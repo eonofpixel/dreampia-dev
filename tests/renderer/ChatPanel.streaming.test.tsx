@@ -12,21 +12,57 @@ function makeSession(turns: Turn[] = []): Session {
   const id = newSessionId();
   const now = nowIso();
   return {
-    id, schema_version: 1, created_at: now, updated_at: now,
-    provider: 'claude', workspace_id: workspaceIdFor('C:\Dev\dreampia-dev'),
-    title: 'test', pinned: false, archived: false,
-    conversation: { turns, current_model: 'claude-opus-4', current_effort: 'high', current_mode: 'standard' },
-    workspace: { root: 'C:\Dev\dreampia-dev', name: 'dreampia-dev', worktrees: [], recent_files: [], open_files: [], ignore_patterns: [], index_status: 'idle', is_temporary: false },
+    id,
+    schema_version: 1,
+    created_at: now,
+    updated_at: now,
+    provider: 'claude',
+    workspace_id: workspaceIdFor('C:\\Dev\\dreampia-dev'),
+    title: 'test',
+    pinned: false,
+    archived: false,
+    conversation: {
+      turns,
+      current_model: 'claude-opus-4',
+      current_effort: 'high',
+      current_mode: 'standard',
+    },
+    workspace: {
+      root: 'C:\\Dev\\dreampia-dev',
+      name: 'dreampia-dev',
+      worktrees: [],
+      recent_files: [],
+      open_files: [],
+      ignore_patterns: [],
+      index_status: 'idle',
+      is_temporary: false,
+    },
     terminal: { panes: [], panel_open: false, height_px: 200 },
     browser: { tabs: [], panel_visible: false, layout: 'hidden', partition_id: partitionIdFor(id) },
     plan: { active: false, browser_tool_enabled: false },
-    permission: { grants: [], default_level: 'workspace_write', temporarily_blocked_capabilities: [] },
+    permission: {
+      grants: [],
+      default_level: 'workspace_write',
+      temporarily_blocked_capabilities: [],
+    },
     metadata: {},
   };
 }
 
-const makeST = (text: string): Turn => ({ id: newTurnId(), role: 'assistant', timestamp: nowIso(), status: 'streaming', content: [{ type: 'text', text }] });
-const makeCT = (text: string, role: Turn['role'] = 'assistant'): Turn => ({ id: newTurnId(), role, timestamp: nowIso(), status: 'completed', content: [{ type: 'text', text }] });
+const makeST = (text: string): Turn => ({
+  id: newTurnId(),
+  role: 'assistant',
+  timestamp: nowIso(),
+  status: 'streaming',
+  content: [{ type: 'text', text }],
+});
+const makeCT = (text: string, role: Turn['role'] = 'assistant'): Turn => ({
+  id: newTurnId(),
+  role,
+  timestamp: nowIso(),
+  status: 'completed',
+  content: [{ type: 'text', text }],
+});
 
 describe('streaming cursor', () => {
   it('shows animate-pulse cursor when streaming turn', () => {
@@ -51,7 +87,9 @@ describe('ChatPanel isStreaming prop', () => {
     expect(screen.getByTestId('chat-input')).toBeDisabled();
   });
   it('enables input when not streaming', () => {
-    render(<ChatPanel session={makeSession([makeCT('x')])} onSubmit={() => {}} isStreaming={false} />);
+    render(
+      <ChatPanel session={makeSession([makeCT('x')])} onSubmit={() => {}} isStreaming={false} />
+    );
     expect(screen.getByTestId('chat-input')).not.toBeDisabled();
   });
   it('enables input by default', () => {
@@ -62,7 +100,9 @@ describe('ChatPanel isStreaming prop', () => {
 
 describe('stop button', () => {
   it('shows when streaming', () => {
-    render(<ChatPanel session={makeSession([])} onSubmit={() => {}} isStreaming onCancel={() => {}} />);
+    render(
+      <ChatPanel session={makeSession([])} onSubmit={() => {}} isStreaming onCancel={() => {}} />
+    );
     expect(screen.getByTestId('stop-button')).toBeInTheDocument();
   });
   it('hidden when not streaming', () => {
@@ -76,23 +116,37 @@ describe('stop button', () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
   it('has aria-label', () => {
-    render(<ChatPanel session={makeSession([])} onSubmit={() => {}} isStreaming onCancel={() => {}} />);
+    render(
+      <ChatPanel session={makeSession([])} onSubmit={() => {}} isStreaming onCancel={() => {}} />
+    );
     expect(screen.getByLabelText('스트리밍 중지')).toBeInTheDocument();
   });
 });
 
 describe('tool call cards', () => {
   const tcTurn = (tc: { id: string; tool_id: string; input: unknown }): Turn => ({
-    id: newTurnId(), role: 'assistant', timestamp: nowIso(), status: 'streaming',
-    content: [{ type: 'text', text: 'x' }], tool_calls: [tc as ToolCallRef],
+    id: newTurnId(),
+    role: 'assistant',
+    timestamp: nowIso(),
+    status: 'streaming',
+    content: [{ type: 'text', text: 'x' }],
+    tool_calls: [tc as ToolCallRef],
   });
   it('renders tool_id', () => {
-    const t = tcTurn({ id: '00000000-0000-7000-8000-000000000010', tool_id: 'shell.run', input: { cmd: 'ls' } });
+    const t = tcTurn({
+      id: '00000000-0000-7000-8000-000000000010',
+      tool_id: 'shell.run',
+      input: { cmd: 'ls' },
+    });
     render(<ChatPanel session={makeSession([t])} onSubmit={() => {}} isStreaming />);
     expect(screen.getAllByTestId('tool-call-card')[0]).toHaveTextContent('shell.run');
   });
   it('renders input JSON', () => {
-    const t = tcTurn({ id: '00000000-0000-7000-8000-000000000011', tool_id: 'sh', input: { cmd: 'ls -la' } });
+    const t = tcTurn({
+      id: '00000000-0000-7000-8000-000000000011',
+      tool_id: 'sh',
+      input: { cmd: 'ls -la' },
+    });
     render(<ChatPanel session={makeSession([t])} onSubmit={() => {}} isStreaming />);
     expect(screen.getByTestId('tool-call-card')).toHaveTextContent('ls -la');
   });
@@ -102,11 +156,22 @@ describe('tool call cards', () => {
   });
   it('multiple tool calls', () => {
     const turn: Turn = {
-      id: newTurnId(), role: 'assistant', timestamp: nowIso(), status: 'streaming',
+      id: newTurnId(),
+      role: 'assistant',
+      timestamp: nowIso(),
+      status: 'streaming',
       content: [{ type: 'text', text: 'x' }],
       tool_calls: [
-        { id: '00000000-0000-7000-8000-000000000012' as unknown as ToolCallId, tool_id: 'a', input: {} },
-        { id: '00000000-0000-7000-8000-000000000013' as unknown as ToolCallId, tool_id: 'b', input: {} },
+        {
+          id: '00000000-0000-7000-8000-000000000012' as unknown as ToolCallId,
+          tool_id: 'a',
+          input: {},
+        },
+        {
+          id: '00000000-0000-7000-8000-000000000013' as unknown as ToolCallId,
+          tool_id: 'b',
+          input: {},
+        },
       ],
     };
     render(<ChatPanel session={makeSession([turn])} onSubmit={() => {}} isStreaming />);

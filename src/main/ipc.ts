@@ -13,36 +13,20 @@
  */
 
 import { app, ipcMain, type App, type BrowserWindow } from 'electron';
+import path from 'node:path';
 import { z } from 'zod';
-import {
-  SessionSchema,
-  TurnSchema,
-  type Session,
-  type SessionId,
-  type Turn,
-} from '@/types';
-import type {
-  LeaderElection,
-  SessionLock,
-  SessionMeta,
-  SessionStore,
-} from '@/storage';
-import type {
-  StreamEvent,
-  StreamingProvider,
-} from '@/providers';
+import { SessionSchema, TurnSchema, type Session, type SessionId, type Turn } from '@/types';
+import type { LeaderElection, SessionLock, SessionMeta, SessionStore } from '@/storage';
+import type { StreamEvent, StreamingProvider } from '@/providers';
 // CLI / auto 는 Node-only — main 에서만 import. providers barrel 은
 // renderer 와 공유되므로 여기서 직접 명시적 경로로 가져온다.
 import {
   getDefaultProvider as defaultGetDefaultProvider,
   type AutoProviderResult,
 } from '@/providers/auto';
-import {
-  detectCli as defaultDetectCli,
-  type CliDetectionResult,
-} from '@/providers/cli/detect';
+import { detectCli as defaultDetectCli, type CliDetectionResult } from '@/providers/cli/detect';
 import type { BrowserManager, BrowserTabState } from './BrowserManager';
-import type { Result, SessionMetaPatch } from './types';
+import type { Result, SessionMetaPatch, WorkspaceInfo } from './types';
 
 export type { Result, SessionMetaPatch } from './types';
 
@@ -159,6 +143,16 @@ export function registerIpcHandlers(
     return process.platform;
   });
 
+  ipcMain.handle('app:get-default-workspace', (): Result<WorkspaceInfo> => {
+    try {
+      const root = process.cwd();
+      const name = path.basename(root) || root;
+      return ok({ root, name });
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
   if (store) {
     registerSessionHandlers(store);
     if (election) registerLockHandlers(election);
@@ -237,20 +231,17 @@ function registerSessionHandlers(store: SessionStore): void {
     }
   );
 
-  ipcMain.handle(
-    'session/delete',
-    (_evt, sessionId: unknown): Result<void> => {
-      try {
-        if (typeof sessionId !== 'string') {
-          throw new Error('session id must be string');
-        }
-        store.deleteSession(sessionId as SessionId);
-        return ok(undefined);
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('session/delete', (_evt, sessionId: unknown): Result<void> => {
+    try {
+      if (typeof sessionId !== 'string') {
+        throw new Error('session id must be string');
       }
+      store.deleteSession(sessionId as SessionId);
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 }
 
 function registerLockHandlers(election: LeaderElection): void {
@@ -259,10 +250,7 @@ function registerLockHandlers(election: LeaderElection): void {
 
   ipcMain.handle(
     'lock/acquire',
-    (
-      _evt,
-      sessionId: unknown
-    ): Result<{ acquired: boolean; leader: SessionLock | null }> => {
+    (_evt, sessionId: unknown): Result<{ acquired: boolean; leader: SessionLock | null }> => {
       try {
         if (typeof sessionId !== 'string') {
           throw new Error('session id must be string');
@@ -276,210 +264,171 @@ function registerLockHandlers(election: LeaderElection): void {
     }
   );
 
-  ipcMain.handle(
-    'lock/release',
-    (_evt, sessionId: unknown): Result<void> => {
-      try {
-        if (typeof sessionId !== 'string') {
-          throw new Error('session id must be string');
-        }
-        election.releaseLeadership(sessionId as SessionId);
-        return ok(undefined);
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('lock/release', (_evt, sessionId: unknown): Result<void> => {
+    try {
+      if (typeof sessionId !== 'string') {
+        throw new Error('session id must be string');
       }
+      election.releaseLeadership(sessionId as SessionId);
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
-  ipcMain.handle(
-    'lock/get',
-    (_evt, sessionId: unknown): Result<SessionLock | null> => {
-      try {
-        if (typeof sessionId !== 'string') {
-          throw new Error('session id must be string');
-        }
-        return ok(election.getLeader(sessionId as SessionId));
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('lock/get', (_evt, sessionId: unknown): Result<SessionLock | null> => {
+    try {
+      if (typeof sessionId !== 'string') {
+        throw new Error('session id must be string');
       }
+      return ok(election.getLeader(sessionId as SessionId));
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
-  ipcMain.handle(
-    'lock/heartbeat',
-    (_evt, sessionId: unknown): Result<boolean> => {
-      try {
-        if (typeof sessionId !== 'string') {
-          throw new Error('session id must be string');
-        }
-        return ok(election.heartbeat(sessionId as SessionId));
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('lock/heartbeat', (_evt, sessionId: unknown): Result<boolean> => {
+    try {
+      if (typeof sessionId !== 'string') {
+        throw new Error('session id must be string');
       }
+      return ok(election.heartbeat(sessionId as SessionId));
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
-  ipcMain.handle(
-    'lock/is-leader',
-    (_evt, sessionId: unknown): Result<boolean> => {
-      try {
-        if (typeof sessionId !== 'string') {
-          throw new Error('session id must be string');
-        }
-        return ok(election.isLeader(sessionId as SessionId));
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('lock/is-leader', (_evt, sessionId: unknown): Result<boolean> => {
+    try {
+      if (typeof sessionId !== 'string') {
+        throw new Error('session id must be string');
       }
+      return ok(election.isLeader(sessionId as SessionId));
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 }
 
 function registerBrowserHandlers(browser: BrowserManager): void {
   // ── browser/* — in-app WebContentsView per session (P1-5) ─────
   // Spec: docs/session/browser.md
 
-  ipcMain.handle(
-    'browser/open-tab',
-    (_evt, args: unknown): Result<BrowserTabState> => {
-      try {
-        const validated = OpenTabArgsSchema.parse(args);
-        const state = browser.openTab({
-          session_id: validated.session_id as SessionId,
-          tab_id: validated.tab_id,
-          url: validated.url,
-        });
-        return ok(state);
-      } catch (err) {
-        return fail(err);
-      }
+  ipcMain.handle('browser/open-tab', (_evt, args: unknown): Result<BrowserTabState> => {
+    try {
+      const validated = OpenTabArgsSchema.parse(args);
+      const state = browser.openTab({
+        session_id: validated.session_id as SessionId,
+        tab_id: validated.tab_id,
+        url: validated.url,
+      });
+      return ok(state);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
-  ipcMain.handle(
-    'browser/close-tab',
-    (_evt, tabId: unknown): Result<void> => {
-      try {
-        if (typeof tabId !== 'string') {
-          throw new Error('tab id must be string');
-        }
-        browser.closeTab(tabId);
-        return ok(undefined);
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('browser/close-tab', (_evt, tabId: unknown): Result<void> => {
+    try {
+      if (typeof tabId !== 'string') {
+        throw new Error('tab id must be string');
       }
+      browser.closeTab(tabId);
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
-  ipcMain.handle(
-    'browser/switch-tab',
-    (_evt, sessionId: unknown, tabId: unknown): Result<void> => {
-      try {
-        if (typeof sessionId !== 'string') {
-          throw new Error('session id must be string');
-        }
-        if (typeof tabId !== 'string') {
-          throw new Error('tab id must be string');
-        }
-        browser.switchTab(sessionId as SessionId, tabId);
-        return ok(undefined);
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('browser/switch-tab', (_evt, sessionId: unknown, tabId: unknown): Result<void> => {
+    try {
+      if (typeof sessionId !== 'string') {
+        throw new Error('session id must be string');
       }
+      if (typeof tabId !== 'string') {
+        throw new Error('tab id must be string');
+      }
+      browser.switchTab(sessionId as SessionId, tabId);
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
-  ipcMain.handle(
-    'browser/navigate',
-    (_evt, tabId: unknown, url: unknown): Result<void> => {
-      try {
-        if (typeof tabId !== 'string') {
-          throw new Error('tab id must be string');
-        }
-        if (typeof url !== 'string' || url.length === 0) {
-          throw new Error('url must be non-empty string');
-        }
-        browser.navigate(tabId, url);
-        return ok(undefined);
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('browser/navigate', (_evt, tabId: unknown, url: unknown): Result<void> => {
+    try {
+      if (typeof tabId !== 'string') {
+        throw new Error('tab id must be string');
       }
+      if (typeof url !== 'string' || url.length === 0) {
+        throw new Error('url must be non-empty string');
+      }
+      browser.navigate(tabId, url);
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
-  ipcMain.handle(
-    'browser/back',
-    (_evt, tabId: unknown): Result<void> => {
-      try {
-        if (typeof tabId !== 'string') {
-          throw new Error('tab id must be string');
-        }
-        browser.goBack(tabId);
-        return ok(undefined);
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('browser/back', (_evt, tabId: unknown): Result<void> => {
+    try {
+      if (typeof tabId !== 'string') {
+        throw new Error('tab id must be string');
       }
+      browser.goBack(tabId);
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
-  ipcMain.handle(
-    'browser/forward',
-    (_evt, tabId: unknown): Result<void> => {
-      try {
-        if (typeof tabId !== 'string') {
-          throw new Error('tab id must be string');
-        }
-        browser.goForward(tabId);
-        return ok(undefined);
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('browser/forward', (_evt, tabId: unknown): Result<void> => {
+    try {
+      if (typeof tabId !== 'string') {
+        throw new Error('tab id must be string');
       }
+      browser.goForward(tabId);
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
-  ipcMain.handle(
-    'browser/reload',
-    (_evt, tabId: unknown): Result<void> => {
-      try {
-        if (typeof tabId !== 'string') {
-          throw new Error('tab id must be string');
-        }
-        browser.reload(tabId);
-        return ok(undefined);
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('browser/reload', (_evt, tabId: unknown): Result<void> => {
+    try {
+      if (typeof tabId !== 'string') {
+        throw new Error('tab id must be string');
       }
+      browser.reload(tabId);
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
-  ipcMain.handle(
-    'browser/set-bounds',
-    (_evt, tabId: unknown, bounds: unknown): Result<void> => {
-      try {
-        if (typeof tabId !== 'string') {
-          throw new Error('tab id must be string');
-        }
-        const validated = BoundsSchema.parse(bounds);
-        browser.setBounds(tabId, validated);
-        return ok(undefined);
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('browser/set-bounds', (_evt, tabId: unknown, bounds: unknown): Result<void> => {
+    try {
+      if (typeof tabId !== 'string') {
+        throw new Error('tab id must be string');
       }
+      const validated = BoundsSchema.parse(bounds);
+      browser.setBounds(tabId, validated);
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
-  ipcMain.handle(
-    'browser/list-tabs',
-    (_evt, sessionId: unknown): Result<BrowserTabState[]> => {
-      try {
-        if (typeof sessionId !== 'string') {
-          throw new Error('session id must be string');
-        }
-        return ok(browser.listTabs(sessionId as SessionId));
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('browser/list-tabs', (_evt, sessionId: unknown): Result<BrowserTabState[]> => {
+    try {
+      if (typeof sessionId !== 'string') {
+        throw new Error('session id must be string');
       }
+      return ok(browser.listTabs(sessionId as SessionId));
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 }
 
 // ────────────────────────────────────────────────────────────
@@ -496,10 +445,7 @@ export interface AiHandlerConfig {
   /** Renderer 로 stream-event 를 보낼 BrowserWindow getter. null 시 emit skip. */
   getMainWindow: () => BrowserWindow | null;
   /** Override for tests. Default: @/providers getDefaultProvider. */
-  getDefaultProvider?: (
-    model: string,
-    signal?: AbortSignal
-  ) => Promise<AutoProviderResult>;
+  getDefaultProvider?: (model: string, signal?: AbortSignal) => Promise<AutoProviderResult>;
   /** Override for tests. Default: @/providers detectCli. */
   detectCli?: () => Promise<CliDetectionResult>;
 }
@@ -527,8 +473,7 @@ export function shutdownAiHandlers(): void {
 }
 
 function registerAiHandlers(cfg: AiHandlerConfig): void {
-  const getDefaultProviderFn =
-    cfg.getDefaultProvider ?? defaultGetDefaultProvider;
+  const getDefaultProviderFn = cfg.getDefaultProvider ?? defaultGetDefaultProvider;
   const detectCliFn = cfg.detectCli ?? defaultDetectCli;
 
   ipcMain.handle('ai/detect-cli', async (): Promise<Result<CliDetectionResult>> => {
@@ -542,22 +487,17 @@ function registerAiHandlers(cfg: AiHandlerConfig): void {
 
   ipcMain.handle(
     'ai/start-stream',
-    async (
-      _evt,
-      args: unknown
-    ): Promise<Result<{ stream_id: string; source: string }>> => {
+    async (_evt, args: unknown): Promise<Result<{ stream_id: string; source: string }>> => {
       try {
         const { stream_id, model, turns } = StartStreamArgsSchema.parse(args);
-        const controller = new AbortController();
-        const { provider, source } = await getDefaultProviderFn(
-          model,
-          controller.signal
-        );
 
-        // 동일 stream_id 가 이미 존재하면 거부 (renderer 가 collision 발생 시 새 id 발급).
+        // Reject collisions before provider detection/spawn work.
         if (activeStreams.has(stream_id)) {
           return { ok: false, error: `stream_id "${stream_id}" already active` };
         }
+
+        const controller = new AbortController();
+        const { provider, source } = await getDefaultProviderFn(model, controller.signal);
         activeStreams.set(stream_id, {
           abort: () => controller.abort(),
         });
@@ -572,24 +512,21 @@ function registerAiHandlers(cfg: AiHandlerConfig): void {
     }
   );
 
-  ipcMain.handle(
-    'ai/stop-stream',
-    (_evt, streamId: unknown): Result<void> => {
-      try {
-        if (typeof streamId !== 'string') {
-          throw new Error('stream_id must be string');
-        }
-        const stream = activeStreams.get(streamId);
-        if (stream !== undefined) {
-          stream.abort();
-          activeStreams.delete(streamId);
-        }
-        return ok(undefined);
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('ai/stop-stream', (_evt, streamId: unknown): Result<void> => {
+    try {
+      if (typeof streamId !== 'string') {
+        throw new Error('stream_id must be string');
       }
+      const stream = activeStreams.get(streamId);
+      if (stream !== undefined) {
+        stream.abort();
+        activeStreams.delete(streamId);
+      }
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 }
 
 async function runStreamPump(

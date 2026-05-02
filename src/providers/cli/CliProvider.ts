@@ -21,7 +21,7 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import type { Provider, Turn } from '@/types';
+import type { Provider, ToolCallRef, Turn } from '@/types';
 import { newTurnId, nowIso } from '@/types';
 import type { StreamEvent, StreamingProvider } from '../types';
 import { JsonlParser } from './jsonlParser';
@@ -76,6 +76,7 @@ export class CliProvider implements StreamingProvider {
     turns: Turn[];
     model: string;
     config?: Record<string, unknown>;
+    signal?: AbortSignal;
   }): AsyncIterable<StreamEvent> {
     const turnId = newTurnId();
     const ctx = { turnId, model: input.model };
@@ -115,6 +116,7 @@ export class CliProvider implements StreamingProvider {
     const parser = new JsonlParser();
     const queue: StreamEvent[] = [];
     const accumulatedDeltas: string[] = [];
+    const accumulatedToolCalls = new Map<string, ToolCallRef>();
     let resolveNext: (() => void) | null = null;
     let ended = false;
     // 명시적 union type — TS 가 closure 안 mutation 을 추적 못해 narrowing
@@ -131,6 +133,26 @@ export class CliProvider implements StreamingProvider {
 
     const enqueue = (ev: StreamEvent): void => {
       if (ev.type === 'text_delta') accumulatedDeltas.push(ev.text);
+      if (ev.type === 'tool_call_start') {
+        accumulatedToolCalls.set(ev.tool_call.id, {
+          id: ev.tool_call.id as ToolCallRef['id'],
+          tool_id: ev.tool_call.tool_id,
+          input: ev.tool_call.input,
+        });
+      }
+      if (ev.type === 'tool_call_input_delta') {
+        const existing = accumulatedToolCalls.get(ev.tool_call_id);
+        if (existing !== undefined) {
+          const previousInput = typeof existing.input === 'string' ? existing.input : '';
+          accumulatedToolCalls.set(ev.tool_call_id, {
+            ...existing,
+            input: `${previousInput}${ev.partial_input}`,
+          });
+        }
+      }
+      if (ev.type === 'tool_call_complete') {
+        accumulatedToolCalls.set(ev.tool_call.id, ev.tool_call);
+      }
       if (ev.type === 'message_complete') receivedComplete = true;
       queue.push(ev);
     };
@@ -231,6 +253,9 @@ export class CliProvider implements StreamingProvider {
         timestamp: nowIso(),
         status: 'completed',
         content: [{ type: 'text', text: accumulatedText }],
+        ...(accumulatedToolCalls.size > 0 && {
+          tool_calls: Array.from(accumulatedToolCalls.values()),
+        }),
         model: input.model,
       };
       yield { type: 'message_complete', turn: finalTurn };
@@ -257,14 +282,7 @@ export class CliProvider implements StreamingProvider {
       return args;
     }
     // codex
-    const args = [
-      'exec',
-      '--json',
-      '--skip-git-repo-check',
-      '--ephemeral',
-      '--model',
-      input.model,
-    ];
+    const args = ['exec', '--json', '--skip-git-repo-check', '--ephemeral', '--model', input.model];
     if (this.opts.extraArgs !== undefined && this.opts.extraArgs.length > 0) {
       args.push(...this.opts.extraArgs);
     }

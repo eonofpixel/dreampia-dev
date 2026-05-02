@@ -85,9 +85,7 @@ describe('SessionStore', () => {
         db: { prepare: (s: string) => { get: (...a: unknown[]) => unknown } };
       };
       const row = dbAccessor.db
-        .prepare(
-          `SELECT name FROM sqlite_master WHERE type='table' AND name='session_locks'`
-        )
+        .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='session_locks'`)
         .get() as { name: string } | undefined;
       expect(row?.name).toBe('session_locks');
     });
@@ -182,9 +180,7 @@ describe('SessionStore', () => {
 
       const reloaded = store.getSession(session.id);
       expect(reloaded).not.toBeNull();
-      expect(reloaded!.conversation.turns.length).toBe(
-        session.conversation.turns.length + 1
-      );
+      expect(reloaded!.conversation.turns.length).toBe(session.conversation.turns.length + 1);
       const last = reloaded!.conversation.turns[reloaded!.conversation.turns.length - 1];
       expect(last).toEqual(newTurn);
     });
@@ -393,9 +389,7 @@ describe('SessionStore', () => {
 
     it('throws for nonexistent session', () => {
       const ghost = '019d0000-0000-7000-8000-fffffffffffd' as SessionId;
-      expect(() => store.updateSessionMeta(ghost, { title: 'x' })).toThrow(
-        /not found/
-      );
+      expect(() => store.updateSessionMeta(ghost, { title: 'x' })).toThrow(/not found/);
     });
 
     it('no-op for empty patch does not throw', () => {
@@ -414,11 +408,21 @@ describe('SessionStore', () => {
       store.createSession(session);
 
       // Sanity: pre-delete child counts
-      const dbAccessor = store as unknown as { db: { prepare: (s: string) => { get: (...a: unknown[]) => unknown } } };
+      const dbAccessor = store as unknown as {
+        db: { prepare: (s: string) => { get: (...a: unknown[]) => unknown } };
+      };
       const countTurns = () =>
-        (dbAccessor.db.prepare('SELECT COUNT(*) AS c FROM turns WHERE session_id = ?').get(session.id) as { c: number }).c;
+        (
+          dbAccessor.db
+            .prepare('SELECT COUNT(*) AS c FROM turns WHERE session_id = ?')
+            .get(session.id) as { c: number }
+        ).c;
       const countPlanItems = () =>
-        (dbAccessor.db.prepare('SELECT COUNT(*) AS c FROM plan_items WHERE session_id = ?').get(session.id) as { c: number }).c;
+        (
+          dbAccessor.db
+            .prepare('SELECT COUNT(*) AS c FROM plan_items WHERE session_id = ?')
+            .get(session.id) as { c: number }
+        ).c;
 
       expect(countTurns()).toBeGreaterThan(0);
       expect(countPlanItems()).toBeGreaterThan(0);
@@ -434,9 +438,15 @@ describe('SessionStore', () => {
       const session = loadFixture('05-with-browser.json'); // grants + tabs + panes
       store.createSession(session);
 
-      const dbAccessor = store as unknown as { db: { prepare: (s: string) => { get: (...a: unknown[]) => unknown } } };
+      const dbAccessor = store as unknown as {
+        db: { prepare: (s: string) => { get: (...a: unknown[]) => unknown } };
+      };
       const cnt = (table: string) =>
-        (dbAccessor.db.prepare(`SELECT COUNT(*) AS c FROM ${table} WHERE session_id = ?`).get(session.id) as { c: number }).c;
+        (
+          dbAccessor.db
+            .prepare(`SELECT COUNT(*) AS c FROM ${table} WHERE session_id = ?`)
+            .get(session.id) as { c: number }
+        ).c;
 
       expect(cnt('permission_grants')).toBeGreaterThan(0);
       expect(cnt('browser_tabs')).toBeGreaterThan(0);
@@ -453,9 +463,15 @@ describe('SessionStore', () => {
       const session = loadFixture('08-with-annotation.json');
       store.createSession(session);
 
-      const dbAccessor = store as unknown as { db: { prepare: (s: string) => { get: (...a: unknown[]) => unknown } } };
+      const dbAccessor = store as unknown as {
+        db: { prepare: (s: string) => { get: (...a: unknown[]) => unknown } };
+      };
       const annoCount = () =>
-        (dbAccessor.db.prepare('SELECT COUNT(*) AS c FROM annotations WHERE session_id = ?').get(session.id) as { c: number }).c;
+        (
+          dbAccessor.db
+            .prepare('SELECT COUNT(*) AS c FROM annotations WHERE session_id = ?')
+            .get(session.id) as { c: number }
+        ).c;
 
       expect(annoCount()).toBeGreaterThan(0);
 
@@ -611,7 +627,7 @@ describe('SessionStore', () => {
         .run(
           'wt-orphan-test-001',
           session.workspace_id,
-          'C:\Dev\orphan-worktree',
+          'C:\\Dev\\orphan-worktree',
           'fix/orphan-test',
           0,
           session.id,
@@ -621,9 +637,7 @@ describe('SessionStore', () => {
       // Verify the worktree was inserted
       const beforeCount = (
         dbAccessor.db
-          .prepare(
-            'SELECT COUNT(*) AS c FROM worktrees WHERE parent_session_id = ?'
-          )
+          .prepare('SELECT COUNT(*) AS c FROM worktrees WHERE parent_session_id = ?')
           .get(session.id) as { c: number }
       ).c;
       expect(beforeCount).toBe(1);
@@ -633,9 +647,7 @@ describe('SessionStore', () => {
       // Worktree must be gone after session delete
       const afterCount = (
         dbAccessor.db
-          .prepare(
-            'SELECT COUNT(*) AS c FROM worktrees WHERE parent_session_id = ?'
-          )
+          .prepare('SELECT COUNT(*) AS c FROM worktrees WHERE parent_session_id = ?')
           .get(session.id) as { c: number }
       ).c;
       expect(afterCount).toBe(0);

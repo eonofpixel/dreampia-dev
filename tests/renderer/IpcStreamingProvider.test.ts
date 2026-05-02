@@ -8,11 +8,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import {
-  __mockStore,
-  __emitAiStreamEvent,
-  __emitAiStreamEnd,
-} from '../setup';
+import { __mockStore, __emitAiStreamEvent, __emitAiStreamEnd } from '../setup';
 import { IpcStreamingProvider } from '../../src/renderer/providers/IpcStreamingProvider';
 import type { StreamEvent } from '../../src/providers/types';
 import type { Turn } from '../../src/types';
@@ -154,13 +150,35 @@ describe('IpcStreamingProvider', () => {
   it('calls stopStream on cleanup (best-effort cancel)', async () => {
     const stopSpy = vi.spyOn(window.dreampia.ai, 'stopStream');
     const p = new IpcStreamingProvider();
-    await consume(
-      p.stream({ turns: [userTurn('hi')], model: 'claude-test' }),
-      (sid) => {
-        __emitAiStreamEnd({ stream_id: sid });
-      }
-    );
+    await consume(p.stream({ turns: [userTurn('hi')], model: 'claude-test' }), (sid) => {
+      __emitAiStreamEnd({ stream_id: sid });
+    });
     expect(stopSpy).toHaveBeenCalled();
+  });
+
+  it('aborts immediately via input signal while waiting for events', async () => {
+    const ctrl = new AbortController();
+    const p = new IpcStreamingProvider();
+    const out: StreamEvent[] = [];
+    const consumePromise = (async () => {
+      for await (const ev of p.stream({
+        turns: [userTurn('hi')],
+        model: 'claude-test',
+        signal: ctrl.signal,
+      })) {
+        out.push(ev);
+      }
+    })();
+
+    await new Promise((r) => setTimeout(r, 5));
+    const ids = [...__mockStore.aiStartedStreams.keys()];
+    const sid = ids[ids.length - 1];
+    expect(sid).toBeDefined();
+    ctrl.abort();
+
+    await consumePromise;
+    expect(out).toEqual([]);
+    expect(__mockStore.aiStoppedStreams.has(sid as string)).toBe(true);
   });
 
   it('yields error when startStream returns ok:false', async () => {

@@ -132,5 +132,6 @@ export interface StreamingProvider {
     turns: Turn[];
     model: string;
     config?: Record<string, unknown>;
+    signal?: AbortSignal;
   }): AsyncIterable<StreamEvent>;
 }

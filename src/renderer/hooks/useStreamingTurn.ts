@@ -61,7 +61,10 @@ export function useStreamingTurn({
       };
 
       try {
-        for await (const ev of provider.stream(input)) {
+        for await (const ev of provider.stream({
+          ...input,
+          signal: controller.signal,
+        })) {
           if (controller.signal.aborted) break;
 
           turn = applyEvent(turn, ev);
@@ -142,8 +145,32 @@ function applyEvent(turn: Turn, ev: StreamEvent): Turn {
       return { ...turn, tool_calls: next };
     }
 
-    case 'message_complete':
-      return { ...ev.turn, status: 'completed' };
+    case 'tool_call_input_delta': {
+      const existing = turn.tool_calls ?? [];
+      const idx = existing.findIndex((c) => c.id === ev.tool_call_id);
+      if (idx < 0) return turn;
+      const next = [...existing];
+      const current = next[idx];
+      if (current === undefined) return turn;
+      const previousInput = typeof current.input === 'string' ? current.input : '';
+      next[idx] = {
+        ...current,
+        input: `${previousInput}${ev.partial_input}`,
+      };
+      return { ...turn, tool_calls: next };
+    }
+
+    case 'message_complete': {
+      const completed: Turn = { ...ev.turn, status: 'completed' };
+      if (
+        (completed.tool_calls === undefined || completed.tool_calls.length === 0) &&
+        turn.tool_calls !== undefined &&
+        turn.tool_calls.length > 0
+      ) {
+        return { ...completed, tool_calls: turn.tool_calls };
+      }
+      return completed;
+    }
 
     case 'error':
       return { ...turn, status: 'failed' };

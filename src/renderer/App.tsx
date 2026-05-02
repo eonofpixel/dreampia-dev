@@ -28,14 +28,20 @@ import {
 } from '@/types';
 import { MockProvider } from '@/providers';
 import type { StreamingProvider } from '@/providers/types';
+import type { WorkspaceInfo } from '@/main/types';
 import { IpcStreamingProvider } from './providers/IpcStreamingProvider';
 import { useStreamingTurn } from './hooks/useStreamingTurn';
 import { useSessionStore } from './hooks/useSessionStore';
 
-function createDemoSession(title: string): Session {
+const FALLBACK_WORKSPACE: WorkspaceInfo = {
+  root: '/',
+  name: 'workspace',
+};
+
+function createDemoSession(title: string, workspace: WorkspaceInfo): Session {
   const id = newSessionId();
   const now = nowIso();
-  const workspaceId = workspaceIdFor('C:\Dev\dreampia-dev');
+  const workspaceId = workspaceIdFor(workspace.root);
 
   return SessionSchema.parse({
     id,
@@ -54,8 +60,8 @@ function createDemoSession(title: string): Session {
       current_mode: 'standard',
     },
     workspace: {
-      root: 'C:\Dev\dreampia-dev',
-      name: 'dreampia-dev',
+      root: workspace.root,
+      name: workspace.name,
       worktrees: [],
       recent_files: [],
       open_files: [],
@@ -93,6 +99,7 @@ export function App(): React.JSX.Element {
   // so streaming text_delta events update synchronously.
   const [activeSessionId, setActiveSessionId] = useState<string>('');
   const [activeSession, setActiveSession] = useState<Session | null>(null);
+  const [defaultWorkspace, setDefaultWorkspace] = useState<WorkspaceInfo>(FALLBACK_WORKSPACE);
 
   // When the list changes and we have no selection, pick the first one.
   useEffect(() => {
@@ -117,12 +124,30 @@ export function App(): React.JSX.Element {
     };
   }, [activeSessionId, getSession]);
 
+  // Renderer has no Node path access in sandbox mode. Ask main for the
+  // launch workspace instead of hardcoding a Windows path into new sessions.
+  useEffect(() => {
+    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+    if (appApi === undefined) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await appApi.getDefaultWorkspace();
+        if (!cancelled && result.ok) setDefaultWorkspace(result.value);
+      } catch {
+        // Keep browser-safe fallback.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // P1-4: IpcStreamingProvider 가 main 의 ai/start-stream 으로 위임.
   // window.dreampia.ai 가 없는 환경 (legacy renderer / 오래된 build) 에서는
   // MockProvider 로 fallback.
   const provider = useMemo<StreamingProvider>(() => {
-    const hasIpc =
-      typeof window !== 'undefined' && window.dreampia?.ai !== undefined;
+    const hasIpc = typeof window !== 'undefined' && window.dreampia?.ai !== undefined;
     if (hasIpc) return new IpcStreamingProvider();
     return new MockProvider({ delayMs: 15 });
   }, []);
@@ -130,8 +155,7 @@ export function App(): React.JSX.Element {
   // CLI 감지 결과 — onMount 한 번 가져와 ChatHeader 에 표시.
   const [cliStatus, setCliStatus] = useState<CliStatus>(null);
   useEffect(() => {
-    const ai =
-      typeof window !== 'undefined' ? window.dreampia?.ai : undefined;
+    const ai = typeof window !== 'undefined' ? window.dreampia?.ai : undefined;
     if (ai === undefined) {
       setCliStatus({ source: 'mock', claude: null, codex: null });
       return;
@@ -190,7 +214,11 @@ export function App(): React.JSX.Element {
     [activeSessionId, persistTurn]
   );
 
-  const { isStreaming, start: startStream, cancel: cancelStream } = useStreamingTurn({
+  const {
+    isStreaming,
+    start: startStream,
+    cancel: cancelStream,
+  } = useStreamingTurn({
     provider,
     onTurnUpdate: handleTurnUpdate,
     onComplete: handleStreamComplete,
@@ -200,12 +228,12 @@ export function App(): React.JSX.Element {
   });
 
   const handleNewChat = useCallback(async (): Promise<void> => {
-    const newSession = createDemoSession(`새 채팅 ${sessions.length + 1}`);
+    const newSession = createDemoSession(`새 채팅 ${sessions.length + 1}`, defaultWorkspace);
     const created = await createSession(newSession);
     if (created !== null) {
       setActiveSessionId(created.id);
     }
-  }, [createSession, sessions.length]);
+  }, [createSession, defaultWorkspace, sessions.length]);
 
   const handleSubmitMessage = useCallback(
     async (text: string): Promise<void> => {
@@ -258,6 +286,7 @@ export function App(): React.JSX.Element {
     () => sessions.map((s) => ({ id: s.id, title: s.title, pinned: s.pinned })),
     [sessions]
   );
+  const projectName = activeSession?.workspace.name ?? defaultWorkspace.name;
 
   return (
     <ThreePanelLayout
@@ -265,6 +294,7 @@ export function App(): React.JSX.Element {
         <Sidebar
           sessions={sidebarSessions}
           activeSessionId={activeSessionId}
+          projectName={projectName}
           onSelectSession={setActiveSessionId}
           onNewChat={() => {
             void handleNewChat();

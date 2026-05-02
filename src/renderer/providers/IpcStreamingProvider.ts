@@ -43,6 +43,7 @@ export class IpcStreamingProvider implements StreamingProvider {
     turns: Turn[];
     model: string;
     config?: Record<string, unknown>;
+    signal?: AbortSignal;
   }): AsyncIterable<StreamEvent> {
     const ai = typeof window !== 'undefined' ? window.dreampia?.ai : undefined;
     if (ai === undefined) {
@@ -56,6 +57,8 @@ export class IpcStreamingProvider implements StreamingProvider {
     const streamId = newStreamId();
     const queue: StreamEvent[] = [];
     let ended = false;
+    let started = false;
+    let stopCalled = false;
     let resolveNext: (() => void) | null = null;
 
     const wakeUp = (): void => {
@@ -63,6 +66,25 @@ export class IpcStreamingProvider implements StreamingProvider {
       resolveNext = null;
       fn?.();
     };
+
+    const stop = async (): Promise<void> => {
+      if (stopCalled) return;
+      stopCalled = true;
+      try {
+        await ai.stopStream(streamId);
+      } catch {
+        // ignore
+      }
+    };
+
+    const onAbort = (): void => {
+      ended = true;
+      if (started) {
+        void stop().finally(wakeUp);
+      }
+      wakeUp();
+    };
+    input.signal?.addEventListener('abort', onAbort, { once: true });
 
     const unsubscribeEvent = ai.onStreamEvent((payload) => {
       if (payload.stream_id !== streamId) return;
@@ -87,6 +109,13 @@ export class IpcStreamingProvider implements StreamingProvider {
         yield { type: 'error', error: result.error };
         return;
       }
+      started = true;
+
+      if (input.signal?.aborted) {
+        ended = true;
+        await stop();
+        return;
+      }
 
       while (true) {
         while (queue.length > 0) {
@@ -99,14 +128,11 @@ export class IpcStreamingProvider implements StreamingProvider {
         });
       }
     } finally {
+      input.signal?.removeEventListener('abort', onAbort);
       unsubscribeEvent();
       unsubscribeEnd();
       // Best-effort cancel — 이미 끝났으면 main 에서 no-op.
-      try {
-        await ai.stopStream(streamId);
-      } catch {
-        // ignore
-      }
+      if (started) await stop();
     }
   }
 }

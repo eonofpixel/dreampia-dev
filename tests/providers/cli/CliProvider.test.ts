@@ -52,7 +52,7 @@ vi.mock('node:child_process', () => ({
 
 import { CliProvider } from '../../../src/providers/cli/CliProvider';
 import type { StreamEvent } from '../../../src/providers/types';
-import type { Turn } from '../../../src/types';
+import type { ToolCallId, Turn } from '../../../src/types';
 import { newTurnId, nowIso } from '../../../src/types';
 
 beforeEach(() => {
@@ -93,6 +93,22 @@ function passthroughTranslate(parsed: unknown): StreamEvent[] {
       },
     ];
   }
+  if (
+    obj.type === 'tool_call_complete' &&
+    typeof obj.id === 'string' &&
+    typeof obj.tool_id === 'string'
+  ) {
+    return [
+      {
+        type: 'tool_call_complete',
+        tool_call: {
+          id: obj.id as ToolCallId,
+          tool_id: obj.tool_id,
+          input: obj.input,
+        },
+      },
+    ];
+  }
   return [];
 }
 
@@ -110,17 +126,28 @@ describe('CliProvider', () => {
       child.stdout.emit('data', Buffer.from('{"type":"text_delta","text":"hi"}\n'));
       child.emit('close', 0);
     };
-    const p = new CliProvider({ binaryPath: '/fake/claude', provider: 'claude', translate: passthroughTranslate });
+    const p = new CliProvider({
+      binaryPath: '/fake/claude',
+      provider: 'claude',
+      translate: passthroughTranslate,
+    });
     const events = await consume(p, [userTurn('hello')]);
     expect(events[0]?.type).toBe('message_start');
   });
 
   it('translates stdout JSONL into text_delta events', async () => {
     nextChildHandler = (child) => {
-      child.stdout.emit('data', Buffer.from('{"type":"text_delta","text":"a"}\n{"type":"text_delta","text":"b"}\n'));
+      child.stdout.emit(
+        'data',
+        Buffer.from('{"type":"text_delta","text":"a"}\n{"type":"text_delta","text":"b"}\n')
+      );
       child.emit('close', 0);
     };
-    const p = new CliProvider({ binaryPath: '/fake/claude', provider: 'claude', translate: passthroughTranslate });
+    const p = new CliProvider({
+      binaryPath: '/fake/claude',
+      provider: 'claude',
+      translate: passthroughTranslate,
+    });
     const events = await consume(p, [userTurn('hi')]);
     const deltas = events.filter((e) => e.type === 'text_delta');
     expect(deltas.map((e) => (e as { text: string }).text)).toEqual(['a', 'b']);
@@ -131,7 +158,11 @@ describe('CliProvider', () => {
       child.stderr.emit('data', Buffer.from('Error: auth failed\n'));
       child.emit('close', 1);
     };
-    const p = new CliProvider({ binaryPath: '/fake/claude', provider: 'claude', translate: passthroughTranslate });
+    const p = new CliProvider({
+      binaryPath: '/fake/claude',
+      provider: 'claude',
+      translate: passthroughTranslate,
+    });
     const events = await consume(p, [userTurn('hi')]);
     const err = events.find((e) => e.type === 'error');
     expect(err).toBeDefined();
@@ -139,8 +170,14 @@ describe('CliProvider', () => {
   });
 
   it('emits error event with exit code on non-zero exit', async () => {
-    nextChildHandler = (child) => { child.emit('close', 2); };
-    const p = new CliProvider({ binaryPath: '/fake/claude', provider: 'claude', translate: passthroughTranslate });
+    nextChildHandler = (child) => {
+      child.emit('close', 2);
+    };
+    const p = new CliProvider({
+      binaryPath: '/fake/claude',
+      provider: 'claude',
+      translate: passthroughTranslate,
+    });
     const events = await consume(p, [userTurn('hi')]);
     const err = events.find((e) => e.type === 'error');
     expect(err).toBeDefined();
@@ -158,7 +195,12 @@ describe('CliProvider', () => {
         setImmediate(() => child.emit('close', null));
       });
     };
-    const p = new CliProvider({ binaryPath: '/fake/claude', provider: 'claude', translate: passthroughTranslate, signal: ctrl.signal });
+    const p = new CliProvider({
+      binaryPath: '/fake/claude',
+      provider: 'claude',
+      translate: passthroughTranslate,
+      signal: ctrl.signal,
+    });
     await consume(p, [userTurn('hi')]);
     expect(capturedChild).not.toBeNull();
     expect(capturedChild!.kill).toHaveBeenCalledWith('SIGTERM');
@@ -170,9 +212,15 @@ describe('CliProvider', () => {
       child.stdout.emit('data', Buffer.from('{"type":"text_delta","text":"b"}'));
       child.emit('close', 0);
     };
-    const p = new CliProvider({ binaryPath: '/fake/claude', provider: 'claude', translate: passthroughTranslate });
+    const p = new CliProvider({
+      binaryPath: '/fake/claude',
+      provider: 'claude',
+      translate: passthroughTranslate,
+    });
     const events = await consume(p, [userTurn('hi')]);
-    const texts = events.filter((e) => e.type === 'text_delta').map((e) => (e as { text: string }).text);
+    const texts = events
+      .filter((e) => e.type === 'text_delta')
+      .map((e) => (e as { text: string }).text);
     expect(texts).toEqual(['a', 'b']);
   });
 
@@ -182,15 +230,44 @@ describe('CliProvider', () => {
       child.stdout.emit('data', Buffer.from('{"type":"text_delta","text":"!"}\n'));
       child.emit('close', 0);
     };
-    const p = new CliProvider({ binaryPath: '/fake/claude', provider: 'claude', translate: passthroughTranslate });
+    const p = new CliProvider({
+      binaryPath: '/fake/claude',
+      provider: 'claude',
+      translate: passthroughTranslate,
+    });
     const events = await consume(p, [userTurn('hi')]);
     const complete = events.find((e) => e.type === 'message_complete');
     expect(complete).toBeDefined();
     const turn = (complete as { turn: Turn }).turn;
     expect(turn.role).toBe('assistant');
     expect(turn.status).toBe('completed');
-    const text = turn.content.find((b) => b.type === 'text') as { type: 'text'; text: string } | undefined;
+    const text = turn.content.find((b) => b.type === 'text') as
+      | { type: 'text'; text: string }
+      | undefined;
     expect(text?.text).toBe('hi!');
+  });
+
+  it('preserves accumulated tool calls in synthesized message_complete', async () => {
+    nextChildHandler = (child) => {
+      child.stdout.emit('data', Buffer.from('{"type":"text_delta","text":"using tool"}\n'));
+      child.stdout.emit(
+        'data',
+        Buffer.from(
+          '{"type":"tool_call_complete","id":"call-1","tool_id":"shell.run","input":{"cmd":"npm test"}}\n'
+        )
+      );
+      child.emit('close', 0);
+    };
+    const p = new CliProvider({
+      binaryPath: '/fake/claude',
+      provider: 'claude',
+      translate: passthroughTranslate,
+    });
+    const events = await consume(p, [userTurn('hi')]);
+    const complete = events.find((e) => e.type === 'message_complete');
+    const turn = (complete as { turn: Turn }).turn;
+    expect(turn.tool_calls?.[0]?.tool_id).toBe('shell.run');
+    expect(turn.tool_calls?.[0]?.input).toEqual({ cmd: 'npm test' });
   });
 
   it('does NOT duplicate message_complete when translator already emitted one', async () => {
@@ -199,15 +276,25 @@ describe('CliProvider', () => {
       child.stdout.emit('data', Buffer.from('{"type":"message_complete","text":"x"}\n'));
       child.emit('close', 0);
     };
-    const p = new CliProvider({ binaryPath: '/fake/claude', provider: 'claude', translate: passthroughTranslate });
+    const p = new CliProvider({
+      binaryPath: '/fake/claude',
+      provider: 'claude',
+      translate: passthroughTranslate,
+    });
     const events = await consume(p, [userTurn('hi')]);
     const completes = events.filter((e) => e.type === 'message_complete');
     expect(completes.length).toBe(1);
   });
 
   it('passes prompt as positional arg (NOT stdin.write) and closes stdin immediately', async () => {
-    nextChildHandler = (child) => { child.emit('close', 0); };
-    const p = new CliProvider({ binaryPath: '/fake/claude', provider: 'claude', translate: passthroughTranslate });
+    nextChildHandler = (child) => {
+      child.emit('close', 0);
+    };
+    const p = new CliProvider({
+      binaryPath: '/fake/claude',
+      provider: 'claude',
+      translate: passthroughTranslate,
+    });
     await consume(p, [userTurn('the prompt')]);
     expect(fakeChildren[0]?.stdin.write).not.toHaveBeenCalled();
     expect(fakeChildren[0]?.stdin.end).toHaveBeenCalled();
@@ -216,8 +303,14 @@ describe('CliProvider', () => {
   });
 
   it('buildArgs for claude includes correct flags', async () => {
-    nextChildHandler = (child) => { child.emit('close', 0); };
-    const p = new CliProvider({ binaryPath: '/fake/claude', provider: 'claude', translate: passthroughTranslate });
+    nextChildHandler = (child) => {
+      child.emit('close', 0);
+    };
+    const p = new CliProvider({
+      binaryPath: '/fake/claude',
+      provider: 'claude',
+      translate: passthroughTranslate,
+    });
     await consume(p, [userTurn('my question')]);
     const args = spawnCalls[0]?.args ?? [];
     expect(args).toContain('--print');
@@ -230,8 +323,14 @@ describe('CliProvider', () => {
   });
 
   it('buildArgs for codex includes correct flags', async () => {
-    nextChildHandler = (child) => { child.emit('close', 0); };
-    const p = new CliProvider({ binaryPath: '/fake/codex', provider: 'codex', translate: passthroughTranslate });
+    nextChildHandler = (child) => {
+      child.emit('close', 0);
+    };
+    const p = new CliProvider({
+      binaryPath: '/fake/codex',
+      provider: 'codex',
+      translate: passthroughTranslate,
+    });
     await consume(p, [userTurn('codex question')]);
     const args = spawnCalls[0]?.args ?? [];
     expect(args[0]).toBe('exec');

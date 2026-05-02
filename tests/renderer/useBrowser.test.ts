@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 
-import { useBrowser } from '../../src/renderer/hooks/useBrowser';
+import { normalizeBrowserUrl, useBrowser } from '../../src/renderer/hooks/useBrowser';
 import type { SessionId } from '../../src/types';
 import { __mockStore, __emitBrowserUpdate } from '../setup';
 
@@ -54,6 +54,8 @@ describe('useBrowser', () => {
     });
     expect(result.current.tabs).toHaveLength(1);
     expect(result.current.tabs[0]?.tab_id).toBe('seeded');
+    expect(result.current.activeTabId).toBe('seeded');
+    expect(__mockStore.browserActive.get(SID)).toBe('seeded');
   });
 
   it('open() creates a tab and makes it active', async () => {
@@ -94,6 +96,7 @@ describe('useBrowser', () => {
 
     expect(result.current.tabs).toHaveLength(1);
     expect(result.current.activeTabId).toBe(firstId);
+    expect(__mockStore.browserActive.get(SID)).toBe(firstId);
   });
 
   it('switchTo() updates activeTabId', async () => {
@@ -139,6 +142,29 @@ describe('useBrowser', () => {
       const tab = result.current.tabs.find((t) => t.tab_id === tabId);
       expect(tab?.url).toBe('https://2.test');
     });
+  });
+
+  it('normalizes scheme-less URLs before navigation', async () => {
+    const { result } = renderHook(() => useBrowser(SID));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let tabId: string | null = null;
+    await act(async () => {
+      tabId = await result.current.open('example.com');
+    });
+    if (!tabId) throw new Error('open failed');
+    expect(__mockStore.browserTabs.get(tabId)?.url).toBe('https://example.com');
+
+    await act(async () => {
+      await result.current.navigate(tabId as string, 'docs.example.com/path');
+    });
+    expect(__mockStore.browserTabs.get(tabId)?.url).toBe('https://docs.example.com/path');
+  });
+
+  it('normalizeBrowserUrl preserves explicit schemes', () => {
+    expect(normalizeBrowserUrl('http://a.test')).toBe('http://a.test');
+    expect(normalizeBrowserUrl('https://a.test')).toBe('https://a.test');
+    expect(normalizeBrowserUrl('about:blank')).toBe('about:blank');
   });
 
   it('subscribes to onTabUpdated only for the current session', async () => {
@@ -198,10 +224,9 @@ describe('useBrowser', () => {
       can_go_forward: false,
     });
 
-    const { result, rerender } = renderHook(
-      ({ id }: { id: SessionId | null }) => useBrowser(id),
-      { initialProps: { id: SID as SessionId | null } }
-    );
+    const { result, rerender } = renderHook(({ id }: { id: SessionId | null }) => useBrowser(id), {
+      initialProps: { id: SID as SessionId | null },
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.tabs.map((t) => t.tab_id)).toEqual(['a-tab']);
 

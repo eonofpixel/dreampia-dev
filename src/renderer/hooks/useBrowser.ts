@@ -73,6 +73,14 @@ export interface UseBrowserReturn extends UseBrowserState {
   refresh: () => Promise<void>;
 }
 
+export function normalizeBrowserUrl(input: string): string {
+  const trimmed = input.trim();
+  if (trimmed.length === 0) return trimmed;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
+  if (/^(about|file|data|mailto):/i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 // ────────────────────────────────────────────────────────────
 // Inline IPC shapes (avoid importing from `@/main`)
 // ────────────────────────────────────────────────────────────
@@ -122,24 +130,32 @@ const INITIAL_STATE: UseBrowserState = {
 // Hook
 // ────────────────────────────────────────────────────────────
 
-export function useBrowser(sessionId: SessionId | null): UseBrowserReturn {
+export function useBrowser(
+  sessionId: SessionId | null,
+  preferredActiveTabId?: string | null
+): UseBrowserReturn {
   const [state, setState] = useState<UseBrowserState>(INITIAL_STATE);
 
   const mountedRef = useRef(true);
+  const activeTabIdRef = useRef<string | null>(null);
+  const tabsRef = useRef<BrowserTabUI[]>([]);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
   }, []);
+  useEffect(() => {
+    activeTabIdRef.current = state.activeTabId;
+  }, [state.activeTabId]);
+  useEffect(() => {
+    tabsRef.current = state.tabs;
+  }, [state.tabs]);
 
-  const safeSet = useCallback(
-    (updater: (s: UseBrowserState) => UseBrowserState): void => {
-      if (!mountedRef.current) return;
-      setState(updater);
-    },
-    []
-  );
+  const safeSet = useCallback((updater: (s: UseBrowserState) => UseBrowserState): void => {
+    if (!mountedRef.current) return;
+    setState(updater);
+  }, []);
 
   // ── refresh: full tab-list re-fetch ─────────────────────────
   const refresh = useCallback(async (): Promise<void> => {
@@ -154,18 +170,30 @@ export function useBrowser(sessionId: SessionId | null): UseBrowserReturn {
       safeSet((s) => ({ ...s, loading: false, error: result.error }));
       return;
     }
+    const tabIds = new Set(result.value.map((t) => t.tab_id));
+    const previous = activeTabIdRef.current;
+    const preferred = preferredActiveTabId !== undefined ? preferredActiveTabId : null;
+    const nextActiveTabId =
+      previous !== null && tabIds.has(previous)
+        ? previous
+        : preferred !== null && tabIds.has(preferred)
+          ? preferred
+          : (result.value[0]?.tab_id ?? null);
+
     safeSet((s) => ({
       ...s,
       tabs: result.value,
-      // If the previous active tab no longer exists, clear it. Otherwise keep.
-      activeTabId:
-        s.activeTabId && result.value.some((t) => t.tab_id === s.activeTabId)
-          ? s.activeTabId
-          : null,
+      activeTabId: nextActiveTabId,
       loading: false,
       error: null,
     }));
-  }, [sessionId, safeSet]);
+    if (nextActiveTabId !== null) {
+      const switched = await api.switchTab(sessionId, nextActiveTabId);
+      if (!switched.ok) {
+        safeSet((s) => ({ ...s, error: switched.error }));
+      }
+    }
+  }, [preferredActiveTabId, sessionId, safeSet]);
 
   // ── live updates: subscribe to main's `browser/tab-updated` ──
   useEffect(() => {
@@ -198,7 +226,12 @@ export function useBrowser(sessionId: SessionId | null): UseBrowserReturn {
       const api = getBrowserApi();
       if (!api || !sessionId) return null;
       const tab_id = newTabId();
-      const created = await api.openTab({ session_id: sessionId, tab_id, url });
+      const normalizedUrl = normalizeBrowserUrl(url);
+      const created = await api.openTab({
+        session_id: sessionId,
+        tab_id,
+        url: normalizedUrl,
+      });
       if (!created.ok) {
         safeSet((s) => ({ ...s, error: created.error }));
         return null;
@@ -224,6 +257,11 @@ export function useBrowser(sessionId: SessionId | null): UseBrowserReturn {
     async (tabId: string): Promise<void> => {
       const api = getBrowserApi();
       if (!api) return;
+      const wasActive = activeTabIdRef.current === tabId;
+      const remainingTabs = tabsRef.current.filter((t) => t.tab_id !== tabId);
+      const replacementActiveTabId = wasActive
+        ? (remainingTabs[remainingTabs.length - 1]?.tab_id ?? null)
+        : activeTabIdRef.current;
       const result = await api.closeTab(tabId);
       if (!result.ok) {
         safeSet((s) => ({ ...s, error: result.error }));
@@ -241,8 +279,14 @@ export function useBrowser(sessionId: SessionId | null): UseBrowserReturn {
         }
         return { ...s, tabs, activeTabId: nextActive, error: null };
       });
+      if (wasActive && replacementActiveTabId !== null && sessionId !== null) {
+        const switched = await api.switchTab(sessionId, replacementActiveTabId);
+        if (!switched.ok) {
+          safeSet((s) => ({ ...s, error: switched.error }));
+        }
+      }
     },
-    [safeSet]
+    [safeSet, sessionId]
   );
 
   const switchTo = useCallback(
@@ -263,7 +307,7 @@ export function useBrowser(sessionId: SessionId | null): UseBrowserReturn {
     async (tabId: string, url: string): Promise<void> => {
       const api = getBrowserApi();
       if (!api) return;
-      const result = await api.navigate(tabId, url);
+      const result = await api.navigate(tabId, normalizeBrowserUrl(url));
       if (!result.ok) {
         safeSet((s) => ({ ...s, error: result.error }));
       }

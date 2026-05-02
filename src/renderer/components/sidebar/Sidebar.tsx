@@ -12,6 +12,7 @@ import { Plus, Search, Puzzle, Bot, Folder, Pin, Settings } from 'lucide-react';
 export interface SidebarProps {
   sessions: ReadonlyArray<Pick<Session, 'id' | 'title' | 'pinned'>>;
   activeSessionId?: string;
+  projectName?: string;
   onSelectSession: (sessionId: string) => void;
   onNewChat: () => void;
 }
@@ -19,6 +20,7 @@ export interface SidebarProps {
 export function Sidebar({
   sessions,
   activeSessionId,
+  projectName = 'workspace',
   onSelectSession,
   onNewChat,
 }: SidebarProps): React.JSX.Element {
@@ -52,10 +54,7 @@ export function Sidebar({
       {/* Projects (placeholder) */}
       <section className="border-b border-border-primary p-2">
         <SectionHeader>프로젝트</SectionHeader>
-        <SidebarNavItem
-          icon={<Folder className="h-4 w-4" />}
-          label="dreampia-dev"
-        />
+        <SidebarNavItem icon={<Folder className="h-4 w-4" />} label={projectName} />
       </section>
 
       {/* Chats */}
@@ -63,9 +62,7 @@ export function Sidebar({
         <SectionHeader>채팅</SectionHeader>
 
         {sessions.length === 0 ? (
-          <p className="px-3 py-2 text-xs text-text-tertiary">
-            아직 채팅이 없어요.
-          </p>
+          <p className="px-3 py-2 text-xs text-text-tertiary">아직 채팅이 없어요.</p>
         ) : (
           <>
             {pinned.length > 0 && (
@@ -100,11 +97,7 @@ export function Sidebar({
 
       {/* Bottom: 설정 */}
       <div className="border-t border-border-primary p-2">
-        <SidebarNavItem
-          icon={<Settings className="h-4 w-4" />}
-          label="설정"
-          shortcut="Ctrl+,"
-        />
+        <SidebarNavItem icon={<Settings className="h-4 w-4" />} label="설정" shortcut="Ctrl+," />
       </div>
     </aside>
   );

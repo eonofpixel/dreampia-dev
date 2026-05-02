@@ -204,6 +204,13 @@ if (typeof window !== 'undefined') {
       invoke: vi.fn(),
       on: vi.fn(),
 
+      app: {
+        getDefaultWorkspace: vi.fn(async () => ({
+          ok: true,
+          value: { root: process.cwd(), name: 'dreampia-dev' },
+        })),
+      },
+
       session: {
         list: vi.fn(
           async (): Promise<Result<MockSessionMeta[]>> => ({
@@ -222,52 +229,43 @@ if (typeof window !== 'undefined') {
           })
         ),
 
-        create: vi.fn(
-          async (session: Session): Promise<Result<Session>> => {
-            mockStore.sessions.set(session.id, session);
-            return { ok: true, value: session };
-          }
-        ),
+        create: vi.fn(async (session: Session): Promise<Result<Session>> => {
+          mockStore.sessions.set(session.id, session);
+          return { ok: true, value: session };
+        }),
 
-        appendTurn: vi.fn(
-          async (id: string, turn: Turn): Promise<Result<void>> => {
-            const s = mockStore.sessions.get(id);
-            if (s === undefined) {
-              return { ok: false, error: `session ${id} not found` };
-            }
-            const next: Session = {
-              ...s,
-              updated_at: new Date().toISOString(),
-              conversation: {
-                ...s.conversation,
-                turns: [...s.conversation.turns, turn],
-              },
-            };
-            mockStore.sessions.set(id, next);
-            return { ok: true, value: undefined };
+        appendTurn: vi.fn(async (id: string, turn: Turn): Promise<Result<void>> => {
+          const s = mockStore.sessions.get(id);
+          if (s === undefined) {
+            return { ok: false, error: `session ${id} not found` };
           }
-        ),
+          const next: Session = {
+            ...s,
+            updated_at: new Date().toISOString(),
+            conversation: {
+              ...s.conversation,
+              turns: [...s.conversation.turns, turn],
+            },
+          };
+          mockStore.sessions.set(id, next);
+          return { ok: true, value: undefined };
+        }),
 
-        updateMeta: vi.fn(
-          async (
-            id: string,
-            patch: SessionMetaPatch
-          ): Promise<Result<void>> => {
-            const s = mockStore.sessions.get(id);
-            if (s === undefined) {
-              return { ok: false, error: `session ${id} not found` };
-            }
-            const next: Session = {
-              ...s,
-              ...(patch.title !== undefined && { title: patch.title }),
-              ...(patch.pinned !== undefined && { pinned: patch.pinned }),
-              ...(patch.archived !== undefined && { archived: patch.archived }),
-              updated_at: new Date().toISOString(),
-            };
-            mockStore.sessions.set(id, next);
-            return { ok: true, value: undefined };
+        updateMeta: vi.fn(async (id: string, patch: SessionMetaPatch): Promise<Result<void>> => {
+          const s = mockStore.sessions.get(id);
+          if (s === undefined) {
+            return { ok: false, error: `session ${id} not found` };
           }
-        ),
+          const next: Session = {
+            ...s,
+            ...(patch.title !== undefined && { title: patch.title }),
+            ...(patch.pinned !== undefined && { pinned: patch.pinned }),
+            ...(patch.archived !== undefined && { archived: patch.archived }),
+            updated_at: new Date().toISOString(),
+          };
+          mockStore.sessions.set(id, next);
+          return { ok: true, value: undefined };
+        }),
 
         delete: vi.fn(async (id: string): Promise<Result<void>> => {
           mockStore.sessions.delete(id);
@@ -282,9 +280,7 @@ if (typeof window !== 'undefined') {
         acquire: vi.fn(
           async (
             sessionId: string
-          ): Promise<
-            Result<{ acquired: boolean; leader: MockSessionLock | null }>
-          > => {
+          ): Promise<Result<{ acquired: boolean; leader: MockSessionLock | null }>> => {
             const now = new Date().toISOString();
             const existing = mockStore.locks.get(sessionId);
             const ttl = existing?.ttl_seconds ?? 30;
@@ -343,39 +339,28 @@ if (typeof window !== 'undefined') {
         }),
 
         get: vi.fn(
-          async (
-            sessionId: string
-          ): Promise<Result<MockSessionLock | null>> => ({
+          async (sessionId: string): Promise<Result<MockSessionLock | null>> => ({
             ok: true,
             value: mockStore.locks.get(sessionId) ?? null,
           })
         ),
 
-        heartbeat: vi.fn(
-          async (sessionId: string): Promise<Result<boolean>> => {
-            const existing = mockStore.locks.get(sessionId);
-            if (
-              !existing ||
-              existing.leader_window_id !== mockStore.windowId
-            ) {
-              return { ok: true, value: false };
-            }
-            existing.heartbeat_at = new Date().toISOString();
-            return { ok: true, value: true };
+        heartbeat: vi.fn(async (sessionId: string): Promise<Result<boolean>> => {
+          const existing = mockStore.locks.get(sessionId);
+          if (!existing || existing.leader_window_id !== mockStore.windowId) {
+            return { ok: true, value: false };
           }
-        ),
+          existing.heartbeat_at = new Date().toISOString();
+          return { ok: true, value: true };
+        }),
 
-        isLeader: vi.fn(
-          async (sessionId: string): Promise<Result<boolean>> => {
-            const existing = mockStore.locks.get(sessionId);
-            return {
-              ok: true,
-              value:
-                existing !== undefined &&
-                existing.leader_window_id === mockStore.windowId,
-            };
-          }
-        ),
+        isLeader: vi.fn(async (sessionId: string): Promise<Result<boolean>> => {
+          const existing = mockStore.locks.get(sessionId);
+          return {
+            ok: true,
+            value: existing !== undefined && existing.leader_window_id === mockStore.windowId,
+          };
+        }),
       },
 
       // P1-5: in-app browser. Mirrors BrowserManager semantics in-memory.
@@ -416,30 +401,23 @@ if (typeof window !== 'undefined') {
           return { ok: true, value: undefined };
         }),
 
-        switchTab: vi.fn(
-          async (
-            sessionId: string,
-            tabId: string
-          ): Promise<Result<void>> => {
-            const tab = mockStore.browserTabs.get(tabId);
-            if (!tab || tab.session_id !== sessionId) {
-              return { ok: true, value: undefined };
-            }
-            mockStore.browserActive.set(sessionId, tabId);
+        switchTab: vi.fn(async (sessionId: string, tabId: string): Promise<Result<void>> => {
+          const tab = mockStore.browserTabs.get(tabId);
+          if (!tab || tab.session_id !== sessionId) {
             return { ok: true, value: undefined };
           }
-        ),
+          mockStore.browserActive.set(sessionId, tabId);
+          return { ok: true, value: undefined };
+        }),
 
-        navigate: vi.fn(
-          async (tabId: string, url: string): Promise<Result<void>> => {
-            const tab = mockStore.browserTabs.get(tabId);
-            if (!tab) return { ok: true, value: undefined };
-            const next: MockBrowserTabState = { ...tab, url, status: 'loading' };
-            mockStore.browserTabs.set(tabId, next);
-            emitBrowserUpdate(next);
-            return { ok: true, value: undefined };
-          }
-        ),
+        navigate: vi.fn(async (tabId: string, url: string): Promise<Result<void>> => {
+          const tab = mockStore.browserTabs.get(tabId);
+          if (!tab) return { ok: true, value: undefined };
+          const next: MockBrowserTabState = { ...tab, url, status: 'loading' };
+          mockStore.browserTabs.set(tabId, next);
+          emitBrowserUpdate(next);
+          return { ok: true, value: undefined };
+        }),
 
         back: vi.fn(async (_tabId: string): Promise<Result<void>> => {
           return { ok: true, value: undefined };
@@ -459,19 +437,14 @@ if (typeof window !== 'undefined') {
         }),
 
         setBounds: vi.fn(
-          async (
-            tabId: string,
-            bounds: MockBrowserBounds
-          ): Promise<Result<void>> => {
+          async (tabId: string, bounds: MockBrowserBounds): Promise<Result<void>> => {
             mockStore.browserBounds.set(tabId, bounds);
             return { ok: true, value: undefined };
           }
         ),
 
         listTabs: vi.fn(
-          async (
-            sessionId: string
-          ): Promise<Result<MockBrowserTabState[]>> => ({
+          async (sessionId: string): Promise<Result<MockBrowserTabState[]>> => ({
             ok: true,
             value: Array.from(mockStore.browserTabs.values()).filter(
               (t) => t.session_id === sessionId
@@ -510,12 +483,10 @@ if (typeof window !== 'undefined') {
             });
             // Source 추론 (테스트에서 검증할 수 있도록).
             const lower = args.model.toLowerCase();
-            const isClaude = ['claude-', 'sonnet-', 'opus-', 'haiku-'].some(
-              (p) => lower.startsWith(p)
-            );
-            const isCodex = ['gpt-', 'o1-', 'o3-', 'codex-'].some((p) =>
+            const isClaude = ['claude-', 'sonnet-', 'opus-', 'haiku-'].some((p) =>
               lower.startsWith(p)
             );
+            const isCodex = ['gpt-', 'o1-', 'o3-', 'codex-'].some((p) => lower.startsWith(p));
             let source: 'claude-cli' | 'codex-cli' | 'mock' = 'mock';
             if (isClaude && mockStore.aiDetection.claude !== null) {
               source = 'claude-cli';
@@ -526,21 +497,17 @@ if (typeof window !== 'undefined') {
           }
         ),
 
-        stopStream: vi.fn(
-          async (streamId: string): Promise<Result<void>> => {
-            mockStore.aiStoppedStreams.add(streamId);
-            return { ok: true, value: undefined };
-          }
-        ),
+        stopStream: vi.fn(async (streamId: string): Promise<Result<void>> => {
+          mockStore.aiStoppedStreams.add(streamId);
+          return { ok: true, value: undefined };
+        }),
 
-        onStreamEvent: vi.fn(
-          (listener: AiStreamEventListener): (() => void) => {
-            mockStore.aiEventListeners.add(listener);
-            return () => {
-              mockStore.aiEventListeners.delete(listener);
-            };
-          }
-        ),
+        onStreamEvent: vi.fn((listener: AiStreamEventListener): (() => void) => {
+          mockStore.aiEventListeners.add(listener);
+          return () => {
+            mockStore.aiEventListeners.delete(listener);
+          };
+        }),
 
         onStreamEnd: vi.fn((listener: AiStreamEndListener): (() => void) => {
           mockStore.aiEndListeners.add(listener);

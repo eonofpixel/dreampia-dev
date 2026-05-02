@@ -57,22 +57,26 @@ export class MockProvider implements StreamingProvider {
     turns: Turn[];
     model: string;
     config?: Record<string, unknown>;
+    signal?: AbortSignal;
   }): AsyncIterable<StreamEvent> {
     const turnId = newTurnId();
     const userText = this.extractLastUserText(input.turns);
     const responseText =
-      this.opts.responseText ??
-      `Mock response. You said: "${userText.slice(0, 80)}"`;
+      this.opts.responseText ?? `Mock response. You said: "${userText.slice(0, 80)}"`;
 
     yield { type: 'message_start', turn_id: turnId, model: input.model };
 
     // 한 글자씩 streaming. Iterator 는 code-point 단위 (이모지 안전).
     for (const ch of responseText) {
+      if (input.signal?.aborted) return;
       if (this.opts.delayMs && this.opts.delayMs > 0) {
-        await this.sleep(this.opts.delayMs);
+        await this.sleep(this.opts.delayMs, input.signal);
       }
+      if (input.signal?.aborted) return;
       yield { type: 'text_delta', text: ch };
     }
+
+    if (input.signal?.aborted) return;
 
     const toolCalls: ToolCallRef[] = [];
     if (this.opts.injectToolCall) {
@@ -122,9 +126,21 @@ export class MockProvider implements StreamingProvider {
     return '';
   }
 
-  private sleep(ms: number): Promise<void> {
+  private sleep(ms: number, signal?: AbortSignal): Promise<void> {
     return new Promise((resolve) => {
-      setTimeout(resolve, ms);
+      if (signal?.aborted) {
+        resolve();
+        return;
+      }
+      const timer = setTimeout(resolve, ms);
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true }
+      );
     });
   }
 }

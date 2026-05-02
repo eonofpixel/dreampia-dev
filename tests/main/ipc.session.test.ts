@@ -20,10 +20,7 @@ import { fileURLToPath } from 'node:url';
 // Mock electron — must come before importing anything that uses it
 // ────────────────────────────────────────────────────────────
 
-type Handler = (
-  evt: unknown,
-  ...args: unknown[]
-) => unknown | Promise<unknown>;
+type Handler = (evt: unknown, ...args: unknown[]) => unknown | Promise<unknown>;
 
 const handlers = new Map<string, Handler>();
 
@@ -99,12 +96,21 @@ describe('IPC session handlers', () => {
   it('registers all expected channels', () => {
     expect(handlers.has('app:get-version')).toBe(true);
     expect(handlers.has('app:get-platform')).toBe(true);
+    expect(handlers.has('app:get-default-workspace')).toBe(true);
     expect(handlers.has('session/list')).toBe(true);
     expect(handlers.has('session/get')).toBe(true);
     expect(handlers.has('session/create')).toBe(true);
     expect(handlers.has('session/append-turn')).toBe(true);
     expect(handlers.has('session/update-meta')).toBe(true);
     expect(handlers.has('session/delete')).toBe(true);
+  });
+
+  it('app:get-default-workspace returns cwd metadata', async () => {
+    const result = await call<Result<{ root: string; name: string }>>('app:get-default-workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.root).toBe(process.cwd());
+    expect(result.value.name.length).toBeGreaterThan(0);
   });
 
   it('does NOT register session/* when store is omitted', () => {
@@ -127,9 +133,7 @@ describe('IPC session handlers', () => {
       const fixture = loadFixture('02-single-turn.json');
       await call<Result<Session>>('session/create', fixture);
 
-      const result = await call<Result<Array<{ id: string; title: string }>>>(
-        'session/list'
-      );
+      const result = await call<Result<Array<{ id: string; title: string }>>>('session/list');
       expect(result.ok).toBe(true);
       if (!result.ok) return; // tighten narrowing for TS
       expect(result.value).toHaveLength(1);
@@ -188,10 +192,7 @@ describe('IPC session handlers', () => {
       const fixture = loadFixture('02-single-turn.json');
       await call('session/create', fixture);
 
-      const result = await call<Result<Session | null>>(
-        'session/get',
-        fixture.id
-      );
+      const result = await call<Result<Session | null>>('session/get', fixture.id);
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value?.id).toBe(fixture.id);
@@ -221,11 +222,7 @@ describe('IPC session handlers', () => {
         content: [{ type: 'text' as const, text: '안녕' }],
       };
 
-      const result = await call<Result<void>>(
-        'session/append-turn',
-        fixture.id,
-        newTurn
-      );
+      const result = await call<Result<void>>('session/append-turn', fixture.id, newTurn);
       expect(result.ok).toBe(true);
 
       // Verify via store
@@ -255,11 +252,11 @@ describe('IPC session handlers', () => {
       const fixture = loadFixture('01-empty.json');
       await call('session/create', fixture);
 
-      const result = await call<Result<void>>(
-        'session/append-turn',
-        fixture.id,
-        { id: '', role: 'invalid', content: 'not-an-array' }
-      );
+      const result = await call<Result<void>>('session/append-turn', fixture.id, {
+        id: '',
+        role: 'invalid',
+        content: 'not-an-array',
+      });
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error).toMatch(/Validation error/);
@@ -273,11 +270,9 @@ describe('IPC session handlers', () => {
       const fixture = loadFixture('01-empty.json');
       await call('session/create', fixture);
 
-      const result = await call<Result<void>>(
-        'session/update-meta',
-        fixture.id,
-        { title: '제목 변경됨' }
-      );
+      const result = await call<Result<void>>('session/update-meta', fixture.id, {
+        title: '제목 변경됨',
+      });
       expect(result.ok).toBe(true);
 
       const reloaded = store.getSession(fixture.id);
@@ -288,11 +283,9 @@ describe('IPC session handlers', () => {
       const fixture = loadFixture('01-empty.json');
       await call('session/create', fixture);
 
-      const result = await call<Result<void>>(
-        'session/update-meta',
-        fixture.id,
-        { random_field: 42 }
-      );
+      const result = await call<Result<void>>('session/update-meta', fixture.id, {
+        random_field: 42,
+      });
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error).toMatch(/Validation error/);

@@ -14,7 +14,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { Session, SessionId, Turn } from '@/types';
-import type { Result, SessionMetaPatch } from './types';
+import type { Result, SessionMetaPatch, WorkspaceInfo } from './types';
 
 // SessionMeta is a struct from `@/storage`. Re-declare inline so this file
 // stays free of the storage module. Keep this in sync with `SessionStore`.
@@ -101,6 +101,7 @@ interface AiStreamEndPayload {
 const ALLOWED_INVOKE_CHANNELS = [
   'app:get-version',
   'app:get-platform',
+  'app:get-default-workspace',
   'session/list',
   'session/get',
   'session/create',
@@ -164,6 +165,14 @@ const api = {
   },
 
   /**
+   * App/runtime information that is safe to expose to the renderer.
+   */
+  app: {
+    getDefaultWorkspace: (): Promise<Result<WorkspaceInfo>> =>
+      ipcRenderer.invoke('app:get-default-workspace') as Promise<Result<WorkspaceInfo>>,
+  },
+
+  /**
    * Typed SessionStore API.
    *
    * Each method returns `Result<T>` so callers can branch on `.ok`
@@ -183,10 +192,7 @@ const api = {
     appendTurn: (id: SessionId, turn: Turn): Promise<Result<void>> =>
       ipcRenderer.invoke('session/append-turn', id, turn) as Promise<Result<void>>,
 
-    updateMeta: (
-      id: SessionId,
-      patch: SessionMetaPatch
-    ): Promise<Result<void>> =>
+    updateMeta: (id: SessionId, patch: SessionMetaPatch): Promise<Result<void>> =>
       ipcRenderer.invoke('session/update-meta', id, patch) as Promise<Result<void>>,
 
     delete: (id: SessionId): Promise<Result<void>> =>
@@ -205,9 +211,7 @@ const api = {
   lock: {
     acquire: (
       sessionId: SessionId
-    ): Promise<
-      Result<{ acquired: boolean; leader: SessionLockShape | null }>
-    > =>
+    ): Promise<Result<{ acquired: boolean; leader: SessionLockShape | null }>> =>
       ipcRenderer.invoke('lock/acquire', sessionId) as Promise<
         Result<{ acquired: boolean; leader: SessionLockShape | null }>
       >,
@@ -216,19 +220,13 @@ const api = {
       ipcRenderer.invoke('lock/release', sessionId) as Promise<Result<void>>,
 
     get: (sessionId: SessionId): Promise<Result<SessionLockShape | null>> =>
-      ipcRenderer.invoke('lock/get', sessionId) as Promise<
-        Result<SessionLockShape | null>
-      >,
+      ipcRenderer.invoke('lock/get', sessionId) as Promise<Result<SessionLockShape | null>>,
 
     heartbeat: (sessionId: SessionId): Promise<Result<boolean>> =>
-      ipcRenderer.invoke('lock/heartbeat', sessionId) as Promise<
-        Result<boolean>
-      >,
+      ipcRenderer.invoke('lock/heartbeat', sessionId) as Promise<Result<boolean>>,
 
     isLeader: (sessionId: SessionId): Promise<Result<boolean>> =>
-      ipcRenderer.invoke('lock/is-leader', sessionId) as Promise<
-        Result<boolean>
-      >,
+      ipcRenderer.invoke('lock/is-leader', sessionId) as Promise<Result<boolean>>,
   },
 
   /**
@@ -249,22 +247,16 @@ const api = {
       tab_id: string;
       url: string;
     }): Promise<Result<BrowserTabStateShape>> =>
-      ipcRenderer.invoke('browser/open-tab', args) as Promise<
-        Result<BrowserTabStateShape>
-      >,
+      ipcRenderer.invoke('browser/open-tab', args) as Promise<Result<BrowserTabStateShape>>,
 
     closeTab: (tabId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('browser/close-tab', tabId) as Promise<Result<void>>,
 
     switchTab: (sessionId: SessionId, tabId: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('browser/switch-tab', sessionId, tabId) as Promise<
-        Result<void>
-      >,
+      ipcRenderer.invoke('browser/switch-tab', sessionId, tabId) as Promise<Result<void>>,
 
     navigate: (tabId: string, url: string): Promise<Result<void>> =>
-      ipcRenderer.invoke('browser/navigate', tabId, url) as Promise<
-        Result<void>
-      >,
+      ipcRenderer.invoke('browser/navigate', tabId, url) as Promise<Result<void>>,
 
     back: (tabId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('browser/back', tabId) as Promise<Result<void>>,
@@ -275,28 +267,14 @@ const api = {
     reload: (tabId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('browser/reload', tabId) as Promise<Result<void>>,
 
-    setBounds: (
-      tabId: string,
-      bounds: BrowserBoundsShape
-    ): Promise<Result<void>> =>
-      ipcRenderer.invoke('browser/set-bounds', tabId, bounds) as Promise<
-        Result<void>
-      >,
+    setBounds: (tabId: string, bounds: BrowserBoundsShape): Promise<Result<void>> =>
+      ipcRenderer.invoke('browser/set-bounds', tabId, bounds) as Promise<Result<void>>,
 
-    listTabs: (
-      sessionId: SessionId
-    ): Promise<Result<BrowserTabStateShape[]>> =>
-      ipcRenderer.invoke('browser/list-tabs', sessionId) as Promise<
-        Result<BrowserTabStateShape[]>
-      >,
+    listTabs: (sessionId: SessionId): Promise<Result<BrowserTabStateShape[]>> =>
+      ipcRenderer.invoke('browser/list-tabs', sessionId) as Promise<Result<BrowserTabStateShape[]>>,
 
-    onTabUpdated: (
-      listener: (state: BrowserTabStateShape) => void
-    ): (() => void) => {
-      const handler = (
-        _event: Electron.IpcRendererEvent,
-        state: BrowserTabStateShape
-      ): void => {
+    onTabUpdated: (listener: (state: BrowserTabStateShape) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: BrowserTabStateShape): void => {
         listener(state);
       };
       ipcRenderer.on('browser/tab-updated', handler);
@@ -334,26 +312,16 @@ const api = {
     stopStream: (streamId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('ai/stop-stream', streamId) as Promise<Result<void>>,
 
-    onStreamEvent: (
-      listener: (payload: AiStreamEventPayload) => void
-    ): (() => void) => {
-      const handler = (
-        _event: Electron.IpcRendererEvent,
-        payload: AiStreamEventPayload
-      ): void => {
+    onStreamEvent: (listener: (payload: AiStreamEventPayload) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: AiStreamEventPayload): void => {
         listener(payload);
       };
       ipcRenderer.on('ai/stream-event', handler);
       return () => ipcRenderer.removeListener('ai/stream-event', handler);
     },
 
-    onStreamEnd: (
-      listener: (payload: AiStreamEndPayload) => void
-    ): (() => void) => {
-      const handler = (
-        _event: Electron.IpcRendererEvent,
-        payload: AiStreamEndPayload
-      ): void => {
+    onStreamEnd: (listener: (payload: AiStreamEndPayload) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: AiStreamEndPayload): void => {
         listener(payload);
       };
       ipcRenderer.on('ai/stream-end', handler);

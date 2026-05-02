@@ -15,9 +15,7 @@
  * stack traces leak file paths and internal structure. Wrap every
  * call in `Result<T>` and surface a string-only error to the renderer.
  */
-export type Result<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: string };
+export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
 /**
  * Patch shape for `session/update-meta` IPC.
@@ -29,4 +27,15 @@ export interface SessionMetaPatch {
   title?: string;
   pinned?: boolean;
   archived?: boolean;
+}
+
+/**
+ * Default workspace surfaced to the renderer for new sessions.
+ *
+ * Kept preload-safe: no branded types here because the renderer derives the
+ * WorkspaceId from `root` with the browser-safe helper.
+ */
+export interface WorkspaceInfo {
+  root: string;
+  name: string;
 }

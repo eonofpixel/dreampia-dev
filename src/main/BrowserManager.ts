@@ -75,6 +75,7 @@ interface ManagedTab {
   state: BrowserTabState;
   bounds: BrowserBounds | null;
   attached: boolean;
+  emitState: (patch?: Partial<BrowserTabState>) => void;
   detachListeners: () => void;
 }
 
@@ -130,11 +131,7 @@ export class BrowserManager {
    * NOT attached to the main window — the renderer must call setBounds()
    * (which auto-attaches when this tab is active) before content is visible.
    */
-  openTab(args: {
-    session_id: SessionId;
-    tab_id: string;
-    url: string;
-  }): BrowserTabState {
+  openTab(args: { session_id: SessionId; tab_id: string; url: string }): BrowserTabState {
     if (this.tabs.has(args.tab_id)) {
       // Idempotent: return existing state. Caller can decide whether to navigate.
       const existing = this.tabs.get(args.tab_id);
@@ -172,6 +169,7 @@ export class BrowserManager {
       state: initialState,
       bounds: null,
       attached: false,
+      emitState: () => {},
       detachListeners: () => {},
     };
     this.tabs.set(args.tab_id, tab);
@@ -195,10 +193,14 @@ export class BrowserManager {
         // Listener errors must never bubble into Electron event loops.
       }
     };
+    tab.emitState = emit;
 
     const onLoadStart = (): void => emit({ status: 'loading' });
     const onLoadEnd = (): void => emit({ status: 'ready' });
-    const onLoadFail = (): void => emit({ status: 'failed' });
+    const onLoadFail = (_event: unknown, errorCode?: number): void => {
+      if (errorCode === -3) return; // ERR_ABORTED during a normal redirect/navigation.
+      emit({ status: 'failed' });
+    };
     const onTitleChange = (_e: unknown, title: string): void => emit({ title });
     const onFaviconChange = (_e: unknown, favicons: string[]): void =>
       emit({ favicon_url: favicons[0] ?? null });
@@ -272,8 +274,9 @@ export class BrowserManager {
     const tab = this.tabs.get(tab_id);
     if (!tab) return;
     if (tab.view.webContents.isDestroyed()) return;
+    tab.emitState({ status: 'loading', url });
     void tab.view.webContents.loadURL(url).catch(() => {
-      // emit 'failed' for visibility — listeners will pick it up via did-fail-load
+      tab.emitState({ status: 'failed', url });
     });
   }
 
@@ -312,7 +315,12 @@ export class BrowserManager {
     const tab = this.tabs.get(tab_id);
     if (!tab) return;
     if (tab.view.webContents.isDestroyed()) return;
-    safeCall(() => tab.view.webContents.reload(), undefined);
+    try {
+      tab.emitState({ status: 'loading' });
+      tab.view.webContents.reload();
+    } catch {
+      tab.emitState({ status: 'failed' });
+    }
   }
 
   // ── geometry ──────────────────────────────────────────────
@@ -373,14 +381,17 @@ export class BrowserManager {
     } catch {
       // window/view destroyed mid-call — leave attached=false so a later
       // setBounds will retry.
+      tab.attached = false;
     }
   }
 
   private detachFromWindow(tab: ManagedTab): void {
     if (!tab.attached) return;
     const win = this.opts.getMainWindow();
-    if (!win) return;
-    if (win.isDestroyed?.()) return;
+    if (!win || win.isDestroyed?.()) {
+      tab.attached = false;
+      return;
+    }
     try {
       win.contentView.removeChildView(tab.view);
     } catch {

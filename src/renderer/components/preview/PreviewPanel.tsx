@@ -69,7 +69,7 @@ export function PreviewPanel({
     forward,
     reload,
     setBounds,
-  } = useBrowser(sessionId);
+  } = useBrowser(sessionId, browser?.active_tab_id ?? null);
 
   const activeTab = useMemo<BrowserTabUI | null>(
     () => tabs.find((t) => t.tab_id === activeTabId) ?? null,
