@@ -203,10 +203,11 @@ describe('useStreamingTurn', () => {
       },
     };
     const onError = vi.fn();
+    const received: Turn[] = [];
     const { result } = renderHook(() =>
       useStreamingTurn({
         provider: errorProvider,
-        onTurnUpdate: vi.fn(),
+        onTurnUpdate: (t) => received.push(t),
         onComplete: vi.fn(),
         onError,
       })
@@ -215,6 +216,11 @@ describe('useStreamingTurn', () => {
       await result.current.start(input);
     });
     expect(onError).toHaveBeenCalledWith('test error');
+    expect(received.at(-1)?.status).toBe('failed');
+    expect(received.at(-1)?.content[0]).toEqual({
+      type: 'text',
+      text: '오류: test error',
+    });
   });
 
   it('cancel aborts stream — no further updates after cancel', async () => {

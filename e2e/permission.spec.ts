@@ -1,22 +1,32 @@
 /**
- * Permission spec — V3 보안 (DangerCheck → PERMISSION_DENIED).
+ * Permission spec — V3 security (DangerCheck -> blocked ToolResult).
  *
- * STATUS: deferred. Same blocker as tool-call.spec.ts — needs
- * dev-only injection of a synthetic tool_call to drive the
- * permission denial flow without a real CLI.
- *
- * See tool-call.spec.ts for the path forward (P2-B).
- *
- * Coverage today: tests/permission/*.test.ts validate the resolver +
- * danger pattern matchers in isolation; tests/main/ipc.tool.test.ts
- * validates the IPC bridge. What's missing is end-to-end: AI emits a
- * dangerous tool_call → renderer surfaces "❌ 실패" with PERMISSION_DENIED.
+ * Uses the same DREAMPIA_TEST-only tool marker as tool-call.spec.ts. The
+ * dangerous command is blocked before child_process.spawn; the UI must show
+ * the failed tool result from the real main-process ToolQueue path.
  */
 
 import { test, expect } from './fixtures';
 
-test.describe.skip('permission (V3) — needs dev-only injection (P2-B)', () => {
-  test('rm -rf / blocked → ToolCallCard shows ❌ 실패', async ({ window }) => {
-    expect(window).toBeTruthy();
+const TOOL_MARKER = '__DREAMPIA_TOOL_CALL__';
+
+test.describe('permission (V3)', () => {
+  test('rm -rf / blocked → ToolCallCard shows 실패 + DANGEROUS_PATTERN', async ({ window }) => {
+    await window.getByRole('button', { name: '새 채팅', exact: false }).first().click();
+    const input = window.getByTestId('chat-input');
+    await input.click();
+    await input.fill(`${TOOL_MARKER} {"tool_id":"shell.run","input":{"cmd":"rm -rf /"}}`);
+    await input.press('Enter');
+
+    const assistantTurn = window.locator('[data-testid="turn-assistant"]');
+    await expect(assistantTurn).toHaveAttribute('data-status', 'completed', {
+      timeout: 15_000,
+    });
+
+    const card = window.getByTestId('tool-call-card').first();
+    await expect(card).toBeVisible({ timeout: 10_000 });
+    await expect(card).toContainText('실패');
+    await card.getByRole('button').click();
+    await expect(card).toContainText('DANGEROUS_PATTERN');
   });
 });

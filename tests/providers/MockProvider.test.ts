@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { MockProvider } from '../../src/providers/MockProvider';
+import { MockProvider, TEST_TOOL_CALL_MARKER } from '../../src/providers/MockProvider';
 import { TurnSchema, type Turn, type TurnId } from '../../src/types';
 import type { StreamEvent } from '../../src/providers/types';
 
@@ -177,6 +177,25 @@ describe('MockProvider — tool call injection', () => {
     const events = await collect(provider, [userTurn('x')]);
     expect(events.find((e) => e.type === 'tool_call_start')).toBeUndefined();
     expect(events.find((e) => e.type === 'tool_call_complete')).toBeUndefined();
+  });
+
+  it('testToolTrigger parses marker JSON into a tool call only when enabled', async () => {
+    const message = `${TEST_TOOL_CALL_MARKER} {"tool_id":"shell.run","input":{"cmd":"echo hi"}}`;
+    const enabledEvents = await collect(
+      new MockProvider({ responseText: 'ok', testToolTrigger: true }),
+      [userTurn(message)]
+    );
+    const completeEv = enabledEvents.find((e) => e.type === 'tool_call_complete');
+    expect(completeEv?.type).toBe('tool_call_complete');
+    if (completeEv?.type === 'tool_call_complete') {
+      expect(completeEv.tool_call.tool_id).toBe('shell.run');
+      expect(completeEv.tool_call.input).toEqual({ cmd: 'echo hi' });
+    }
+
+    const disabledEvents = await collect(new MockProvider({ responseText: 'ok' }), [
+      userTurn(message),
+    ]);
+    expect(disabledEvents.find((e) => e.type === 'tool_call_complete')).toBeUndefined();
   });
 
   it('final turn includes tool_calls array when injected', async () => {

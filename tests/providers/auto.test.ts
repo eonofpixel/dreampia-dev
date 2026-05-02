@@ -25,6 +25,8 @@ const mockDetect = vi.mocked(detectCli);
 
 beforeEach(() => {
   mockDetect.mockReset();
+  delete process.env.DREAMPIA_TEST;
+  delete process.env.DREAMPIA_ALLOW_MOCK_PROVIDER;
 });
 
 describe('getDefaultProvider', () => {
@@ -63,6 +65,31 @@ describe('getDefaultProvider', () => {
     });
     const result = await getDefaultProvider('unknown-model');
     expect(result.source).toBe('mock');
+  });
+
+  it('production without a matching CLI fails closed instead of using MockProvider', async () => {
+    mockDetect.mockResolvedValue({ claude: null, codex: null });
+    const originalNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      await expect(getDefaultProvider('claude-3.5-sonnet')).rejects.toThrow(
+        /No production provider available/
+      );
+    } finally {
+      if (originalNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = originalNodeEnv;
+      }
+    }
+  });
+
+  it('DREAMPIA_TEST still forces deterministic MockProvider', async () => {
+    process.env.DREAMPIA_TEST = '1';
+    const result = await getDefaultProvider('gpt-5.5');
+    expect(result.source).toBe('mock');
+    expect(result.provider).toBeInstanceOf(MockProvider);
+    expect(mockDetect).not.toHaveBeenCalled();
   });
 
   it('both installed: claude model uses claude-cli, codex model uses codex-cli', async () => {

@@ -210,7 +210,11 @@ function applyEvent(turn: Turn, ev: StreamEvent): Turn {
     }
 
     case 'error':
-      return { ...turn, status: 'failed' };
+      return {
+        ...turn,
+        status: 'failed',
+        content: [{ type: 'text', text: `오류: ${ev.error}` }],
+      };
 
     default:
       return turn;

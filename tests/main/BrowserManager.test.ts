@@ -19,6 +19,7 @@ interface FakeWebContents {
   loadURL: ReturnType<typeof vi.fn>;
   getURL: ReturnType<typeof vi.fn>;
   getTitle: ReturnType<typeof vi.fn>;
+  setWindowOpenHandler: ReturnType<typeof vi.fn>;
   on: ReturnType<typeof vi.fn>;
   off: ReturnType<typeof vi.fn>;
   isDestroyed: ReturnType<typeof vi.fn>;
@@ -48,8 +49,14 @@ interface FakeWindow {
   isDestroyed: () => boolean;
 }
 
+interface FakeSession {
+  setPermissionRequestHandler: ReturnType<typeof vi.fn>;
+  setPermissionCheckHandler: ReturnType<typeof vi.fn>;
+}
+
 const fakeViewsCreated: FakeView[] = [];
 const fakeSessionPartitions: string[] = [];
+const fakeSessionsCreated: FakeSession[] = [];
 
 function makeFakeWebContents(initialUrl: string): FakeWebContents {
   const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
@@ -63,6 +70,7 @@ function makeFakeWebContents(initialUrl: string): FakeWebContents {
     }),
     getURL: vi.fn(() => currentUrl),
     getTitle: vi.fn(() => currentTitle),
+    setWindowOpenHandler: vi.fn(),
     on: vi.fn((evt: string, handler: (...args: unknown[]) => void) => {
       const arr = listeners.get(evt) ?? [];
       arr.push(handler);
@@ -103,7 +111,12 @@ vi.mock('electron', () => {
     session: {
       fromPartition: vi.fn((p: string) => {
         fakeSessionPartitions.push(p);
-        return {};
+        const fakeSession: FakeSession = {
+          setPermissionRequestHandler: vi.fn(),
+          setPermissionCheckHandler: vi.fn(),
+        };
+        fakeSessionsCreated.push(fakeSession);
+        return fakeSession;
       }),
     },
     WebContentsView: vi.fn((opts?: { webPreferences?: { session?: object } }) => {
@@ -163,6 +176,7 @@ describe('BrowserManager', () => {
   beforeEach(() => {
     fakeViewsCreated.length = 0;
     fakeSessionPartitions.length = 0;
+    fakeSessionsCreated.length = 0;
     win = makeFakeWindow();
     updates = [];
     mgr = new BrowserManager({
@@ -195,11 +209,44 @@ describe('BrowserManager', () => {
     );
   });
 
+  it('openTab blocks unsafe initial URL schemes before loadURL', () => {
+    const state = mgr.openTab({
+      session_id: SID_A,
+      tab_id: 't1',
+      url: 'file:///C:/Windows/win.ini',
+    });
+
+    expect(state.status).toBe('failed');
+    expect(state.title).toBe('Blocked URL');
+    expect(fakeViewsCreated[0]?.webContents.loadURL).not.toHaveBeenCalled();
+  });
+
   it('openTab uses persist:dreampia-browser-app-{sessionId} partition', () => {
     mgr.openTab({ session_id: SID_A, tab_id: 't1', url: 'https://x.test' });
     expect(fakeSessionPartitions).toEqual([
       `persist:dreampia-browser-app-${SID_A}`,
     ]);
+  });
+
+  it('denies browser permission prompts and popup windows by default', () => {
+    mgr.openTab({ session_id: SID_A, tab_id: 't1', url: 'https://x.test' });
+    const sess = fakeSessionsCreated[0];
+    const view = fakeViewsCreated[0];
+    expect(sess?.setPermissionRequestHandler).toHaveBeenCalledTimes(1);
+    expect(sess?.setPermissionCheckHandler).toHaveBeenCalledTimes(1);
+    expect(view?.webContents.setWindowOpenHandler).toHaveBeenCalledTimes(1);
+
+    const requestHandler = sess?.setPermissionRequestHandler.mock.calls[0]?.[0] as
+      | ((wc: unknown, permission: string, callback: (allowed: boolean) => void) => void)
+      | undefined;
+    const callback = vi.fn();
+    requestHandler?.({}, 'clipboard-read', callback);
+    expect(callback).toHaveBeenCalledWith(false);
+
+    const popupHandler = view?.webContents.setWindowOpenHandler.mock.calls[0]?.[0] as
+      | ((details: { url: string }) => { action: string })
+      | undefined;
+    expect(popupHandler?.({ url: 'https://popup.test' })).toEqual({ action: 'deny' });
   });
 
   it('openTab is idempotent on the same tab_id', () => {
@@ -295,6 +342,32 @@ describe('BrowserManager', () => {
     mgr.navigate('t2', 'https://3.test');
     const v2 = fakeViewsCreated[1];
     expect(v2?.webContents.loadURL).toHaveBeenCalledWith('https://3.test');
+  });
+
+  it('navigate blocks unsafe schemes before loadURL', () => {
+    mgr.openTab({ session_id: SID_A, tab_id: 't1', url: 'https://1.test' });
+    const view = fakeViewsCreated[0];
+    expect(view).toBeDefined();
+    if (!view) return;
+
+    view.webContents.loadURL.mockClear();
+    mgr.navigate('t1', 'javascript:alert(1)');
+
+    expect(view.webContents.loadURL).not.toHaveBeenCalled();
+    expect(mgr.getTab('t1')?.status).toBe('failed');
+  });
+
+  it('will-navigate prevents unsafe renderer-initiated navigation', () => {
+    mgr.openTab({ session_id: SID_A, tab_id: 't1', url: 'https://1.test' });
+    const view = fakeViewsCreated[0];
+    expect(view).toBeDefined();
+    if (!view) return;
+
+    const event = { preventDefault: vi.fn() };
+    fireListener(view, 'will-navigate', event, 'data:text/html,<h1>x</h1>');
+
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(mgr.getTab('t1')?.status).toBe('failed');
   });
 
   it('goBack respects canGoBack', () => {

@@ -76,8 +76,18 @@ export interface UseBrowserReturn extends UseBrowserState {
 export function normalizeBrowserUrl(input: string): string {
   const trimmed = input.trim();
   if (trimmed.length === 0) return trimmed;
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
-  if (/^(about|file|data|mailto):/i.test(trimmed)) return trimmed;
+  if (trimmed.toLowerCase() === 'about:blank') return 'about:blank';
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return trimmed;
+      }
+    } catch {
+      return 'about:blank';
+    }
+    return 'about:blank';
+  }
   return `https://${trimmed}`;
 }
 

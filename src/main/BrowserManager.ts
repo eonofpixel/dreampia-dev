@@ -30,6 +30,7 @@ import {
   WebContentsView,
   session as electronSession,
   type BrowserWindow,
+  type Session as ElectronSession,
   type WebContents,
 } from 'electron';
 import type { SessionId } from '@/types';
@@ -114,6 +115,40 @@ function readNavState(wc: WebContents): {
   };
 }
 
+function normalizeAllowedBrowserUrl(rawUrl: string): string | null {
+  const trimmed = rawUrl.trim();
+  if (trimmed.toLowerCase() === 'about:blank') return 'about:blank';
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return trimmed;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function denyBrowserSessionPermissions(sess: ElectronSession): void {
+  const maybeSession = sess as ElectronSession & {
+    setPermissionCheckHandler?: (handler: () => boolean) => void;
+  };
+  try {
+    maybeSession.setPermissionRequestHandler((_wc, _permission, callback) => {
+      callback(false);
+    });
+  } catch {
+    // Best effort. Older Electron versions can differ here.
+  }
+  try {
+    maybeSession.setPermissionCheckHandler?.(() => false);
+  } catch {
+    // Best effort.
+  }
+}
+
 // ────────────────────────────────────────────────────────────
 // BrowserManager
 // ────────────────────────────────────────────────────────────
@@ -140,6 +175,8 @@ export class BrowserManager {
 
     const partition = partitionIdFor(args.session_id);
     const sess = electronSession.fromPartition(partition);
+    denyBrowserSessionPermissions(sess);
+    const safeInitialUrl = normalizeAllowedBrowserUrl(args.url);
 
     const view = new WebContentsView({
       webPreferences: {
@@ -154,10 +191,10 @@ export class BrowserManager {
     const initialState: BrowserTabState = {
       tab_id: args.tab_id,
       session_id: args.session_id,
-      url: args.url,
-      title: 'Loading...',
+      url: safeInitialUrl ?? args.url,
+      title: safeInitialUrl === null ? 'Blocked URL' : 'Loading...',
       favicon_url: null,
-      status: 'loading',
+      status: safeInitialUrl === null ? 'failed' : 'loading',
       can_go_back: false,
       can_go_forward: false,
     };
@@ -204,12 +241,19 @@ export class BrowserManager {
     const onTitleChange = (_e: unknown, title: string): void => emit({ title });
     const onFaviconChange = (_e: unknown, favicons: string[]): void =>
       emit({ favicon_url: favicons[0] ?? null });
+    const onWillNavigate = (event: { preventDefault?: () => void }, url: string): void => {
+      if (normalizeAllowedBrowserUrl(url) !== null) return;
+      event.preventDefault?.();
+      emit({ status: 'failed', title: 'Blocked URL' });
+    };
 
+    wc.setWindowOpenHandler(() => ({ action: 'deny' }));
     wc.on('did-start-loading', onLoadStart);
     wc.on('did-finish-load', onLoadEnd);
     wc.on('did-fail-load', onLoadFail);
     wc.on('page-title-updated', onTitleChange);
     wc.on('page-favicon-updated', onFaviconChange);
+    wc.on('will-navigate', onWillNavigate);
 
     tab.detachListeners = (): void => {
       try {
@@ -218,13 +262,16 @@ export class BrowserManager {
         wc.off('did-fail-load', onLoadFail);
         wc.off('page-title-updated', onTitleChange);
         wc.off('page-favicon-updated', onFaviconChange);
+        wc.off('will-navigate', onWillNavigate);
       } catch {
         // already destroyed — harmless
       }
     };
 
     // Kick off the initial load. Failures route through the same emit pipeline.
-    void wc.loadURL(args.url).catch(() => emit({ status: 'failed' }));
+    if (safeInitialUrl !== null) {
+      void wc.loadURL(safeInitialUrl).catch(() => emit({ status: 'failed' }));
+    }
 
     return tab.state;
   }
@@ -274,9 +321,14 @@ export class BrowserManager {
     const tab = this.tabs.get(tab_id);
     if (!tab) return;
     if (tab.view.webContents.isDestroyed()) return;
-    tab.emitState({ status: 'loading', url });
-    void tab.view.webContents.loadURL(url).catch(() => {
-      tab.emitState({ status: 'failed', url });
+    const safeUrl = normalizeAllowedBrowserUrl(url);
+    if (safeUrl === null) {
+      tab.emitState({ status: 'failed', title: 'Blocked URL' });
+      return;
+    }
+    tab.emitState({ status: 'loading', url: safeUrl });
+    void tab.view.webContents.loadURL(safeUrl).catch(() => {
+      tab.emitState({ status: 'failed', url: safeUrl });
     });
   }
 

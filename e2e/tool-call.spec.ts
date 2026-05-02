@@ -1,27 +1,35 @@
 /**
  * Tool call spec — V3 tool execution end-to-end.
  *
- * STATUS: deferred. Requires a deterministic way to make MockProvider
- * inject a tool_call_complete event from outside the renderer.
- *
- * Path forward (P2-B):
- *   1. Add `src/renderer/devTestHooks.ts` exposing window.__dreampiaTest
- *      with `injectStreamEvent(stream_id, event)` gated on
- *      import.meta.env.MODE !== 'production' OR DREAMPIA_TEST=1.
- *   2. Hook into App.tsx so the active provider can be wrapped to
- *      surface inject hooks.
- *   3. Re-enable the .skip below.
- *
- * Why skipped now: changing App.tsx to expose internal hooks is invasive
- * for a P2-A foundation commit. Smoke + chat + sidebar + browser-view
- * already give regression coverage of every UI flow that doesn't depend
- * on driving tool calls deterministically.
+ * DREAMPIA_TEST=1 makes auto.ts use MockProvider with a test-only prompt
+ * marker. The tool still executes through main-process ToolQueue, so this
+ * covers renderer -> IPC stream -> Queue -> shell.run -> tool result display.
  */
 
 import { test, expect } from './fixtures';
 
-test.describe.skip('tool call (V3) — needs dev-only injection (P2-B)', () => {
+const TOOL_MARKER = '__DREAMPIA_TOOL_CALL__';
+
+test.describe('tool call (V3)', () => {
   test('shell.run echo hi → ToolCallCard shows ✅ 완료', async ({ window }) => {
-    expect(window).toBeTruthy(); // placeholder for re-enabled flow
+    await window.getByRole('button', { name: '새 채팅', exact: false }).first().click();
+    const input = window.getByTestId('chat-input');
+    await input.click();
+    await input.fill(
+      `${TOOL_MARKER} {"tool_id":"shell.run","input":{"cmd":"echo dreampia-e2e-tool"}}`
+    );
+    await input.press('Enter');
+
+    const assistantTurn = window.locator('[data-testid="turn-assistant"]');
+    await expect(assistantTurn).toHaveAttribute('data-status', 'completed', {
+      timeout: 15_000,
+    });
+
+    const card = window.getByTestId('tool-call-card').first();
+    await expect(card).toBeVisible({ timeout: 10_000 });
+    await expect(card).toContainText('shell.run');
+    await expect(card).toContainText('완료');
+    await card.getByRole('button').click();
+    await expect(card).toContainText('dreampia-e2e-tool');
   });
 });

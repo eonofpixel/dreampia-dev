@@ -36,9 +36,20 @@ export interface MockProviderOptions {
     input: Record<string, unknown>;
   };
 
+  /**
+   * Test-only hook. When enabled, the last user message may contain:
+   *   __DREAMPIA_TOOL_CALL__ {"tool_id":"shell.run","input":{"cmd":"echo hi"}}
+   *
+   * This is intentionally opt-in so production/dev MockProvider usage cannot
+   * be steered by prompt text.
+   */
+  testToolTrigger?: boolean;
+
   /** Provider 식별자 (테스트 격리용). 기본 'claude'. */
   provider?: 'claude' | 'codex';
 }
+
+export const TEST_TOOL_CALL_MARKER = '__DREAMPIA_TOOL_CALL__';
 
 // ────────────────────────────────────────────────────────────
 // MockProvider
@@ -61,8 +72,15 @@ export class MockProvider implements StreamingProvider {
   }): AsyncIterable<StreamEvent> {
     const turnId = newTurnId();
     const userText = this.extractLastUserText(input.turns);
+    const triggeredToolCall = this.opts.testToolTrigger
+      ? this.extractTriggeredToolCall(userText)
+      : null;
+    const toolCallToInject = this.opts.injectToolCall ?? triggeredToolCall ?? undefined;
     const responseText =
-      this.opts.responseText ?? `Mock response. You said: "${userText.slice(0, 80)}"`;
+      this.opts.responseText ??
+      (triggeredToolCall
+        ? `Mock tool call requested: ${triggeredToolCall.tool_id}`
+        : `Mock response. You said: "${userText.slice(0, 80)}"`);
 
     yield { type: 'message_start', turn_id: turnId, model: input.model };
 
@@ -79,9 +97,9 @@ export class MockProvider implements StreamingProvider {
     if (input.signal?.aborted) return;
 
     const toolCalls: ToolCallRef[] = [];
-    if (this.opts.injectToolCall) {
+    if (toolCallToInject) {
       const toolCallId = newToolCallId();
-      const tc = this.opts.injectToolCall;
+      const tc = toolCallToInject;
 
       yield {
         type: 'tool_call_start',
@@ -124,6 +142,39 @@ export class MockProvider implements StreamingProvider {
       }
     }
     return '';
+  }
+
+  private extractTriggeredToolCall(
+    userText: string
+  ): { tool_id: string; input: Record<string, unknown> } | null {
+    const markerIndex = userText.indexOf(TEST_TOOL_CALL_MARKER);
+    if (markerIndex < 0) return null;
+
+    const rawJson = userText.slice(markerIndex + TEST_TOOL_CALL_MARKER.length).trim();
+    if (rawJson.length === 0) return null;
+
+    try {
+      const parsed = JSON.parse(rawJson) as unknown;
+      if (
+        typeof parsed !== 'object' ||
+        parsed === null ||
+        !('tool_id' in parsed) ||
+        typeof (parsed as { tool_id?: unknown }).tool_id !== 'string'
+      ) {
+        return null;
+      }
+      const inputValue = (parsed as { input?: unknown }).input;
+      const input =
+        typeof inputValue === 'object' && inputValue !== null && !Array.isArray(inputValue)
+          ? (inputValue as Record<string, unknown>)
+          : {};
+      return {
+        tool_id: (parsed as { tool_id: string }).tool_id,
+        input,
+      };
+    } catch {
+      return null;
+    }
   }
 
   private sleep(ms: number, signal?: AbortSignal): Promise<void> {

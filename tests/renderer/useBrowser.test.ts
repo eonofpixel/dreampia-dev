@@ -167,6 +167,12 @@ describe('useBrowser', () => {
     expect(normalizeBrowserUrl('about:blank')).toBe('about:blank');
   });
 
+  it('normalizeBrowserUrl maps unsafe schemes to about:blank', () => {
+    expect(normalizeBrowserUrl('file:///C:/Windows/win.ini')).toBe('about:blank');
+    expect(normalizeBrowserUrl('data:text/html,<h1>x</h1>')).toBe('about:blank');
+    expect(normalizeBrowserUrl('javascript:alert(1)')).toBe('about:blank');
+  });
+
   it('subscribes to onTabUpdated only for the current session', async () => {
     const { result } = renderHook(() => useBrowser(SID));
     await waitFor(() => expect(result.current.loading).toBe(false));

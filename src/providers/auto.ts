@@ -6,7 +6,9 @@
  * 우선순위:
  *   1. Model prefix 가 claude → CliProvider(claude)  (CLI 설치 시)
  *   2. Model prefix 가 codex/gpt/o1 → CliProvider(codex)  (CLI 설치 시)
- *   3. 그 외 (모델 매칭 실패 / CLI 미설치) → MockProvider (개발 fallback)
+ *   3. 그 외 (모델 매칭 실패 / CLI 미설치)
+ *      - test/dev explicitly allowed → MockProvider
+ *      - production → fail closed (never fake a successful AI response)
  *
  * MAIN process 전용 — renderer 에서 호출 X (subprocess sandbox 불가).
  */
@@ -49,7 +51,7 @@ export async function getDefaultProvider(
   // Mock provider 로 강제 fallback 하여 deterministic 검증.
   if (process.env.DREAMPIA_TEST === '1') {
     return {
-      provider: new MockProvider({ delayMs: 15 }),
+      provider: new MockProvider({ delayMs: 15, testToolTrigger: true }),
       source: 'mock',
       detected: { claude: null, codex: null },
     };
@@ -81,12 +83,31 @@ export async function getDefaultProvider(
     };
   }
 
-  // Fallback — 미설치 / 모르는 모델.
-  return {
-    provider: new MockProvider({ delayMs: 15 }),
-    source: 'mock',
-    detected,
-  };
+  // Development fallback only. Production must not silently pretend that a
+  // real AI provider completed the request.
+  if (shouldAllowMockFallback()) {
+    return {
+      provider: new MockProvider({ delayMs: 15 }),
+      source: 'mock',
+      detected,
+    };
+  }
+
+  throw new Error(buildNoProviderMessage(model, detected));
+}
+
+function shouldAllowMockFallback(): boolean {
+  if (process.env.DREAMPIA_ALLOW_MOCK_PROVIDER === '1') return true;
+  return process.env.NODE_ENV !== 'production';
+}
+
+function buildNoProviderMessage(model: string, detected: CliDetectionResult): string {
+  const available = [
+    detected.claude !== null ? `Claude CLI (${detected.claude.path})` : null,
+    detected.codex !== null ? `Codex CLI (${detected.codex.path})` : null,
+  ].filter((v): v is string => v !== null);
+  const availableText = available.length > 0 ? available.join(', ') : 'none';
+  return `No production provider available for model "${model}". Detected CLI providers: ${availableText}.`;
 }
 
 function makeCliProvider(
