@@ -24,10 +24,18 @@ type Handler = (evt: unknown, ...args: unknown[]) => unknown | Promise<unknown>;
 
 const handlers = new Map<string, Handler>();
 
+// 각 ipc.session 테스트마다 settings.json 누설을 막기 위해 vi.hoisted 영역에서
+// userData 경로를 ref 로 두고, beforeEach 에서 임시 디렉토리로 채운다.
+const sessionUserDataRef = vi.hoisted(() => ({ current: '' }));
+
 vi.mock('electron', () => {
   return {
     app: {
       getVersion: () => '0.0.1-test',
+      getPath: (name: string): string => {
+        if (name === 'userData') return sessionUserDataRef.current;
+        return sessionUserDataRef.current;
+      },
     },
     ipcMain: {
       handle: (channel: string, handler: Handler): void => {
@@ -37,11 +45,17 @@ vi.mock('electron', () => {
         handlers.delete(channel);
       },
     },
+    dialog: {
+      showOpenDialog: vi.fn(async () => ({ canceled: true, filePaths: [] })),
+    },
   };
 });
 
 // Imports MUST come after vi.mock so they pick up the stub.
+import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { registerIpcHandlers } from '../../src/main/ipc';
+import { __resetSettingsCache } from '../../src/main/settings';
 import { SessionStore } from '../../src/storage';
 import { SessionSchema, type Session } from '../../src/types';
 import type { Result } from '../../src/main/types';
@@ -76,19 +90,28 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
 
 describe('IPC session handlers', () => {
   let store: SessionStore;
+  let tmpUserData = '';
   // Stub for the App parameter — registerIpcHandlers only calls getVersion.
-  const stubApp = { getVersion: () => '0.0.1-test' } as unknown as Parameters<
-    typeof registerIpcHandlers
-  >[0];
+  const stubApp = {
+    getVersion: () => '0.0.1-test',
+    getPath: (_n: string) => sessionUserDataRef.current,
+  } as unknown as Parameters<typeof registerIpcHandlers>[0];
 
   beforeEach(() => {
     handlers.clear();
+    // settings.json 누설 차단 — 각 테스트 고유 tmp dir.
+    tmpUserData = mkdtempSync(join(tmpdir(), 'dreampia-ipc-session-'));
+    sessionUserDataRef.current = tmpUserData;
+    __resetSettingsCache();
     store = new SessionStore(':memory:');
     registerIpcHandlers(stubApp, store);
   });
 
   afterEach(() => {
     store.close();
+    if (tmpUserData.length > 0 && existsSync(tmpUserData)) {
+      rmSync(tmpUserData, { recursive: true, force: true });
+    }
   });
 
   // ── registration ────────────────────────────────────────────

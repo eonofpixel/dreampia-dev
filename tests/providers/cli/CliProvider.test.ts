@@ -347,11 +347,150 @@ describe('CliProvider', () => {
     });
     await consume(p, [userTurn('codex question')]);
     const args = spawnCalls[0]?.args ?? [];
-    expect(args[0]).toBe('exec');
+    // '--sandbox <mode>' 는 'exec' 앞에 옴 — Codex top-level 옵션.
+    expect(args).toContain('exec');
     expect(args).toContain('--json');
     expect(args).toContain('--skip-git-repo-check');
     expect(args).toContain('--ephemeral');
     expect(args).toContain('--model');
     expect(args[args.length - 1]).toBe('codex question');
+  });
+
+  // ────────────────────────────────────────────────────────────
+  // Permission level → sandbox / tool-policy 매핑.
+  // Spec: docs/permission/provider-mapping.md
+  // ────────────────────────────────────────────────────────────
+
+  describe('buildArgs — codex sandbox mapping', () => {
+    function spawnAndCapture(
+      level: 'read_only' | 'workspace_write' | 'full_access' | 'custom' | undefined
+    ): Promise<string[]> {
+      nextChildHandler = (child) => {
+        child.emit('close', 0);
+      };
+      const p = new CliProvider({
+        binaryPath: '/fake/codex',
+        provider: 'codex',
+        translate: passthroughTranslate,
+        ...(level !== undefined && { permissionLevel: level }),
+      });
+      return consume(p, [userTurn('q')]).then(() => spawnCalls[0]?.args ?? []);
+    }
+
+    it('read_only → --sandbox read-only', async () => {
+      const args = await spawnAndCapture('read_only');
+      const sandboxIdx = args.indexOf('--sandbox');
+      expect(sandboxIdx).toBeGreaterThanOrEqual(0);
+      expect(args[sandboxIdx + 1]).toBe('read-only');
+      // 'exec' 보다 앞.
+      expect(sandboxIdx).toBeLessThan(args.indexOf('exec'));
+    });
+
+    it('workspace_write → --sandbox workspace-write', async () => {
+      const args = await spawnAndCapture('workspace_write');
+      const sandboxIdx = args.indexOf('--sandbox');
+      expect(args[sandboxIdx + 1]).toBe('workspace-write');
+    });
+
+    it('full_access → --sandbox danger-full-access', async () => {
+      const args = await spawnAndCapture('full_access');
+      const sandboxIdx = args.indexOf('--sandbox');
+      expect(args[sandboxIdx + 1]).toBe('danger-full-access');
+    });
+
+    it('custom → --sandbox workspace-write (safest fallback)', async () => {
+      const args = await spawnAndCapture('custom');
+      const sandboxIdx = args.indexOf('--sandbox');
+      expect(args[sandboxIdx + 1]).toBe('workspace-write');
+    });
+
+    it('no permissionLevel defaults to workspace-write', async () => {
+      const args = await spawnAndCapture(undefined);
+      const sandboxIdx = args.indexOf('--sandbox');
+      expect(sandboxIdx).toBeGreaterThanOrEqual(0);
+      expect(args[sandboxIdx + 1]).toBe('workspace-write');
+    });
+  });
+
+  describe('buildArgs — claude tool-policy mapping', () => {
+    it('claude with cwd appends --add-dir <cwd>', async () => {
+      nextChildHandler = (child) => {
+        child.emit('close', 0);
+      };
+      const p = new CliProvider({
+        binaryPath: '/fake/claude',
+        provider: 'claude',
+        translate: passthroughTranslate,
+        cwd: '/workspace/project',
+      });
+      await consume(p, [userTurn('q')]);
+      const args = spawnCalls[0]?.args ?? [];
+      const idx = args.indexOf('--add-dir');
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(args[idx + 1]).toBe('/workspace/project');
+    });
+
+    it('claude with read_only adds --disallowed-tools "Bash Edit Write"', async () => {
+      nextChildHandler = (child) => {
+        child.emit('close', 0);
+      };
+      const p = new CliProvider({
+        binaryPath: '/fake/claude',
+        provider: 'claude',
+        translate: passthroughTranslate,
+        permissionLevel: 'read_only',
+      });
+      await consume(p, [userTurn('q')]);
+      const args = spawnCalls[0]?.args ?? [];
+      const idx = args.indexOf('--disallowed-tools');
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(args[idx + 1]).toBe('Bash Edit Write');
+    });
+
+    it('claude with workspace_write does NOT add --disallowed-tools', async () => {
+      nextChildHandler = (child) => {
+        child.emit('close', 0);
+      };
+      const p = new CliProvider({
+        binaryPath: '/fake/claude',
+        provider: 'claude',
+        translate: passthroughTranslate,
+        permissionLevel: 'workspace_write',
+      });
+      await consume(p, [userTurn('q')]);
+      const args = spawnCalls[0]?.args ?? [];
+      expect(args).not.toContain('--disallowed-tools');
+    });
+
+    it('claude with full_access does NOT add --disallowed-tools', async () => {
+      nextChildHandler = (child) => {
+        child.emit('close', 0);
+      };
+      const p = new CliProvider({
+        binaryPath: '/fake/claude',
+        provider: 'claude',
+        translate: passthroughTranslate,
+        permissionLevel: 'full_access',
+      });
+      await consume(p, [userTurn('q')]);
+      const args = spawnCalls[0]?.args ?? [];
+      expect(args).not.toContain('--disallowed-tools');
+    });
+
+    it('claude prompt remains the LAST arg even with permission/cwd flags', async () => {
+      nextChildHandler = (child) => {
+        child.emit('close', 0);
+      };
+      const p = new CliProvider({
+        binaryPath: '/fake/claude',
+        provider: 'claude',
+        translate: passthroughTranslate,
+        cwd: '/ws',
+        permissionLevel: 'read_only',
+      });
+      await consume(p, [userTurn('the question')]);
+      const args = spawnCalls[0]?.args ?? [];
+      expect(args[args.length - 1]).toBe('the question');
+    });
   });
 });

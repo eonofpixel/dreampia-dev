@@ -152,6 +152,8 @@ const ALLOWED_INVOKE_CHANNELS = [
   'app:get-version',
   'app:get-platform',
   'app:get-default-workspace',
+  'workspace/pick-folder',
+  'workspace/get',
   'session/list',
   'session/get',
   'session/create',
@@ -225,6 +227,24 @@ const api = {
   app: {
     getDefaultWorkspace: (): Promise<Result<WorkspaceInfo>> =>
       ipcRenderer.invoke('app:get-default-workspace') as Promise<Result<WorkspaceInfo>>,
+  },
+
+  /**
+   * Workspace picker — main 이 OS-native 폴더 다이얼로그 표시 +
+   * 선택된 경로를 settings.json 에 저장.
+   *
+   * Spec: docs/permission/levels.md (workspace_write 는 사용자 의도된 폴더 한정)
+   */
+  workspace: {
+    pickFolder: (): Promise<Result<{ path: string; name: string } | null>> =>
+      ipcRenderer.invoke('workspace/pick-folder') as Promise<
+        Result<{ path: string; name: string } | null>
+      >,
+
+    get: (): Promise<Result<{ path: string; name: string } | null>> =>
+      ipcRenderer.invoke('workspace/get') as Promise<
+        Result<{ path: string; name: string } | null>
+      >,
   },
 
   /**
@@ -361,6 +381,10 @@ const api = {
       turns: Turn[];
       session_id?: string;
       workspace_root?: string;
+      // PermissionLevel mirrored as string-literal union so preload doesn't
+      // depend on @/types runtime import (preload sandbox-safety). Keep
+      // in sync with `PermissionLevelSchema` in @/types/permission.
+      permission_level?: 'read_only' | 'workspace_write' | 'full_access' | 'custom';
     }): Promise<Result<{ stream_id: string; source: string }>> =>
       ipcRenderer.invoke('ai/start-stream', args) as Promise<
         Result<{ stream_id: string; source: string }>

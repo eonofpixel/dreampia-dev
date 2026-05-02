@@ -235,6 +235,65 @@ describe('IPC ai handlers', () => {
     expect(capturedCwd).toBe('C:\\Dev\\workspace');
   });
 
+  it('passes permission_level through to provider selection', async () => {
+    provider = provFromEvents([]);
+    let capturedLevel: string | undefined;
+    register({
+      getDefaultProvider: async (_model, _signal, _cwd, level): Promise<AutoProviderResult> => {
+        capturedLevel = level;
+        return {
+          provider,
+          source: 'codex-cli',
+          detected: { claude: null, codex: null },
+        };
+      },
+    });
+    const result = await call<Result<{ stream_id: string; source: string }>>(
+      'ai/start-stream',
+      {
+        stream_id: 'sid-level',
+        model: 'gpt-5.5',
+        turns: [userTurn('hi')],
+        permission_level: 'read_only',
+      }
+    );
+    expect(result.ok).toBe(true);
+    expect(capturedLevel).toBe('read_only');
+  });
+
+  it('defaults permission_level to workspace_write when omitted', async () => {
+    provider = provFromEvents([]);
+    let capturedLevel: string | undefined;
+    register({
+      getDefaultProvider: async (_model, _signal, _cwd, level): Promise<AutoProviderResult> => {
+        capturedLevel = level;
+        return {
+          provider,
+          source: 'codex-cli',
+          detected: { claude: null, codex: null },
+        };
+      },
+    });
+    await call<Result<{ stream_id: string; source: string }>>('ai/start-stream', {
+      stream_id: 'sid-default-level',
+      model: 'gpt-5.5',
+      turns: [userTurn('hi')],
+    });
+    expect(capturedLevel).toBe('workspace_write');
+  });
+
+  it('rejects invalid permission_level via zod', async () => {
+    provider = provFromEvents([]);
+    register();
+    const result = await call<Result<unknown>>('ai/start-stream', {
+      stream_id: 'sid-bad-level',
+      model: 'claude-test',
+      turns: [userTurn('hi')],
+      permission_level: 'invalid-level',
+    });
+    expect(result.ok).toBe(false);
+  });
+
   it('emits stream events via mainWindow.webContents.send', async () => {
     provider = provFromEvents([
       { type: 'message_start', turn_id: 'tt-1', model: 'claude-test' },

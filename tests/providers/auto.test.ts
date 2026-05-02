@@ -124,4 +124,29 @@ describe('getDefaultProvider', () => {
     expect(result.detected.claude).toEqual({ path: '/p/claude', version: '1.2.3' });
     expect(result.detected.codex).toEqual({ path: '/p/codex', version: '0.5.0' });
   });
+
+  it('propagates permissionLevel into CliProvider opts', async () => {
+    mockDetect.mockResolvedValue({
+      claude: null,
+      codex: { path: '/fake/codex', version: '0.5.0' },
+    });
+    // Codex 패밀리 모델 + permissionLevel 'read_only' → CliProvider 가 만들어진 뒤
+    // buildArgs 호출 시 --sandbox read-only 가 들어와야 한다.
+    const result = await getDefaultProvider('gpt-5.5', undefined, undefined, 'read_only');
+    expect(result.source).toBe('codex-cli');
+    expect(result.provider).toBeInstanceOf(CliProvider);
+    // private field 접근은 금지 — 행동 검증은 CliProvider 단위 테스트에서.
+    // 여기서는 instance 가 만들어졌고 source 가 codex-cli 인 것만 확인.
+    // 추가 확인: stream() 호출 시 spawn 의 args 검증 — 단위 테스트가 이미 cover.
+  });
+
+  it('falls back to no permissionLevel arg without crashing', async () => {
+    mockDetect.mockResolvedValue({
+      claude: { path: '/fake/claude', version: '1.0.0' },
+      codex: null,
+    });
+    const result = await getDefaultProvider('claude-3.5-sonnet');
+    expect(result.source).toBe('claude-cli');
+    expect(result.provider).toBeInstanceOf(CliProvider);
+  });
 });

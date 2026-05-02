@@ -32,6 +32,7 @@ import type { WorkspaceInfo } from '@/main/types';
 import { IpcStreamingProvider } from './providers/IpcStreamingProvider';
 import { useStreamingTurn } from './hooks/useStreamingTurn';
 import { useSessionStore } from './hooks/useSessionStore';
+import { useWorkspace } from './hooks/useWorkspace';
 
 const FALLBACK_WORKSPACE: WorkspaceInfo = {
   root: '/',
@@ -99,7 +100,11 @@ export function App(): React.JSX.Element {
   // so streaming text_delta events update synchronously.
   const [activeSessionId, setActiveSessionId] = useState<string>('');
   const [activeSession, setActiveSession] = useState<Session | null>(null);
-  const [defaultWorkspace, setDefaultWorkspace] = useState<WorkspaceInfo>(FALLBACK_WORKSPACE);
+  const [launchWorkspace, setLaunchWorkspace] = useState<WorkspaceInfo>(FALLBACK_WORKSPACE);
+
+  // 사용자가 picker 로 선택한 워크스페이스 (settings.json 영속). 있으면 우선,
+  // 없으면 main 이 보내준 launch workspace (보통 process.cwd()) 로 폴백.
+  const { workspace: pickedWorkspace, pick: pickWorkspace } = useWorkspace();
 
   // When the list changes and we have no selection, pick the first one.
   useEffect(() => {
@@ -133,7 +138,7 @@ export function App(): React.JSX.Element {
     void (async () => {
       try {
         const result = await appApi.getDefaultWorkspace();
-        if (!cancelled && result.ok) setDefaultWorkspace(result.value);
+        if (!cancelled && result.ok) setLaunchWorkspace(result.value);
       } catch {
         // Keep browser-safe fallback.
       }
@@ -142,6 +147,14 @@ export function App(): React.JSX.Element {
       cancelled = true;
     };
   }, []);
+
+  // 새 세션은 항상 (사용자 선택 > launch) 우선순위로 root 결정.
+  const defaultWorkspace = useMemo<WorkspaceInfo>(() => {
+    if (pickedWorkspace !== null) {
+      return { root: pickedWorkspace.path, name: pickedWorkspace.name };
+    }
+    return launchWorkspace;
+  }, [pickedWorkspace, launchWorkspace]);
 
   // P1-4: IpcStreamingProvider 가 main 의 ai/start-stream 으로 위임.
   // window.dreampia.ai 가 없는 환경 (legacy renderer / 오래된 build) 에서는
@@ -273,11 +286,14 @@ export function App(): React.JSX.Element {
 
       // 3) Kick off streaming; assistant turn shadowed locally,
       //    persisted on message_complete (handleStreamComplete).
+      // session.permission.default_level 을 명시적으로 forward — main 이 이걸로
+      // CLI sandbox/tool-policy 결정. Spec: docs/permission/provider-mapping.md
       void startStream({
         turns: [...activeSession.conversation.turns, userTurn],
         model: activeSession.conversation.current_model,
         sessionId: activeSession.id,
         workspaceRoot: activeSession.workspace.root,
+        permissionLevel: activeSession.permission.default_level,
       });
     },
     [activeSession, isStreaming, persistTurn, startStream]
@@ -319,6 +335,10 @@ export function App(): React.JSX.Element {
           isStreaming={isStreaming}
           onCancel={cancelStream}
           cliStatus={cliStatus}
+          workspaceName={defaultWorkspace.name}
+          onPickWorkspace={() => {
+            void pickWorkspace();
+          }}
         />
       }
       preview={

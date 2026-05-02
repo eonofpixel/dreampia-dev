@@ -41,6 +41,10 @@ export interface ChatPanelProps {
   isStreaming?: boolean;
   onCancel?: () => void;
   cliStatus?: CliStatus;
+  /** 현재 작업 폴더 이름 — header 의 [폴더 변경] 버튼 옆에 표시. */
+  workspaceName?: string;
+  /** [폴더 변경] 클릭 시 main 의 dialog.showOpenDialog 호출. */
+  onPickWorkspace?: () => void;
 }
 
 export function ChatPanel({
@@ -49,6 +53,8 @@ export function ChatPanel({
   isStreaming = false,
   onCancel,
   cliStatus = null,
+  workspaceName,
+  onPickWorkspace,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -60,7 +66,12 @@ export function ChatPanel({
 
   return (
     <main className="flex h-full flex-1 flex-col bg-bg-primary">
-      <ChatHeader session={session} cliStatus={cliStatus} />
+      <ChatHeader
+        session={session}
+        cliStatus={cliStatus}
+        workspaceName={workspaceName}
+        onPickWorkspace={onPickWorkspace}
+      />
       <MessagesArea turns={session.conversation.turns} />
       <InputArea onSubmit={onSubmit} isStreaming={isStreaming} onCancel={onCancel} />
     </main>
@@ -132,14 +143,30 @@ function InputArea({ onSubmit, isStreaming, onCancel }: InputAreaProps): React.J
 function ChatHeader({
   session,
   cliStatus,
+  workspaceName,
+  onPickWorkspace,
 }: {
   session: Session;
   cliStatus: CliStatus;
+  workspaceName?: string;
+  onPickWorkspace?: () => void;
 }): React.JSX.Element {
   return (
     <div className="flex h-12 items-center justify-between border-b border-border-primary px-4">
       <h1 className="truncate text-sm font-semibold">{session.title}</h1>
       <div className="flex items-center gap-3 text-xs text-text-tertiary">
+        {workspaceName !== undefined && onPickWorkspace !== undefined && (
+          <button
+            type="button"
+            onClick={onPickWorkspace}
+            className="rounded bg-bg-tertiary px-2 py-0.5 hover:bg-border-primary"
+            title={`현재 작업 폴더: ${workspaceName}. 클릭하여 변경.`}
+            aria-label="작업 폴더 변경"
+            data-testid="workspace-pick-button"
+          >
+            📁 {workspaceName}
+          </button>
+        )}
         <CliStatusBadge status={cliStatus} />
         <span>
           {session.conversation.current_model}

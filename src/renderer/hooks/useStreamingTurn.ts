@@ -9,7 +9,14 @@
 
 import { useState, useCallback, useRef } from 'react';
 import type { StreamEvent, StreamingProvider } from '@/providers/types';
-import type { Turn, TurnId, ToolCallRef, ToolCallId, ToolResultRef } from '@/types';
+import type {
+  PermissionLevel,
+  Turn,
+  TurnId,
+  ToolCallRef,
+  ToolCallId,
+  ToolResultRef,
+} from '@/types';
 import { newTurnId, nowIso } from '@/types';
 
 export interface UseStreamingTurnArgs {
@@ -26,6 +33,12 @@ export interface UseStreamingTurnReturn {
     model: string;
     sessionId?: string;
     workspaceRoot?: string;
+    /**
+     * 세션의 default_level. main 에서 CLI sandbox / tool-policy 매핑에 사용.
+     * 미지정 시 main 이 'workspace_write' default 적용.
+     * Spec: docs/permission/provider-mapping.md
+     */
+    permissionLevel?: PermissionLevel;
   }) => Promise<void>;
   cancel: () => void;
 }
@@ -54,6 +67,7 @@ export function useStreamingTurn({
       model: string;
       sessionId?: string;
       workspaceRoot?: string;
+      permissionLevel?: PermissionLevel;
     }): Promise<void> => {
       if (isStreaming) return;
 
@@ -79,6 +93,9 @@ export function useStreamingTurn({
             ...(input.sessionId !== undefined && { session_id: input.sessionId }),
             ...(input.workspaceRoot !== undefined && {
               workspace_root: input.workspaceRoot,
+            }),
+            ...(input.permissionLevel !== undefined && {
+              permission_level: input.permissionLevel,
             }),
           },
           signal: controller.signal,

@@ -13,6 +13,7 @@
  * MAIN process 전용 — renderer 에서 호출 X (subprocess sandbox 불가).
  */
 
+import type { PermissionLevel } from '@/types';
 import { CliProvider } from './cli/CliProvider';
 import {
   detectCli,
@@ -39,11 +40,15 @@ export interface AutoProviderResult {
  * `cwd` 는 CLI subprocess 작업 디렉토리다. Renderer/main IPC 의
  * workspace_root 를 여기까지 명시적으로 전달해 process.cwd() 의 우연성에
  * 기대지 않는다.
+ * `permissionLevel` 은 session.permission.default_level 을 그대로 받아 CLI
+ * 의 sandbox / tool-policy 옵션으로 매핑된다. 미지정 시 'workspace_write'.
+ * Spec: docs/permission/provider-mapping.md
  */
 export async function getDefaultProvider(
   model: string,
   signal?: AbortSignal,
-  cwd?: string
+  cwd?: string,
+  permissionLevel?: PermissionLevel
 ): Promise<AutoProviderResult> {
   // ★ E2E test 환경 (DREAMPIA_TEST=1) 에선 CLI 감지/사용 강제 disable.
   // 이유: 실제 CLI 가 설치돼 있으면 인증 안 된 상태로 stream 실패하여
@@ -70,14 +75,14 @@ export async function getDefaultProvider(
 
   if (claudeFamily && detected.claude !== null) {
     return {
-      provider: makeCliProvider(detected.claude, 'claude', signal, cwd),
+      provider: makeCliProvider(detected.claude, 'claude', signal, cwd, permissionLevel),
       source: 'claude-cli',
       detected,
     };
   }
   if (codexFamily && detected.codex !== null) {
     return {
-      provider: makeCliProvider(detected.codex, 'codex', signal, cwd),
+      provider: makeCliProvider(detected.codex, 'codex', signal, cwd, permissionLevel),
       source: 'codex-cli',
       detected,
     };
@@ -114,7 +119,8 @@ function makeCliProvider(
   info: CliInfo,
   provider: 'claude' | 'codex',
   signal?: AbortSignal,
-  cwd?: string
+  cwd?: string,
+  permissionLevel?: PermissionLevel
 ): CliProvider {
   return new CliProvider({
     binaryPath: info.path,
@@ -122,5 +128,6 @@ function makeCliProvider(
     translate: provider === 'claude' ? translateClaudeJsonl : translateCodexJsonl,
     ...(signal !== undefined && { signal }),
     ...(cwd !== undefined && { cwd }),
+    ...(permissionLevel !== undefined && { permissionLevel }),
   });
 }

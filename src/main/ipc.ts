@@ -12,13 +12,16 @@
  * include absolute paths) into the renderer.
  */
 
-import { app, ipcMain, type App, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
+import { app, dialog, ipcMain, type App, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 import path from 'node:path';
 import { z } from 'zod';
+import { readSettings, writeSettings } from './settings';
 import {
+  PermissionLevelSchema,
   SessionSchema,
   TurnSchema,
   newTurnId,
+  type PermissionLevel,
   type Session,
   type SessionId,
   type ToolCallId,
@@ -83,7 +86,7 @@ const BoundsSchema = z
 // ai/* — Real CLI subprocess streaming (P1-4).
 // Renderer 가 stream_id 를 발급하고 turns / model 을 보내면 main 이 자동 적합한
 // CliProvider 또는 MockProvider 를 선택해 stream 을 시작한다.
-// Spec: docs/session/cross-ai-sync.md
+// Spec: docs/session/cross-ai-sync.md, docs/permission/provider-mapping.md
 const StartStreamArgsSchema = z
   .object({
     stream_id: z.string().min(1),
@@ -91,6 +94,11 @@ const StartStreamArgsSchema = z
     turns: z.array(TurnSchema),
     session_id: z.string().min(1).optional(),
     workspace_root: z.string().min(1).optional(),
+    /**
+     * Session 의 default_level 을 그대로 main 까지 전달. 미지정 시 main 에서
+     * 'workspace_write' 로 default 를 적용 (Codex 안전 default).
+     */
+    permission_level: PermissionLevelSchema.optional(),
   })
   .strict();
 
@@ -208,6 +216,21 @@ export function registerIpcHandlers(
 
   ipcMain.handle('app:get-default-workspace', (): Result<WorkspaceInfo> => {
     try {
+      // 사용자가 picker 로 선택한 경로가 있으면 우선. 없으면 process.cwd() 로 fallback.
+      // Spec: docs/permission/levels.md (workspace_write 의 의미: 사용자 의도된
+      // 폴더에만 쓰기) — process.cwd() 는 우연한 위치일 수 있어 의도 표현이 약함.
+      const settings = readSettings();
+      if (
+        typeof settings.workspace_root === 'string' &&
+        settings.workspace_root.length > 0
+      ) {
+        const root = settings.workspace_root;
+        const name =
+          typeof settings.workspace_name === 'string' && settings.workspace_name.length > 0
+            ? settings.workspace_name
+            : path.basename(root) || root;
+        return ok({ root, name });
+      }
       const root = process.cwd();
       const name = path.basename(root) || root;
       return ok({ root, name });
@@ -216,6 +239,8 @@ export function registerIpcHandlers(
     }
   });
 
+  registerWorkspaceHandlers();
+
   if (store) {
     registerSessionHandlers(store);
     if (election) registerLockHandlers(election);
@@ -223,6 +248,56 @@ export function registerIpcHandlers(
   if (browser) registerBrowserHandlers(browser);
   if (ai) registerAiHandlers(ai);
   if (tools) registerToolHandlers(tools);
+}
+
+// ────────────────────────────────────────────────────────────
+// workspace/* — folder picker + persistence
+// ────────────────────────────────────────────────────────────
+
+function registerWorkspaceHandlers(): void {
+  ipcMain.handle(
+    'workspace/pick-folder',
+    async (): Promise<Result<{ path: string; name: string } | null>> => {
+      try {
+        const result = await dialog.showOpenDialog({
+          properties: ['openDirectory'],
+          title: '작업 폴더 선택',
+        });
+        if (result.canceled || result.filePaths.length === 0) {
+          return ok(null);
+        }
+        const picked = result.filePaths[0];
+        if (picked === undefined || picked.length === 0) {
+          return ok(null);
+        }
+        const name = path.basename(picked) || picked;
+        writeSettings({ workspace_root: picked, workspace_name: name });
+        return ok({ path: picked, name });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'workspace/get',
+    (): Result<{ path: string; name: string } | null> => {
+      try {
+        const settings = readSettings();
+        if (
+          typeof settings.workspace_root === 'string' &&
+          settings.workspace_root.length > 0 &&
+          typeof settings.workspace_name === 'string' &&
+          settings.workspace_name.length > 0
+        ) {
+          return ok({ path: settings.workspace_root, name: settings.workspace_name });
+        }
+        return ok(null);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
 }
 
 // ────────────────────────────────────────────────────────────
@@ -641,7 +716,8 @@ export interface AiHandlerConfig {
   getDefaultProvider?: (
     model: string,
     signal?: AbortSignal,
-    cwd?: string
+    cwd?: string,
+    permissionLevel?: PermissionLevel
   ) => Promise<AutoProviderResult>;
   /** Override for tests. Default: @/providers detectCli. */
   detectCli?: () => Promise<CliDetectionResult>;
@@ -688,7 +764,7 @@ function registerAiHandlers(cfg: AiHandlerConfig): void {
     'ai/start-stream',
     async (_evt, args: unknown): Promise<Result<{ stream_id: string; source: string }>> => {
       try {
-        const { stream_id, model, turns, session_id, workspace_root } =
+        const { stream_id, model, turns, session_id, workspace_root, permission_level } =
           StartStreamArgsSchema.parse(args);
 
         // Reject collisions before provider detection/spawn work.
@@ -696,11 +772,15 @@ function registerAiHandlers(cfg: AiHandlerConfig): void {
           return { ok: false, error: `stream_id "${stream_id}" already active` };
         }
 
+        // Codex spec 의 안전한 default — renderer 가 명시 안 했어도 sandbox 가
+        // 강제되도록. Spec: docs/permission/provider-mapping.md
+        const effectiveLevel: PermissionLevel = permission_level ?? 'workspace_write';
         const controller = new AbortController();
         const { provider, source } = await getDefaultProviderFn(
           model,
           controller.signal,
-          workspace_root
+          workspace_root,
+          effectiveLevel
         );
         activeStreams.set(stream_id, {
           abort: () => controller.abort(),

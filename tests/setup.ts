@@ -57,6 +57,11 @@ interface MockBrowserBounds {
   height: number;
 }
 
+interface MockWorkspaceInfo {
+  path: string;
+  name: string;
+}
+
 type BrowserUpdateListener = (state: MockBrowserTabState) => void;
 
 // ── ai/* (P1-4) — mock IPC for IpcStreamingProvider tests ──
@@ -98,9 +103,23 @@ const mockStore = {
     claude: { path: '/usr/local/bin/claude', version: '1.2.3' },
     codex: null,
   } as MockCliDetection,
+
+  // ── workspace (Phase 2) ────────────────────────────────
+  // 사용자가 picker 로 선택한 폴더. null = 미선택 (= settings.json 미존재).
+  // Tests can pre-set or simulate pick by reassigning.
+  workspace: null as MockWorkspaceInfo | null,
+  // pickFolder 호출 시 반환할 다음 값. null = 사용자 취소. undefined = default
+  // (path: '/picked/dir', name: 'dir'). Tests can inject via __mockStore.
+  workspacePickNext: undefined as MockWorkspaceInfo | null | undefined,
   aiStartedStreams: new Map<
     string,
-    { model: string; turns: unknown[]; session_id?: string; workspace_root?: string }
+    {
+      model: string;
+      turns: unknown[];
+      session_id?: string;
+      workspace_root?: string;
+      permission_level?: 'read_only' | 'workspace_write' | 'full_access' | 'custom';
+    }
   >(),
   aiStoppedStreams: new Set<string>(),
   aiEventListeners: new Set<AiStreamEventListener>(),
@@ -189,6 +208,8 @@ beforeEach(() => {
   mockStore.aiStoppedStreams.clear();
   mockStore.aiEventListeners.clear();
   mockStore.aiEndListeners.clear();
+  mockStore.workspace = null;
+  mockStore.workspacePickNext = undefined;
 });
 
 afterEach(() => {
@@ -212,6 +233,28 @@ if (typeof window !== 'undefined') {
           ok: true,
           value: { root: process.cwd(), name: 'dreampia-dev' },
         })),
+      },
+
+      // Phase 2: workspace picker — main 의 dialog.showOpenDialog 를 mock.
+      // Tests 가 __mockStore.workspacePickNext 로 다음 pick 결과를 inject.
+      workspace: {
+        get: vi.fn(async (): Promise<Result<MockWorkspaceInfo | null>> => ({
+          ok: true,
+          value: mockStore.workspace,
+        })),
+
+        pickFolder: vi.fn(async (): Promise<Result<MockWorkspaceInfo | null>> => {
+          const next =
+            mockStore.workspacePickNext === undefined
+              ? { path: '/picked/dir', name: 'dir' }
+              : mockStore.workspacePickNext;
+          if (next !== null) {
+            mockStore.workspace = next;
+          }
+          // Reset injection so next pick uses default unless re-set.
+          mockStore.workspacePickNext = undefined;
+          return { ok: true, value: next };
+        }),
       },
 
       session: {
@@ -481,12 +524,16 @@ if (typeof window !== 'undefined') {
             turns: unknown[];
             session_id?: string;
             workspace_root?: string;
+            permission_level?: 'read_only' | 'workspace_write' | 'full_access' | 'custom';
           }): Promise<Result<{ stream_id: string; source: string }>> => {
             mockStore.aiStartedStreams.set(args.stream_id, {
               model: args.model,
               turns: args.turns,
               ...(args.session_id !== undefined && { session_id: args.session_id }),
               ...(args.workspace_root !== undefined && { workspace_root: args.workspace_root }),
+              ...(args.permission_level !== undefined && {
+                permission_level: args.permission_level,
+              }),
             });
             // Source 추론 (테스트에서 검증할 수 있도록).
             const lower = args.model.toLowerCase();

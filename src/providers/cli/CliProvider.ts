@@ -21,7 +21,7 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import type { Provider, ToolCallRef, Turn } from '@/types';
+import type { PermissionLevel, Provider, ToolCallRef, Turn } from '@/types';
 import { newTurnId, nowIso } from '@/types';
 import type { StreamEvent, StreamingProvider } from '../types';
 import { JsonlParser } from './jsonlParser';
@@ -48,6 +48,23 @@ export interface CliProviderOptions {
   translate: CliTranslate;
   /** Mid-stream 취소용 (MAIN process 가 IPC 'ai/stop-stream' 에서 사용). */
   signal?: AbortSignal;
+  /**
+   * Session permission level — provider CLI 의 sandbox / tool-policy 옵션으로 매핑된다.
+   *
+   * Codex: '--sandbox <mode>' 로 전달.
+   *   read_only       → read-only
+   *   workspace_write → workspace-write
+   *   full_access     → danger-full-access
+   *   custom          → workspace-write (가장 안전한 default)
+   *
+   * Claude: '--add-dir <cwd>' (cwd 가 있으면) + tool-policy 매핑.
+   *   read_only → '--disallowed-tools "Bash Edit Write"'
+   *   그 외     → 기본 (CLI 가 전체 tool 허용)
+   *
+   * Spec: docs/permission/provider-mapping.md
+   * 미설정 시 default = 'workspace_write'.
+   */
+  permissionLevel?: PermissionLevel;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -265,6 +282,7 @@ export class CliProvider implements StreamingProvider {
   // ─────────── helpers ───────────
 
   private buildArgs(input: { model: string; prompt: string }): string[] {
+    const level: PermissionLevel = this.opts.permissionLevel ?? 'workspace_write';
     if (this.opts.provider === 'claude') {
       const args = [
         '--print',
@@ -275,18 +293,58 @@ export class CliProvider implements StreamingProvider {
         '--model',
         input.model,
       ];
+      // workspace 가 있으면 Claude CLI 가 그 디렉토리를 도구 호출 컨텍스트로 인식하도록 명시.
+      if (this.opts.cwd !== undefined && this.opts.cwd.length > 0) {
+        args.push('--add-dir', this.opts.cwd);
+      }
+      // read_only 권한은 mutating 도구 차단. 그 외 level (workspace_write / full_access /
+      // custom) 은 Claude CLI 의 기본 정책 (전체 허용) 으로 둔다 — 세밀한 grant 제어는
+      // hooks (PreToolUse) 단에서 한다. Spec: docs/permission/provider-mapping.md
+      if (level === 'read_only') {
+        args.push('--disallowed-tools', 'Bash Edit Write');
+      }
       if (this.opts.extraArgs !== undefined && this.opts.extraArgs.length > 0) {
         args.push(...this.opts.extraArgs);
       }
       args.push(input.prompt); // positional prompt arg (must be last)
       return args;
     }
-    // codex
-    const args = ['exec', '--json', '--skip-git-repo-check', '--ephemeral', '--model', input.model];
+    // codex — '--sandbox' 는 top-level 플래그 (exec 서브커맨드 앞에).
+    // Spec: docs/permission/provider-mapping.md 33-51
+    const args = [
+      '--sandbox',
+      CliProvider.sandboxModeFor(level),
+      'exec',
+      '--json',
+      '--skip-git-repo-check',
+      '--ephemeral',
+      '--model',
+      input.model,
+    ];
     if (this.opts.extraArgs !== undefined && this.opts.extraArgs.length > 0) {
       args.push(...this.opts.extraArgs);
     }
     args.push(input.prompt); // positional prompt arg (must be last)
     return args;
+  }
+
+  /**
+   * PermissionLevel → Codex sandbox mode 매핑.
+   *
+   * Spec: docs/permission/provider-mapping.md (toCodexSandboxMode).
+   * INV-1: deterministic 1:1 매핑.
+   */
+  private static sandboxModeFor(level: PermissionLevel): string {
+    switch (level) {
+      case 'read_only':
+        return 'read-only';
+      case 'workspace_write':
+        return 'workspace-write';
+      case 'full_access':
+        return 'danger-full-access';
+      case 'custom':
+        // Codex 가 custom 을 지원하지 않으므로 가장 가까운 안전 옵션.
+        return 'workspace-write';
+    }
   }
 }
