@@ -6,7 +6,7 @@ node_modules/
 # Build output
 dist/
 out/
-build/
+# build/ 는 electron-builder 의 buildResources (icons, entitlements 등) — track 필요
 
 # Electron / Vite
 .vite/

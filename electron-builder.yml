@@ -15,34 +15,65 @@ asar: true
 asarUnpack:
   - 'node_modules/better-sqlite3/**'
 
-# Windows
+# === Windows ===
 win:
   target:
     - target: nsis
       arch: [x64]
   artifactName: 'Dreampia-Dev-${version}-${arch}.${ext}'
-  # Phase 2+: MSIX
-  # target: appx
-  # publisherName: 'Dreampia'
+  publisherName: 'Dreampia'
+  # signing: env vars CSC_LINK + CSC_KEY_PASSWORD
+  # (electron-builder reads these automatically)
+  signingHashAlgorithms: ['sha256']
+  signDlls: false
+  verifyUpdateCodeSignature: false  # Phase 2: enable after publisher cert obtained
 
-# macOS
+nsis:
+  oneClick: false                   # full installer (recommended)
+  perMachine: false                 # per-user install (no admin)
+  allowToChangeInstallationDirectory: true
+  artifactName: 'Dreampia-Dev-Setup-${version}-${arch}.${ext}'
+  shortcutName: 'Dreampia-Dev'
+  uninstallDisplayName: 'Dreampia-Dev ${version}'
+
+# === macOS ===
 mac:
   target:
     - target: dmg
+      arch: [x64, arm64]   # universal — both Intel + Apple Silicon
+    - target: zip          # for auto-updater (electron-updater requirement)
       arch: [x64, arm64]
   category: public.app-category.developer-tools
   artifactName: 'Dreampia-Dev-${version}-${arch}.${ext}'
+  hardenedRuntime: true              # required for notarization
+  gatekeeperAssess: false             # allow re-signing
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: false                    # set true once Apple ID env vars present
+  # signing: env vars CSC_LINK + CSC_KEY_PASSWORD
+  # notarization: APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID
 
-# Linux
+dmg:
+  sign: false                        # not required (the .app inside is signed)
+  artifactName: 'Dreampia-Dev-${version}-${arch}.${ext}'
+
+# === Linux ===
 linux:
   target:
     - target: AppImage
       arch: [x64]
+    - target: deb
+      arch: [x64]
   category: Development
   artifactName: 'Dreampia-Dev-${version}-${arch}.${ext}'
+  desktop:
+    Name: Dreampia-Dev
+    Comment: AI coding desktop wrapper
+    Categories: Development;IDE;
 
-# 자동 업데이트 (Phase 2+)
+# === Auto-updater ===
 publish:
   provider: github
   owner: dreampia-org
   repo: dreampia-dev
+  releaseType: release   # not 'draft' — direct publish on tag

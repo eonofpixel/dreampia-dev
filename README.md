@@ -362,6 +362,16 @@ Phase 3 (v2)         12주     Plugin 시스템, 추가 AI, Linux
 
 ---
 
+## 📦 Release
+
+`v0.1.0` 같은 git tag push 시 GitHub Actions 가 Win/macOS/Linux 3종 artifact 를 자동 빌드해
+GitHub Release 로 발행합니다. Code signing (Win/macOS) 과 macOS notarization 은 secrets 가
+설정된 환경에서 자동 동작 (없으면 unsigned 빌드). 자동 업데이트는 `electron-updater` 가
+GitHub Releases 채널 폴링. 자세한 절차 (secrets, 아이콘, 버전 bump) 는
+[docs/release.md](./docs/release.md) 참고.
+
+---
+
 ## ⚖️ 라이선스 / 법적
 
 - **라이선스**: TBD (Apache 2.0 또는 MIT 권장)
