@@ -49,7 +49,10 @@ function createMainWindow(): BrowserWindow {
     backgroundColor: '#131517',
 
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      // ★ .cjs 확장자: package.json 의 "type":"module" 때문에 .js 는 ESM
+      // 로 해석되어 sandbox preload 가 로드 못함. vite.config.ts 에서
+      // CommonJS 로 빌드 (entryFileNames '[name].cjs').
+      preload: path.join(__dirname, 'preload.cjs'),
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,

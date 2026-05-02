@@ -33,6 +33,8 @@ export default [
       'release/**',
       'docs/**',
       'captures/**',
+      'playwright-report/**',
+      'test-results/**',
       '.eslintrc.cjs',
       '*.config.js',
       '*.config.cjs',
@@ -41,7 +43,7 @@ export default [
   },
   js.configs.recommended,
   {
-    files: ['src/**/*.{ts,tsx}', 'tests/**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}', 'tests/**/*.{ts,tsx}', 'e2e/**/*.{ts,tsx}'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -71,6 +73,16 @@ export default [
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    // Playwright fixtures use `({}, use) => …` (empty destructure declares
+    // no fixture deps) and a `use` callback that name-collides with React's
+    // `use()` hook. Both are false positives in e2e/.
+    files: ['e2e/**/*.{ts,tsx}'],
+    rules: {
+      'no-empty-pattern': 'off',
+      'react-hooks/rules-of-hooks': 'off',
     },
   },
 ];

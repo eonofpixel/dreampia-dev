@@ -43,6 +43,18 @@ export async function getDefaultProvider(
   signal?: AbortSignal,
   cwd?: string
 ): Promise<AutoProviderResult> {
+  // ★ E2E test 환경 (DREAMPIA_TEST=1) 에선 CLI 감지/사용 강제 disable.
+  // 이유: 실제 CLI 가 설치돼 있으면 인증 안 된 상태로 stream 실패하여
+  // assistant turn 이 'failed' 상태로 끝남 (실제 e2e 실행 중 발견).
+  // Mock provider 로 강제 fallback 하여 deterministic 검증.
+  if (process.env.DREAMPIA_TEST === '1') {
+    return {
+      provider: new MockProvider({ delayMs: 15 }),
+      source: 'mock',
+      detected: { claude: null, codex: null },
+    };
+  }
+
   const detected = await detectCli();
   const lower = model.toLowerCase();
 

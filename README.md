@@ -43,6 +43,45 @@ npm run build
 > dev ↔ test 전환 시 위 rebuild 명령을 호출하세요. 영구 해결 (sql.js WASM 또는
 > node:sqlite 마이그레이션) 은 P2-V6 으로 추적 중.
 
+### E2E 테스트 (Playwright Electron)
+
+Vitest 605개는 mocked I/O 단위 테스트. 실제 Electron 부팅 + 사용자 클릭 흐름 검증은
+Playwright `_electron` 으로 자동화됨 (`e2e/`).
+
+```bash
+# 사전 빌드 + ABI 토글 (Electron ABI 로 better-sqlite3 컴파일)
+npm run pretest:e2e
+
+# 모든 e2e 시나리오 실행 (smoke + chat + sidebar + browser-view)
+npm run test:e2e
+
+# GUI 보면서 디버깅
+npm run test:e2e:headed
+
+# Playwright Inspector (step-by-step)
+npm run test:e2e:debug
+
+# 마지막 실행 HTML 리포트 열기
+npm run test:e2e:report
+```
+
+E2E 테스트 후 Vitest 로 돌아가려면 ABI 를 다시 토글:
+
+```bash
+npm run test:rebuild
+npm test
+```
+
+**알려진 한계:**
+
+- ABI 토글 매번 수동 (V6 영구 해결 후 자동화 예정).
+- `tool-call.spec.ts` / `permission.spec.ts` 는 dev-only injection 이 필요해
+  현재 `.skip` 상태 (P2-B 에서 `src/renderer/devTestHooks.ts` 추가 후 활성화).
+- `browser-view.spec.ts` 는 https://example.com 네트워크 필요.
+  네트워크 없는 환경에선 `PLAYWRIGHT_SKIP_NETWORK=1 npm run test:e2e`.
+- 단일 instance lock (`requestSingleInstanceLock`) 로 인해 e2e 는
+  serial 실행 (workers: 1).
+
 ### 요구사항
 
 ```

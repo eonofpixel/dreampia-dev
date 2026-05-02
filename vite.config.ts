@@ -58,7 +58,10 @@ export default defineConfig({
         },
       },
       {
-        // Preload script
+        // Preload script — CommonJS (.cjs) 강제.
+        // Electron preload + sandbox=true 는 ESM 미지원.
+        // package.json 의 "type":"module" 때문에 .js 는 ESM 로 해석되므로
+        // .cjs 확장자 + format:'cjs' 명시 필요. (E2E 실행 중 발견)
         entry: resolve(__dirname, 'src/main/preload.ts'),
         onstart(options) {
           options.reload();
@@ -74,6 +77,13 @@ export default defineConfig({
           build: {
             outDir: resolve(__dirname, 'dist/main'),
             sourcemap: true,
+            // lib mode 로 명시해야 vite-plugin-electron 의 default ESM 설정
+            // 을 override 가능. format:'cjs' 만으론 import 가 그대로 남음.
+            lib: {
+              entry: resolve(__dirname, 'src/main/preload.ts'),
+              formats: ['cjs'],
+              fileName: () => 'preload.cjs',
+            },
             rollupOptions: {
               external: ['electron'],
             },

@@ -35,6 +35,11 @@ lerna-debug.log*
 coverage/
 .nyc_output/
 
+# Playwright (E2E)
+test-results/
+playwright-report/
+playwright/.cache/
+
 # Environment / secrets
 .env
 .env.local

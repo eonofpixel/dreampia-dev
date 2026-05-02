@@ -89,3 +89,42 @@ jobs:
 
       - name: Build (no package)
         run: npm run build:dir
+
+  e2e:
+    name: E2E (Playwright Electron)
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test]
+    # Network-dependent specs (browser-view) are skipped via env var.
+    # ABI rebuild + vite build + Electron launch all happen in this job.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer + main + rebuild better-sqlite3 for Electron
+        run: npm run pretest:e2e
+
+      - name: Run E2E (xvfb wrapper for headless Electron)
+        run: xvfb-run --auto-servernum -- npm run test:e2e
+        env:
+          CI: '1'
+          # Skip BrowserView specs that require https://example.com.
+          # Flip to 0 when the runner has confirmed network access.
+          PLAYWRIGHT_SKIP_NETWORK: '1'
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
