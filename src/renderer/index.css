@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   Design Tokens (Tier 2 - Semantic)
+   See: docs/design/tokens/colors.md
+   ============================================ */
+
+:root {
+  /* Light theme */
+  --color-bg-primary: hsl(0 0% 100%);
+  --color-bg-secondary: hsl(220 14% 96%);
+  --color-bg-tertiary: hsl(220 13% 91%);
+  --color-bg-elevated: hsl(0 0% 100%);
+
+  --color-text-primary: hsl(220 9% 9%);
+  --color-text-secondary: hsl(220 9% 46%);
+  --color-text-tertiary: hsl(220 9% 65%);
+
+  --color-accent: hsl(195 80% 48%);
+  --color-accent-hover: hsl(195 75% 40%);
+
+  --color-border-primary: hsl(220 13% 91%);
+  --color-border-focus: hsl(195 80% 48%);
+
+  /* Typography (한국어 우선) */
+  --font-sans:
+    'Pretendard Variable', 'Pretendard', 'Apple SD Gothic Neo', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, sans-serif;
+
+  --font-mono:
+    'D2Coding Ligature', 'D2Coding', 'JetBrains Mono', 'Fira Code', Menlo, Monaco, Consolas,
+    monospace;
+}
+
+[data-theme='dark'] {
+  --color-bg-primary: hsl(220 13% 9%);
+  --color-bg-secondary: hsl(220 13% 14%);
+  --color-bg-tertiary: hsl(220 13% 18%);
+  --color-bg-elevated: hsl(220 13% 14%);
+
+  --color-text-primary: hsl(220 14% 96%);
+  --color-text-secondary: hsl(220 9% 70%);
+  --color-text-tertiary: hsl(220 9% 50%);
+
+  --color-accent: hsl(195 84% 68%);
+  --color-accent-hover: hsl(195 88% 78%);
+
+  --color-border-primary: hsl(220 13% 22%);
+  --color-border-focus: hsl(195 84% 68%);
+}
+
+/* Base styles */
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  word-break: keep-all; /* 한국어 어절 유지 */
+  overflow-wrap: break-word;
+}
+
+code,
+pre {
+  font-family: var(--font-mono);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Focus ring (keyboard only) */
+*:focus {
+  outline: none;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}

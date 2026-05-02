@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+out/
+build/
+
+# Electron / Vite
+.vite/
+.cache/
+release/
+
+# IDE / Editor
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.idea/
+*.iml
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# OS
+Thumbs.db
+
+# Tools
+.eslintcache
+.tsbuildinfo
+
+# Captures (analysis 결과 — 별도 보관)
+captures/
+
+# Local DB / cache
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+sessions.sqlite*

@@ -1,0 +1,48 @@
+appId: dev.dreampia.app
+productName: Dreampia-Dev
+copyright: Copyright © 2026 Dreampia
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - package.json
+  - LICENSE
+
+asar: true
+asarUnpack:
+  - 'node_modules/better-sqlite3/**'
+
+# Windows
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: 'Dreampia-Dev-${version}-${arch}.${ext}'
+  # Phase 2+: MSIX
+  # target: appx
+  # publisherName: 'Dreampia'
+
+# macOS
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  category: public.app-category.developer-tools
+  artifactName: 'Dreampia-Dev-${version}-${arch}.${ext}'
+
+# Linux
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  category: Development
+  artifactName: 'Dreampia-Dev-${version}-${arch}.${ext}'
+
+# 자동 업데이트 (Phase 2+)
+publish:
+  provider: github
+  owner: dreampia-org
+  repo: dreampia-dev
