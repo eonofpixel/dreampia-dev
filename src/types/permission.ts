@@ -10,6 +10,7 @@
 
 import { z } from 'zod';
 import { SessionIdSchema, ISO8601Schema, AbsolutePathSchema } from './common';
+import { CapabilitySchema as StrictCapabilitySchema } from '../permission/Capability';
 
 // ────────────────────────────────────────────────────────────
 // PermissionLevel
@@ -33,13 +34,42 @@ export const PERMISSION_LEVEL_LABELS_KO: Record<PermissionLevel, string> = {
 };
 
 // ────────────────────────────────────────────────────────────
-// Capability (subset — full enum in src/permission/Capability.ts)
+// Capability re-exports
 //
-// Phase 1 minimum: parse string. Full type checking in PM-1 (Phase 1).
+// 전체 enum / schema / 헬퍼는 src/permission/Capability.ts 에서 정의되며
+// 여기선 단순 re-export. 이렇게 하면 Capability ↔ permission 모듈 간 cycle 없음.
 // ────────────────────────────────────────────────────────────
 
-export const CapabilitySchema = z.string().min(1);
-export type Capability = string;
+export {
+  ALL_CAPABILITIES,
+  CapabilitySchema,
+  type Capability,
+  isParentCapability,
+} from '../permission/Capability';
+
+// ────────────────────────────────────────────────────────────
+// GrantCapability — 일반 Capability 또는 deny 표기.
+//
+// PermissionGrant.capability 필드는 다음 중 하나:
+//  - 일반 Capability (예: 'LOCAL_WRITE.modify')
+//  - Deny 표기 (예: '__deny__:LOCAL_EXECUTE') — resolver.md 168-185
+//
+// 따라서 grant schema 의 capability 는 strict enum 보다 약간 느슨하게:
+//  - 정상 Capability 통과
+//  - '__deny__:' prefix + 정상 Capability 통과
+// ────────────────────────────────────────────────────────────
+
+const DENY_PREFIX = '__deny__:';
+
+const GrantCapabilitySchema = z.string().refine(
+  (v) => {
+    if (v.startsWith(DENY_PREFIX)) {
+      return StrictCapabilitySchema.safeParse(v.slice(DENY_PREFIX.length)).success;
+    }
+    return StrictCapabilitySchema.safeParse(v).success;
+  },
+  { message: 'Must be a valid Capability or __deny__:Capability' }
+);
 
 // ────────────────────────────────────────────────────────────
 // GrantTarget
@@ -90,7 +120,7 @@ export const PermissionGrantSchema = z.object({
   id: z.string().min(1),
   session_id: SessionIdSchema,
 
-  capability: CapabilitySchema,
+  capability: GrantCapabilitySchema,
   target: GrantTargetSchema,
   scope: GrantScopeSchema,
 
@@ -115,12 +145,12 @@ export const PermissionStateSchema = z.object({
 
   last_denied: z
     .object({
-      capability: CapabilitySchema,
+      capability: GrantCapabilitySchema,
       ts: ISO8601Schema,
     })
     .optional(),
 
-  temporarily_blocked_capabilities: z.array(CapabilitySchema),
+  temporarily_blocked_capabilities: z.array(GrantCapabilitySchema),
 });
 
 export type PermissionState = z.infer<typeof PermissionStateSchema>;
