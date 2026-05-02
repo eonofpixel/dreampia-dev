@@ -293,7 +293,6 @@ describe('roundtrip — documented info loss', () => {
           id: '01900000-0000-7000-8000-bbbbbbbbbbbb' as never,
           tool_id: originalToolId,
           input: { x: 1 },
-          ts: '2026-05-02T00:00:00.000Z',
         },
       ],
     };
