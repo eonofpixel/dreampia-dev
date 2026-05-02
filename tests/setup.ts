@@ -39,12 +39,53 @@ interface MockSessionLock {
   ttl_seconds: number;
 }
 
+interface MockBrowserTabState {
+  tab_id: string;
+  session_id: string;
+  url: string;
+  title: string;
+  favicon_url: string | null;
+  status: 'loading' | 'ready' | 'failed';
+  can_go_back: boolean;
+  can_go_forward: boolean;
+}
+
+interface MockBrowserBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+type BrowserUpdateListener = (state: MockBrowserTabState) => void;
+
 const mockStore = {
   sessions: new Map<string, Session>(),
   locks: new Map<string, MockSessionLock>(),
   /** This window's id (mocked). Tests can override to simulate other windows. */
   windowId: 'test-window-1',
+
+  // ── browser/* (P1-5) ───────────────────────────────────────
+  // Reproduces the BrowserManager surface in-memory:
+  //   browserTabs:    tab_id -> state
+  //   browserActive:  session_id -> tab_id (the visible tab per session)
+  //   browserBounds:  tab_id -> last reported bounds
+  //   browserListeners: subscribers to onTabUpdated
+  browserTabs: new Map<string, MockBrowserTabState>(),
+  browserActive: new Map<string, string>(),
+  browserBounds: new Map<string, MockBrowserBounds>(),
+  browserListeners: new Set<BrowserUpdateListener>(),
 };
+
+function emitBrowserUpdate(state: MockBrowserTabState): void {
+  for (const fn of mockStore.browserListeners) {
+    try {
+      fn(state);
+    } catch {
+      // ignore listener errors in tests
+    }
+  }
+}
 
 /**
  * Test helper: seed mockStore from a test file.
@@ -54,8 +95,11 @@ const mockStore = {
  *   __mockStore.sessions.set(s.id, s);
  *   __mockStore.locks.set(id, { ... });
  *   __mockStore.windowId = 'window-A';
+ *   __mockStore.browserTabs.set(tabId, { ... });
+ *   __emitBrowserUpdate(state);  // simulate main → renderer event
  */
 export const __mockStore = mockStore;
+export const __emitBrowserUpdate = emitBrowserUpdate;
 
 function toMeta(s: Session): MockSessionMeta {
   const meta: MockSessionMeta = {
@@ -79,6 +123,10 @@ beforeEach(() => {
   mockStore.sessions.clear();
   mockStore.locks.clear();
   mockStore.windowId = 'test-window-1';
+  mockStore.browserTabs.clear();
+  mockStore.browserActive.clear();
+  mockStore.browserBounds.clear();
+  mockStore.browserListeners.clear();
 });
 
 afterEach(() => {
@@ -269,6 +317,115 @@ if (typeof window !== 'undefined') {
             };
           }
         ),
+      },
+
+      // P1-5: in-app browser. Mirrors BrowserManager semantics in-memory.
+      // No real WebContentsView; tabs are pure state objects.
+      browser: {
+        openTab: vi.fn(
+          async (args: {
+            session_id: string;
+            tab_id: string;
+            url: string;
+          }): Promise<Result<MockBrowserTabState>> => {
+            const existing = mockStore.browserTabs.get(args.tab_id);
+            if (existing) {
+              return { ok: true, value: existing };
+            }
+            const state: MockBrowserTabState = {
+              tab_id: args.tab_id,
+              session_id: args.session_id,
+              url: args.url,
+              title: 'Loading...',
+              favicon_url: null,
+              status: 'loading',
+              can_go_back: false,
+              can_go_forward: false,
+            };
+            mockStore.browserTabs.set(args.tab_id, state);
+            return { ok: true, value: state };
+          }
+        ),
+
+        closeTab: vi.fn(async (tabId: string): Promise<Result<void>> => {
+          const tab = mockStore.browserTabs.get(tabId);
+          mockStore.browserTabs.delete(tabId);
+          mockStore.browserBounds.delete(tabId);
+          if (tab && mockStore.browserActive.get(tab.session_id) === tabId) {
+            mockStore.browserActive.delete(tab.session_id);
+          }
+          return { ok: true, value: undefined };
+        }),
+
+        switchTab: vi.fn(
+          async (
+            sessionId: string,
+            tabId: string
+          ): Promise<Result<void>> => {
+            const tab = mockStore.browserTabs.get(tabId);
+            if (!tab || tab.session_id !== sessionId) {
+              return { ok: true, value: undefined };
+            }
+            mockStore.browserActive.set(sessionId, tabId);
+            return { ok: true, value: undefined };
+          }
+        ),
+
+        navigate: vi.fn(
+          async (tabId: string, url: string): Promise<Result<void>> => {
+            const tab = mockStore.browserTabs.get(tabId);
+            if (!tab) return { ok: true, value: undefined };
+            const next: MockBrowserTabState = { ...tab, url, status: 'loading' };
+            mockStore.browserTabs.set(tabId, next);
+            emitBrowserUpdate(next);
+            return { ok: true, value: undefined };
+          }
+        ),
+
+        back: vi.fn(async (_tabId: string): Promise<Result<void>> => {
+          return { ok: true, value: undefined };
+        }),
+
+        forward: vi.fn(async (_tabId: string): Promise<Result<void>> => {
+          return { ok: true, value: undefined };
+        }),
+
+        reload: vi.fn(async (tabId: string): Promise<Result<void>> => {
+          const tab = mockStore.browserTabs.get(tabId);
+          if (!tab) return { ok: true, value: undefined };
+          const next: MockBrowserTabState = { ...tab, status: 'loading' };
+          mockStore.browserTabs.set(tabId, next);
+          emitBrowserUpdate(next);
+          return { ok: true, value: undefined };
+        }),
+
+        setBounds: vi.fn(
+          async (
+            tabId: string,
+            bounds: MockBrowserBounds
+          ): Promise<Result<void>> => {
+            mockStore.browserBounds.set(tabId, bounds);
+            return { ok: true, value: undefined };
+          }
+        ),
+
+        listTabs: vi.fn(
+          async (
+            sessionId: string
+          ): Promise<Result<MockBrowserTabState[]>> => ({
+            ok: true,
+            value: Array.from(mockStore.browserTabs.values()).filter(
+              (t) => t.session_id === sessionId
+            ),
+          })
+        ),
+
+        onTabUpdated: vi.fn((listener: BrowserUpdateListener): (() => void) => {
+          mockStore.browserListeners.add(listener);
+          return () => {
+            mockStore.browserListeners.delete(listener);
+          };
+        }),
       },
     },
   });

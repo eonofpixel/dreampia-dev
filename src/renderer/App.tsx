@@ -238,7 +238,12 @@ export function App(): React.JSX.Element {
           onCancel={cancelStream}
         />
       }
-      preview={<PreviewPanel browser={activeSession?.browser ?? null} />}
+      preview={
+        <PreviewPanel
+          sessionId={(activeSession?.id ?? null) as SessionId | null}
+          browser={activeSession?.browser ?? null}
+        />
+      }
     />
   );
 }

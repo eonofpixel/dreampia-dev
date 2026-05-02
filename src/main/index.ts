@@ -10,6 +10,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { registerIpcHandlers } from './ipc';
+import { BrowserManager } from './BrowserManager';
 import { LeaderElection, SessionStore } from '@/storage';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -23,6 +24,7 @@ app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
 let mainWindow: BrowserWindow | null = null;
 let sessionStore: SessionStore | null = null;
 let leaderElection: LeaderElection | null = null;
+let browserManager: BrowserManager | null = null;
 
 function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -98,7 +100,21 @@ app.whenReady().then(() => {
     ttl_seconds: 30,
   });
 
-  registerIpcHandlers(app, sessionStore, leaderElection);
+  // BrowserManager owns one WebContentsView per tab. It needs the
+  // current main window (constructed below) — pass a getter so it
+  // can re-resolve after re-creation on macOS dock-click. Tab-state
+  // diffs are forwarded to the renderer over `browser/tab-updated`.
+  // Spec: docs/session/browser.md
+  browserManager = new BrowserManager({
+    getMainWindow: () => mainWindow,
+    onTabUpdate: (state) => {
+      const win = mainWindow;
+      if (!win || win.isDestroyed()) return;
+      win.webContents.send('browser/tab-updated', state);
+    },
+  });
+
+  registerIpcHandlers(app, sessionStore, leaderElection, browserManager);
   mainWindow = createMainWindow();
 
   app.on('activate', () => {
@@ -117,9 +133,14 @@ app.on('window-all-closed', () => {
 });
 
 // Close DB on quit (flush WAL, release file handle).
-// Order matters: shutdown election first (releases held locks via DB writes)
-// then close the DB.
+// Order matters:
+//   1) tear down BrowserManager (releases WebContentsView resources first
+//      so partition file handles are flushed before app exit),
+//   2) shutdown election (releases held locks via DB writes),
+//   3) close the DB.
 app.on('before-quit', () => {
+  browserManager?.shutdown();
+  browserManager = null;
   leaderElection?.shutdown();
   leaderElection = null;
   sessionStore?.close();

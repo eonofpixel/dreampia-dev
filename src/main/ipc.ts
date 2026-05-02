@@ -27,6 +27,7 @@ import type {
   SessionMeta,
   SessionStore,
 } from '@/storage';
+import type { BrowserManager, BrowserTabState } from './BrowserManager';
 import type { Result, SessionMetaPatch } from './types';
 
 export type { Result, SessionMetaPatch } from './types';
@@ -48,6 +49,25 @@ const SessionMetaPatchSchema = z
     title: z.string().min(1).optional(),
     pinned: z.boolean().optional(),
     archived: z.boolean().optional(),
+  })
+  .strict();
+
+// browser/* — Codex-style namespace. Renderer payloads are validated here so
+// the BrowserManager can keep working with already-typed values.
+const OpenTabArgsSchema = z
+  .object({
+    session_id: z.string().min(1),
+    tab_id: z.string().min(1),
+    url: z.string().min(1),
+  })
+  .strict();
+
+const BoundsSchema = z
+  .object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+    width: z.number().finite().nonnegative(),
+    height: z.number().finite().nonnegative(),
   })
   .strict();
 
@@ -87,11 +107,15 @@ function fail(err: unknown): { ok: false; error: string } {
  * @param election - Optional LeaderElection. When omitted, `lock/*` handlers
  *                   are not registered. Tests that don't exercise locks can
  *                   skip it; production always passes one.
+ * @param browser  - Optional BrowserManager. When omitted, `browser/*`
+ *                   handlers are not registered. Tests that don't exercise
+ *                   the in-app browser can skip it. Spec: docs/session/browser.md
  */
 export function registerIpcHandlers(
   electronApp: App = app,
   store?: SessionStore,
-  election?: LeaderElection
+  election?: LeaderElection,
+  browser?: BrowserManager
 ): void {
   ipcMain.handle('app:get-version', (): AppInfo => {
     return {
@@ -106,8 +130,18 @@ export function registerIpcHandlers(
     return process.platform;
   });
 
-  if (!store) return;
+  if (store) {
+    registerSessionHandlers(store);
+    if (election) registerLockHandlers(election);
+  }
+  if (browser) registerBrowserHandlers(browser);
+}
 
+// ────────────────────────────────────────────────────────────
+// Namespace registrations
+// ────────────────────────────────────────────────────────────
+
+function registerSessionHandlers(store: SessionStore): void {
   // ── session/* — SessionStore CRUD ────────────────────────────
 
   ipcMain.handle('session/list', (): Result<SessionMeta[]> => {
@@ -187,9 +221,9 @@ export function registerIpcHandlers(
       }
     }
   );
+}
 
-  if (!election) return;
-
+function registerLockHandlers(election: LeaderElection): void {
   // ── lock/* — multi-window leader election ───────────────────
   // Spec: docs/session/multi-window.md
 
@@ -263,6 +297,154 @@ export function registerIpcHandlers(
           throw new Error('session id must be string');
         }
         return ok(election.isLeader(sessionId as SessionId));
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+}
+
+function registerBrowserHandlers(browser: BrowserManager): void {
+  // ── browser/* — in-app WebContentsView per session (P1-5) ─────
+  // Spec: docs/session/browser.md
+
+  ipcMain.handle(
+    'browser/open-tab',
+    (_evt, args: unknown): Result<BrowserTabState> => {
+      try {
+        const validated = OpenTabArgsSchema.parse(args);
+        const state = browser.openTab({
+          session_id: validated.session_id as SessionId,
+          tab_id: validated.tab_id,
+          url: validated.url,
+        });
+        return ok(state);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'browser/close-tab',
+    (_evt, tabId: unknown): Result<void> => {
+      try {
+        if (typeof tabId !== 'string') {
+          throw new Error('tab id must be string');
+        }
+        browser.closeTab(tabId);
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'browser/switch-tab',
+    (_evt, sessionId: unknown, tabId: unknown): Result<void> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        if (typeof tabId !== 'string') {
+          throw new Error('tab id must be string');
+        }
+        browser.switchTab(sessionId as SessionId, tabId);
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'browser/navigate',
+    (_evt, tabId: unknown, url: unknown): Result<void> => {
+      try {
+        if (typeof tabId !== 'string') {
+          throw new Error('tab id must be string');
+        }
+        if (typeof url !== 'string' || url.length === 0) {
+          throw new Error('url must be non-empty string');
+        }
+        browser.navigate(tabId, url);
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'browser/back',
+    (_evt, tabId: unknown): Result<void> => {
+      try {
+        if (typeof tabId !== 'string') {
+          throw new Error('tab id must be string');
+        }
+        browser.goBack(tabId);
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'browser/forward',
+    (_evt, tabId: unknown): Result<void> => {
+      try {
+        if (typeof tabId !== 'string') {
+          throw new Error('tab id must be string');
+        }
+        browser.goForward(tabId);
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'browser/reload',
+    (_evt, tabId: unknown): Result<void> => {
+      try {
+        if (typeof tabId !== 'string') {
+          throw new Error('tab id must be string');
+        }
+        browser.reload(tabId);
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'browser/set-bounds',
+    (_evt, tabId: unknown, bounds: unknown): Result<void> => {
+      try {
+        if (typeof tabId !== 'string') {
+          throw new Error('tab id must be string');
+        }
+        const validated = BoundsSchema.parse(bounds);
+        browser.setBounds(tabId, validated);
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'browser/list-tabs',
+    (_evt, sessionId: unknown): Result<BrowserTabState[]> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        return ok(browser.listTabs(sessionId as SessionId));
       } catch (err) {
         return fail(err);
       }

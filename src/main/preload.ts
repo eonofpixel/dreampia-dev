@@ -43,6 +43,26 @@ interface SessionLockShape {
   ttl_seconds: number;
 }
 
+// BrowserTabState mirrored from `@/main/BrowserManager.ts`. Inlined here so
+// preload doesn't transitively import Electron-only modules. Keep in sync.
+interface BrowserTabStateShape {
+  tab_id: string;
+  session_id: SessionId;
+  url: string;
+  title: string;
+  favicon_url: string | null;
+  status: 'loading' | 'ready' | 'failed';
+  can_go_back: boolean;
+  can_go_forward: boolean;
+}
+
+interface BrowserBoundsShape {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 // Whitelist of IPC channels (security)
 const ALLOWED_INVOKE_CHANNELS = [
   'app:get-version',
@@ -58,9 +78,19 @@ const ALLOWED_INVOKE_CHANNELS = [
   'lock/get',
   'lock/heartbeat',
   'lock/is-leader',
+  'browser/open-tab',
+  'browser/close-tab',
+  'browser/switch-tab',
+  'browser/navigate',
+  'browser/back',
+  'browser/forward',
+  'browser/reload',
+  'browser/set-bounds',
+  'browser/list-tabs',
 ] as const;
 
 const ALLOWED_RECEIVE_CHANNELS = [
+  'browser/tab-updated',
   // Phase 2+:
   // 'session:updated',
   // 'tool:result',
@@ -160,6 +190,79 @@ const api = {
       ipcRenderer.invoke('lock/is-leader', sessionId) as Promise<
         Result<boolean>
       >,
+  },
+
+  /**
+   * In-app browser (P1-5).
+   *
+   * Spec: docs/session/browser.md
+   *
+   * Renderer drives tab CRUD; main owns the WebContentsView lifecycle.
+   * Per-session partition isolation matches the Codex codex-browser-app
+   * pattern (see `partitionIdFor` in @/types/helpers).
+   *
+   * `onTabUpdated` returns an unsubscribe function — callers MUST invoke
+   * it on unmount to avoid leaking listeners.
+   */
+  browser: {
+    openTab: (args: {
+      session_id: SessionId;
+      tab_id: string;
+      url: string;
+    }): Promise<Result<BrowserTabStateShape>> =>
+      ipcRenderer.invoke('browser/open-tab', args) as Promise<
+        Result<BrowserTabStateShape>
+      >,
+
+    closeTab: (tabId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('browser/close-tab', tabId) as Promise<Result<void>>,
+
+    switchTab: (sessionId: SessionId, tabId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('browser/switch-tab', sessionId, tabId) as Promise<
+        Result<void>
+      >,
+
+    navigate: (tabId: string, url: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('browser/navigate', tabId, url) as Promise<
+        Result<void>
+      >,
+
+    back: (tabId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('browser/back', tabId) as Promise<Result<void>>,
+
+    forward: (tabId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('browser/forward', tabId) as Promise<Result<void>>,
+
+    reload: (tabId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('browser/reload', tabId) as Promise<Result<void>>,
+
+    setBounds: (
+      tabId: string,
+      bounds: BrowserBoundsShape
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('browser/set-bounds', tabId, bounds) as Promise<
+        Result<void>
+      >,
+
+    listTabs: (
+      sessionId: SessionId
+    ): Promise<Result<BrowserTabStateShape[]>> =>
+      ipcRenderer.invoke('browser/list-tabs', sessionId) as Promise<
+        Result<BrowserTabStateShape[]>
+      >,
+
+    onTabUpdated: (
+      listener: (state: BrowserTabStateShape) => void
+    ): (() => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        state: BrowserTabStateShape
+      ): void => {
+        listener(state);
+      };
+      ipcRenderer.on('browser/tab-updated', handler);
+      return () => ipcRenderer.removeListener('browser/tab-updated', handler);
+    },
   },
 };
 
