@@ -9,19 +9,24 @@
 
 import { useState, useCallback, useRef } from 'react';
 import type { StreamEvent, StreamingProvider } from '@/providers/types';
-import type { Turn, TurnId, ToolCallRef, ToolCallId } from '@/types';
+import type { Turn, TurnId, ToolCallRef, ToolCallId, ToolResultRef } from '@/types';
 import { newTurnId, nowIso } from '@/types';
 
 export interface UseStreamingTurnArgs {
   provider: StreamingProvider;
   onTurnUpdate: (turn: Turn) => void;
-  onComplete: (turn: Turn) => void;
+  onComplete: (turn: Turn, toolResultTurn?: Turn) => void;
   onError?: (error: string) => void;
 }
 
 export interface UseStreamingTurnReturn {
   isStreaming: boolean;
-  start: (input: { turns: Turn[]; model: string }) => Promise<void>;
+  start: (input: {
+    turns: Turn[];
+    model: string;
+    sessionId?: string;
+    workspaceRoot?: string;
+  }) => Promise<void>;
   cancel: () => void;
 }
 
@@ -44,7 +49,12 @@ export function useStreamingTurn({
   onErrorRef.current = onError;
 
   const start = useCallback(
-    async (input: { turns: Turn[]; model: string }): Promise<void> => {
+    async (input: {
+      turns: Turn[];
+      model: string;
+      sessionId?: string;
+      workspaceRoot?: string;
+    }): Promise<void> => {
       if (isStreaming) return;
 
       setIsStreaming(true);
@@ -59,19 +69,43 @@ export function useStreamingTurn({
         content: [{ type: 'text', text: '' }],
         model: input.model,
       };
+      const toolResults: ToolResultRef[] = [];
 
       try {
         for await (const ev of provider.stream({
-          ...input,
+          turns: input.turns,
+          model: input.model,
+          config: {
+            ...(input.sessionId !== undefined && { session_id: input.sessionId }),
+            ...(input.workspaceRoot !== undefined && {
+              workspace_root: input.workspaceRoot,
+            }),
+          },
           signal: controller.signal,
         })) {
           if (controller.signal.aborted) break;
+
+          if (ev.type === 'tool_result') {
+            toolResults.push(ev.result);
+            continue;
+          }
 
           turn = applyEvent(turn, ev);
           onTurnUpdateRef.current(turn);
 
           if (ev.type === 'message_complete') {
-            onCompleteRef.current(turn);
+            const toolResultTurn =
+              toolResults.length > 0
+                ? ({
+                    id: newTurnId(),
+                    role: 'tool',
+                    timestamp: nowIso(),
+                    status: 'completed',
+                    content: [],
+                    tool_results: toolResults,
+                  } satisfies Turn)
+                : undefined;
+            onCompleteRef.current(turn, toolResultTurn);
             break;
           }
           if (ev.type === 'error') {
@@ -159,6 +193,9 @@ function applyEvent(turn: Turn, ev: StreamEvent): Turn {
       };
       return { ...turn, tool_calls: next };
     }
+
+    case 'tool_result':
+      return turn;
 
     case 'message_complete': {
       const completed: Turn = { ...ev.turn, status: 'completed' };

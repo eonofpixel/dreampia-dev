@@ -49,8 +49,9 @@ import type {
 } from '../../src/providers/types';
 import type { AutoProviderResult } from '../../src/providers/auto';
 import type { CliDetectionResult } from '../../src/providers';
-import type { Turn } from '../../src/types';
+import type { ToolCallId, Turn } from '../../src/types';
 import { newTurnId, nowIso } from '../../src/types';
+import type { ToolQueue, ToolResult } from '../../src/tools';
 
 const evt = {} as unknown;
 
@@ -147,6 +148,9 @@ describe('IPC ai handlers', () => {
           source: 'claude-cli',
           detected: { claude: null, codex: null },
         })),
+      // ★ Codex 2차 fix 후 누락 — opts.toolQueue 가 cfg 로 전파 안 되어
+      // 'executes provider tool calls through ToolQueue' 테스트 fail.
+      toolQueue: opts?.toolQueue,
     };
     registerIpcHandlers(stubApp, undefined, undefined, undefined, cfg);
     return { win };
@@ -205,6 +209,32 @@ describe('IPC ai handlers', () => {
     expect(result.value.source).toBe('claude-cli');
   });
 
+  it('passes workspace_root through to provider selection', async () => {
+    provider = provFromEvents([]);
+    let capturedCwd: string | undefined;
+    register({
+      getDefaultProvider: async (_model, _signal, cwd): Promise<AutoProviderResult> => {
+        capturedCwd = cwd;
+        return {
+          provider,
+          source: 'claude-cli',
+          detected: { claude: null, codex: null },
+        };
+      },
+    });
+    const result = await call<Result<{ stream_id: string; source: string }>>(
+      'ai/start-stream',
+      {
+        stream_id: 'sid-cwd',
+        model: 'claude-test',
+        turns: [userTurn('hi')],
+        workspace_root: 'C:\\Dev\\workspace',
+      }
+    );
+    expect(result.ok).toBe(true);
+    expect(capturedCwd).toBe('C:\\Dev\\workspace');
+  });
+
   it('emits stream events via mainWindow.webContents.send', async () => {
     provider = provFromEvents([
       { type: 'message_start', turn_id: 'tt-1', model: 'claude-test' },
@@ -233,6 +263,69 @@ describe('IPC ai handlers', () => {
     expect(events.length).toBeGreaterThanOrEqual(2);
     const ends = sent.filter((s) => s.channel === 'ai/stream-end');
     expect(ends.length).toBe(1);
+  });
+
+  it('executes provider tool calls through ToolQueue and emits tool_result', async () => {
+    const callId = '019d0003-0000-7000-8000-000000000001';
+    provider = provFromEvents([
+      { type: 'message_start', turn_id: '019d0003-0000-7000-8000-000000000002', model: 'claude-test' },
+      {
+        type: 'tool_call_complete',
+        tool_call: { id: callId as ToolCallId, tool_id: 'shell.run', input: { cmd: 'echo hi' } },
+      },
+      {
+        type: 'message_complete',
+        turn: {
+          id: newTurnId(),
+          role: 'assistant',
+          timestamp: nowIso(),
+          status: 'completed',
+          content: [{ type: 'text', text: 'done' }],
+          tool_calls: [
+            { id: callId as ToolCallId, tool_id: 'shell.run', input: { cmd: 'echo hi' } },
+          ],
+          model: 'claude-test',
+        },
+      },
+    ]);
+    const toolResult: ToolResult = {
+      call_id: callId as ToolResult['call_id'],
+      tool_id: 'shell.run',
+      status: 'success',
+      output: { stdout: 'hi', stderr: '', exit_code: 0, duration_ms: 1 },
+      started_at: nowIso(),
+      completed_at: nowIso(),
+      duration_ms: 1,
+      attempt_count: 1,
+      side_effects: [],
+      log_tail: [],
+    };
+    const queue = {
+      enqueue: vi.fn(async () => toolResult),
+    } as unknown as ToolQueue;
+
+    register({ toolQueue: queue });
+    await call('ai/start-stream', {
+      stream_id: 'sid-tool',
+      model: 'claude-test',
+      turns: [userTurn('hi')],
+      session_id: '019d0003-0000-7000-8000-000000000003',
+    });
+    await flushMicrotasks();
+
+    expect(queue.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: callId,
+        tool_id: 'shell.run',
+        session_id: '019d0003-0000-7000-8000-000000000003',
+      })
+    );
+    const toolEvents = sent.filter(
+      (s) =>
+        s.channel === 'ai/stream-event' &&
+        (s.payload as { event: { type: string } }).event.type === 'tool_result'
+    );
+    expect(toolEvents).toHaveLength(1);
   });
 
   it('rejects malformed start-stream payload via zod', async () => {

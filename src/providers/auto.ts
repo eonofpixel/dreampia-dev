@@ -34,10 +34,14 @@ export interface AutoProviderResult {
  * 모델 이름 + CLI 설치 상태로 best provider 선택.
  *
  * `signal` 은 CliProvider 에 전달되어 mid-stream abort 를 지원한다.
+ * `cwd` 는 CLI subprocess 작업 디렉토리다. Renderer/main IPC 의
+ * workspace_root 를 여기까지 명시적으로 전달해 process.cwd() 의 우연성에
+ * 기대지 않는다.
  */
 export async function getDefaultProvider(
   model: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  cwd?: string
 ): Promise<AutoProviderResult> {
   const detected = await detectCli();
   const lower = model.toLowerCase();
@@ -52,14 +56,14 @@ export async function getDefaultProvider(
 
   if (claudeFamily && detected.claude !== null) {
     return {
-      provider: makeCliProvider(detected.claude, 'claude', signal),
+      provider: makeCliProvider(detected.claude, 'claude', signal, cwd),
       source: 'claude-cli',
       detected,
     };
   }
   if (codexFamily && detected.codex !== null) {
     return {
-      provider: makeCliProvider(detected.codex, 'codex', signal),
+      provider: makeCliProvider(detected.codex, 'codex', signal, cwd),
       source: 'codex-cli',
       detected,
     };
@@ -76,12 +80,14 @@ export async function getDefaultProvider(
 function makeCliProvider(
   info: CliInfo,
   provider: 'claude' | 'codex',
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  cwd?: string
 ): CliProvider {
   return new CliProvider({
     binaryPath: info.path,
     provider,
     translate: provider === 'claude' ? translateClaudeJsonl : translateCodexJsonl,
     ...(signal !== undefined && { signal }),
+    ...(cwd !== undefined && { cwd }),
   });
 }

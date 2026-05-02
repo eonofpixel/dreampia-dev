@@ -86,6 +86,7 @@ type StreamEventShape =
     }
   | { type: 'tool_call_input_delta'; tool_call_id: string; partial_input: string }
   | { type: 'tool_call_complete'; tool_call: { id: string; tool_id: string; input?: unknown } }
+  | { type: 'tool_result'; result: ToolResultRefShape }
   | { type: 'message_complete'; turn: Turn }
   | { type: 'error'; error: string };
 
@@ -95,6 +96,55 @@ interface AiStreamEventPayload {
 }
 interface AiStreamEndPayload {
   stream_id: string;
+}
+
+interface ToolCallShape {
+  id: string;
+  tool_id: string;
+  session_id: string;
+  turn_id: string;
+  parent_call_id?: string;
+  input: unknown;
+  timeout_ms?: number;
+  priority?: 'high' | 'normal' | 'low';
+  origin: 'ai' | 'user' | 'automation';
+  created_at: string;
+}
+
+interface ToolResultRefShape {
+  call_id: string;
+  status: 'success' | 'failed' | 'cancelled' | 'timeout';
+  output?: unknown;
+  error?: {
+    code: string;
+    message: string;
+  };
+  duration_ms: number;
+}
+
+interface ToolResultShape {
+  call_id: string;
+  tool_id: string;
+  status: 'success' | 'failed' | 'cancelled' | 'timeout';
+  output?: unknown;
+  error?: {
+    code: string;
+    message: string;
+    details?: Record<string, unknown>;
+    retryable: boolean;
+    user_visible_hint?: string;
+  };
+  started_at: string;
+  completed_at: string;
+  duration_ms: number;
+  attempt_count: number;
+  side_effects: never[];
+  log_tail: Array<{
+    level: 'debug' | 'info' | 'warn' | 'error';
+    timestamp: string;
+    message: string;
+    data?: Record<string, unknown>;
+  }>;
 }
 
 // Whitelist of IPC channels (security)
@@ -125,6 +175,11 @@ const ALLOWED_INVOKE_CHANNELS = [
   'ai/detect-cli',
   'ai/start-stream',
   'ai/stop-stream',
+  'tool/list',
+  'tool/execute',
+  'tool/cancel-call',
+  'tool/cancel-turn',
+  'tool/stats',
 ] as const;
 
 const ALLOWED_RECEIVE_CHANNELS = [
@@ -304,6 +359,8 @@ const api = {
       stream_id: string;
       model: string;
       turns: Turn[];
+      session_id?: string;
+      workspace_root?: string;
     }): Promise<Result<{ stream_id: string; source: string }>> =>
       ipcRenderer.invoke('ai/start-stream', args) as Promise<
         Result<{ stream_id: string; source: string }>
@@ -327,6 +384,33 @@ const api = {
       ipcRenderer.on('ai/stream-end', handler);
       return () => ipcRenderer.removeListener('ai/stream-end', handler);
     },
+  },
+
+  /**
+   * Tool Queue bridge. Main owns the registry and execution queue; renderer
+   * receives only serializable call/result objects.
+   */
+  tool: {
+    list: (): Promise<Result<Array<{ id: string; version: string; source: string; name: string }>>> =>
+      ipcRenderer.invoke('tool/list') as Promise<
+        Result<Array<{ id: string; version: string; source: string; name: string }>>
+      >,
+
+    execute: (call: ToolCallShape): Promise<Result<ToolResultShape>> =>
+      ipcRenderer.invoke('tool/execute', call) as Promise<Result<ToolResultShape>>,
+
+    cancelCall: (callId: string, reason?: string): Promise<Result<boolean>> =>
+      ipcRenderer.invoke('tool/cancel-call', callId, reason) as Promise<Result<boolean>>,
+
+    cancelTurn: (turnId: string, reason?: string): Promise<Result<number>> =>
+      ipcRenderer.invoke('tool/cancel-turn', turnId, reason) as Promise<Result<number>>,
+
+    stats: (): Promise<
+      Result<{ active: number; pending: number; by_session: Record<string, number> }>
+    > =>
+      ipcRenderer.invoke('tool/stats') as Promise<
+        Result<{ active: number; pending: number; by_session: Record<string, number> }>
+      >,
   },
 };
 

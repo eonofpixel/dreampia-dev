@@ -205,13 +205,20 @@ export function App(): React.JSX.Element {
   }, []);
 
   const handleStreamComplete = useCallback(
-    (turn: Turn): void => {
+    (turn: Turn, toolResultTurn?: Turn): void => {
       // 스트리밍 도중에는 매 delta 마다 DB write 하지 않는다 (퍼포먼스).
-      // 완성된 assistant turn 만 한 번에 persist.
+      // 완성된 assistant turn 만 한 번에 persist. Tool Queue 결과가 있으면
+      // assistant 직후 role='tool' turn 으로 순서를 보존해 append 한다.
       if (activeSessionId === '') return;
-      void persistTurn(activeSessionId as SessionId, turn);
+      void (async () => {
+        await persistTurn(activeSessionId as SessionId, turn);
+        if (toolResultTurn !== undefined) {
+          handleTurnUpdate(toolResultTurn);
+          await persistTurn(activeSessionId as SessionId, toolResultTurn);
+        }
+      })();
     },
-    [activeSessionId, persistTurn]
+    [activeSessionId, handleTurnUpdate, persistTurn]
   );
 
   const {
@@ -269,6 +276,8 @@ export function App(): React.JSX.Element {
       void startStream({
         turns: [...activeSession.conversation.turns, userTurn],
         model: activeSession.conversation.current_model,
+        sessionId: activeSession.id,
+        workspaceRoot: activeSession.workspace.root,
       });
     },
     [activeSession, isStreaming, persistTurn, startStream]

@@ -45,6 +45,7 @@ export type StreamEvent =
     }
   | { type: 'tool_call_input_delta'; tool_call_id: string; partial_input: string }
   | { type: 'tool_call_complete'; tool_call: ToolCall }
+  | { type: 'tool_result'; result: ToolResult }
   | { type: 'message_complete'; turn: Turn }
   | { type: 'error'; error: string };
 

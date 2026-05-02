@@ -98,7 +98,10 @@ const mockStore = {
     claude: { path: '/usr/local/bin/claude', version: '1.2.3' },
     codex: null,
   } as MockCliDetection,
-  aiStartedStreams: new Map<string, { model: string; turns: unknown[] }>(),
+  aiStartedStreams: new Map<
+    string,
+    { model: string; turns: unknown[]; session_id?: string; workspace_root?: string }
+  >(),
   aiStoppedStreams: new Set<string>(),
   aiEventListeners: new Set<AiStreamEventListener>(),
   aiEndListeners: new Set<AiStreamEndListener>(),
@@ -476,10 +479,14 @@ if (typeof window !== 'undefined') {
             stream_id: string;
             model: string;
             turns: unknown[];
+            session_id?: string;
+            workspace_root?: string;
           }): Promise<Result<{ stream_id: string; source: string }>> => {
             mockStore.aiStartedStreams.set(args.stream_id, {
               model: args.model,
               turns: args.turns,
+              ...(args.session_id !== undefined && { session_id: args.session_id }),
+              ...(args.workspace_root !== undefined && { workspace_root: args.workspace_root }),
             });
             // Source 추론 (테스트에서 검증할 수 있도록).
             const lower = args.model.toLowerCase();

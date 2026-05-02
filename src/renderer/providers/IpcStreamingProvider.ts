@@ -100,10 +100,21 @@ export class IpcStreamingProvider implements StreamingProvider {
     });
 
     try {
+      const workspaceRoot =
+        typeof input.config?.['workspace_root'] === 'string'
+          ? input.config['workspace_root']
+          : undefined;
+      const sessionId =
+        typeof input.config?.['session_id'] === 'string'
+          ? input.config['session_id']
+          : undefined;
+
       const result = await ai.startStream({
         stream_id: streamId,
         model: input.model,
         turns: input.turns,
+        ...(workspaceRoot !== undefined && { workspace_root: workspaceRoot }),
+        ...(sessionId !== undefined && { session_id: sessionId }),
       });
       if (!result.ok) {
         yield { type: 'error', error: result.error };

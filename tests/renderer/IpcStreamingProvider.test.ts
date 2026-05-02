@@ -156,6 +156,26 @@ describe('IpcStreamingProvider', () => {
     expect(stopSpy).toHaveBeenCalled();
   });
 
+  it('passes session_id and workspace_root config to ai/start-stream', async () => {
+    const p = new IpcStreamingProvider();
+    await consume(
+      p.stream({
+        turns: [userTurn('hi')],
+        model: 'claude-test',
+        config: {
+          session_id: '019d0003-0000-7000-8000-000000000001',
+          workspace_root: 'C:\\Dev\\workspace',
+        },
+      }),
+      (sid) => {
+        __emitAiStreamEnd({ stream_id: sid });
+      }
+    );
+    const started = [...__mockStore.aiStartedStreams.values()].at(-1);
+    expect(started?.session_id).toBe('019d0003-0000-7000-8000-000000000001');
+    expect(started?.workspace_root).toBe('C:\\Dev\\workspace');
+  });
+
   it('aborts immediately via input signal while waiting for events', async () => {
     const ctrl = new AbortController();
     const p = new IpcStreamingProvider();

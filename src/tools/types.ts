@@ -13,13 +13,7 @@
  */
 
 import type { z } from 'zod';
-import type {
-  SessionId,
-  TurnId,
-  ToolCallId,
-  AbsolutePath,
-  ISO8601,
-} from '@/types';
+import type { Session, SessionId, TurnId, ToolCallId, AbsolutePath, ISO8601 } from '@/types';
 import type { Capability } from '@/permission';
 
 // ────────────────────────────────────────────────────────────
@@ -40,6 +34,11 @@ export type PermissionTargetKind = 'path' | 'url' | 'domain' | 'global';
 export interface PermissionTarget {
   kind: PermissionTargetKind;
   value: string;
+  /**
+   * Optional separate string for danger-pattern matching when the permission
+   * target must remain a path/url/domain for default-level scoping.
+   */
+  danger_value?: string;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -65,9 +64,14 @@ export interface Tool<TInput = unknown, TOutput = unknown> {
   /**
    * Optional: input 으로부터 권한 target 추출.
    * 미정의 시 { kind: 'global', value: '' } 사용.
-   * 예: shell.run 은 cmd 문자열을 target value 로 — danger pattern 검사용.
+   * 예: shell.run 은 실행 cwd 를 path target 으로 반환해 workspace_write
+   * level 이 workspace 외부 실행을 막을 수 있게 한다.
    */
-  permission_target?(input: TInput, capability: Capability): PermissionTarget;
+  permission_target?(
+    input: TInput,
+    capability: Capability,
+    ctx: { session: Session }
+  ): PermissionTarget;
 
   // ── Execution ──
   execute(input: TInput, ctx: ExecutionContext): Promise<TOutput>;

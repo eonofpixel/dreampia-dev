@@ -12,12 +12,23 @@
  * include absolute paths) into the renderer.
  */
 
-import { app, ipcMain, type App, type BrowserWindow } from 'electron';
+import { app, ipcMain, type App, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 import path from 'node:path';
 import { z } from 'zod';
-import { SessionSchema, TurnSchema, type Session, type SessionId, type Turn } from '@/types';
+import {
+  SessionSchema,
+  TurnSchema,
+  newTurnId,
+  type Session,
+  type SessionId,
+  type ToolCallId,
+  type ToolResultRef,
+  type Turn,
+  type TurnId,
+} from '@/types';
 import type { LeaderElection, SessionLock, SessionMeta, SessionStore } from '@/storage';
 import type { StreamEvent, StreamingProvider } from '@/providers';
+import type { ToolCall, ToolQueue, ToolRegistry, ToolResult } from '@/tools';
 // CLI / auto 는 Node-only — main 에서만 import. providers barrel 은
 // renderer 와 공유되므로 여기서 직접 명시적 경로로 가져온다.
 import {
@@ -78,6 +89,23 @@ const StartStreamArgsSchema = z
     stream_id: z.string().min(1),
     model: z.string().min(1),
     turns: z.array(TurnSchema),
+    session_id: z.string().min(1).optional(),
+    workspace_root: z.string().min(1).optional(),
+  })
+  .strict();
+
+const ToolCallArgsSchema = z
+  .object({
+    id: z.string().min(1),
+    tool_id: z.string().min(1),
+    session_id: z.string().min(1),
+    turn_id: z.string().min(1),
+    parent_call_id: z.string().min(1).optional(),
+    input: z.unknown(),
+    timeout_ms: z.number().int().positive().optional(),
+    priority: z.enum(['high', 'normal', 'low']).optional(),
+    origin: z.enum(['ai', 'user', 'automation']),
+    created_at: z.string().min(1),
   })
   .strict();
 
@@ -103,6 +131,38 @@ function fail(err: unknown): { ok: false; error: string } {
   return { ok: false, error: toErrorMessage(err) };
 }
 
+export interface LockHandlerConfig {
+  /**
+   * Resolve the LeaderElection instance for the BrowserWindow that invoked
+   * this IPC call. Production uses one election per BrowserWindow; tests may
+   * still pass a single LeaderElection directly.
+   */
+  getElection: (event: IpcMainInvokeEvent) => LeaderElection | null;
+}
+
+export interface ToolHandlerConfig {
+  registry: ToolRegistry;
+  queue: ToolQueue;
+}
+
+type LockHandlerSource = LeaderElection | LockHandlerConfig;
+
+function isLockHandlerConfig(source: LockHandlerSource): source is LockHandlerConfig {
+  return 'getElection' in source;
+}
+
+function resolveElection(
+  source: LockHandlerSource,
+  event: IpcMainInvokeEvent
+): LeaderElection {
+  if (!isLockHandlerConfig(source)) return source;
+  const election = source.getElection(event);
+  if (election === null) {
+    throw new Error('No LeaderElection registered for this window');
+  }
+  return election;
+}
+
 // ────────────────────────────────────────────────────────────
 // Registration
 // ────────────────────────────────────────────────────────────
@@ -115,20 +175,23 @@ function fail(err: unknown): { ok: false; error: string } {
  *                are registered. This keeps the module testable without
  *                booting an Electron app or opening a SQLite file.
  * @param election - Optional LeaderElection. When omitted, `lock/*` handlers
- *                   are not registered. Tests that don't exercise locks can
- *                   skip it; production always passes one.
+ *                   are not registered. Production passes a resolver that maps
+ *                   each IPC sender window to its own LeaderElection.
  * @param browser  - Optional BrowserManager. When omitted, `browser/*`
  *                   handlers are not registered. Tests that don't exercise
  *                   the in-app browser can skip it. Spec: docs/session/browser.md
  * @param ai       - Optional AI handler config. When omitted, `ai/*` handlers
  *                   are not registered. Spec: docs/session/cross-ai-sync.md
+ * @param tools    - Optional Tool Queue config. When omitted, `tool/*`
+ *                   handlers are not registered.
  */
 export function registerIpcHandlers(
   electronApp: App = app,
   store?: SessionStore,
-  election?: LeaderElection,
+  election?: LockHandlerSource,
   browser?: BrowserManager,
-  ai?: AiHandlerConfig
+  ai?: AiHandlerConfig,
+  tools?: ToolHandlerConfig
 ): void {
   ipcMain.handle('app:get-version', (): AppInfo => {
     return {
@@ -159,6 +222,7 @@ export function registerIpcHandlers(
   }
   if (browser) registerBrowserHandlers(browser);
   if (ai) registerAiHandlers(ai);
+  if (tools) registerToolHandlers(tools);
 }
 
 // ────────────────────────────────────────────────────────────
@@ -244,17 +308,21 @@ function registerSessionHandlers(store: SessionStore): void {
   });
 }
 
-function registerLockHandlers(election: LeaderElection): void {
+function registerLockHandlers(electionSource: LockHandlerSource): void {
   // ── lock/* — multi-window leader election ───────────────────
   // Spec: docs/session/multi-window.md
 
   ipcMain.handle(
     'lock/acquire',
-    (_evt, sessionId: unknown): Result<{ acquired: boolean; leader: SessionLock | null }> => {
+    (
+      evt: IpcMainInvokeEvent,
+      sessionId: unknown
+    ): Result<{ acquired: boolean; leader: SessionLock | null }> => {
       try {
         if (typeof sessionId !== 'string') {
           throw new Error('session id must be string');
         }
+        const election = resolveElection(electionSource, evt);
         const acquired = election.acquireLeadership(sessionId as SessionId);
         const leader = election.getLeader(sessionId as SessionId);
         return ok({ acquired, leader });
@@ -264,50 +332,66 @@ function registerLockHandlers(election: LeaderElection): void {
     }
   );
 
-  ipcMain.handle('lock/release', (_evt, sessionId: unknown): Result<void> => {
-    try {
-      if (typeof sessionId !== 'string') {
-        throw new Error('session id must be string');
+  ipcMain.handle(
+    'lock/release',
+    (evt: IpcMainInvokeEvent, sessionId: unknown): Result<void> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        const election = resolveElection(electionSource, evt);
+        election.releaseLeadership(sessionId as SessionId);
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
       }
-      election.releaseLeadership(sessionId as SessionId);
-      return ok(undefined);
-    } catch (err) {
-      return fail(err);
     }
-  });
+  );
 
-  ipcMain.handle('lock/get', (_evt, sessionId: unknown): Result<SessionLock | null> => {
-    try {
-      if (typeof sessionId !== 'string') {
-        throw new Error('session id must be string');
+  ipcMain.handle(
+    'lock/get',
+    (evt: IpcMainInvokeEvent, sessionId: unknown): Result<SessionLock | null> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        const election = resolveElection(electionSource, evt);
+        return ok(election.getLeader(sessionId as SessionId));
+      } catch (err) {
+        return fail(err);
       }
-      return ok(election.getLeader(sessionId as SessionId));
-    } catch (err) {
-      return fail(err);
     }
-  });
+  );
 
-  ipcMain.handle('lock/heartbeat', (_evt, sessionId: unknown): Result<boolean> => {
-    try {
-      if (typeof sessionId !== 'string') {
-        throw new Error('session id must be string');
+  ipcMain.handle(
+    'lock/heartbeat',
+    (evt: IpcMainInvokeEvent, sessionId: unknown): Result<boolean> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        const election = resolveElection(electionSource, evt);
+        return ok(election.heartbeat(sessionId as SessionId));
+      } catch (err) {
+        return fail(err);
       }
-      return ok(election.heartbeat(sessionId as SessionId));
-    } catch (err) {
-      return fail(err);
     }
-  });
+  );
 
-  ipcMain.handle('lock/is-leader', (_evt, sessionId: unknown): Result<boolean> => {
-    try {
-      if (typeof sessionId !== 'string') {
-        throw new Error('session id must be string');
+  ipcMain.handle(
+    'lock/is-leader',
+    (evt: IpcMainInvokeEvent, sessionId: unknown): Result<boolean> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        const election = resolveElection(electionSource, evt);
+        return ok(election.isLeader(sessionId as SessionId));
+      } catch (err) {
+        return fail(err);
       }
-      return ok(election.isLeader(sessionId as SessionId));
-    } catch (err) {
-      return fail(err);
     }
-  });
+  );
 }
 
 function registerBrowserHandlers(browser: BrowserManager): void {
@@ -431,6 +515,115 @@ function registerBrowserHandlers(browser: BrowserManager): void {
   });
 }
 
+function toolResultToRef(result: ToolResult): ToolResultRef {
+  const ref: ToolResultRef = {
+    call_id: result.call_id,
+    status: result.status,
+    duration_ms: result.duration_ms,
+    ...(result.output !== undefined && { output: result.output }),
+    ...(result.error !== undefined && {
+      error: {
+        code: result.error.code,
+        message: result.error.message,
+      },
+    }),
+  };
+  return ref;
+}
+
+function registerToolHandlers(tools: ToolHandlerConfig): void {
+  // ── tool/* — Tool Queue IPC bridge ─────────────────────────
+  // Spec: docs/tools/queue.md
+
+  ipcMain.handle('tool/list', (): Result<Array<{
+    id: string;
+    version: string;
+    source: string;
+    name: string;
+  }>> => {
+    try {
+      return ok(
+        tools.registry.list().map((tool) => ({
+          id: tool.id,
+          version: tool.version,
+          source: tool.source,
+          name: tool.display.name,
+        }))
+      );
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('tool/execute', async (_evt, raw: unknown): Promise<Result<ToolResult>> => {
+    try {
+      const parsed = ToolCallArgsSchema.parse(raw);
+      const call: ToolCall = {
+        id: parsed.id as ToolCallId,
+        tool_id: parsed.tool_id,
+        session_id: parsed.session_id as SessionId,
+        turn_id: parsed.turn_id as TurnId,
+        input: parsed.input,
+        origin: parsed.origin,
+        created_at: parsed.created_at,
+        ...(parsed.parent_call_id !== undefined && {
+          parent_call_id: parsed.parent_call_id as ToolCallId,
+        }),
+        ...(parsed.timeout_ms !== undefined && { timeout_ms: parsed.timeout_ms }),
+        ...(parsed.priority !== undefined && { priority: parsed.priority }),
+      };
+      return ok(await tools.queue.enqueue(call));
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('tool/cancel-call', (_evt, callId: unknown, reason: unknown): Result<boolean> => {
+    try {
+      if (typeof callId !== 'string') {
+        throw new Error('call id must be string');
+      }
+      if (reason !== undefined && typeof reason !== 'string') {
+        throw new Error('reason must be string');
+      }
+      return ok(tools.queue.cancelCall(callId as ToolCallId, reason));
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('tool/cancel-turn', (_evt, turnId: unknown, reason: unknown): Result<number> => {
+    try {
+      if (typeof turnId !== 'string') {
+        throw new Error('turn id must be string');
+      }
+      if (reason !== undefined && typeof reason !== 'string') {
+        throw new Error('reason must be string');
+      }
+      return ok(tools.queue.cancelTurn(turnId as TurnId, reason));
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('tool/stats', (): Result<{
+    active: number;
+    pending: number;
+    by_session: Record<string, number>;
+  }> => {
+    try {
+      const stats = tools.queue.getStats();
+      return ok({
+        active: stats.active,
+        pending: stats.pending,
+        by_session: Object.fromEntries(stats.by_session.entries()),
+      });
+    } catch (err) {
+      return fail(err);
+    }
+  });
+}
+
 // ────────────────────────────────────────────────────────────
 // ai/* — Real CLI subprocess streaming (P1-4)
 // ────────────────────────────────────────────────────────────
@@ -445,9 +638,15 @@ export interface AiHandlerConfig {
   /** Renderer 로 stream-event 를 보낼 BrowserWindow getter. null 시 emit skip. */
   getMainWindow: () => BrowserWindow | null;
   /** Override for tests. Default: @/providers getDefaultProvider. */
-  getDefaultProvider?: (model: string, signal?: AbortSignal) => Promise<AutoProviderResult>;
+  getDefaultProvider?: (
+    model: string,
+    signal?: AbortSignal,
+    cwd?: string
+  ) => Promise<AutoProviderResult>;
   /** Override for tests. Default: @/providers detectCli. */
   detectCli?: () => Promise<CliDetectionResult>;
+  /** Optional Tool Queue integration for provider-emitted tool calls. */
+  toolQueue?: ToolQueue;
 }
 
 interface ActiveStream {
@@ -489,7 +688,8 @@ function registerAiHandlers(cfg: AiHandlerConfig): void {
     'ai/start-stream',
     async (_evt, args: unknown): Promise<Result<{ stream_id: string; source: string }>> => {
       try {
-        const { stream_id, model, turns } = StartStreamArgsSchema.parse(args);
+        const { stream_id, model, turns, session_id, workspace_root } =
+          StartStreamArgsSchema.parse(args);
 
         // Reject collisions before provider detection/spawn work.
         if (activeStreams.has(stream_id)) {
@@ -497,13 +697,23 @@ function registerAiHandlers(cfg: AiHandlerConfig): void {
         }
 
         const controller = new AbortController();
-        const { provider, source } = await getDefaultProviderFn(model, controller.signal);
+        const { provider, source } = await getDefaultProviderFn(
+          model,
+          controller.signal,
+          workspace_root
+        );
         activeStreams.set(stream_id, {
           abort: () => controller.abort(),
         });
 
         // Stream 은 background 로 실행. Result 는 즉시 반환.
-        void runStreamPump(stream_id, provider, { turns, model }, controller, cfg);
+        void runStreamPump(
+          stream_id,
+          provider,
+          { turns, model, session_id },
+          controller,
+          cfg
+        );
 
         return ok({ stream_id, source });
       } catch (err) {
@@ -532,7 +742,7 @@ function registerAiHandlers(cfg: AiHandlerConfig): void {
 async function runStreamPump(
   streamId: string,
   provider: StreamingProvider,
-  input: { turns: Turn[]; model: string },
+  input: { turns: Turn[]; model: string; session_id?: string },
   controller: AbortController,
   cfg: AiHandlerConfig
 ): Promise<void> {
@@ -551,10 +761,24 @@ async function runStreamPump(
   };
 
   let terminalEmitted = false;
+  let currentTurnId: TurnId | null = null;
   try {
     for await (const ev of provider.stream(input)) {
       if (controller.signal.aborted) break;
+      if (ev.type === 'message_start') {
+        currentTurnId = ev.turn_id as TurnId;
+      }
       send('ai/stream-event', { stream_id: streamId, event: ev });
+      if (ev.type === 'tool_call_complete') {
+        await runToolCallFromStream({
+          streamId,
+          toolCall: ev.tool_call,
+          sessionId: input.session_id,
+          turnId: currentTurnId,
+          cfg,
+          send,
+        });
+      }
       if (ev.type === 'message_complete' || ev.type === 'error') {
         terminalEmitted = true;
         break;
@@ -577,4 +801,32 @@ async function runStreamPump(
     }
     send('ai/stream-end', { stream_id: streamId });
   }
+}
+
+async function runToolCallFromStream(args: {
+  streamId: string;
+  toolCall: { id: string; tool_id: string; input?: unknown };
+  sessionId?: string;
+  turnId: TurnId | null;
+  cfg: AiHandlerConfig;
+  send: (channel: string, payload: unknown) => void;
+}): Promise<void> {
+  if (args.cfg.toolQueue === undefined || args.sessionId === undefined) return;
+
+  const call: ToolCall = {
+    id: args.toolCall.id as ToolCallId,
+    tool_id: args.toolCall.tool_id,
+    session_id: args.sessionId as SessionId,
+    turn_id: args.turnId ?? newTurnId(),
+    input: args.toolCall.input,
+    origin: 'ai',
+    created_at: new Date().toISOString(),
+  };
+
+  const result = await args.cfg.toolQueue.enqueue(call);
+  const event: StreamEvent = {
+    type: 'tool_result',
+    result: toolResultToRef(result),
+  };
+  args.send('ai/stream-event', { stream_id: args.streamId, event });
 }

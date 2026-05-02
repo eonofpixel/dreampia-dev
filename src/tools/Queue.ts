@@ -26,7 +26,7 @@
  *  - high(0) → normal(1) → low(2), 그 다음 created_at FIFO.
  */
 
-import { isAllowed, type GrantDecision } from '@/permission';
+import { checkDangerousPattern, isAllowed, type GrantDecision } from '@/permission';
 import type { Capability } from '@/permission';
 import type { Session, SessionId, TurnId, ToolCallId } from '@/types';
 import type { ResolvedTarget } from '@/permission/Targets';
@@ -301,11 +301,26 @@ export class ToolQueue {
     const caps = tool.required_capabilities(input);
 
     for (const cap of caps) {
-      const target = this.resolveTarget(tool, input, cap);
+      const target = this.resolveTarget(tool, input, cap, session);
       const resolved: ResolvedTarget = {
         kind: target.kind,
         value: target.value,
       };
+
+      const dangerTarget = target.danger_value;
+      if (dangerTarget !== undefined) {
+        const danger = checkDangerousPattern(cap, dangerTarget);
+        if (danger !== null) {
+          const decision: GrantDecision = {
+            allowed: false,
+            reason: 'dangerous_pattern',
+            action: danger.action,
+            hint: danger.rule.message,
+          };
+          if (danger.action === 'warn') continue;
+          return this.decisionToError(cap, decision);
+        }
+      }
 
       const decision = isAllowed(
         cap,
@@ -374,10 +389,11 @@ export class ToolQueue {
   private resolveTarget(
     tool: Tool,
     input: unknown,
-    cap: Capability
+    cap: Capability,
+    session: Session
   ): PermissionTarget {
     if (tool.permission_target) {
-      return tool.permission_target(input, cap);
+      return tool.permission_target(input, cap, { session });
     }
     return { kind: 'global', value: '' };
   }

@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useStreamingTurn } from '../../src/renderer/hooks/useStreamingTurn';
 import { MockProvider } from '../../src/providers';
-import type { Turn } from '../../src/types';
+import type { ToolCallId, Turn } from '../../src/types';
 
 function makeUserTurn(text: string): Turn {
   return {
@@ -146,6 +146,53 @@ describe('useStreamingTurn', () => {
     const completed = (onComplete.mock.calls[0] as [Turn])[0];
     expect(completed.tool_calls?.[0]?.tool_id).toBe('shell.run');
     expect(completed.tool_calls?.[0]?.input).toBe('{"cmd":"npm test"}');
+  });
+
+  it('passes tool_result events as a role=tool turn after completion', async () => {
+    const callId = '019d0003-0000-7000-8000-000000000001' as ToolCallId;
+    const provider = {
+      provider: 'claude' as const,
+      async *stream() {
+        yield { type: 'message_start' as const, turn_id: 't-1', model: 'mock-model' };
+        yield {
+          type: 'tool_call_complete' as const,
+          tool_call: { id: callId, tool_id: 'shell.run', input: { cmd: 'echo hi' } },
+        };
+        yield {
+          type: 'tool_result' as const,
+          result: {
+            call_id: callId,
+            status: 'success' as const,
+            output: { stdout: 'hi' },
+            duration_ms: 10,
+          },
+        };
+        yield {
+          type: 'message_complete' as const,
+          turn: {
+            id: 't-1' as Turn['id'],
+            role: 'assistant' as const,
+            timestamp: new Date().toISOString(),
+            status: 'completed' as const,
+            content: [{ type: 'text' as const, text: 'done' }],
+            tool_calls: [{ id: callId, tool_id: 'shell.run', input: { cmd: 'echo hi' } }],
+            model: 'mock-model',
+          },
+        };
+      },
+    };
+    const onComplete = vi.fn();
+    const { result } = renderHook(() =>
+      useStreamingTurn({ provider, onTurnUpdate: vi.fn(), onComplete })
+    );
+
+    await act(async () => {
+      await result.current.start(input);
+    });
+
+    const [, toolTurn] = onComplete.mock.calls[0] as [Turn, Turn | undefined];
+    expect(toolTurn?.role).toBe('tool');
+    expect(toolTurn?.tool_results?.[0]?.call_id).toBe(callId);
   });
 
   it('handles error event by calling onError', async () => {

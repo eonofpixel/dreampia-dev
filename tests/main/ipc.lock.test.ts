@@ -66,6 +66,18 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
   return (await handler(evt, ...args)) as T;
 }
 
+async function callWithEvent<T>(
+  event: unknown,
+  channel: string,
+  ...args: unknown[]
+): Promise<T> {
+  const handler = handlers.get(channel);
+  if (handler === undefined) {
+    throw new Error(`no handler registered for ${channel}`);
+  }
+  return (await handler(event, ...args)) as T;
+}
+
 // ────────────────────────────────────────────────────────────
 // Suite
 // ────────────────────────────────────────────────────────────
@@ -150,6 +162,41 @@ describe('IPC lock handlers', () => {
         expect(result.value.leader?.leader_window_id).toBe('wOther');
       } finally {
         other.shutdown();
+      }
+    });
+
+    it('uses a separate LeaderElection per IPC sender window', async () => {
+      handlers.clear();
+      const a = new LeaderElection(store.getDb(), { window_id: 'window-A' });
+      const b = new LeaderElection(store.getDb(), { window_id: 'window-B' });
+      const bySender = new Map([
+        [101, a],
+        [202, b],
+      ]);
+      registerIpcHandlers(stubApp, store, {
+        getElection: (event) =>
+          bySender.get((event as { sender: { id: number } }).sender.id) ?? null,
+      });
+
+      try {
+        const eventA = { sender: { id: 101 } };
+        const eventB = { sender: { id: 202 } };
+        const first = await callWithEvent<
+          Result<{ acquired: boolean; leader: SessionLock | null }>
+        >(eventA, 'lock/acquire', session.id);
+        const second = await callWithEvent<
+          Result<{ acquired: boolean; leader: SessionLock | null }>
+        >(eventB, 'lock/acquire', session.id);
+
+        expect(first.ok).toBe(true);
+        expect(second.ok).toBe(true);
+        if (!first.ok || !second.ok) return;
+        expect(first.value.acquired).toBe(true);
+        expect(second.value.acquired).toBe(false);
+        expect(second.value.leader?.leader_window_id).toBe('window-A');
+      } finally {
+        a.shutdown();
+        b.shutdown();
       }
     });
   });

@@ -1,9 +1,0 @@
-dist/
-node_modules/
-out/
-release/
-docs/
-captures/
-*.config.js
-*.config.cjs
-*.config.ts

@@ -17,7 +17,10 @@
  *   - cmd 안에 sudo / runas 단어 매치 시 LOCAL_EXECUTE.elevated 추가 요구
  *
  * Permission target:
- *   - cmd 문자열을 target.value 로 — danger pattern (rm -rf /, format c: 등) 검사용
+ *   - 실행 cwd 를 path target 으로 전달해 workspace_write 가 workspace 외부
+ *     실행을 막는다.
+ *   - cmd 문자열은 danger_value 로 따로 전달해 rm -rf /, format c: 등을
+ *     실행 전 차단한다.
  *
  * 동작:
  *   - child_process.spawn { shell: true } 사용 (Win cmd.exe / Unix sh)
@@ -27,6 +30,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import path from 'node:path';
 import { z } from 'zod';
 
 import type { Capability } from '@/permission';
@@ -58,6 +62,18 @@ export type ShellRunOutput = z.infer<typeof ShellRunOutputSchema>;
 // ────────────────────────────────────────────────────────────
 
 const ELEVATED_PATTERN = /\b(sudo|runas)\b/i;
+const WINDOWS_ABSOLUTE_PATTERN = /^(?:[a-zA-Z]:[\\/]|\\\\)/;
+
+function resolveShellCwd(cwd: string | undefined, workspaceRoot: string): string {
+  if (cwd === undefined || cwd.length === 0) return workspaceRoot;
+  if (WINDOWS_ABSOLUTE_PATTERN.test(cwd)) {
+    return path.win32.resolve(cwd);
+  }
+  if (path.isAbsolute(cwd)) {
+    return path.resolve(cwd);
+  }
+  return path.resolve(workspaceRoot, cwd);
+}
 
 // ────────────────────────────────────────────────────────────
 // Tool definition
@@ -79,10 +95,12 @@ export const ShellRunTool: Tool<ShellRunInput, ShellRunOutput> = {
     return caps;
   },
 
-  permission_target(input): PermissionTarget {
-    // danger pattern (rm -rf /, sudo, format c: 등) 검사 위해 cmd 를 target value 로.
-    // kind 'global' 사용 — DangerCheck 는 capability + target.value 만 본다.
-    return { kind: 'global', value: input.cmd };
+  permission_target(input, _capability, ctx): PermissionTarget {
+    return {
+      kind: 'path',
+      value: resolveShellCwd(input.cwd, ctx.session.workspace.root),
+      danger_value: input.cmd,
+    };
   },
 
   async execute(input, ctx): Promise<ShellRunOutput> {
@@ -92,7 +110,7 @@ export const ShellRunTool: Tool<ShellRunInput, ShellRunOutput> = {
     return new Promise<ShellRunOutput>((resolve, reject) => {
       const child = spawn(input.cmd, {
         shell: true,
-        cwd: input.cwd ?? ctx.cwd,
+        cwd: resolveShellCwd(input.cwd, ctx.cwd),
         env: { ...process.env, ...(input.env ?? {}) },
         // Node 16+ — AbortSignal 로 subprocess kill 가능 (engines >=22)
         signal: ctx.signal,

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { registerIpcHandlers, shutdownAiHandlers } from './ipc';
 import { BrowserManager } from './BrowserManager';
 import { LeaderElection, SessionStore } from '@/storage';
+import { ShellRunTool, ToolQueue, ToolRegistry } from '@/tools';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -23,8 +24,13 @@ app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
 
 let mainWindow: BrowserWindow | null = null;
 let sessionStore: SessionStore | null = null;
-let leaderElection: LeaderElection | null = null;
 let browserManager: BrowserManager | null = null;
+
+interface WindowRuntime {
+  election: LeaderElection;
+}
+
+const windowRuntimes = new Map<number, WindowRuntime>();
 
 function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -78,6 +84,22 @@ function createMainWindow(): BrowserWindow {
     }
   });
 
+  if (sessionStore !== null) {
+    const election = new LeaderElection(sessionStore.getDb(), {
+      window_id: randomUUID(),
+      heartbeat_interval_ms: 5000,
+      ttl_seconds: 30,
+    });
+    windowRuntimes.set(win.webContents.id, { election });
+    win.on('closed', () => {
+      election.shutdown();
+      windowRuntimes.delete(win.webContents.id);
+      if (mainWindow === win) {
+        mainWindow = null;
+      }
+    });
+  }
+
   return win;
 }
 
@@ -90,15 +112,11 @@ app.whenReady().then(() => {
   const dbPath = path.join(app.getPath('userData'), 'sessions.sqlite');
   sessionStore = new SessionStore(dbPath);
 
-  // Multi-window leader election (SS-5). Each app launch generates a unique
-  // window_id; in Phase 1 there is only one main process, so all
-  // BrowserWindows share this election instance. Phase 2 may split per-window.
-  // Spec: docs/session/multi-window.md
-  leaderElection = new LeaderElection(sessionStore.getDb(), {
-    window_id: randomUUID(),
-    heartbeat_interval_ms: 5000,
-    ttl_seconds: 30,
-  });
+  // Tool Queue: main process owns all tool execution. Renderer/AI streams use
+  // IPC only; subprocess-capable tools never cross into the sandboxed renderer.
+  const registry = new ToolRegistry();
+  registry.register(ShellRunTool);
+  const queue = new ToolQueue(registry, (id) => sessionStore?.getSession(id) ?? undefined);
 
   // BrowserManager owns one WebContentsView per tab. It needs the
   // current main window (constructed below) — pass a getter so it
@@ -117,9 +135,22 @@ app.whenReady().then(() => {
   // P1-4: AI handlers (ai/detect-cli, ai/start-stream, ai/stop-stream).
   // Renderer 가 stream-event/end 를 받으려면 mainWindow getter 필요.
   // Spec: docs/session/cross-ai-sync.md
-  registerIpcHandlers(app, sessionStore, leaderElection, browserManager, {
-    getMainWindow: () => mainWindow,
-  });
+  registerIpcHandlers(
+    app,
+    sessionStore,
+    {
+      getElection: (event) => windowRuntimes.get(event.sender.id)?.election ?? null,
+    },
+    browserManager,
+    {
+      getMainWindow: () => mainWindow,
+      toolQueue: queue,
+    },
+    {
+      registry,
+      queue,
+    }
+  );
   mainWindow = createMainWindow();
 
   app.on('activate', () => {
@@ -148,8 +179,10 @@ app.on('before-quit', () => {
   shutdownAiHandlers();
   browserManager?.shutdown();
   browserManager = null;
-  leaderElection?.shutdown();
-  leaderElection = null;
+  for (const runtime of windowRuntimes.values()) {
+    runtime.election.shutdown();
+  }
+  windowRuntimes.clear();
   sessionStore?.close();
   sessionStore = null;
 });

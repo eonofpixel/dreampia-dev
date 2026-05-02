@@ -65,6 +65,13 @@ function makeCall(session: Session, cmd: string): ToolCall {
   };
 }
 
+function makeCallWithInput(session: Session, input: unknown): ToolCall {
+  return {
+    ...makeCall(session, 'echo placeholder'),
+    input,
+  };
+}
+
 // ────────────────────────────────────────────────────────────
 // Tests
 // ────────────────────────────────────────────────────────────
@@ -88,6 +95,21 @@ describe('shell.run × permission — workspace_write level', () => {
       makeCall(session, 'echo "would npm install"')
     );
     expect(result.status).toBe('success');
+  });
+
+  it('cwd outside workspace is blocked before subprocess execution', async () => {
+    const session = loadSessionWithLevel('workspace_write');
+    const q = makeQueue(session);
+
+    const result = await q.enqueue(
+      makeCallWithInput(session, {
+        cmd: 'echo should-not-run',
+        cwd: 'C:\\outside-dreampia-workspace',
+      })
+    );
+    expect(result.status).toBe('failed');
+    expect(result.error?.code).toBe('PERMISSION_DENIED');
+    expect(result.error?.details?.['reason']).toBe('level_does_not_allow');
   });
 });
 

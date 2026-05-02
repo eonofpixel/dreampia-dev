@@ -26,11 +26,11 @@ interface FakeChild extends EventEmitter {
 
 const fakeChildren: FakeChild[] = [];
 let nextChildHandler: ((child: FakeChild) => void) | null = null;
-const spawnCalls: Array<{ cmd: string; args: string[] }> = [];
+const spawnCalls: Array<{ cmd: string; args: string[]; opts?: { cwd?: string } }> = [];
 
 vi.mock('node:child_process', () => ({
-  spawn: vi.fn((cmd: string, args: string[]) => {
-    spawnCalls.push({ cmd, args });
+  spawn: vi.fn((cmd: string, args: string[], opts?: { cwd?: string }) => {
+    spawnCalls.push({ cmd, args, opts });
     const child: FakeChild = Object.assign(new EventEmitter(), {
       stdout: new EventEmitter(),
       stderr: new EventEmitter(),
@@ -300,6 +300,20 @@ describe('CliProvider', () => {
     expect(fakeChildren[0]?.stdin.end).toHaveBeenCalled();
     const args = spawnCalls[0]?.args ?? [];
     expect(args[args.length - 1]).toBe('the prompt');
+  });
+
+  it('passes explicit cwd to spawn', async () => {
+    nextChildHandler = (child) => {
+      child.emit('close', 0);
+    };
+    const p = new CliProvider({
+      binaryPath: '/fake/claude',
+      provider: 'claude',
+      translate: passthroughTranslate,
+      cwd: '/workspace/project',
+    });
+    await consume(p, [userTurn('cwd check')]);
+    expect(spawnCalls[0]?.opts?.cwd).toBe('/workspace/project');
   });
 
   it('buildArgs for claude includes correct flags', async () => {
