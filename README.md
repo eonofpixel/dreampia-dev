@@ -57,9 +57,15 @@ OS       Windows 10+ / macOS 12+ / Linux (Ubuntu 22+)
    ├─ tests/fixtures/invalid/    : 5개 invariant violation
    └─ tests/session/             : Contract tests + helpers tests
 
-⏳ Day 4-5: Contract tests 실행 검증 + 추가 케이스
-⏳ Day 6: 3-패널 layout 윤곽 (Sidebar / Chat / Preview)
-⏳ Day 7: spec ↔ test ↔ impl 추적표
+✅ Day 4-7: 3-패널 layout + IPC + IME-safe 입력 + 추적표
+   ├─ src/main/ipc.ts            : IPC handlers (app/version, app/platform)
+   ├─ src/renderer/components/   : Sidebar / ChatPanel / PreviewPanel /
+   │                                ChatInput / ThreePanelLayout
+   ├─ tests/renderer/            : ChatInput (IME 보호 5개) + Sidebar + Layout
+   │                                @testing-library/react + jsdom
+   └─ docs/traceability.md       : spec → test → impl 추적표 (181 spec)
+
+🚀 Phase 1 (다음): SessionStore (SQLite) + 첫 AI 호출 + 권한 Resolver
 ```
 
 핵심 spec: [docs/session/_index.md](./docs/session/_index.md), [CODEX_SELF_ADVICE.md](./CODEX_SELF_ADVICE.md).
