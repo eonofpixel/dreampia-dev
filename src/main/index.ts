@@ -90,10 +90,14 @@ function createMainWindow(): BrowserWindow {
       heartbeat_interval_ms: 5000,
       ttl_seconds: 30,
     });
-    windowRuntimes.set(win.webContents.id, { election });
+    // ★ webContents.id 를 closed 핸들러 등록 전에 캡처.
+    // 'closed' 이벤트 시점엔 webContents 가 이미 destroyed 라 .id 접근 시
+    // TypeError: Object has been destroyed (실제 dev 실행 중 발견).
+    const webContentsId = win.webContents.id;
+    windowRuntimes.set(webContentsId, { election });
     win.on('closed', () => {
       election.shutdown();
-      windowRuntimes.delete(win.webContents.id);
+      windowRuntimes.delete(webContentsId);
       if (mainWindow === win) {
         mainWindow = null;
       }
