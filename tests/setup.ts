@@ -4,24 +4,153 @@
  * Provides:
  *   - @testing-library/jest-dom matchers (toBeInTheDocument, etc.)
  *   - Cleanup after each test
- *   - Mock window.dreampia (IPC bridge)
+ *   - Mock window.dreampia (IPC bridge) with in-memory SessionStore stand-in
  */
 
 import '@testing-library/jest-dom/vitest';
-import { afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import type { Session, Turn } from '../src/types';
+import type { Result, SessionMetaPatch } from '../src/main/types';
+
+// ────────────────────────────────────────────────────────────
+// In-memory mock store (shared across all renderer tests)
+// ────────────────────────────────────────────────────────────
+
+interface MockSessionMeta {
+  id: string;
+  schema_version: number;
+  provider: 'claude' | 'codex';
+  workspace_id: string;
+  title: string;
+  pinned: boolean;
+  archived: boolean;
+  parent_session_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+const mockStore = {
+  sessions: new Map<string, Session>(),
+};
+
+/**
+ * Test helper: seed mockStore from a test file.
+ *
+ * Usage:
+ *   import { __mockStore } from '../setup';
+ *   __mockStore.sessions.set(s.id, s);
+ */
+export const __mockStore = mockStore;
+
+function toMeta(s: Session): MockSessionMeta {
+  const meta: MockSessionMeta = {
+    id: s.id,
+    schema_version: s.schema_version,
+    provider: s.provider,
+    workspace_id: s.workspace_id,
+    title: s.title,
+    pinned: s.pinned,
+    archived: s.archived,
+    created_at: s.created_at,
+    updated_at: s.updated_at,
+  };
+  if (s.parent_session_id !== undefined) {
+    meta.parent_session_id = s.parent_session_id;
+  }
+  return meta;
+}
+
+beforeEach(() => {
+  mockStore.sessions.clear();
+});
 
 afterEach(() => {
   cleanup();
 });
 
+// ────────────────────────────────────────────────────────────
 // Mock IPC bridge in renderer tests
+// ────────────────────────────────────────────────────────────
+
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'dreampia', {
     writable: true,
+    configurable: true,
     value: {
       invoke: vi.fn(),
       on: vi.fn(),
+
+      session: {
+        list: vi.fn(
+          async (): Promise<Result<MockSessionMeta[]>> => ({
+            ok: true,
+            value: [...mockStore.sessions.values()]
+              .map(toMeta)
+              // Mirror SessionStore: ORDER BY updated_at DESC.
+              .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1)),
+          })
+        ),
+
+        get: vi.fn(
+          async (id: string): Promise<Result<Session | null>> => ({
+            ok: true,
+            value: mockStore.sessions.get(id) ?? null,
+          })
+        ),
+
+        create: vi.fn(
+          async (session: Session): Promise<Result<Session>> => {
+            mockStore.sessions.set(session.id, session);
+            return { ok: true, value: session };
+          }
+        ),
+
+        appendTurn: vi.fn(
+          async (id: string, turn: Turn): Promise<Result<void>> => {
+            const s = mockStore.sessions.get(id);
+            if (s === undefined) {
+              return { ok: false, error: `session ${id} not found` };
+            }
+            const next: Session = {
+              ...s,
+              updated_at: new Date().toISOString(),
+              conversation: {
+                ...s.conversation,
+                turns: [...s.conversation.turns, turn],
+              },
+            };
+            mockStore.sessions.set(id, next);
+            return { ok: true, value: undefined };
+          }
+        ),
+
+        updateMeta: vi.fn(
+          async (
+            id: string,
+            patch: SessionMetaPatch
+          ): Promise<Result<void>> => {
+            const s = mockStore.sessions.get(id);
+            if (s === undefined) {
+              return { ok: false, error: `session ${id} not found` };
+            }
+            const next: Session = {
+              ...s,
+              ...(patch.title !== undefined && { title: patch.title }),
+              ...(patch.pinned !== undefined && { pinned: patch.pinned }),
+              ...(patch.archived !== undefined && { archived: patch.archived }),
+              updated_at: new Date().toISOString(),
+            };
+            mockStore.sessions.set(id, next);
+            return { ok: true, value: undefined };
+          }
+        ),
+
+        delete: vi.fn(async (id: string): Promise<Result<void>> => {
+          mockStore.sessions.delete(id);
+          return { ok: true, value: undefined };
+        }),
+      },
     },
   });
 }

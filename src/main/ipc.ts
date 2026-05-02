@@ -4,10 +4,27 @@
  * Pattern follows Codex's AppServerConnection: {namespace}/{action}.
  * Spec: docs/findings/round5-ipc-telemetry.md
  *
- * All handlers are registered via `registerIpcHandlers(app)`.
+ * All handlers are registered via `registerIpcHandlers(app, store?)`.
+ *
+ * Iron rule: handlers NEVER throw across the IPC boundary. Every
+ * SessionStore call is wrapped in a try/catch that maps to `Result<T>`.
+ * This prevents Electron from serializing Node stack traces (which
+ * include absolute paths) into the renderer.
  */
 
 import { app, ipcMain, type App } from 'electron';
+import { z } from 'zod';
+import {
+  SessionSchema,
+  TurnSchema,
+  type Session,
+  type SessionId,
+  type Turn,
+} from '@/types';
+import type { SessionStore, SessionMeta } from '@/storage';
+import type { Result, SessionMetaPatch } from './types';
+
+export type { Result, SessionMetaPatch } from './types';
 
 // Types shared with renderer (preload only exposes whitelisted channels)
 export type AppInfo = {
@@ -17,13 +34,56 @@ export type AppInfo = {
   nodeVersion: string;
 };
 
+// ────────────────────────────────────────────────────────────
+// Validation schemas (renderer 입력은 신뢰 불가)
+// ────────────────────────────────────────────────────────────
+
+const SessionMetaPatchSchema = z
+  .object({
+    title: z.string().min(1).optional(),
+    pinned: z.boolean().optional(),
+    archived: z.boolean().optional(),
+  })
+  .strict();
+
+// ────────────────────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────────────────────
+
+function toErrorMessage(err: unknown): string {
+  if (err instanceof z.ZodError) {
+    return `Validation error: ${err.issues
+      .map((i) => `${i.path.join('.')}: ${i.message}`)
+      .join('; ')}`;
+  }
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+function ok<T>(value: T): { ok: true; value: T } {
+  return { ok: true, value };
+}
+
+function fail(err: unknown): { ok: false; error: string } {
+  return { ok: false, error: toErrorMessage(err) };
+}
+
+// ────────────────────────────────────────────────────────────
+// Registration
+// ────────────────────────────────────────────────────────────
+
 /**
  * Register all main-process IPC handlers.
  *
- * Day 4 (얇게): app/version + app/platform 만.
- * Phase 1+: session/list, plugin/list, config/read 등 추가.
+ * @param electronApp - Electron App instance (defaults to module-level `app`).
+ * @param store - Optional SessionStore. When omitted, only `app:*` handlers
+ *                are registered. This keeps the module testable without
+ *                booting an Electron app or opening a SQLite file.
  */
-export function registerIpcHandlers(electronApp: App = app): void {
+export function registerIpcHandlers(
+  electronApp: App = app,
+  store?: SessionStore
+): void {
   ipcMain.handle('app:get-version', (): AppInfo => {
     return {
       version: electronApp.getVersion(),
@@ -36,4 +96,86 @@ export function registerIpcHandlers(electronApp: App = app): void {
   ipcMain.handle('app:get-platform', (): NodeJS.Platform => {
     return process.platform;
   });
+
+  if (!store) return;
+
+  // ── session/* — SessionStore CRUD ────────────────────────────
+
+  ipcMain.handle('session/list', (): Result<SessionMeta[]> => {
+    try {
+      return ok(store.listSessions());
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('session/get', (_evt, id: unknown): Result<Session | null> => {
+    try {
+      if (typeof id !== 'string') {
+        throw new Error('session id must be string');
+      }
+      return ok(store.getSession(id as SessionId));
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('session/create', (_evt, raw: unknown): Result<Session> => {
+    try {
+      // Zod validates AND brands the ids — so the SessionStore call below
+      // receives a fully-typed Session even though `raw` came from IPC.
+      const session = SessionSchema.parse(raw);
+      store.createSession(session);
+      return ok(session);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle(
+    'session/append-turn',
+    (_evt, sessionId: unknown, rawTurn: unknown): Result<void> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        const turn: Turn = TurnSchema.parse(rawTurn);
+        store.appendTurn(sessionId as SessionId, turn);
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'session/update-meta',
+    (_evt, sessionId: unknown, patch: unknown): Result<void> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        const validated: SessionMetaPatch = SessionMetaPatchSchema.parse(patch);
+        store.updateSessionMeta(sessionId as SessionId, validated);
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'session/delete',
+    (_evt, sessionId: unknown): Result<void> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        store.deleteSession(sessionId as SessionId);
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
 }

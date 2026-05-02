@@ -9,6 +9,7 @@ import { app, BrowserWindow, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerIpcHandlers } from './ipc';
+import { SessionStore } from '@/storage';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -19,6 +20,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
 
 let mainWindow: BrowserWindow | null = null;
+let sessionStore: SessionStore | null = null;
 
 function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -76,7 +78,15 @@ function createMainWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
-  registerIpcHandlers(app);
+  // Open session DB at OS-specific user data dir.
+  //   Windows: %APPDATA%/Dreampia-Dev/sessions.sqlite
+  //   macOS:   ~/Library/Application Support/Dreampia-Dev/sessions.sqlite
+  //   Linux:   ~/.config/Dreampia-Dev/sessions.sqlite
+  // (Electron creates the userData dir automatically on first access.)
+  const dbPath = path.join(app.getPath('userData'), 'sessions.sqlite');
+  sessionStore = new SessionStore(dbPath);
+
+  registerIpcHandlers(app, sessionStore);
   mainWindow = createMainWindow();
 
   app.on('activate', () => {
@@ -92,6 +102,12 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+// Close DB on quit (flush WAL, release file handle).
+app.on('before-quit', () => {
+  sessionStore?.close();
+  sessionStore = null;
 });
 
 // Prevent multiple instances

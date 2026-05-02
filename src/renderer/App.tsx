@@ -3,11 +3,12 @@
  *
  * Day 6: 3-패널 layout (F-013) + ChatInput (IME-safe).
  * Day 7: MockProvider streaming wire-through (P0 final).
+ * P1-2: SessionStore IPC integration — sessions persist across reload.
  *
- * Spec: docs/design/layout/3panel.md, docs/ia/chat-flow.md
+ * Spec: docs/design/layout/3panel.md, docs/ia/chat-flow.md, docs/session/persistence.md
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ThreePanelLayout } from './components/layout/ThreePanelLayout';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { ChatPanel } from './components/chat/ChatPanel';
@@ -20,10 +21,12 @@ import {
   partitionIdFor,
   nowIso,
   type Session,
+  type SessionId,
   type Turn,
 } from '@/types';
 import { MockProvider } from '@/providers';
 import { useStreamingTurn } from './hooks/useStreamingTurn';
+import { useSessionStore } from './hooks/useSessionStore';
 
 function createDemoSession(title: string): Session {
   const id = newSessionId();
@@ -74,103 +77,163 @@ function createDemoSession(title: string): Session {
 }
 
 export function App(): React.JSX.Element {
-  const [sessions, setSessions] = useState<Session[]>(() => [
-    { ...createDemoSession('Day 6 layout 데모'), pinned: true },
-    createDemoSession('테스트 세션 2'),
-  ]);
-  const [activeSessionId, setActiveSessionId] = useState<string>(
-    () => sessions[0]?.id ?? ''
-  );
+  const {
+    state: { sessions, error: storeError },
+    create: createSession,
+    get: getSession,
+    appendTurn: persistTurn,
+  } = useSessionStore();
 
-  const activeSession = useMemo(
-    () => sessions.find((s) => s.id === activeSessionId) ?? null,
-    [sessions, activeSessionId]
-  );
+  // The full active session lives only in the renderer during chat;
+  // the database holds the source of truth, but we shadow it locally
+  // so streaming text_delta events update synchronously.
+  const [activeSessionId, setActiveSessionId] = useState<string>('');
+  const [activeSession, setActiveSession] = useState<Session | null>(null);
+
+  // When the list changes and we have no selection, pick the first one.
+  useEffect(() => {
+    if (activeSessionId !== '' || sessions.length === 0) return;
+    const first = sessions[0];
+    if (first !== undefined) setActiveSessionId(first.id);
+  }, [sessions, activeSessionId]);
+
+  // Fetch the full session (with conversation) whenever the selection changes.
+  useEffect(() => {
+    if (activeSessionId === '') {
+      setActiveSession(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const session = await getSession(activeSessionId as SessionId);
+      if (!cancelled) setActiveSession(session);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionId, getSession]);
 
   // MockProvider: 15ms delay 로 글자 단위 streaming
   const provider = useMemo(() => new MockProvider({ delayMs: 15 }), []);
 
+  // Streaming pattern (see useSessionStore for rationale):
+  //   - text_delta:        update local activeSession only (NO IPC)
+  //   - message_complete:  appendTurn() through IPC + refresh
+  const handleTurnUpdate = useCallback((turn: Turn): void => {
+    setActiveSession((prev) => {
+      if (prev === null) return prev;
+      const turns = [...prev.conversation.turns];
+      const idx = turns.findIndex((t) => t.id === turn.id);
+      if (idx >= 0) {
+        turns[idx] = turn;
+      } else {
+        turns.push(turn);
+      }
+      return {
+        ...prev,
+        updated_at: nowIso(),
+        conversation: { ...prev.conversation, turns },
+      };
+    });
+  }, []);
+
+  const handleStreamComplete = useCallback(
+    (turn: Turn): void => {
+      // 스트리밍 도중에는 매 delta 마다 DB write 하지 않는다 (퍼포먼스).
+      // 완성된 assistant turn 만 한 번에 persist.
+      if (activeSessionId === '') return;
+      void persistTurn(activeSessionId as SessionId, turn);
+    },
+    [activeSessionId, persistTurn]
+  );
+
   const { isStreaming, start: startStream, cancel: cancelStream } = useStreamingTurn({
     provider,
-    onTurnUpdate: (turn) => {
-      setSessions((prev) =>
-        prev.map((s) => {
-          if (s.id !== activeSessionId) return s;
-          const turns = [...s.conversation.turns];
-          const idx = turns.findIndex((t) => t.id === turn.id);
-          if (idx >= 0) {
-            turns[idx] = turn;
-          } else {
-            turns.push(turn);
-          }
-          return {
-            ...s,
-            updated_at: nowIso(),
-            conversation: { ...s.conversation, turns },
-          };
-        })
-      );
-    },
-    onComplete: (_turn) => {
-      // onTurnUpdate 가 마지막 이벤트(message_complete)도 처리하므로 추가 작업 없음
-    },
-    onError: (error) => {
-      console.error('[ChatStreaming] error:', error);
+    onTurnUpdate: handleTurnUpdate,
+    onComplete: handleStreamComplete,
+    onError: (err) => {
+      console.error('[ChatStreaming] error:', err);
     },
   });
 
-  const handleNewChat = (): void => {
+  const handleNewChat = useCallback(async (): Promise<void> => {
     const newSession = createDemoSession(`새 채팅 ${sessions.length + 1}`);
-    setSessions([...sessions, newSession]);
-    setActiveSessionId(newSession.id);
-  };
+    const created = await createSession(newSession);
+    if (created !== null) {
+      setActiveSessionId(created.id);
+    }
+  }, [createSession, sessions.length]);
 
-  const handleSubmitMessage = (text: string): void => {
-    if (!activeSession || isStreaming) return;
+  const handleSubmitMessage = useCallback(
+    async (text: string): Promise<void> => {
+      if (activeSession === null || isStreaming) return;
 
-    const userTurn: Turn = {
-      id: newTurnId(),
-      role: 'user',
-      timestamp: nowIso(),
-      status: 'completed',
-      content: [{ type: 'text', text }],
-    };
+      const userTurn: Turn = {
+        id: newTurnId(),
+        role: 'user',
+        timestamp: nowIso(),
+        status: 'completed',
+        content: [{ type: 'text', text }],
+      };
 
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.id === activeSessionId
-          ? {
-              ...s,
+      // 1) Optimistic local push so the UI is responsive.
+      setActiveSession((prev) =>
+        prev === null
+          ? prev
+          : {
+              ...prev,
               updated_at: nowIso(),
               conversation: {
-                ...s.conversation,
-                turns: [...s.conversation.turns, userTurn],
+                ...prev.conversation,
+                turns: [...prev.conversation.turns, userTurn],
               },
             }
-          : s
-      )
-    );
+      );
 
-    void startStream({
-      turns: [...activeSession.conversation.turns, userTurn],
-      model: activeSession.conversation.current_model,
-    });
-  };
+      // 2) Persist user turn (refresh updates Sidebar's updated_at order).
+      await persistTurn(activeSession.id, userTurn);
+
+      // 3) Kick off streaming; assistant turn shadowed locally,
+      //    persisted on message_complete (handleStreamComplete).
+      void startStream({
+        turns: [...activeSession.conversation.turns, userTurn],
+        model: activeSession.conversation.current_model,
+      });
+    },
+    [activeSession, isStreaming, persistTurn, startStream]
+  );
+
+  // Surface IPC errors in the console; UI-level error states come later.
+  useEffect(() => {
+    if (storeError !== null) {
+      console.error('[useSessionStore] error:', storeError);
+    }
+  }, [storeError]);
+
+  // Sidebar consumes a lightweight subset of the session list.
+  const sidebarSessions = useMemo(
+    () => sessions.map((s) => ({ id: s.id, title: s.title, pinned: s.pinned })),
+    [sessions]
+  );
 
   return (
     <ThreePanelLayout
       sidebar={
         <Sidebar
-          sessions={sessions}
+          sessions={sidebarSessions}
           activeSessionId={activeSessionId}
           onSelectSession={setActiveSessionId}
-          onNewChat={handleNewChat}
+          onNewChat={() => {
+            void handleNewChat();
+          }}
         />
       }
       chat={
         <ChatPanel
           session={activeSession}
-          onSubmit={handleSubmitMessage}
+          onSubmit={(text) => {
+            void handleSubmitMessage(text);
+          }}
           isStreaming={isStreaming}
           onCancel={cancelStream}
         />
