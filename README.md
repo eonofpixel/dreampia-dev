@@ -20,17 +20,28 @@
 # 의존성 설치
 npm install
 
+# === 환경 토글 (better-sqlite3 native ABI) ===
+# Electron 실행 전:  Electron ABI 로 native module 컴파일
+npm run dev:rebuild
+
 # 개발 모드 (Electron 창 자동 열림)
 npm run dev
 
-# 빌드 검증
-npm run build:dir
+# === 테스트 / 빌드 ===
+# 테스트 실행 전:    Node ABI 로 native module 복원 (dev:rebuild 후 토글 필요)
+npm run test:rebuild
+npm test
 
-# 타입 체크 / 린트 / 테스트
+# 타입 체크 / 린트 / 빌드
 npm run typecheck
 npm run lint
-npm test
+npm run build
 ```
+
+> ⚠ **better-sqlite3 ABI 토글**: Electron 33 의 V8 ABI (NODE_MODULE_VERSION 130) 와
+> Node 22 의 ABI (127) 가 다릅니다. native module 은 환경마다 재컴파일 필요.
+> dev ↔ test 전환 시 위 rebuild 명령을 호출하세요. 영구 해결 (sql.js WASM 또는
+> node:sqlite 마이그레이션) 은 P2-V6 으로 추적 중.
 
 ### 요구사항
 
@@ -40,33 +51,75 @@ npm      >= 10.0
 OS       Windows 10+ / macOS 12+ / Linux (Ubuntu 22+)
 ```
 
-### 진행 상황 (Day 2-3)
+### 진행 상황
 
 ```
-✅ Day 1: scaffold + CI (얇게)
-   ├─ Electron 33 + Vite 6 + React 18 + TypeScript 5.6
-   ├─ Tailwind 3.4 + Pretendard (한글 우선)
-   ├─ ESLint + Prettier
-   └─ GitHub Actions CI
+✅ Day 1-7: scaffold + UI 토대 + IPC + IME-safe 입력
+   Electron 33 + Vite 6 + React 18 + TypeScript 5.6 strict
+   Tailwind 3.4 + Pretendard (한국어 우선)
+   3-패널 layout + ChatInput (compositionStart/End 안전)
+   181 spec docs (session/permission/tools/ux/design/...)
 
-✅ Day 2-3: SS-1 TypeScript types + contract tests
-   ├─ src/types/ (9 파일) - Session 모델 전체 (Zod schema)
-   │   common, conversation, workspace, terminal,
-   │   browser, plan, permission, session, helpers
-   ├─ tests/fixtures/sessions/   : 8개 valid Session JSON
-   ├─ tests/fixtures/invalid/    : 5개 invariant violation
-   └─ tests/session/             : Contract tests + helpers tests
+✅ Phase 1 P0: 백엔드 토대
+   ✓ PM-3 Permission resolver (5단계 우선순위) + PM-9 위험 패턴   6a687a3
+   ✓ SS-4 SessionStore (better-sqlite3 + WAL + 마이그레이션)        62e2722
+   ✓ SS-6 Provider Adapter (Claude/Codex/Mock streaming)           3b2c832
+   ✓ TO-4 Tool Queue + shell.run + permission 통합                 33978d0
+   ✓ ChatPanel streaming (▋ 펄싱 + char-by-char + auto-scroll)     8557c17
 
-✅ Day 4-7: 3-패널 layout + IPC + IME-safe 입력 + 추적표
-   ├─ src/main/ipc.ts            : IPC handlers (app/version, app/platform)
-   ├─ src/renderer/components/   : Sidebar / ChatPanel / PreviewPanel /
-   │                                ChatInput / ThreePanelLayout
-   ├─ tests/renderer/            : ChatInput (IME 보호 5개) + Sidebar + Layout
-   │                                @testing-library/react + jsdom
-   └─ docs/traceability.md       : spec → test → impl 추적표 (181 spec)
+✅ Phase 1 P1: production 와이어업
+   ✓ P1-1 Sidebar branded SessionId fix                            168727c
+   ✓ P1-2 SessionStore main process IPC 통합                       d4bb7f0
+   ✓ P1-3 Tool result inline display (ToolCallCard)                efc084e
+   ✓ P1-6 SS-5 Multi-window leader election (heartbeat + TTL)      bd16169
+   ✓ P1-5 BrowserView (WebContentsView + partition isolation)      4e77430
+   ✓ P1-4 real CLI subprocess (Claude/Codex spawn + JSONL)         49f2a4a
 
-🚀 Phase 1 (다음): SessionStore (SQLite) + 첫 AI 호출 + 권한 Resolver
+✅ Phase 2 V1+V5: 검증 phase
+   ✓ V1 production build 가능 + Electron 실행 검증 (3 build 버그)   7bf1911
+   ✓ V5 real CLI JSONL 형식 보정 (P1-4 추측 → 검증된 형식)          5369f66
+
+⏳ Phase 2 진행 중 (수동 검증 권장):
+   ⏳ V2 E2E 첫 채팅 흐름 — npm run dev 후 사용자 직접 클릭 검증
+   ⏳ V3 Tool call 실제 실행 — 사용자 직접 prompt 입력 검증
+   ⏳ V4 BrowserView example.com 로드 — 사용자 직접 URL 입력 검증
+   ⏳ V6 ABI 토글 영구 해결 (sql.js WASM 또는 node:sqlite migration)
 ```
+
+### 검증 현황
+
+```
+588 tests pass (vitest, mocked I/O)
+0 typecheck errors
+production build 성공 (vite + electron-builder)
+Electron 창 실제 부팅 확인 (V1 commit 에서 검증)
+Claude CLI v2.1.123 + Codex CLI v0.125.0 출력 캡처 → translate 보정 (V5)
+```
+
+### 알려진 한계
+
+```
+1. Mock 응답 = "Mock response. You said: ..." (echo).
+   진짜 응답은 CLI 인증 (claude /login, codex login) 후 사용 가능.
+
+2. better-sqlite3 dual-ABI 토글 필요 (위 rebuild 명령).
+
+3. CLI translate 의 Codex function_call 매핑은 best-effort.
+   실제 tool 호출 응답이 캡처되면 보정 필요.
+
+4. BrowserView 의 ResizeObserver setBounds 는 실제 click 검증 안 됨.
+   tests/main/BrowserManager.test.ts 는 Electron 모킹 기반.
+
+5. Multi-window leader election: 같은 db 의 두 LeaderElection 인스턴스로
+   단위 테스트. 진짜 두 Electron 윈도우는 검증 안 됨.
+```
+
+🚀 다음 후보 (Phase 2 + Phase 3):
+  - V2-V4 수동 시각 검증 (사용자 환경에서 npm run dev:rebuild && npm run dev)
+  - V6 sql.js WASM 또는 node:sqlite 마이그레이션 (dual-ABI 영구 해결)
+  - DOM Inspector / Annotation 모드 (BrowserView P2 기능)
+  - Onboarding 5-step UI (CLI 감지 + 설치 안내 → first-chat)
+  - Plugin / MCP Bridge / Skill Loader (TO-8/9/10)
 
 핵심 spec: [docs/session/_index.md](./docs/session/_index.md), [CODEX_SELF_ADVICE.md](./CODEX_SELF_ADVICE.md).
 
