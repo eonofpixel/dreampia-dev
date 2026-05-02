@@ -3,14 +3,17 @@
  *
  * Day 6: 윤곽 + ChatInput.
  * Day 7: 스트리밍 표시 (pulsing cursor, tool call cards, auto-scroll, stop button).
+ * P1-3: 툴 결과 인라인 표시 (tool turn 숨김, ToolCallCard 사용).
  *
  * Spec: docs/ia/chat-flow.md, docs/design/components/chat-message.md
  */
 
 import { useEffect, useRef } from 'react';
 import { ChatInput } from './ChatInput';
-import type { Session, Turn, ToolCallRef } from '@/types';
+import type { Session, Turn, ToolResultRef } from '@/types';
 import { EFFORT_LABELS_KO } from '@/types';
+import { ToolCallCard } from './ToolCallCard';
+import { findToolResult } from './toolDisplayHelpers';
 
 export interface ChatPanelProps {
   session: Session | null;
@@ -62,8 +65,14 @@ function MessagesArea({ turns }: MessagesAreaProps): React.JSX.Element {
     <div className="flex-1 overflow-y-auto p-4">
       {turns.length === 0 ? null : (
         <div className="mx-auto max-w-3xl space-y-4">
-          {turns.map((turn) => (
-            <TurnDisplay key={turn.id} turn={turn} />
+          {turns.map((turn, index) => (
+            <TurnDisplay
+              key={turn.id}
+              turn={turn}
+              getResult={(callId: string): ToolResultRef | undefined =>
+                findToolResult(turns, index, callId)
+              }
+            />
           ))}
         </div>
       )}
@@ -138,7 +147,15 @@ function SuggestionChip({ children }: { children: React.ReactNode }): React.JSX.
   );
 }
 
-function TurnDisplay({ turn }: { turn: Turn }): React.JSX.Element {
+interface TurnDisplayProps {
+  turn: Turn;
+  getResult: (callId: string) => ToolResultRef | undefined;
+}
+
+function TurnDisplay({ turn, getResult }: TurnDisplayProps): React.JSX.Element | null {
+  // tool 역할 턴은 렌더링하지 않음 — 결과는 어시스턴트 턴 내 인라인으로 표시
+  if (turn.role === 'tool') return null;
+
   const isUser = turn.role === 'user';
   const isStreamingTurn = turn.status === 'streaming';
 
@@ -182,28 +199,18 @@ function TurnDisplay({ turn }: { turn: Turn }): React.JSX.Element {
           return null;
         })}
         {turn.tool_calls && turn.tool_calls.length > 0 && (
-          <ToolCallList toolCalls={turn.tool_calls} />
+          <div className="mt-2 space-y-1">
+            {turn.tool_calls.map((tc) => (
+              <ToolCallCard
+                key={tc.id}
+                call={tc}
+                result={getResult(tc.id)}
+              />
+            ))}
+          </div>
         )}
       </div>
     </article>
-  );
-}
-
-function ToolCallList({ toolCalls }: { toolCalls: ToolCallRef[] }): React.JSX.Element {
-  return (
-    <div className="mt-2 space-y-1">
-      {toolCalls.map((tc) => (
-        <div
-          key={tc.id}
-          className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-xs font-mono"
-          data-testid="tool-call-card"
-        >
-          🔧 {tc.tool_id}(
-          {JSON.stringify(tc.input).slice(0, 80)}
-          {JSON.stringify(tc.input).length > 80 ? '...' : ''})
-        </div>
-      ))}
-    </div>
   );
 }
 
