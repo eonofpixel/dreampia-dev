@@ -1,0 +1,175 @@
+{
+  "id": "019d0000-0000-7000-8000-000000000005",
+  "schema_version": 1,
+  "created_at": "2026-05-01T19:46:00.000Z",
+  "updated_at": "2026-05-02T01:54:30.000Z",
+
+  "provider": "codex",
+  "workspace_id": "ws-pyeongtaek-portal01",
+
+  "title": "서버 열고 미리보기 확인",
+  "pinned": true,
+  "archived": false,
+
+  "conversation": {
+    "turns": [
+      {
+        "id": "019d0005-0000-7000-8000-000000000001",
+        "role": "user",
+        "timestamp": "2026-05-01T19:46:00.000Z",
+        "status": "completed",
+        "content": [{ "type": "text", "text": "서버 열고 미리보기 보게해줘" }]
+      },
+      {
+        "id": "019d0005-0000-7000-8000-000000000002",
+        "role": "assistant",
+        "timestamp": "2026-05-01T19:46:30.000Z",
+        "status": "completed",
+        "content": [
+          {
+            "type": "text",
+            "text": "browser-use 스킬을 사용하겠습니다. 서버를 띄우고 미리보기 탭을 열어드릴게요."
+          },
+          {
+            "type": "embedded_card",
+            "card": {
+              "kind": "web_preview",
+              "title": "웹 미리보기",
+              "url": "http://127.0.0.1:3000/dashboard"
+            }
+          }
+        ],
+        "model": "gpt-5.5",
+        "effort": "high"
+      }
+    ],
+    "current_model": "gpt-5.5",
+    "current_effort": "high",
+    "current_mode": "standard"
+  },
+
+  "workspace": {
+    "root": "C:\\Dev\\pyeongtaek-portal",
+    "name": "평택문화원 업무포털",
+    "worktrees": [],
+    "recent_files": [
+      {
+        "uri": "file:///C:/Dev/pyeongtaek-portal/renewal/web/pages/login.tsx",
+        "name": "login.tsx",
+        "size_bytes": 2456,
+        "language": "typescript",
+        "last_accessed": "2026-05-02T01:54:00.000Z"
+      }
+    ],
+    "open_files": [],
+    "git_state": {
+      "branch": "main",
+      "ahead": 0,
+      "behind": 2,
+      "staged_count": 0,
+      "unstaged_count": 1,
+      "untracked_count": 0,
+      "last_commit": {
+        "sha": "abc1234",
+        "subject": "fix: dashboard layout"
+      }
+    },
+    "ignore_patterns": ["node_modules/**", ".git/**"],
+    "index_status": "ready",
+    "indexed_at": "2026-05-01T19:00:00.000Z",
+    "file_count": 1247,
+    "is_temporary": false
+  },
+
+  "terminal": {
+    "panes": [
+      {
+        "id": "pane-001",
+        "title": "npm run dev",
+        "shell": "powershell",
+        "cwd": "C:\\Dev\\pyeongtaek-portal\\renewal\\web",
+        "env": { "NODE_ENV": "development" },
+        "status": "running",
+        "pid": 12345,
+        "scrollback_lines": 87,
+        "input_history": ["npm install", "npm run dev"],
+        "spawned_by_ai": true,
+        "turn_id": "019d0005-0000-7000-8000-000000000002"
+      }
+    ],
+    "active_pane_id": "pane-001",
+    "panel_open": false,
+    "height_px": 280
+  },
+
+  "browser": {
+    "tabs": [
+      {
+        "id": "tab-001",
+        "title": "평택문화원 업무포털 - 대시보드",
+        "url": "http://127.0.0.1:3000/dashboard",
+        "status": "ready",
+        "last_load": "2026-05-01T19:46:35.000Z",
+        "history": [
+          {
+            "url": "http://127.0.0.1:3000/login",
+            "ts": "2026-05-01T19:46:30.000Z"
+          },
+          {
+            "url": "http://127.0.0.1:3000/dashboard",
+            "ts": "2026-05-01T19:46:35.000Z"
+          }
+        ],
+        "history_index": 1,
+        "annotation_mode": false,
+        "annotations": [],
+        "spawned_by": "ai",
+        "spawning_turn_id": "019d0005-0000-7000-8000-000000000002"
+      }
+    ],
+    "active_tab_id": "tab-001",
+    "panel_visible": true,
+    "layout": "panel",
+    "partition_id": "persist:dreampia-browser-app-019d0000-0000-7000-8000-000000000005"
+  },
+
+  "plan": {
+    "active": false,
+    "browser_tool_enabled": false
+  },
+
+  "permission": {
+    "grants": [
+      {
+        "id": "grant-001",
+        "session_id": "019d0000-0000-7000-8000-000000000005",
+        "capability": "LOCAL_EXECUTE",
+        "target": {
+          "kind": "path",
+          "path": "C:\\Dev\\pyeongtaek-portal",
+          "recursive": true
+        },
+        "scope": "session",
+        "granted_at": "2026-05-01T19:46:10.000Z",
+        "granted_by": "user"
+      },
+      {
+        "id": "grant-002",
+        "session_id": "019d0000-0000-7000-8000-000000000005",
+        "capability": "NETWORK_LOCAL",
+        "target": { "kind": "global" },
+        "scope": "session",
+        "granted_at": "2026-05-01T19:46:10.000Z",
+        "granted_by": "auto"
+      }
+    ],
+    "default_level": "workspace_write",
+    "temporarily_blocked_capabilities": []
+  },
+
+  "metadata": {
+    "codex": {
+      "deep_link": "dreampia-dev://chat/019d0000-0000-7000-8000-000000000005"
+    }
+  }
+}

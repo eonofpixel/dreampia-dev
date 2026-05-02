@@ -1,0 +1,98 @@
+{
+  "id": "019d0000-0000-7000-8000-000000000008",
+  "schema_version": 1,
+  "created_at": "2026-05-02T04:00:00.000Z",
+  "updated_at": "2026-05-02T04:00:30.000Z",
+
+  "provider": "codex",
+  "workspace_id": "ws-pyeongtaek-portal01",
+
+  "title": "주석 모드 테스트",
+  "pinned": false,
+  "archived": false,
+
+  "conversation": {
+    "turns": [
+      {
+        "id": "019d0008-0000-7000-8000-000000000001",
+        "role": "user",
+        "timestamp": "2026-05-02T04:00:10.000Z",
+        "status": "completed",
+        "content": [
+          { "type": "text", "text": "이 영역 색깔을 바꿔줘" }
+        ],
+        "annotations": [
+          {
+            "id": "anno-001",
+            "marker_index": 1,
+            "selector": "[data-testid='today-tasks'] > h3",
+            "bounding_box": { "x": 100, "y": 200, "w": 280, "h": 32 },
+            "screenshot_uri": "blob://anno-001/sc-001.png",
+            "dom_meta": {
+              "tag": "h3",
+              "color": "#1A1C1F",
+              "bg_color": "#FFFFFF",
+              "font": "16px Pretendard",
+              "dimensions": "280 × 32"
+            },
+            "comment": "이 제목 색깔을 파란색으로 바꿔줘",
+            "page_url": "http://127.0.0.1:3000/dashboard",
+            "created_at": "2026-05-02T04:00:08.000Z"
+          }
+        ]
+      }
+    ],
+    "current_model": "gpt-5.5",
+    "current_effort": "high",
+    "current_mode": "standard"
+  },
+
+  "workspace": {
+    "root": "C:\\Dev\\pyeongtaek-portal",
+    "name": "pyeongtaek-portal",
+    "worktrees": [],
+    "recent_files": [],
+    "open_files": [],
+    "ignore_patterns": [],
+    "index_status": "ready",
+    "is_temporary": false
+  },
+
+  "terminal": { "panes": [], "panel_open": false, "height_px": 200 },
+
+  "browser": {
+    "tabs": [
+      {
+        "id": "tab-001",
+        "title": "대시보드",
+        "url": "http://127.0.0.1:3000/dashboard",
+        "status": "ready",
+        "last_load": "2026-05-02T04:00:00.000Z",
+        "history": [
+          {
+            "url": "http://127.0.0.1:3000/dashboard",
+            "ts": "2026-05-02T04:00:00.000Z"
+          }
+        ],
+        "history_index": 0,
+        "annotation_mode": true,
+        "annotations": [],
+        "spawned_by": "user"
+      }
+    ],
+    "active_tab_id": "tab-001",
+    "panel_visible": true,
+    "layout": "panel",
+    "partition_id": "persist:dreampia-browser-app-019d0000-0000-7000-8000-000000000008"
+  },
+
+  "plan": { "active": false, "browser_tool_enabled": false },
+
+  "permission": {
+    "grants": [],
+    "default_level": "workspace_write",
+    "temporarily_blocked_capabilities": []
+  },
+
+  "metadata": {}
+}

@@ -1,0 +1,70 @@
+{
+  "_invariant_violated": "INV-3: tool_calls 가 있는 턴 다음엔 role='tool' 턴 (assistant 가 바로 옴)",
+
+  "id": "019d0000-0000-7000-8000-0000000000c0",
+  "schema_version": 1,
+  "created_at": "2026-05-02T01:00:00.000Z",
+  "updated_at": "2026-05-02T01:00:00.000Z",
+
+  "provider": "codex",
+  "workspace_id": "ws-test",
+
+  "title": "도구 호출 후 결과 누락",
+  "pinned": false,
+  "archived": false,
+
+  "conversation": {
+    "turns": [
+      {
+        "id": "019d0000-0000-7000-8000-0000000000c1",
+        "role": "assistant",
+        "timestamp": "2026-05-02T01:00:00.000Z",
+        "status": "completed",
+        "content": [{ "type": "text", "text": "test 실행" }],
+        "tool_calls": [
+          {
+            "id": "019d0000-0000-7000-8000-0000000000c2",
+            "tool_id": "shell.run",
+            "input": { "cmd": "npm test" }
+          }
+        ]
+      },
+      {
+        "id": "019d0000-0000-7000-8000-0000000000c3",
+        "role": "assistant",
+        "timestamp": "2026-05-02T01:00:01.000Z",
+        "status": "completed",
+        "content": [{ "type": "text", "text": "결과 무시하고 다음" }]
+      }
+    ],
+    "current_model": "gpt-5.5",
+    "current_effort": "high",
+    "current_mode": "standard"
+  },
+
+  "workspace": {
+    "root": "C:\\Dev\\foo",
+    "name": "foo",
+    "worktrees": [],
+    "recent_files": [],
+    "open_files": [],
+    "ignore_patterns": [],
+    "index_status": "idle",
+    "is_temporary": false
+  },
+
+  "terminal": { "panes": [], "panel_open": false, "height_px": 200 },
+  "browser": {
+    "tabs": [],
+    "panel_visible": false,
+    "layout": "hidden",
+    "partition_id": "persist:dreampia-browser-app-019d0000-0000-7000-8000-0000000000c0"
+  },
+  "plan": { "active": false, "browser_tool_enabled": false },
+  "permission": {
+    "grants": [],
+    "default_level": "workspace_write",
+    "temporarily_blocked_capabilities": []
+  },
+  "metadata": {}
+}

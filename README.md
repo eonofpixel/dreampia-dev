@@ -40,18 +40,25 @@ npm      >= 10.0
 OS       Windows 10+ / macOS 12+ / Linux (Ubuntu 22+)
 ```
 
-### 진행 상황 (Day 1)
+### 진행 상황 (Day 2-3)
 
 ```
 ✅ Day 1: scaffold + CI (얇게)
-   ├─ Electron 41 + Vite 6 + React 18 + TypeScript 5.6
+   ├─ Electron 33 + Vite 6 + React 18 + TypeScript 5.6
    ├─ Tailwind 3.4 + Pretendard (한글 우선)
    ├─ ESLint + Prettier
    └─ GitHub Actions CI
 
-⏳ Day 2-3: SS-1 TypeScript types
-⏳ Day 4-5: Contract tests
-⏳ Day 6: 3-패널 layout
+✅ Day 2-3: SS-1 TypeScript types + contract tests
+   ├─ src/types/ (9 파일) - Session 모델 전체 (Zod schema)
+   │   common, conversation, workspace, terminal,
+   │   browser, plan, permission, session, helpers
+   ├─ tests/fixtures/sessions/   : 8개 valid Session JSON
+   ├─ tests/fixtures/invalid/    : 5개 invariant violation
+   └─ tests/session/             : Contract tests + helpers tests
+
+⏳ Day 4-5: Contract tests 실행 검증 + 추가 케이스
+⏳ Day 6: 3-패널 layout 윤곽 (Sidebar / Chat / Preview)
 ⏳ Day 7: spec ↔ test ↔ impl 추적표
 ```
 
