@@ -4,14 +4,16 @@
  * Day 6: 3-패널 layout (F-013) + ChatInput (IME-safe).
  * Day 7: MockProvider streaming wire-through (P0 final).
  * P1-2: SessionStore IPC integration — sessions persist across reload.
+ * P1-4: Real CLI subprocess via IpcStreamingProvider + CLI status indicator.
  *
- * Spec: docs/design/layout/3panel.md, docs/ia/chat-flow.md, docs/session/persistence.md
+ * Spec: docs/design/layout/3panel.md, docs/ia/chat-flow.md,
+ *       docs/session/persistence.md, docs/session/cross-ai-sync.md
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ThreePanelLayout } from './components/layout/ThreePanelLayout';
 import { Sidebar } from './components/sidebar/Sidebar';
-import { ChatPanel } from './components/chat/ChatPanel';
+import { ChatPanel, type CliStatus } from './components/chat/ChatPanel';
 import { PreviewPanel } from './components/preview/PreviewPanel';
 import {
   SessionSchema,
@@ -25,6 +27,8 @@ import {
   type Turn,
 } from '@/types';
 import { MockProvider } from '@/providers';
+import type { StreamingProvider } from '@/providers/types';
+import { IpcStreamingProvider } from './providers/IpcStreamingProvider';
 import { useStreamingTurn } from './hooks/useStreamingTurn';
 import { useSessionStore } from './hooks/useSessionStore';
 
@@ -113,8 +117,47 @@ export function App(): React.JSX.Element {
     };
   }, [activeSessionId, getSession]);
 
-  // MockProvider: 15ms delay 로 글자 단위 streaming
-  const provider = useMemo(() => new MockProvider({ delayMs: 15 }), []);
+  // P1-4: IpcStreamingProvider 가 main 의 ai/start-stream 으로 위임.
+  // window.dreampia.ai 가 없는 환경 (legacy renderer / 오래된 build) 에서는
+  // MockProvider 로 fallback.
+  const provider = useMemo<StreamingProvider>(() => {
+    const hasIpc =
+      typeof window !== 'undefined' && window.dreampia?.ai !== undefined;
+    if (hasIpc) return new IpcStreamingProvider();
+    return new MockProvider({ delayMs: 15 });
+  }, []);
+
+  // CLI 감지 결과 — onMount 한 번 가져와 ChatHeader 에 표시.
+  const [cliStatus, setCliStatus] = useState<CliStatus>(null);
+  useEffect(() => {
+    const ai =
+      typeof window !== 'undefined' ? window.dreampia?.ai : undefined;
+    if (ai === undefined) {
+      setCliStatus({ source: 'mock', claude: null, codex: null });
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await ai.detectCli();
+        if (cancelled) return;
+        if (result.ok) {
+          setCliStatus({
+            source: 'auto',
+            claude: result.value.claude,
+            codex: result.value.codex,
+          });
+        } else {
+          setCliStatus({ source: 'mock', claude: null, codex: null });
+        }
+      } catch {
+        if (!cancelled) setCliStatus({ source: 'mock', claude: null, codex: null });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Streaming pattern (see useSessionStore for rationale):
   //   - text_delta:        update local activeSession only (NO IPC)
@@ -236,6 +279,7 @@ export function App(): React.JSX.Element {
           }}
           isStreaming={isStreaming}
           onCancel={cancelStream}
+          cliStatus={cliStatus}
         />
       }
       preview={

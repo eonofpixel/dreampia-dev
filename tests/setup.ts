@@ -59,6 +59,20 @@ interface MockBrowserBounds {
 
 type BrowserUpdateListener = (state: MockBrowserTabState) => void;
 
+// ── ai/* (P1-4) — mock IPC for IpcStreamingProvider tests ──
+interface MockCliInfo {
+  path: string;
+  version: string | null;
+}
+interface MockCliDetection {
+  claude: MockCliInfo | null;
+  codex: MockCliInfo | null;
+}
+type MockStreamEventPayload = { stream_id: string; event: unknown };
+type MockStreamEndPayload = { stream_id: string };
+type AiStreamEventListener = (payload: MockStreamEventPayload) => void;
+type AiStreamEndListener = (payload: MockStreamEndPayload) => void;
+
 const mockStore = {
   sessions: new Map<string, Session>(),
   locks: new Map<string, MockSessionLock>(),
@@ -75,12 +89,45 @@ const mockStore = {
   browserActive: new Map<string, string>(),
   browserBounds: new Map<string, MockBrowserBounds>(),
   browserListeners: new Set<BrowserUpdateListener>(),
+
+  // ── ai/* (P1-4) ───────────────────────────────────────
+  // Tests can inject events via __emitAiStreamEvent / __emitAiStreamEnd.
+  // detect default: claude detected, codex null. Override per-test by
+  // mutating __mockStore.aiDetection.
+  aiDetection: {
+    claude: { path: '/usr/local/bin/claude', version: '1.2.3' },
+    codex: null,
+  } as MockCliDetection,
+  aiStartedStreams: new Map<string, { model: string; turns: unknown[] }>(),
+  aiStoppedStreams: new Set<string>(),
+  aiEventListeners: new Set<AiStreamEventListener>(),
+  aiEndListeners: new Set<AiStreamEndListener>(),
 };
 
 function emitBrowserUpdate(state: MockBrowserTabState): void {
   for (const fn of mockStore.browserListeners) {
     try {
       fn(state);
+    } catch {
+      // ignore listener errors in tests
+    }
+  }
+}
+
+function emitAiStreamEvent(payload: MockStreamEventPayload): void {
+  for (const fn of mockStore.aiEventListeners) {
+    try {
+      fn(payload);
+    } catch {
+      // ignore listener errors in tests
+    }
+  }
+}
+
+function emitAiStreamEnd(payload: MockStreamEndPayload): void {
+  for (const fn of mockStore.aiEndListeners) {
+    try {
+      fn(payload);
     } catch {
       // ignore listener errors in tests
     }
@@ -97,9 +144,13 @@ function emitBrowserUpdate(state: MockBrowserTabState): void {
  *   __mockStore.windowId = 'window-A';
  *   __mockStore.browserTabs.set(tabId, { ... });
  *   __emitBrowserUpdate(state);  // simulate main → renderer event
+ *   __emitAiStreamEvent({stream_id, event});  // P1-4
+ *   __emitAiStreamEnd({stream_id});           // P1-4
  */
 export const __mockStore = mockStore;
 export const __emitBrowserUpdate = emitBrowserUpdate;
+export const __emitAiStreamEvent = emitAiStreamEvent;
+export const __emitAiStreamEnd = emitAiStreamEnd;
 
 function toMeta(s: Session): MockSessionMeta {
   const meta: MockSessionMeta = {
@@ -127,6 +178,14 @@ beforeEach(() => {
   mockStore.browserActive.clear();
   mockStore.browserBounds.clear();
   mockStore.browserListeners.clear();
+  mockStore.aiDetection = {
+    claude: { path: '/usr/local/bin/claude', version: '1.2.3' },
+    codex: null,
+  };
+  mockStore.aiStartedStreams.clear();
+  mockStore.aiStoppedStreams.clear();
+  mockStore.aiEventListeners.clear();
+  mockStore.aiEndListeners.clear();
 });
 
 afterEach(() => {
@@ -424,6 +483,69 @@ if (typeof window !== 'undefined') {
           mockStore.browserListeners.add(listener);
           return () => {
             mockStore.browserListeners.delete(listener);
+          };
+        }),
+      },
+
+      // P1-4: AI streaming via real CLI subprocess. Renderer-side IPC is
+      // mocked in-memory — tests inject events with __emitAiStreamEvent /
+      // __emitAiStreamEnd. detectCli returns __mockStore.aiDetection.
+      ai: {
+        detectCli: vi.fn(
+          async (): Promise<Result<MockCliDetection>> => ({
+            ok: true,
+            value: mockStore.aiDetection,
+          })
+        ),
+
+        startStream: vi.fn(
+          async (args: {
+            stream_id: string;
+            model: string;
+            turns: unknown[];
+          }): Promise<Result<{ stream_id: string; source: string }>> => {
+            mockStore.aiStartedStreams.set(args.stream_id, {
+              model: args.model,
+              turns: args.turns,
+            });
+            // Source 추론 (테스트에서 검증할 수 있도록).
+            const lower = args.model.toLowerCase();
+            const isClaude = ['claude-', 'sonnet-', 'opus-', 'haiku-'].some(
+              (p) => lower.startsWith(p)
+            );
+            const isCodex = ['gpt-', 'o1-', 'o3-', 'codex-'].some((p) =>
+              lower.startsWith(p)
+            );
+            let source: 'claude-cli' | 'codex-cli' | 'mock' = 'mock';
+            if (isClaude && mockStore.aiDetection.claude !== null) {
+              source = 'claude-cli';
+            } else if (isCodex && mockStore.aiDetection.codex !== null) {
+              source = 'codex-cli';
+            }
+            return { ok: true, value: { stream_id: args.stream_id, source } };
+          }
+        ),
+
+        stopStream: vi.fn(
+          async (streamId: string): Promise<Result<void>> => {
+            mockStore.aiStoppedStreams.add(streamId);
+            return { ok: true, value: undefined };
+          }
+        ),
+
+        onStreamEvent: vi.fn(
+          (listener: AiStreamEventListener): (() => void) => {
+            mockStore.aiEventListeners.add(listener);
+            return () => {
+              mockStore.aiEventListeners.delete(listener);
+            };
+          }
+        ),
+
+        onStreamEnd: vi.fn((listener: AiStreamEndListener): (() => void) => {
+          mockStore.aiEndListeners.add(listener);
+          return () => {
+            mockStore.aiEndListeners.delete(listener);
           };
         }),
       },

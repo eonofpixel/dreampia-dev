@@ -9,7 +9,7 @@ import { app, BrowserWindow, shell } from 'electron';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { registerIpcHandlers } from './ipc';
+import { registerIpcHandlers, shutdownAiHandlers } from './ipc';
 import { BrowserManager } from './BrowserManager';
 import { LeaderElection, SessionStore } from '@/storage';
 
@@ -114,7 +114,12 @@ app.whenReady().then(() => {
     },
   });
 
-  registerIpcHandlers(app, sessionStore, leaderElection, browserManager);
+  // P1-4: AI handlers (ai/detect-cli, ai/start-stream, ai/stop-stream).
+  // Renderer 가 stream-event/end 를 받으려면 mainWindow getter 필요.
+  // Spec: docs/session/cross-ai-sync.md
+  registerIpcHandlers(app, sessionStore, leaderElection, browserManager, {
+    getMainWindow: () => mainWindow,
+  });
   mainWindow = createMainWindow();
 
   app.on('activate', () => {
@@ -139,6 +144,8 @@ app.on('window-all-closed', () => {
 //   2) shutdown election (releases held locks via DB writes),
 //   3) close the DB.
 app.on('before-quit', () => {
+  // 활성 AI streams 먼저 abort — subprocess leak 방지.
+  shutdownAiHandlers();
   browserManager?.shutdown();
   browserManager = null;
   leaderElection?.shutdown();

@@ -4,8 +4,10 @@
  * Day 6: 윤곽 + ChatInput.
  * Day 7: 스트리밍 표시 (pulsing cursor, tool call cards, auto-scroll, stop button).
  * P1-3: 툴 결과 인라인 표시 (tool turn 숨김, ToolCallCard 사용).
+ * P1-4: ChatHeader 에 CLI 감지 상태 표시 (Claude/Codex/Mock).
  *
- * Spec: docs/ia/chat-flow.md, docs/design/components/chat-message.md
+ * Spec: docs/ia/chat-flow.md, docs/design/components/chat-message.md,
+ *       docs/ia/onboarding.md (CLI 감지)
  */
 
 import { useEffect, useRef } from 'react';
@@ -15,11 +17,30 @@ import { EFFORT_LABELS_KO } from '@/types';
 import { ToolCallCard } from './ToolCallCard';
 import { findToolResult } from './toolDisplayHelpers';
 
+/**
+ * CLI 감지 상태 — App 이 useEffect 에서 ai/detect-cli 호출 후 설정.
+ *
+ * source = 'auto'  → CLI 감지 시도됨, claude/codex 가 null/non-null 로 표시
+ * source = 'mock'  → IPC 사용 불가 또는 detect 실패 (모두 MockProvider 사용)
+ */
+export interface CliInfoShape {
+  path: string;
+  version: string | null;
+}
+export type CliStatus =
+  | null
+  | {
+      source: 'auto' | 'mock';
+      claude: CliInfoShape | null;
+      codex: CliInfoShape | null;
+    };
+
 export interface ChatPanelProps {
   session: Session | null;
   onSubmit: (text: string) => void;
   isStreaming?: boolean;
   onCancel?: () => void;
+  cliStatus?: CliStatus;
 }
 
 export function ChatPanel({
@@ -27,6 +48,7 @@ export function ChatPanel({
   onSubmit,
   isStreaming = false,
   onCancel,
+  cliStatus = null,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -38,7 +60,7 @@ export function ChatPanel({
 
   return (
     <main className="flex h-full flex-1 flex-col bg-bg-primary">
-      <ChatHeader session={session} />
+      <ChatHeader session={session} cliStatus={cliStatus} />
       <MessagesArea turns={session.conversation.turns} />
       <InputArea onSubmit={onSubmit} isStreaming={isStreaming} onCancel={onCancel} />
     </main>
@@ -107,11 +129,18 @@ function InputArea({ onSubmit, isStreaming, onCancel }: InputAreaProps): React.J
   );
 }
 
-function ChatHeader({ session }: { session: Session }): React.JSX.Element {
+function ChatHeader({
+  session,
+  cliStatus,
+}: {
+  session: Session;
+  cliStatus: CliStatus;
+}): React.JSX.Element {
   return (
     <div className="flex h-12 items-center justify-between border-b border-border-primary px-4">
       <h1 className="truncate text-sm font-semibold">{session.title}</h1>
       <div className="flex items-center gap-3 text-xs text-text-tertiary">
+        <CliStatusBadge status={cliStatus} />
         <span>
           {session.conversation.current_model}
           <span className="mx-1">·</span>
@@ -120,6 +149,57 @@ function ChatHeader({ session }: { session: Session }): React.JSX.Element {
         <span aria-label="더보기">···</span>
       </div>
     </div>
+  );
+}
+
+/**
+ * CLI 감지 상태 뱃지 — onMount 후 갱신. Mock 도 명시적으로 표시.
+ */
+function CliStatusBadge({ status }: { status: CliStatus }): React.JSX.Element | null {
+  if (status === null) return null;
+  if (status.source === 'mock') {
+    return (
+      <span
+        title="Mock provider in use (CLI not detected)"
+        aria-label="Mock provider"
+        className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px]"
+      >
+        Mock
+      </span>
+    );
+  }
+  if (status.claude !== null) {
+    const v = status.claude.version ?? '?';
+    return (
+      <span
+        title={`Claude CLI ${v} detected at ${status.claude.path}`}
+        aria-label={`Claude CLI ${v}`}
+        className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px]"
+      >
+        Claude CLI {v}
+      </span>
+    );
+  }
+  if (status.codex !== null) {
+    const v = status.codex.version ?? '?';
+    return (
+      <span
+        title={`Codex CLI ${v} detected at ${status.codex.path}`}
+        aria-label={`Codex CLI ${v}`}
+        className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px]"
+      >
+        Codex CLI {v}
+      </span>
+    );
+  }
+  return (
+    <span
+      title="No CLI detected — using Mock"
+      aria-label="No CLI"
+      className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px]"
+    >
+      No CLI
+    </span>
   );
 }
 

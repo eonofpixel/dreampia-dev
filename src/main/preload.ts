@@ -63,6 +63,40 @@ interface BrowserBoundsShape {
   height: number;
 }
 
+// AI shapes (P1-4). Inlined here so preload doesn't import @/providers
+// (which transitively pulls in Node-only modules — child_process, fs).
+// Keep these in sync with @/providers/cli/detect.ts and @/providers/types.ts.
+interface CliInfoShape {
+  path: string;
+  version: string | null;
+}
+interface CliDetectionShape {
+  claude: CliInfoShape | null;
+  codex: CliInfoShape | null;
+}
+
+// StreamEvent shape — discriminated union mirrored from @/providers/types.
+// Renderer-side IpcStreamingProvider casts this back to the strict type.
+type StreamEventShape =
+  | { type: 'message_start'; turn_id: string; model: string }
+  | { type: 'text_delta'; text: string }
+  | {
+      type: 'tool_call_start';
+      tool_call: { id: string; tool_id: string; input?: unknown };
+    }
+  | { type: 'tool_call_input_delta'; tool_call_id: string; partial_input: string }
+  | { type: 'tool_call_complete'; tool_call: { id: string; tool_id: string; input?: unknown } }
+  | { type: 'message_complete'; turn: Turn }
+  | { type: 'error'; error: string };
+
+interface AiStreamEventPayload {
+  stream_id: string;
+  event: StreamEventShape;
+}
+interface AiStreamEndPayload {
+  stream_id: string;
+}
+
 // Whitelist of IPC channels (security)
 const ALLOWED_INVOKE_CHANNELS = [
   'app:get-version',
@@ -87,10 +121,15 @@ const ALLOWED_INVOKE_CHANNELS = [
   'browser/reload',
   'browser/set-bounds',
   'browser/list-tabs',
+  'ai/detect-cli',
+  'ai/start-stream',
+  'ai/stop-stream',
 ] as const;
 
 const ALLOWED_RECEIVE_CHANNELS = [
   'browser/tab-updated',
+  'ai/stream-event',
+  'ai/stream-end',
   // Phase 2+:
   // 'session:updated',
   // 'tool:result',
@@ -262,6 +301,63 @@ const api = {
       };
       ipcRenderer.on('browser/tab-updated', handler);
       return () => ipcRenderer.removeListener('browser/tab-updated', handler);
+    },
+  },
+
+  /**
+   * AI streaming via real CLI subprocesses (P1-4).
+   *
+   * Spec: docs/session/cross-ai-sync.md
+   *
+   * Flow:
+   *   1) detectCli() — onboarding 에서 호출, 설치된 CLI 위치+버전 표시
+   *   2) startStream({stream_id, model, turns}) — main 이 적합한 provider 선택,
+   *      stream_id 단위로 격리된 stream 시작. main 은 즉시 응답, 후속
+   *      이벤트는 onStreamEvent / onStreamEnd 로 흘러옴.
+   *   3) stopStream(stream_id) — mid-stream cancel.
+   *
+   * onStreamEvent / onStreamEnd 는 unsubscribe 함수를 반환 — 반드시 호출!
+   */
+  ai: {
+    detectCli: (): Promise<Result<CliDetectionShape>> =>
+      ipcRenderer.invoke('ai/detect-cli') as Promise<Result<CliDetectionShape>>,
+
+    startStream: (args: {
+      stream_id: string;
+      model: string;
+      turns: Turn[];
+    }): Promise<Result<{ stream_id: string; source: string }>> =>
+      ipcRenderer.invoke('ai/start-stream', args) as Promise<
+        Result<{ stream_id: string; source: string }>
+      >,
+
+    stopStream: (streamId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('ai/stop-stream', streamId) as Promise<Result<void>>,
+
+    onStreamEvent: (
+      listener: (payload: AiStreamEventPayload) => void
+    ): (() => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: AiStreamEventPayload
+      ): void => {
+        listener(payload);
+      };
+      ipcRenderer.on('ai/stream-event', handler);
+      return () => ipcRenderer.removeListener('ai/stream-event', handler);
+    },
+
+    onStreamEnd: (
+      listener: (payload: AiStreamEndPayload) => void
+    ): (() => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: AiStreamEndPayload
+      ): void => {
+        listener(payload);
+      };
+      ipcRenderer.on('ai/stream-end', handler);
+      return () => ipcRenderer.removeListener('ai/stream-end', handler);
     },
   },
 };
