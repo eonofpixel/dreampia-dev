@@ -8,11 +8,16 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Sidebar } from '../../src/renderer/components/sidebar/Sidebar';
+import type { SessionId } from '../../src/types';
+
+// SessionId 는 branded string 타입 (string & { __brand: 'SessionId' }).
+// 테스트 fixture 에서는 캐스트 helper 로 단축 표기.
+const sid = (s: string): SessionId => s as SessionId;
 
 const mockSessions = [
-  { id: '019d-1', title: '서버 열고 미리보기', pinned: true },
-  { id: '019d-2', title: '테스트 통과시키기', pinned: false },
-  { id: '019d-3', title: '리팩토링', pinned: false },
+  { id: sid('019d-1'), title: '서버 열고 미리보기', pinned: true },
+  { id: sid('019d-2'), title: '테스트 통과시키기', pinned: false },
+  { id: sid('019d-3'), title: '리팩토링', pinned: false },
 ];
 
 describe('Sidebar', () => {
@@ -76,7 +81,7 @@ describe('Sidebar', () => {
     render(
       <Sidebar
         sessions={mockSessions}
-        activeSessionId="019d-2"
+        activeSessionId={sid('019d-2')}
         onSelectSession={() => {}}
         onNewChat={() => {}}
       />
