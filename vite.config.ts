@@ -37,27 +37,42 @@ export default defineConfig({
 
     electron([
       {
-        // Main process
-        entry: 'src/main/index.ts',
+        // Main process — vite root 가 'src/renderer' 라 절대 경로 필요
+        entry: resolve(__dirname, 'src/main/index.ts'),
         vite: {
+          resolve: {
+            alias: {
+              '@': resolve(__dirname, 'src'),
+              '@/main': resolve(__dirname, 'src/main'),
+              '@/renderer': resolve(__dirname, 'src/renderer'),
+              '@/types': resolve(__dirname, 'src/types'),
+            },
+          },
           build: {
-            outDir: 'dist/main',
+            outDir: resolve(__dirname, 'dist/main'),
             sourcemap: true,
             rollupOptions: {
-              external: ['electron'],
+              external: ['electron', 'better-sqlite3'],
             },
           },
         },
       },
       {
         // Preload script
-        entry: 'src/main/preload.ts',
+        entry: resolve(__dirname, 'src/main/preload.ts'),
         onstart(options) {
           options.reload();
         },
         vite: {
+          resolve: {
+            alias: {
+              '@': resolve(__dirname, 'src'),
+              '@/main': resolve(__dirname, 'src/main'),
+              '@/types': resolve(__dirname, 'src/types'),
+            },
+          },
           build: {
-            outDir: 'dist/main',
+            outDir: resolve(__dirname, 'dist/main'),
             sourcemap: true,
             rollupOptions: {
               external: ['electron'],

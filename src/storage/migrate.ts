@@ -10,9 +10,12 @@
  */
 
 import type { Database } from 'better-sqlite3';
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+
+// SQL files imported as raw text — Vite/Vitest 가 빌드 시 inline.
+// 이전엔 readFileSync 로 dist/main/migrations/*.sql 을 읽었으나 vite-plugin-electron
+// 이 .sql 을 번들에 안 넣어 production build 에서 ENOENT 발생 (P2-V1 발견).
+import sql001 from './migrations/001_init.sql?raw';
+import sql002 from './migrations/002_locks.sql?raw';
 
 // ────────────────────────────────────────────────────────────
 // Migration registry
@@ -24,17 +27,10 @@ interface Migration {
   up: string;
 }
 
-/** Resolve a SQL file path relative to this module. */
-function readSql(file: string): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const path = resolve(here, 'migrations', file);
-  return readFileSync(path, 'utf-8');
-}
-
 /** Ordered list of migrations. Future versions append here. */
 const MIGRATIONS: readonly Migration[] = [
-  { version: 1, description: 'initial schema', up: readSql('001_init.sql') },
-  { version: 2, description: 'session_locks for multi-window leader election', up: readSql('002_locks.sql') },
+  { version: 1, description: 'initial schema', up: sql001 },
+  { version: 2, description: 'session_locks for multi-window leader election', up: sql002 },
 ] as const;
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

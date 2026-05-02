@@ -17,6 +17,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:rebuild": "electron-rebuild -f -w better-sqlite3",
     "build": "tsc --noEmit && vite build && electron-builder",
     "build:dir": "vite build && electron-builder --dir",
     "lint": "eslint . --ext .ts,.tsx",
@@ -24,6 +25,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:rebuild": "npm rebuild better-sqlite3 --build-from-source",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "preview": "vite preview"
@@ -37,6 +39,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.0",
