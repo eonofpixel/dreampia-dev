@@ -214,11 +214,17 @@ export function registerIpcHandlers(
     return process.platform;
   });
 
-  ipcMain.handle('app:get-default-workspace', (): Result<WorkspaceInfo> => {
+  ipcMain.handle('app:get-default-workspace', (): Result<WorkspaceInfo | null> => {
     try {
-      // 사용자가 picker 로 선택한 경로가 있으면 우선. 없으면 process.cwd() 로 fallback.
+      // 사용자가 picker 로 선택한 경로가 있으면 우선.
       // Spec: docs/permission/levels.md (workspace_write 의 의미: 사용자 의도된
       // 폴더에만 쓰기) — process.cwd() 는 우연한 위치일 수 있어 의도 표현이 약함.
+      //
+      // Phase 3 audit (HIGH) — packaged 빌드에선 settings 가 없으면 null 반환.
+      // 이전엔 process.cwd() 로 fallback 했는데 packaged Electron 의 cwd 는
+      // user 의도와 무관한 OS 기본 경로 (Program Files / Applications). 사용자
+      // 가 picker 로 명시 선택해야 새 채팅을 만들 수 있도록 강제. 이 함수는
+      // null 만 반환하고, renderer 가 null 을 보고 onboarding/picker 를 띄운다.
       const settings = readSettings();
       if (
         typeof settings.workspace_root === 'string' &&
@@ -230,6 +236,12 @@ export function registerIpcHandlers(
             ? settings.workspace_name
             : path.basename(root) || root;
         return ok({ root, name });
+      }
+      // 저장된 workspace 없음:
+      //   packaged → null (사용자가 picker 로 선택해야 함)
+      //   unpackaged (dev/e2e) → process.cwd() fallback (개발자 편의)
+      if (electronApp.isPackaged) {
+        return ok(null);
       }
       const root = process.cwd();
       const name = path.basename(root) || root;

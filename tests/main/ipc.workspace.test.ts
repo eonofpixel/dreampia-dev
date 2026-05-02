@@ -33,6 +33,9 @@ let nextDialogResult: OpenDialogResult = { canceled: true, filePaths: [] };
 
 // vi.hoisted: 호이스트된 mock 안에서 testTmpDir 를 lazy 하게 가져오기 위한 ref.
 const userDataRef = vi.hoisted(() => ({ current: '' }));
+// Phase 3 audit (HIGH): app:get-default-workspace 가 isPackaged 에 따라
+// strict mode 동작 — 테스트별 토글.
+const electronRef = vi.hoisted(() => ({ isPackaged: false }));
 
 vi.mock('electron', () => {
   return {
@@ -41,6 +44,9 @@ vi.mock('electron', () => {
       getPath: (name: string): string => {
         if (name === 'userData') return userDataRef.current;
         return userDataRef.current;
+      },
+      get isPackaged(): boolean {
+        return electronRef.isPackaged;
       },
     },
     ipcMain: {
@@ -75,6 +81,9 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
 const stubApp = {
   getVersion: () => '0.0.1-test',
   getPath: (_n: string) => userDataRef.current,
+  get isPackaged(): boolean {
+    return electronRef.isPackaged;
+  },
 } as unknown as Parameters<typeof registerIpcHandlers>[0];
 
 let testTmpDir = '';
@@ -86,6 +95,8 @@ beforeEach(() => {
   userDataRef.current = testTmpDir;
   __resetSettingsCache();
   nextDialogResult = { canceled: true, filePaths: [] };
+  // 기본은 unpackaged (dev/e2e) — process.cwd() fallback 허용.
+  electronRef.isPackaged = false;
   registerIpcHandlers(stubApp);
 });
 
@@ -204,28 +215,57 @@ describe('IPC workspace handlers', () => {
   });
 
   describe('app:get-default-workspace', () => {
-    it('falls back to process.cwd() when no settings', async () => {
-      const result = await call<Result<{ root: string; name: string }>>(
+    it('unpackaged + no settings → falls back to process.cwd() (dev convenience)', async () => {
+      electronRef.isPackaged = false;
+      const result = await call<Result<{ root: string; name: string } | null>>(
         'app:get-default-workspace'
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
+      expect(result.value).not.toBeNull();
+      if (result.value === null) return;
       expect(result.value.root).toBe(process.cwd());
     });
 
-    it('prefers settings.workspace_root over process.cwd()', async () => {
+    it('packaged + no settings → returns null (forces user to pick a workspace)', async () => {
+      // Phase 3 audit (HIGH): packaged 빌드는 process.cwd() 가 OS 기본 경로
+      // (Program Files / Applications) — 사용자 의도와 무관. null 반환으로
+      // renderer 가 picker 강제하도록 한다.
+      electronRef.isPackaged = true;
+      const result = await call<Result<{ root: string; name: string } | null>>(
+        'app:get-default-workspace'
+      );
+      expect(result).toEqual({ ok: true, value: null });
+    });
+
+    it('packaged + settings present → returns saved workspace', async () => {
+      electronRef.isPackaged = true;
       writeFileSync(
         join(testTmpDir, 'settings.json'),
         JSON.stringify({ workspace_root: '/picked/path', workspace_name: 'picked' })
       );
       __resetSettingsCache();
-      const result = await call<Result<{ root: string; name: string }>>(
+      const result = await call<Result<{ root: string; name: string } | null>>(
         'app:get-default-workspace'
       );
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.value.root).toBe('/picked/path');
-      expect(result.value.name).toBe('picked');
+      expect(result.value).toEqual({ root: '/picked/path', name: 'picked' });
+    });
+
+    it('unpackaged + settings present → prefers settings over process.cwd()', async () => {
+      electronRef.isPackaged = false;
+      writeFileSync(
+        join(testTmpDir, 'settings.json'),
+        JSON.stringify({ workspace_root: '/picked/path', workspace_name: 'picked' })
+      );
+      __resetSettingsCache();
+      const result = await call<Result<{ root: string; name: string } | null>>(
+        'app:get-default-workspace'
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toEqual({ root: '/picked/path', name: 'picked' });
     });
   });
 });

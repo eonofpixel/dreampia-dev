@@ -13,6 +13,7 @@
  * MAIN process 전용 — renderer 에서 호출 X (subprocess sandbox 불가).
  */
 
+import { app } from 'electron';
 import type { PermissionLevel } from '@/types';
 import { CliProvider } from './cli/CliProvider';
 import {
@@ -102,8 +103,18 @@ export async function getDefaultProvider(
 }
 
 function shouldAllowMockFallback(): boolean {
+  // 명시적 opt-in — dev/CI/E2E 가 mock 활성화. preview build 디버깅에도 유용.
   if (process.env.DREAMPIA_ALLOW_MOCK_PROVIDER === '1') return true;
-  return process.env.NODE_ENV !== 'production';
+  // app.isPackaged 가 Electron 의 canonical production marker.
+  // packaged build (NSIS/DMG/AppImage) 에서만 true → 그 경우엔 fail-closed.
+  // unpackaged 실행 (npm run dev, e2e 의 dist/main/index.js, vitest) 에선
+  // false → mock 허용.
+  //
+  // 왜 NODE_ENV 가 아닌가: Codex audit 발견 — packaged Electron 은 NODE_ENV 가
+  // 빈 문자열인 경우가 많아 `!== 'production'` 이 true 가 되며 mock 이
+  // 새어나갔다. Mock 에 fallback 하면 사용자는 가짜 응답을 받게 되어 매우 위험.
+  if (app.isPackaged) return false;
+  return true;
 }
 
 function buildNoProviderMessage(model: string, detected: CliDetectionResult): string {

@@ -225,8 +225,12 @@ const api = {
    * App/runtime information that is safe to expose to the renderer.
    */
   app: {
-    getDefaultWorkspace: (): Promise<Result<WorkspaceInfo>> =>
-      ipcRenderer.invoke('app:get-default-workspace') as Promise<Result<WorkspaceInfo>>,
+    /**
+     * Phase 3 audit: packaged build 에서 settings 가 없으면 null 반환.
+     * Renderer 는 null 시 picker / onboarding 으로 안내.
+     */
+    getDefaultWorkspace: (): Promise<Result<WorkspaceInfo | null>> =>
+      ipcRenderer.invoke('app:get-default-workspace') as Promise<Result<WorkspaceInfo | null>>,
   },
 
   /**

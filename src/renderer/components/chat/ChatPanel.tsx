@@ -45,6 +45,11 @@ export interface ChatPanelProps {
   workspaceName?: string;
   /** [폴더 변경] 클릭 시 main 의 dialog.showOpenDialog 호출. */
   onPickWorkspace?: () => void;
+  /**
+   * Phase 3 audit (HIGH) — production 에서 preload script 가 깨져 IPC 가
+   * 누락된 상태. true 면 입력을 disable 하고 명시적 error banner 를 띄운다.
+   */
+  ipcUnavailable?: boolean;
 }
 
 export function ChatPanel({
@@ -55,10 +60,12 @@ export function ChatPanel({
   cliStatus = null,
   workspaceName,
   onPickWorkspace,
+  ipcUnavailable = false,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
       <main className="flex h-full flex-1 flex-col bg-bg-primary">
+        {ipcUnavailable && <IpcUnavailableBanner />}
         <EmptyState />
       </main>
     );
@@ -72,9 +79,34 @@ export function ChatPanel({
         workspaceName={workspaceName}
         onPickWorkspace={onPickWorkspace}
       />
+      {ipcUnavailable && <IpcUnavailableBanner />}
       <MessagesArea turns={session.conversation.turns} />
-      <InputArea onSubmit={onSubmit} isStreaming={isStreaming} onCancel={onCancel} />
+      <InputArea
+        onSubmit={onSubmit}
+        isStreaming={isStreaming}
+        onCancel={onCancel}
+        disabled={ipcUnavailable}
+      />
     </main>
+  );
+}
+
+/**
+ * Production 에서 preload script 로딩 실패 시 표시. 사용자에게 재설치 또는
+ * 재시작을 안내한다. dev/test 에선 MockProvider 로 fallback 되므로 여기에
+ * 도달하지 않는다.
+ */
+function IpcUnavailableBanner(): React.JSX.Element {
+  return (
+    <div
+      role="alert"
+      data-testid="ipc-unavailable-banner"
+      className="border-b border-red-500/30 bg-red-500/10 px-4 py-2 text-xs text-red-300"
+    >
+      <strong>⚠ AI 통신 채널이 비어있습니다.</strong>{' '}
+      앱을 재시작하거나 dev tools 에서 <code>window.dreampia</code> 를 확인하세요.
+      (preload script 또는 IPC 문제)
+    </div>
   );
 }
 
@@ -118,9 +150,15 @@ interface InputAreaProps {
   onSubmit: (text: string) => void;
   isStreaming: boolean;
   onCancel?: () => void;
+  disabled?: boolean;
 }
 
-function InputArea({ onSubmit, isStreaming, onCancel }: InputAreaProps): React.JSX.Element {
+function InputArea({
+  onSubmit,
+  isStreaming,
+  onCancel,
+  disabled = false,
+}: InputAreaProps): React.JSX.Element {
   return (
     <div>
       {isStreaming && (
@@ -135,7 +173,7 @@ function InputArea({ onSubmit, isStreaming, onCancel }: InputAreaProps): React.J
           </button>
         </div>
       )}
-      <ChatInput onSubmit={onSubmit} disabled={isStreaming} />
+      <ChatInput onSubmit={onSubmit} disabled={isStreaming || disabled} />
     </div>
   );
 }

@@ -34,10 +34,24 @@ import { useStreamingTurn } from './hooks/useStreamingTurn';
 import { useSessionStore } from './hooks/useSessionStore';
 import { useWorkspace } from './hooks/useWorkspace';
 
-const FALLBACK_WORKSPACE: WorkspaceInfo = {
-  root: '/',
-  name: 'workspace',
-};
+/**
+ * Renderer-side mock fallback gate.
+ *
+ * Phase 3 audit (HIGH): production 에서 IPC bridge 가 깨졌을 때 MockProvider
+ * 로 silently fallback 하면 사용자에게 가짜 AI 응답을 보여줄 수 있다.
+ * `import.meta.env.DEV` 는 Vite 가 build-time 에 inline 하므로 production
+ * bundle 에선 항상 false → fail-closed.
+ *
+ * E2E 는 production build 의 dist/main 을 띄우므로 DEV=false 지만, 그땐
+ * preload 가 정상 로드되어 hasIpc 가 true 가 되므로 mock fallback 자체가
+ * 필요 없다 — 이 함수를 거치지 않는다. 만약 preload 가 깨지면 e2e 도 정상적
+ * 으로 fail 표시되어야 하고, 그게 의도한 동작이다.
+ */
+function isMockAllowed(): boolean {
+  // Vite 의 `import.meta.env.DEV` 는 production build 시 false 로 inline 된다.
+  // SSR / Node test 환경 (vitest) 에선 DEV 가 undefined 일 수 있어 falsy guard.
+  return Boolean(import.meta.env.DEV);
+}
 
 function createDemoSession(title: string, workspace: WorkspaceInfo): Session {
   const id = newSessionId();
@@ -100,11 +114,20 @@ export function App(): React.JSX.Element {
   // so streaming text_delta events update synchronously.
   const [activeSessionId, setActiveSessionId] = useState<string>('');
   const [activeSession, setActiveSession] = useState<Session | null>(null);
-  const [launchWorkspace, setLaunchWorkspace] = useState<WorkspaceInfo>(FALLBACK_WORKSPACE);
+  // launchWorkspace 는 main 이 보내준 default. packaged 에서 settings 없으면
+  // null 이 반환되므로 nullable. dev/e2e 에선 process.cwd() 가 들어옴.
+  const [launchWorkspace, setLaunchWorkspace] = useState<WorkspaceInfo | null>(null);
+  const [launchWorkspaceLoaded, setLaunchWorkspaceLoaded] = useState(false);
+  // Phase 3 audit (HIGH): picker auto-launch 가 사용자 취소 시 무한루프 방지.
+  const [workspacePickAttempted, setWorkspacePickAttempted] = useState(false);
 
   // 사용자가 picker 로 선택한 워크스페이스 (settings.json 영속). 있으면 우선,
   // 없으면 main 이 보내준 launch workspace (보통 process.cwd()) 로 폴백.
-  const { workspace: pickedWorkspace, pick: pickWorkspace } = useWorkspace();
+  const {
+    workspace: pickedWorkspace,
+    loading: pickedWorkspaceLoading,
+    pick: pickWorkspace,
+  } = useWorkspace();
 
   // When the list changes and we have no selection, pick the first one.
   useEffect(() => {
@@ -133,14 +156,23 @@ export function App(): React.JSX.Element {
   // launch workspace instead of hardcoding a Windows path into new sessions.
   useEffect(() => {
     const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
-    if (appApi === undefined) return;
+    if (appApi === undefined) {
+      // IPC 미존재 (preload 깨짐) — launchWorkspace 는 null 유지. provider 도
+      // null 이 되어 ipcUnavailable banner 가 표시된다.
+      setLaunchWorkspaceLoaded(true);
+      return;
+    }
     let cancelled = false;
     void (async () => {
       try {
         const result = await appApi.getDefaultWorkspace();
-        if (!cancelled && result.ok) setLaunchWorkspace(result.value);
+        if (cancelled) return;
+        // result.value 가 null 일 수 있음 (packaged + settings 없음).
+        if (result.ok) setLaunchWorkspace(result.value);
       } catch {
-        // Keep browser-safe fallback.
+        // Keep null fallback.
+      } finally {
+        if (!cancelled) setLaunchWorkspaceLoaded(true);
       }
     })();
     return () => {
@@ -149,20 +181,41 @@ export function App(): React.JSX.Element {
   }, []);
 
   // 새 세션은 항상 (사용자 선택 > launch) 우선순위로 root 결정.
-  const defaultWorkspace = useMemo<WorkspaceInfo>(() => {
+  // packaged + settings 없음 + 사용자가 picker 로 선택 안함 = null.
+  // null 이면 새 채팅 생성 disabled.
+  const defaultWorkspace = useMemo<WorkspaceInfo | null>(() => {
     if (pickedWorkspace !== null) {
       return { root: pickedWorkspace.path, name: pickedWorkspace.name };
     }
     return launchWorkspace;
   }, [pickedWorkspace, launchWorkspace]);
 
+  // Phase 3 audit (HIGH): packaged 에서 workspace 가 null 이면 자동으로
+  // picker 띄우기. 단 한 번만 시도 — 사용자가 picker 취소하면 onboarding
+  // screen 으로 안내 (무한 루프 방지).
+  const workspaceResolved = launchWorkspaceLoaded && !pickedWorkspaceLoading;
+  useEffect(() => {
+    if (!workspaceResolved) return;
+    if (defaultWorkspace !== null) return;
+    if (workspacePickAttempted) return;
+    setWorkspacePickAttempted(true);
+    void pickWorkspace();
+  }, [workspaceResolved, defaultWorkspace, workspacePickAttempted, pickWorkspace]);
+
   // P1-4: IpcStreamingProvider 가 main 의 ai/start-stream 으로 위임.
-  // window.dreampia.ai 가 없는 환경 (legacy renderer / 오래된 build) 에서는
-  // MockProvider 로 fallback.
-  const provider = useMemo<StreamingProvider>(() => {
+  // window.dreampia.ai 가 없는 환경 (preload script 로딩 실패 / legacy build)
+  // 에서는:
+  //   - dev/test (vite dev / e2e / vitest) → MockProvider 로 빠른 iteration
+  //   - production (packaged build) → null → UI 가 명시적 error banner 표시
+  //
+  // Phase 3 audit (HIGH) — 이전엔 production 에서도 MockProvider 로
+  // silently fallback 했다. 이러면 preload 가 깨졌을 때 사용자에게 가짜
+  // AI 응답을 보여주는 위험이 있다. fail-closed 로 명확히 표시하도록 변경.
+  const provider = useMemo<StreamingProvider | null>(() => {
     const hasIpc = typeof window !== 'undefined' && window.dreampia?.ai !== undefined;
     if (hasIpc) return new IpcStreamingProvider();
-    return new MockProvider({ delayMs: 15 });
+    if (isMockAllowed()) return new MockProvider({ delayMs: 15 });
+    return null;
   }, []);
 
   // CLI 감지 결과 — onMount 한 번 가져와 ChatHeader 에 표시.
@@ -248,16 +301,27 @@ export function App(): React.JSX.Element {
   });
 
   const handleNewChat = useCallback(async (): Promise<void> => {
-    const newSession = createDemoSession(`새 채팅 ${sessions.length + 1}`, defaultWorkspace);
+    // Phase 3 audit (HIGH): workspace 가 없으면 picker 먼저. 사용자가 취소하면
+    // 새 채팅 만들지 않음 — 우연한 process.cwd() 위치를 root 로 쓰지 않도록.
+    let workspace = defaultWorkspace;
+    if (workspace === null) {
+      const picked = await pickWorkspace();
+      if (picked === null) return;
+      workspace = { root: picked.path, name: picked.name };
+    }
+    const newSession = createDemoSession(`새 채팅 ${sessions.length + 1}`, workspace);
     const created = await createSession(newSession);
     if (created !== null) {
       setActiveSessionId(created.id);
     }
-  }, [createSession, defaultWorkspace, sessions.length]);
+  }, [createSession, defaultWorkspace, pickWorkspace, sessions.length]);
 
   const handleSubmitMessage = useCallback(
     async (text: string): Promise<void> => {
       if (activeSession === null || isStreaming) return;
+      // Phase 3 audit (HIGH) — production 에서 IPC bridge 누락 시 fail-closed.
+      // ChatPanel 이 이미 banner 와 input disable 로 표시 중이지만 방어적으로 가드.
+      if (provider === null) return;
 
       const userTurn: Turn = {
         id: newTurnId(),
@@ -296,7 +360,7 @@ export function App(): React.JSX.Element {
         permissionLevel: activeSession.permission.default_level,
       });
     },
-    [activeSession, isStreaming, persistTurn, startStream]
+    [activeSession, isStreaming, persistTurn, startStream, provider]
   );
 
   // Surface IPC errors in the console; UI-level error states come later.
@@ -311,7 +375,18 @@ export function App(): React.JSX.Element {
     () => sessions.map((s) => ({ id: s.id, title: s.title, pinned: s.pinned })),
     [sessions]
   );
-  const projectName = activeSession?.workspace.name ?? defaultWorkspace.name;
+  // Sidebar 의 project name — active session 우선, 없으면 default, 둘 다 없으면
+  // 사용자가 picker 누르도록 안내 placeholder.
+  const projectName =
+    activeSession?.workspace.name ?? defaultWorkspace?.name ?? '폴더 선택 필요';
+
+  // Phase 3 audit fix #4 — ChatHeader 가 표시할 workspace name.
+  // 우선순위: active session 의 workspace.name (실제 메시지가 향하는 폴더) >
+  //          defaultWorkspace.name (새 채팅이 만들어질 폴더).
+  // 이전엔 항상 defaultWorkspace.name 만 보여서 session.workspace 와 drift 가
+  // 났다 (사용자가 picker 로 폴더 바꿔도 기존 session 에는 반영 X).
+  const chatHeaderWorkspaceName =
+    activeSession?.workspace.name ?? defaultWorkspace?.name;
 
   return (
     <ThreePanelLayout
@@ -335,10 +410,11 @@ export function App(): React.JSX.Element {
           isStreaming={isStreaming}
           onCancel={cancelStream}
           cliStatus={cliStatus}
-          workspaceName={defaultWorkspace.name}
+          workspaceName={chatHeaderWorkspaceName}
           onPickWorkspace={() => {
             void pickWorkspace();
           }}
+          ipcUnavailable={provider === null}
         />
       }
       preview={

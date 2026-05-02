@@ -20,7 +20,12 @@ import type {
 import { newTurnId, nowIso } from '@/types';
 
 export interface UseStreamingTurnArgs {
-  provider: StreamingProvider;
+  /**
+   * Streaming provider 또는 null (production 에서 IPC bridge 누락).
+   * null 이면 start() 가 즉시 onError 호출 후 no-op.
+   * Spec: docs/findings/phase3-audit.md (HIGH — fail-closed)
+   */
+  provider: StreamingProvider | null;
   onTurnUpdate: (turn: Turn) => void;
   onComplete: (turn: Turn, toolResultTurn?: Turn) => void;
   onError?: (error: string) => void;
@@ -70,6 +75,15 @@ export function useStreamingTurn({
       permissionLevel?: PermissionLevel;
     }): Promise<void> => {
       if (isStreaming) return;
+      if (provider === null) {
+        // Production 에서 IPC bridge 누락. UI 가 이미 banner 로 표시 중이지만,
+        // 사용자가 강제로 입력해도 silently 무시되지 않도록 onError 호출.
+        onErrorRef.current?.(
+          'AI 통신 채널이 비어있습니다. 앱을 재시작하거나 dev tools 에서 ' +
+            'window.dreampia 를 확인하세요. (preload script 또는 IPC 문제)'
+        );
+        return;
+      }
 
       setIsStreaming(true);
       const controller = new AbortController();
