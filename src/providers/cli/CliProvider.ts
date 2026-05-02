@@ -4,7 +4,7 @@
  * Spec: docs/session/cross-ai-sync.md (P0: CLI 인증 위임)
  *
  * 역할:
- *   - Provider CLI binary 를 spawn 하고 prompt 를 stdin 에 write
+ *   - Provider CLI binary 를 spawn 하고 prompt 를 positional arg 로 전달
  *   - stdout 의 JSONL 청크를 누적 → translate → StreamEvent emit
  *   - stderr 의 에러성 출력 캡처
  *   - close 시 누락된 message_complete 를 누적 텍스트로 합성
@@ -13,7 +13,11 @@
  *   - 반드시 main process 에서만 인스턴스화 (subprocess 는 sandbox 불가)
  *   - shell:false 로 spawn → 인젝션 방지
  *   - AbortSignal 으로 mid-stream 종료 시 SIGTERM 전송
- *   - stdin 은 prompt 후 즉시 end() — CLI 가 EOF 인지 가능
+ *   - stdin 은 즉시 end() — prompt 는 positional arg 로 전달 (stdin X)
+ *
+ * Verified CLI flags (2026-05-02):
+ *   claude: --print --output-format stream-json --bare --verbose --model M "PROMPT"
+ *   codex:  exec --json --skip-git-repo-check --ephemeral --model M "PROMPT"
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -77,7 +81,16 @@ export class CliProvider implements StreamingProvider {
     const ctx = { turnId, model: input.model };
     yield { type: 'message_start', turn_id: turnId, model: input.model };
 
-    const args = this.buildArgs(input);
+    // 마지막 user turn 텍스트를 positional arg 로 전달.
+    const lastUserTurn = [...input.turns].reverse().find((t) => t.role === 'user');
+    const userText = lastUserTurn
+      ? lastUserTurn.content
+          .filter((b) => b.type === 'text')
+          .map((b) => (b as { type: 'text'; text: string }).text)
+          .join('\n')
+      : '';
+
+    const args = this.buildArgs({ model: input.model, prompt: userText });
 
     let child: ChildProcess;
     try {
@@ -92,13 +105,11 @@ export class CliProvider implements StreamingProvider {
       return;
     }
 
-    // 마지막 user turn 텍스트를 stdin 으로 송신 후 EOF.
-    const userText = this.extractLastUserText(input.turns);
+    // prompt 는 args 에 포함 — stdin 에는 아무것도 쓰지 않고 즉시 EOF.
     try {
-      child.stdin?.write(userText + '\n');
       child.stdin?.end();
     } catch {
-      // stdin write 실패 → 어차피 child.error 이벤트로 잡힘
+      // stdin end 실패 — child.error 이벤트로 잡힘
     }
 
     const parser = new JsonlParser();
@@ -228,27 +239,36 @@ export class CliProvider implements StreamingProvider {
 
   // ─────────── helpers ───────────
 
-  private buildArgs(input: {
-    model: string;
-    config?: Record<string, unknown>;
-  }): string[] {
-    const args = ['--model', input.model, '--format', 'json-stream'];
+  private buildArgs(input: { model: string; prompt: string }): string[] {
+    if (this.opts.provider === 'claude') {
+      const args = [
+        '--print',
+        '--output-format',
+        'stream-json',
+        '--bare',
+        '--verbose',
+        '--model',
+        input.model,
+      ];
+      if (this.opts.extraArgs !== undefined && this.opts.extraArgs.length > 0) {
+        args.push(...this.opts.extraArgs);
+      }
+      args.push(input.prompt); // positional prompt arg (must be last)
+      return args;
+    }
+    // codex
+    const args = [
+      'exec',
+      '--json',
+      '--skip-git-repo-check',
+      '--ephemeral',
+      '--model',
+      input.model,
+    ];
     if (this.opts.extraArgs !== undefined && this.opts.extraArgs.length > 0) {
       args.push(...this.opts.extraArgs);
     }
+    args.push(input.prompt); // positional prompt arg (must be last)
     return args;
-  }
-
-  private extractLastUserText(turns: Turn[]): string {
-    for (let i = turns.length - 1; i >= 0; i -= 1) {
-      const t = turns[i];
-      if (t !== undefined && t.role === 'user') {
-        return t.content
-          .filter((b) => b.type === 'text')
-          .map((b) => (b as { type: 'text'; text: string }).text)
-          .join('\n');
-      }
-    }
-    return '';
   }
 }

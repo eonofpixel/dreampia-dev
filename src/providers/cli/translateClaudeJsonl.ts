@@ -1,24 +1,26 @@
 /**
  * Claude CLI JSONL → StreamEvent 변환.
  *
- * Spec: docs/session/cross-ai-sync.md (P0 — CLI 인증 위임)
+ * Verified against real `claude --print --output-format stream-json --bare --verbose` output.
+ * Captured 2026-05-02. CLI version: 2.1.123 (Claude Code).
  *
- * 주의 — best-effort 변환:
- *   실제 `claude --format json-stream` (또는 `--output-format stream-json`)
- *   출력 형태를 직접 검증할 수 없는 환경에서 작성된 가장 그럴듯한 형태.
- *   Anthropic SSE 와 anthropic-cli source 를 참고한 주요 이벤트:
+ * Sample events (one of each type observed):
  *
- *     { type: 'message_start', message: {...} }
- *     { type: 'content_block_start', index, content_block }
- *     { type: 'content_block_delta', delta: { type: 'text_delta', text: '...' } }
- *     { type: 'tool_use', id, name, input }
- *     { type: 'message_stop' }   또는   { type: 'message_complete' }
- *     { type: 'error', error: { message } }
+ * // 1. Init (first line — metadata only, emit nothing)
+ * {"type":"system","subtype":"init","cwd":"...","session_id":"43e8...","tools":["Bash","Edit",...],"mcp_servers":[],"model":"claude-haiku-4-5-20251001","permissionMode":"default","slash_commands":[...],"apiKeySource":"none","claude_code_version":"2.1.123"}
  *
- * 실제 CLI 출력과 다를 경우 이 함수만 갱신하면 됨.
- * 알 수 없는 이벤트는 빈 배열 반환 (silent skip).
+ * // 2. Assistant message (one or more per turn)
+ * {"type":"assistant","message":{"id":"dddb...","model":"<synthetic>","role":"assistant","stop_reason":"stop_sequence","content":[{"type":"text","text":"Not logged in · Please run /login"}],"usage":{...},"context_management":null},"parent_tool_use_id":null,"session_id":"43e8...","uuid":"907a...","error":"authentication_failed"}
+ *
+ * // 3. Result (always last)
+ * {"type":"result","subtype":"success","is_error":true,"api_error_status":null,"duration_ms":143,"duration_api_ms":0,"num_turns":1,"result":"Not logged in · Please run /login","stop_reason":"stop_sequence","session_id":"43e8...","total_cost_usd":0,"usage":{...},"modelUsage":{},"permission_denials":[],"terminal_reason":"completed","fast_mode_state":"off","uuid":"4912..."}
+ *
+ * // Hook events (--bare disables, but captured without --bare):
+ * {"type":"system","subtype":"hook_started","hook_id":"...","hook_name":"SessionStart:startup",...}
+ * {"type":"system","subtype":"hook_response","hook_id":"...","output":"...",...}
  */
 
+import type { ToolCallId } from '@/types';
 import type { StreamEvent } from '../types';
 
 interface TranslateContext {
@@ -34,71 +36,56 @@ export function translateClaudeJsonl(
   const obj = parsed as Record<string, unknown>;
   const evType = typeof obj.type === 'string' ? obj.type : '';
 
-  // ── content_block_delta { delta: { type:'text_delta', text } } ──
-  if (evType === 'content_block_delta') {
-    const delta = obj.delta as Record<string, unknown> | undefined;
-    if (
-      delta !== undefined &&
-      delta.type === 'text_delta' &&
-      typeof delta.text === 'string'
-    ) {
-      return [{ type: 'text_delta', text: delta.text }];
+  // ── system: init / hook_* — emit nothing (metadata / hooks) ──
+  if (evType === 'system') {
+    return [];
+  }
+
+  // ── assistant — iterate message.content blocks ──
+  if (evType === 'assistant') {
+    const message = obj.message as Record<string, unknown> | undefined;
+    if (message === undefined || message === null) return [];
+    const content = message.content;
+    if (!Array.isArray(content)) return [];
+
+    const out: StreamEvent[] = [];
+    for (const block of content) {
+      if (typeof block !== 'object' || block === null) continue;
+      const b = block as Record<string, unknown>;
+      const bType = typeof b.type === 'string' ? b.type : '';
+
+      if (bType === 'text' && typeof b.text === 'string') {
+        out.push({ type: 'text_delta', text: b.text });
+      } else if (bType === 'tool_use') {
+        const id = typeof b.id === 'string' ? b.id : '';
+        const name = typeof b.name === 'string' ? b.name : '';
+        // Claude convention: underscore → dot (e.g. read_file → read.file)
+        const tool_id = name.replace(/_/g, '.');
+        out.push({
+          type: 'tool_call_start',
+          tool_call: { id, tool_id, input: b.input },
+        });
+        out.push({
+          type: 'tool_call_complete',
+          tool_call: { id: id as ToolCallId, tool_id, input: b.input },
+        });
+      }
     }
-    if (
-      delta !== undefined &&
-      delta.type === 'input_json_delta' &&
-      typeof delta.partial_json === 'string' &&
-      typeof obj.tool_call_id === 'string'
-    ) {
-      return [
-        {
-          type: 'tool_call_input_delta',
-          tool_call_id: obj.tool_call_id,
-          partial_input: delta.partial_json,
-        },
-      ];
+    return out;
+  }
+
+  // ── result — only emit error when is_error === true ──
+  // CliProvider synthesizes message_complete from accumulated deltas.
+  if (evType === 'result') {
+    const isError = obj.is_error === true;
+    if (isError) {
+      const resultText =
+        typeof obj.result === 'string' ? obj.result : 'unknown error';
+      return [{ type: 'error', error: resultText }];
     }
     return [];
   }
 
-  // ── tool_use {id, name, input} ──
-  if (evType === 'tool_use') {
-    const id = typeof obj.id === 'string' ? obj.id : '';
-    const name = typeof obj.name === 'string' ? obj.name : '';
-    // Claude convention: tool_id 는 dot 구분자 (read_file → read.file 같은 매핑은
-    // 호출 측 책임. 여기서는 underscore → dot 만 단순 변환).
-    const tool_id = name.replace(/_/g, '.');
-    return [
-      {
-        type: 'tool_call_start',
-        tool_call: {
-          id,
-          tool_id,
-          input: obj.input,
-        },
-      },
-    ];
-  }
-
-  // ── message_stop / message_complete ──
-  // CliProvider 가 누적된 text 로 finalTurn 합성하므로 여기선 빈 배열.
-  if (evType === 'message_stop' || evType === 'message_complete') {
-    return [];
-  }
-
-  // ── error ──
-  if (evType === 'error') {
-    const err = obj.error as Record<string, unknown> | string | undefined;
-    let message = 'unknown error';
-    if (typeof err === 'string') {
-      message = err;
-    } else if (err !== undefined && err !== null) {
-      const errObj = err as Record<string, unknown>;
-      if (typeof errObj.message === 'string') message = errObj.message;
-    }
-    return [{ type: 'error', error: message }];
-  }
-
-  // ── 그 외 (message_start / content_block_start / ping 등) — 무시 ──
+  // ── 그 외 unknown event type — silent skip ──
   return [];
 }
