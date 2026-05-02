@@ -67,7 +67,8 @@ describe('SessionStore', () => {
   describe('migrations', () => {
     it('apply on a fresh DB and report schema_version = LATEST', () => {
       expect(store.getSchemaVersion()).toBe(LATEST_SCHEMA_VERSION);
-      expect(store.getSchemaVersion()).toBe(1);
+      // Bumped from 1 → 2 in SS-5 (002_locks.sql).
+      expect(store.getSchemaVersion()).toBe(2);
     });
 
     it('are idempotent — re-opening the same DB does not reapply', () => {
@@ -76,7 +77,19 @@ describe('SessionStore', () => {
       // verify the constructor itself is idempotent: calling migrate via
       // a second SessionStore on the same path is what real apps do.
       // For :memory: we can only assert the version stays stable.
-      expect(store.getSchemaVersion()).toBe(1);
+      expect(store.getSchemaVersion()).toBe(2);
+    });
+
+    it('creates session_locks table at v2 (SS-5)', () => {
+      const dbAccessor = store as unknown as {
+        db: { prepare: (s: string) => { get: (...a: unknown[]) => unknown } };
+      };
+      const row = dbAccessor.db
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type='table' AND name='session_locks'`
+        )
+        .get() as { name: string } | undefined;
+      expect(row?.name).toBe('session_locks');
     });
   });
 
@@ -658,7 +671,7 @@ describe('SessionStore', () => {
       fileStore = new SessionStore(dbPath);
       const original = loadFixture('02-single-turn.json');
       fileStore.createSession(original);
-      expect(fileStore.getSchemaVersion()).toBe(1);
+      expect(fileStore.getSchemaVersion()).toBe(2);
       fileStore.close();
 
       // DB file must exist on disk
@@ -666,7 +679,7 @@ describe('SessionStore', () => {
 
       // Reopen and verify session round-trips
       fileStore = new SessionStore(dbPath);
-      expect(fileStore.getSchemaVersion()).toBe(1); // migration is idempotent
+      expect(fileStore.getSchemaVersion()).toBe(2); // migration is idempotent
       const reloaded = fileStore.getSession(original.id);
       expect(reloaded).toEqual(original);
     });

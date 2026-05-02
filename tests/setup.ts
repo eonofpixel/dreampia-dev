@@ -30,8 +30,20 @@ interface MockSessionMeta {
   updated_at: string;
 }
 
+interface MockSessionLock {
+  session_id: string;
+  leader_window_id: string;
+  leader_pid: number;
+  acquired_at: string;
+  heartbeat_at: string;
+  ttl_seconds: number;
+}
+
 const mockStore = {
   sessions: new Map<string, Session>(),
+  locks: new Map<string, MockSessionLock>(),
+  /** This window's id (mocked). Tests can override to simulate other windows. */
+  windowId: 'test-window-1',
 };
 
 /**
@@ -40,6 +52,8 @@ const mockStore = {
  * Usage:
  *   import { __mockStore } from '../setup';
  *   __mockStore.sessions.set(s.id, s);
+ *   __mockStore.locks.set(id, { ... });
+ *   __mockStore.windowId = 'window-A';
  */
 export const __mockStore = mockStore;
 
@@ -63,6 +77,8 @@ function toMeta(s: Session): MockSessionMeta {
 
 beforeEach(() => {
   mockStore.sessions.clear();
+  mockStore.locks.clear();
+  mockStore.windowId = 'test-window-1';
 });
 
 afterEach(() => {
@@ -150,6 +166,109 @@ if (typeof window !== 'undefined') {
           mockStore.sessions.delete(id);
           return { ok: true, value: undefined };
         }),
+      },
+
+      // Mock for SS-5 multi-window leader election. Mirrors the production
+      // LeaderElection semantics in-memory: PRIMARY KEY on session_id,
+      // takeover when heartbeat_at is older than (now - ttl_seconds), etc.
+      lock: {
+        acquire: vi.fn(
+          async (
+            sessionId: string
+          ): Promise<
+            Result<{ acquired: boolean; leader: MockSessionLock | null }>
+          > => {
+            const now = new Date().toISOString();
+            const existing = mockStore.locks.get(sessionId);
+            const ttl = existing?.ttl_seconds ?? 30;
+            const expiry = new Date(Date.now() - ttl * 1000).toISOString();
+
+            if (existing) {
+              if (existing.leader_window_id === mockStore.windowId) {
+                existing.heartbeat_at = now;
+                return {
+                  ok: true,
+                  value: { acquired: true, leader: existing },
+                };
+              }
+              if (existing.heartbeat_at < expiry) {
+                const taken: MockSessionLock = {
+                  session_id: sessionId,
+                  leader_window_id: mockStore.windowId,
+                  leader_pid: 12345,
+                  acquired_at: now,
+                  heartbeat_at: now,
+                  ttl_seconds: ttl,
+                };
+                mockStore.locks.set(sessionId, taken);
+                return {
+                  ok: true,
+                  value: { acquired: true, leader: taken },
+                };
+              }
+              return {
+                ok: true,
+                value: { acquired: false, leader: existing },
+              };
+            }
+            const created: MockSessionLock = {
+              session_id: sessionId,
+              leader_window_id: mockStore.windowId,
+              leader_pid: 12345,
+              acquired_at: now,
+              heartbeat_at: now,
+              ttl_seconds: 30,
+            };
+            mockStore.locks.set(sessionId, created);
+            return {
+              ok: true,
+              value: { acquired: true, leader: created },
+            };
+          }
+        ),
+
+        release: vi.fn(async (sessionId: string): Promise<Result<void>> => {
+          const existing = mockStore.locks.get(sessionId);
+          if (existing && existing.leader_window_id === mockStore.windowId) {
+            mockStore.locks.delete(sessionId);
+          }
+          return { ok: true, value: undefined };
+        }),
+
+        get: vi.fn(
+          async (
+            sessionId: string
+          ): Promise<Result<MockSessionLock | null>> => ({
+            ok: true,
+            value: mockStore.locks.get(sessionId) ?? null,
+          })
+        ),
+
+        heartbeat: vi.fn(
+          async (sessionId: string): Promise<Result<boolean>> => {
+            const existing = mockStore.locks.get(sessionId);
+            if (
+              !existing ||
+              existing.leader_window_id !== mockStore.windowId
+            ) {
+              return { ok: true, value: false };
+            }
+            existing.heartbeat_at = new Date().toISOString();
+            return { ok: true, value: true };
+          }
+        ),
+
+        isLeader: vi.fn(
+          async (sessionId: string): Promise<Result<boolean>> => {
+            const existing = mockStore.locks.get(sessionId);
+            return {
+              ok: true,
+              value:
+                existing !== undefined &&
+                existing.leader_window_id === mockStore.windowId,
+            };
+          }
+        ),
       },
     },
   });

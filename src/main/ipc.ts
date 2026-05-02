@@ -21,7 +21,12 @@ import {
   type SessionId,
   type Turn,
 } from '@/types';
-import type { SessionStore, SessionMeta } from '@/storage';
+import type {
+  LeaderElection,
+  SessionLock,
+  SessionMeta,
+  SessionStore,
+} from '@/storage';
 import type { Result, SessionMetaPatch } from './types';
 
 export type { Result, SessionMetaPatch } from './types';
@@ -79,10 +84,14 @@ function fail(err: unknown): { ok: false; error: string } {
  * @param store - Optional SessionStore. When omitted, only `app:*` handlers
  *                are registered. This keeps the module testable without
  *                booting an Electron app or opening a SQLite file.
+ * @param election - Optional LeaderElection. When omitted, `lock/*` handlers
+ *                   are not registered. Tests that don't exercise locks can
+ *                   skip it; production always passes one.
  */
 export function registerIpcHandlers(
   electronApp: App = app,
-  store?: SessionStore
+  store?: SessionStore,
+  election?: LeaderElection
 ): void {
   ipcMain.handle('app:get-version', (): AppInfo => {
     return {
@@ -173,6 +182,87 @@ export function registerIpcHandlers(
         }
         store.deleteSession(sessionId as SessionId);
         return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  if (!election) return;
+
+  // ── lock/* — multi-window leader election ───────────────────
+  // Spec: docs/session/multi-window.md
+
+  ipcMain.handle(
+    'lock/acquire',
+    (
+      _evt,
+      sessionId: unknown
+    ): Result<{ acquired: boolean; leader: SessionLock | null }> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        const acquired = election.acquireLeadership(sessionId as SessionId);
+        const leader = election.getLeader(sessionId as SessionId);
+        return ok({ acquired, leader });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'lock/release',
+    (_evt, sessionId: unknown): Result<void> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        election.releaseLeadership(sessionId as SessionId);
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'lock/get',
+    (_evt, sessionId: unknown): Result<SessionLock | null> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        return ok(election.getLeader(sessionId as SessionId));
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'lock/heartbeat',
+    (_evt, sessionId: unknown): Result<boolean> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        return ok(election.heartbeat(sessionId as SessionId));
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'lock/is-leader',
+    (_evt, sessionId: unknown): Result<boolean> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        return ok(election.isLeader(sessionId as SessionId));
       } catch (err) {
         return fail(err);
       }

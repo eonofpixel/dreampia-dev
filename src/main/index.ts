@@ -7,9 +7,10 @@
 
 import { app, BrowserWindow, shell } from 'electron';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { registerIpcHandlers } from './ipc';
-import { SessionStore } from '@/storage';
+import { LeaderElection, SessionStore } from '@/storage';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -21,6 +22,7 @@ app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
 
 let mainWindow: BrowserWindow | null = null;
 let sessionStore: SessionStore | null = null;
+let leaderElection: LeaderElection | null = null;
 
 function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -86,7 +88,17 @@ app.whenReady().then(() => {
   const dbPath = path.join(app.getPath('userData'), 'sessions.sqlite');
   sessionStore = new SessionStore(dbPath);
 
-  registerIpcHandlers(app, sessionStore);
+  // Multi-window leader election (SS-5). Each app launch generates a unique
+  // window_id; in Phase 1 there is only one main process, so all
+  // BrowserWindows share this election instance. Phase 2 may split per-window.
+  // Spec: docs/session/multi-window.md
+  leaderElection = new LeaderElection(sessionStore.getDb(), {
+    window_id: randomUUID(),
+    heartbeat_interval_ms: 5000,
+    ttl_seconds: 30,
+  });
+
+  registerIpcHandlers(app, sessionStore, leaderElection);
   mainWindow = createMainWindow();
 
   app.on('activate', () => {
@@ -105,7 +117,11 @@ app.on('window-all-closed', () => {
 });
 
 // Close DB on quit (flush WAL, release file handle).
+// Order matters: shutdown election first (releases held locks via DB writes)
+// then close the DB.
 app.on('before-quit', () => {
+  leaderElection?.shutdown();
+  leaderElection = null;
   sessionStore?.close();
   sessionStore = null;
 });

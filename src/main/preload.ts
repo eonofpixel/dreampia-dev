@@ -31,6 +31,18 @@ interface SessionMetaShape {
   updated_at: string;
 }
 
+// SessionLock shape mirrored from `@/storage/LeaderElection.ts`. Inlined here
+// so this preload script stays free of the better-sqlite3 import chain.
+// Keep in sync with `LeaderElection.SessionLock`.
+interface SessionLockShape {
+  session_id: SessionId;
+  leader_window_id: string;
+  leader_pid: number;
+  acquired_at: string;
+  heartbeat_at: string;
+  ttl_seconds: number;
+}
+
 // Whitelist of IPC channels (security)
 const ALLOWED_INVOKE_CHANNELS = [
   'app:get-version',
@@ -41,6 +53,11 @@ const ALLOWED_INVOKE_CHANNELS = [
   'session/append-turn',
   'session/update-meta',
   'session/delete',
+  'lock/acquire',
+  'lock/release',
+  'lock/get',
+  'lock/heartbeat',
+  'lock/is-leader',
 ] as const;
 
 const ALLOWED_RECEIVE_CHANNELS = [
@@ -105,6 +122,44 @@ const api = {
 
     delete: (id: SessionId): Promise<Result<void>> =>
       ipcRenderer.invoke('session/delete', id) as Promise<Result<void>>,
+  },
+
+  /**
+   * Multi-window leader election (SS-5).
+   *
+   * Spec: docs/session/multi-window.md
+   *
+   * `acquire` returns whether THIS window is now leader plus the current
+   * leader info. `isLeader` is computed in main (which knows the window_id);
+   * the renderer never sees its own window_id directly.
+   */
+  lock: {
+    acquire: (
+      sessionId: SessionId
+    ): Promise<
+      Result<{ acquired: boolean; leader: SessionLockShape | null }>
+    > =>
+      ipcRenderer.invoke('lock/acquire', sessionId) as Promise<
+        Result<{ acquired: boolean; leader: SessionLockShape | null }>
+      >,
+
+    release: (sessionId: SessionId): Promise<Result<void>> =>
+      ipcRenderer.invoke('lock/release', sessionId) as Promise<Result<void>>,
+
+    get: (sessionId: SessionId): Promise<Result<SessionLockShape | null>> =>
+      ipcRenderer.invoke('lock/get', sessionId) as Promise<
+        Result<SessionLockShape | null>
+      >,
+
+    heartbeat: (sessionId: SessionId): Promise<Result<boolean>> =>
+      ipcRenderer.invoke('lock/heartbeat', sessionId) as Promise<
+        Result<boolean>
+      >,
+
+    isLeader: (sessionId: SessionId): Promise<Result<boolean>> =>
+      ipcRenderer.invoke('lock/is-leader', sessionId) as Promise<
+        Result<boolean>
+      >,
   },
 };
 

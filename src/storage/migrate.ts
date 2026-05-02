@@ -34,6 +34,7 @@ function readSql(file: string): string {
 /** Ordered list of migrations. Future versions append here. */
 const MIGRATIONS: readonly Migration[] = [
   { version: 1, description: 'initial schema', up: readSql('001_init.sql') },
+  { version: 2, description: 'session_locks for multi-window leader election', up: readSql('002_locks.sql') },
 ] as const;
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

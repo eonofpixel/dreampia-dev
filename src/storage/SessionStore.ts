@@ -350,6 +350,22 @@ export class SessionStore {
     return getSchemaVersionImpl(this.db);
   }
 
+  /**
+   * Return the underlying better-sqlite3 handle.
+   *
+   * For advanced use only — currently the LeaderElection class needs to share
+   * the same connection so its lock writes participate in the same WAL stream
+   * and FK pragma. Callers MUST NOT close the handle from outside; use
+   * `SessionStore.close()` instead.
+   *
+   * NOTE: this leaks an internal abstraction in service of pragmatism.
+   * A future refactor could replace this with composition (LeaderElection
+   * owned by SessionStore) once the IPC layer matures.
+   */
+  getDb(): DatabaseT {
+    return this.db;
+  }
+
   // ────────────────────────────────────────────────────────────
   // Public API — write
   // ────────────────────────────────────────────────────────────
