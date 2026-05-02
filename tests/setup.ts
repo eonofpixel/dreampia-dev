@@ -25,3 +25,8 @@ if (typeof window !== 'undefined') {
     },
   });
 }
+
+// Mock scrollIntoView for jsdom (not implemented in jsdom by default)
+if (typeof window !== 'undefined') {
+  window.HTMLElement.prototype.scrollIntoView = function () {};
+}

@@ -2,6 +2,7 @@
  * App.tsx — Main React component
  *
  * Day 6: 3-패널 layout (F-013) + ChatInput (IME-safe).
+ * Day 7: MockProvider streaming wire-through (P0 final).
  *
  * Spec: docs/design/layout/3panel.md, docs/ia/chat-flow.md
  */
@@ -21,11 +22,13 @@ import {
   type Session,
   type Turn,
 } from '@/types';
+import { MockProvider } from '@/providers';
+import { useStreamingTurn } from './hooks/useStreamingTurn';
 
 function createDemoSession(title: string): Session {
   const id = newSessionId();
   const now = nowIso();
-  const workspaceId = workspaceIdFor('C:\\Dev\\dreampia-dev');
+  const workspaceId = workspaceIdFor('C:\Dev\dreampia-dev');
 
   return SessionSchema.parse({
     id,
@@ -44,7 +47,7 @@ function createDemoSession(title: string): Session {
       current_mode: 'standard',
     },
     workspace: {
-      root: 'C:\\Dev\\dreampia-dev',
+      root: 'C:\Dev\dreampia-dev',
       name: 'dreampia-dev',
       worktrees: [],
       recent_files: [],
@@ -71,7 +74,6 @@ function createDemoSession(title: string): Session {
 }
 
 export function App(): React.JSX.Element {
-  // Day 6: 메모리 상 세션 (Phase 1 후반에 SessionStore 로 영구화)
   const [sessions, setSessions] = useState<Session[]>(() => [
     { ...createDemoSession('Day 6 layout 데모'), pinned: true },
     createDemoSession('테스트 세션 2'),
@@ -85,6 +87,38 @@ export function App(): React.JSX.Element {
     [sessions, activeSessionId]
   );
 
+  // MockProvider: 15ms delay 로 글자 단위 streaming
+  const provider = useMemo(() => new MockProvider({ delayMs: 15 }), []);
+
+  const { isStreaming, start: startStream, cancel: cancelStream } = useStreamingTurn({
+    provider,
+    onTurnUpdate: (turn) => {
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== activeSessionId) return s;
+          const turns = [...s.conversation.turns];
+          const idx = turns.findIndex((t) => t.id === turn.id);
+          if (idx >= 0) {
+            turns[idx] = turn;
+          } else {
+            turns.push(turn);
+          }
+          return {
+            ...s,
+            updated_at: nowIso(),
+            conversation: { ...s.conversation, turns },
+          };
+        })
+      );
+    },
+    onComplete: (_turn) => {
+      // onTurnUpdate 가 마지막 이벤트(message_complete)도 처리하므로 추가 작업 없음
+    },
+    onError: (error) => {
+      console.error('[ChatStreaming] error:', error);
+    },
+  });
+
   const handleNewChat = (): void => {
     const newSession = createDemoSession(`새 채팅 ${sessions.length + 1}`);
     setSessions([...sessions, newSession]);
@@ -92,9 +126,9 @@ export function App(): React.JSX.Element {
   };
 
   const handleSubmitMessage = (text: string): void => {
-    if (!activeSession) return;
+    if (!activeSession || isStreaming) return;
 
-    const newTurn: Turn = {
+    const userTurn: Turn = {
       id: newTurnId(),
       role: 'user',
       timestamp: nowIso(),
@@ -110,12 +144,17 @@ export function App(): React.JSX.Element {
               updated_at: nowIso(),
               conversation: {
                 ...s.conversation,
-                turns: [...s.conversation.turns, newTurn],
+                turns: [...s.conversation.turns, userTurn],
               },
             }
           : s
       )
     );
+
+    void startStream({
+      turns: [...activeSession.conversation.turns, userTurn],
+      model: activeSession.conversation.current_model,
+    });
   };
 
   return (
@@ -128,7 +167,14 @@ export function App(): React.JSX.Element {
           onNewChat={handleNewChat}
         />
       }
-      chat={<ChatPanel session={activeSession} onSubmit={handleSubmitMessage} />}
+      chat={
+        <ChatPanel
+          session={activeSession}
+          onSubmit={handleSubmitMessage}
+          isStreaming={isStreaming}
+          onCancel={cancelStream}
+        />
+      }
       preview={<PreviewPanel browser={activeSession?.browser ?? null} />}
     />
   );
