@@ -195,4 +195,89 @@ describe('getDefaultProvider', () => {
     expect(result.source).toBe('claude-cli');
     expect(result.provider).toBeInstanceOf(CliProvider);
   });
+
+  // ────────────────────────────────────────────────────────────
+  // v0.3.0 — userDefaultProvider override (wizard / settings 선택)
+  // ────────────────────────────────────────────────────────────
+
+  it('userDefaultProvider=claude overrides codex model when claude detected', async () => {
+    // codex 모델 prefix 지만 사용자가 'claude' 강제 → claude-cli 선택.
+    mockDetect.mockResolvedValue({
+      claude: { path: '/fake/claude', version: '1.0.0' },
+      codex: { path: '/fake/codex', version: '0.5.0' },
+    });
+    const result = await getDefaultProvider(
+      'gpt-5.5',
+      undefined,
+      undefined,
+      undefined,
+      'claude'
+    );
+    expect(result.source).toBe('claude-cli');
+    expect((result.provider as CliProvider).provider).toBe('claude');
+  });
+
+  it('userDefaultProvider=codex overrides claude model when codex detected', async () => {
+    mockDetect.mockResolvedValue({
+      claude: { path: '/fake/claude', version: '1.0.0' },
+      codex: { path: '/fake/codex', version: '0.5.0' },
+    });
+    const result = await getDefaultProvider(
+      'claude-3.5-sonnet',
+      undefined,
+      undefined,
+      undefined,
+      'codex'
+    );
+    expect(result.source).toBe('codex-cli');
+    expect((result.provider as CliProvider).provider).toBe('codex');
+  });
+
+  it('userDefaultProvider=mock forces MockProvider when allowed', async () => {
+    mockDetect.mockResolvedValue({
+      claude: { path: '/fake/claude', version: '1.0.0' },
+      codex: null,
+    });
+    const result = await getDefaultProvider(
+      'claude-3.5-sonnet',
+      undefined,
+      undefined,
+      undefined,
+      'mock'
+    );
+    expect(result.source).toBe('mock');
+    expect(result.provider).toBeInstanceOf(MockProvider);
+  });
+
+  it('userDefaultProvider=auto falls through to model-prefix routing', async () => {
+    mockDetect.mockResolvedValue({
+      claude: { path: '/fake/claude', version: '1.0.0' },
+      codex: null,
+    });
+    const result = await getDefaultProvider(
+      'claude-3.5-sonnet',
+      undefined,
+      undefined,
+      undefined,
+      'auto'
+    );
+    expect(result.source).toBe('claude-cli');
+  });
+
+  it('userDefaultProvider=claude but claude not detected falls back to model-prefix routing', async () => {
+    // 사용자 명시 'claude' but CLI 미감지 → silent 실패 대신 model-prefix routing.
+    // 이 경우 codex-cli detected + codex model → codex-cli 선택.
+    mockDetect.mockResolvedValue({
+      claude: null,
+      codex: { path: '/fake/codex', version: '0.5.0' },
+    });
+    const result = await getDefaultProvider(
+      'gpt-5.5',
+      undefined,
+      undefined,
+      undefined,
+      'claude'
+    );
+    expect(result.source).toBe('codex-cli');
+  });
 });

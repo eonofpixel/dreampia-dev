@@ -21,7 +21,24 @@
 import { app } from 'electron';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { McpServerConfigSchema, type McpServerConfig } from '@/types';
+import {
+  McpServerConfigSchema,
+  PermissionLevelSchema,
+  type McpServerConfig,
+  type PermissionLevel,
+} from '@/types';
+
+/**
+ * v0.3.0 — 사용자가 onboarding wizard 또는 설정에서 선택할 수 있는 기본 provider.
+ * 'auto' (default) → routing.ts 의 model-prefix 기반 자동 선택.
+ * 그 외 명시 선택 시 auto.ts 의 routing 을 override (단 CLI 가 감지된 경우만).
+ */
+export const DEFAULT_PROVIDER_VALUES = ['auto', 'claude', 'codex', 'mock'] as const;
+export type DefaultProviderChoice = (typeof DEFAULT_PROVIDER_VALUES)[number];
+
+function isDefaultProviderChoice(v: unknown): v is DefaultProviderChoice {
+  return typeof v === 'string' && (DEFAULT_PROVIDER_VALUES as readonly string[]).includes(v);
+}
 
 export interface AppSettings {
   /** 마지막으로 선택한 작업 폴더 절대 경로. */
@@ -39,6 +56,18 @@ export interface AppSettings {
    * 부팅 시 McpManager.loadFromSettings() 가 enabled=true 인 항목만 spawn.
    */
   mcp_servers?: McpServerConfig[];
+  /**
+   * v0.3.0 — 사용자가 wizard / 설정에서 선택한 기본 provider.
+   *   undefined / 'auto' → 자동 (model prefix 기반)
+   *   'claude' / 'codex'  → CLI 감지 시 강제 사용
+   *   'mock'              → MockProvider 사용 (개발/테스트 옵트인)
+   */
+  default_provider?: DefaultProviderChoice;
+  /**
+   * v0.3.0 — 새 세션이 만들어질 때 사용할 기본 permission level.
+   * 미지정 시 'workspace_write' (codebase 의 기존 default).
+   */
+  default_permission_level?: PermissionLevel;
 }
 
 let cached: AppSettings | null = null;
@@ -81,6 +110,16 @@ export function readSettings(): AppSettings {
           // 손상된 항목은 silent drop — 다음 write 시 정상 항목만 남는다.
         }
         next.mcp_servers = valid;
+      }
+      // v0.3.0 — default_provider / default_permission_level. 알 수 없는 값은
+      // silent drop (undefined 로 fallback) — corrupt 한 값이 전체 기능을 막지
+      // 않도록.
+      if (isDefaultProviderChoice(obj['default_provider'])) {
+        next.default_provider = obj['default_provider'];
+      }
+      const dplResult = PermissionLevelSchema.safeParse(obj['default_permission_level']);
+      if (dplResult.success) {
+        next.default_permission_level = dplResult.data;
       }
       cached = next;
     } else {

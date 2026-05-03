@@ -23,8 +23,80 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, X, Folder, FolderOpen, Sparkles, Terminal, KeyRound } from 'lucide-react';
+import {
+  Check,
+  X,
+  Folder,
+  FolderOpen,
+  Sparkles,
+  Terminal,
+  KeyRound,
+  ShieldCheck,
+} from 'lucide-react';
 import type { CliInfoShape } from '../chat/ChatPanel';
+import { PERMISSION_LEVEL_LABELS_KO, type PermissionLevel } from '@/types';
+
+/**
+ * v0.3.0 — wizard step 3 의 provider selector 옵션.
+ * 'auto' 는 model-prefix 기반 routing (default).
+ * 'mock' 은 dev/test 옵트인 — 일반 사용자 헷갈림 방지를 위해 라벨에 "(개발용)" 표기.
+ */
+type DefaultProviderChoice = 'auto' | 'claude' | 'codex' | 'mock';
+
+interface ProviderOption {
+  value: DefaultProviderChoice;
+  label: string;
+  hint: string;
+  /** CLI 미감지 시 disable + grayed out + 'CLI 미설치' 뱃지. */
+  requiresCli?: 'claude' | 'codex';
+}
+
+const PROVIDER_OPTIONS: ReadonlyArray<ProviderOption> = [
+  {
+    value: 'auto',
+    label: '자동 (모델별 선택)',
+    hint: '모델 이름에 따라 Claude / Codex 자동 분기',
+  },
+  {
+    value: 'claude',
+    label: 'Claude CLI 우선',
+    hint: '모든 모델을 Claude CLI 로 보냅니다',
+    requiresCli: 'claude',
+  },
+  {
+    value: 'codex',
+    label: 'Codex CLI 우선',
+    hint: '모든 모델을 Codex CLI 로 보냅니다',
+    requiresCli: 'codex',
+  },
+  {
+    value: 'mock',
+    label: 'Mock (개발용)',
+    hint: '실제 AI 호출 없이 로컬 응답만 반환',
+  },
+];
+
+/**
+ * v0.3.0 — wizard step 4 의 permission preset selector.
+ * 라벨은 src/types/permission.ts 의 PERMISSION_LEVEL_LABELS_KO 사용.
+ */
+const PERMISSION_OPTIONS: ReadonlyArray<{
+  value: PermissionLevel;
+  hint: string;
+}> = [
+  {
+    value: 'read_only',
+    hint: '파일 읽기만 허용. 쓰기/실행은 매번 사용자 승인',
+  },
+  {
+    value: 'workspace_write',
+    hint: '권장. 작업 폴더 안에서 자유롭게 쓰기/실행',
+  },
+  {
+    value: 'full_access',
+    hint: '폴더 외부 접근 허용. 신중하게 사용',
+  },
+];
 
 interface CliDetection {
   claude: CliInfoShape | null;
@@ -62,6 +134,10 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps):
   const [cliDetecting, setCliDetecting] = useState(false);
   const [workspace, setWorkspace] = useState<PickedWorkspace | null>(null);
   const [pickingWorkspace, setPickingWorkspace] = useState(false);
+  // v0.3.0 — provider / permission preset 선택. 초기값은 settings 에서 fetch
+  // 시도 후 fallback. mount 직후 IPC 응답 도착 전까진 'auto' / 'workspace_write'.
+  const [providerChoice, setProviderChoice] = useState<DefaultProviderChoice>('auto');
+  const [permissionChoice, setPermissionChoice] = useState<PermissionLevel>('workspace_write');
 
   // ── CLI 감지 — Step 2 진입 시 한 번 실행 ──────────────────
   useEffect(() => {
@@ -117,12 +193,63 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps):
     };
   }, []);
 
+  // v0.3.0 — provider / permission 의 현재 settings 값을 onMount 한 번 fetch.
+  // wizard 처음 보는 사용자는 default 그대로 두고 next 만 눌러도 OK — IPC 응답
+  // 전엔 default 표시. 이미 한 번 wizard 끝낸 사용자 (reset 후 재진입) 는
+  // 이전 선택이 그대로 보임.
+  useEffect(() => {
+    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+    if (appApi === undefined) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        if (typeof appApi.getDefaultProvider === 'function') {
+          const result = await appApi.getDefaultProvider();
+          if (!cancelled && result.ok) setProviderChoice(result.value);
+        }
+        if (typeof appApi.getDefaultPermissionLevel === 'function') {
+          const result = await appApi.getDefaultPermissionLevel();
+          if (!cancelled && result.ok) setPermissionChoice(result.value);
+        }
+      } catch {
+        // 안전한 default 유지
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const goNext = useCallback((): void => {
     setStep((s) => Math.min(TOTAL_STEPS - 1, s + 1));
   }, []);
 
   const goPrev = useCallback((): void => {
     setStep((s) => Math.max(0, s - 1));
+  }, []);
+
+  const handleProviderChange = useCallback(async (next: DefaultProviderChoice): Promise<void> => {
+    // Optimistic UI — 즉시 UI 업데이트. IPC 실패해도 사용자가 다시 시도 가능.
+    setProviderChoice(next);
+    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+    if (appApi === undefined || typeof appApi.setDefaultProvider !== 'function') return;
+    try {
+      await appApi.setDefaultProvider(next);
+    } catch {
+      // ignore — 다음 wizard step 으로 넘어가도 영속 실패는 사용자가 모름.
+      // P2: error toast UI 가 추가되면 여기서 알림.
+    }
+  }, []);
+
+  const handlePermissionChange = useCallback(async (next: PermissionLevel): Promise<void> => {
+    setPermissionChoice(next);
+    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+    if (appApi === undefined || typeof appApi.setDefaultPermissionLevel !== 'function') return;
+    try {
+      await appApi.setDefaultPermissionLevel(next);
+    } catch {
+      // ignore (P2: error toast)
+    }
   }, []);
 
   const handlePickWorkspace = useCallback(async (): Promise<PickedWorkspace | null> => {
@@ -196,12 +323,24 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps):
         <div className="min-h-[220px]">
           {step === 0 && <WelcomeStep onNext={goNext} />}
           {step === 1 && <CliDetectionStep cliStatus={cliStatus} detecting={cliDetecting} />}
-          {step === 2 && <AuthGuideStep cliStatus={cliStatus} />}
+          {step === 2 && (
+            <AuthGuideStep
+              cliStatus={cliStatus}
+              providerChoice={providerChoice}
+              onProviderChange={(v) => {
+                void handleProviderChange(v);
+              }}
+            />
+          )}
           {step === 3 && (
             <WorkspaceStep
               workspace={workspace}
               picking={pickingWorkspace}
               onPick={handlePickWorkspace}
+              permissionChoice={permissionChoice}
+              onPermissionChange={(v) => {
+                void handlePermissionChange(v);
+              }}
             />
           )}
           {step === 4 && (
@@ -374,7 +513,15 @@ function CliRow({
 // Step 3 — 인증 안내
 // ────────────────────────────────────────────────────────────
 
-function AuthGuideStep({ cliStatus }: { cliStatus: CliDetection | null }): React.JSX.Element {
+function AuthGuideStep({
+  cliStatus,
+  providerChoice,
+  onProviderChange,
+}: {
+  cliStatus: CliDetection | null;
+  providerChoice: DefaultProviderChoice;
+  onProviderChange: (next: DefaultProviderChoice) => void;
+}): React.JSX.Element {
   const claudeDetected = cliStatus?.claude !== undefined && cliStatus?.claude !== null;
   const codexDetected = cliStatus?.codex !== undefined && cliStatus?.codex !== null;
   const noneDetected = !claudeDetected && !codexDetected;
@@ -409,6 +556,59 @@ function AuthGuideStep({ cliStatus }: { cliStatus: CliDetection | null }): React
           )}
         </div>
       )}
+
+      {/* v0.3.0 — 기본 provider 선택 */}
+      <div className="mt-5 border-t border-border-primary pt-4" data-testid="provider-selector">
+        <p className="mb-2 text-sm font-medium text-text-primary">
+          기본 Provider — 어떤 AI 를 우선 사용할까요?
+        </p>
+        <ul className="space-y-2 text-sm">
+          {PROVIDER_OPTIONS.map((opt) => {
+            const requiresClaude = opt.requiresCli === 'claude';
+            const requiresCodex = opt.requiresCli === 'codex';
+            const cliMissing =
+              (requiresClaude && !claudeDetected) || (requiresCodex && !codexDetected);
+            const disabled = cliMissing;
+            const isSelected = providerChoice === opt.value;
+            return (
+              <li key={opt.value}>
+                <label
+                  className={`flex items-start gap-2 rounded-md border p-2 ${
+                    isSelected
+                      ? 'border-accent bg-bg-tertiary'
+                      : 'border-border-primary hover:bg-bg-tertiary'
+                  } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                  data-testid={`provider-option-${opt.value}`}
+                >
+                  <input
+                    type="radio"
+                    name="default-provider"
+                    value={opt.value}
+                    checked={isSelected}
+                    onChange={() => {
+                      if (!disabled) onProviderChange(opt.value);
+                    }}
+                    disabled={disabled}
+                    className="mt-0.5"
+                    aria-label={opt.label}
+                  />
+                  <div className="flex-1">
+                    <p className="text-text-primary">
+                      <span className="font-medium">{opt.label}</span>
+                      {cliMissing && (
+                        <span className="ml-2 rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px] text-text-tertiary">
+                          감지 안 됨
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-text-tertiary">{opt.hint}</p>
+                  </div>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </section>
   );
 }
@@ -443,10 +643,14 @@ function WorkspaceStep({
   workspace,
   picking,
   onPick,
+  permissionChoice,
+  onPermissionChange,
 }: {
   workspace: PickedWorkspace | null;
   picking: boolean;
   onPick: () => Promise<PickedWorkspace | null>;
+  permissionChoice: PermissionLevel;
+  onPermissionChange: (next: PermissionLevel) => void;
 }): React.JSX.Element {
   return (
     <section data-testid="onboarding-step-workspace">
@@ -484,6 +688,57 @@ function WorkspaceStep({
       >
         {picking ? '폴더 선택 중...' : workspace !== null ? '다른 폴더 선택' : '폴더 찾아보기'}
       </button>
+
+      {/* v0.3.0 — 기본 권한 preset */}
+      <div
+        className="mt-5 border-t border-border-primary pt-4"
+        data-testid="permission-selector"
+      >
+        <header className="mb-2 flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-text-secondary" aria-hidden="true" />
+          <p className="text-sm font-medium text-text-primary">AI 가 기본으로 가질 권한</p>
+        </header>
+        <ul className="space-y-2 text-sm">
+          {PERMISSION_OPTIONS.map((opt) => {
+            const isSelected = permissionChoice === opt.value;
+            return (
+              <li key={opt.value}>
+                <label
+                  className={`flex items-start gap-2 rounded-md border p-2 cursor-pointer ${
+                    isSelected
+                      ? 'border-accent bg-bg-tertiary'
+                      : 'border-border-primary hover:bg-bg-tertiary'
+                  }`}
+                  data-testid={`permission-option-${opt.value}`}
+                >
+                  <input
+                    type="radio"
+                    name="default-permission-level"
+                    value={opt.value}
+                    checked={isSelected}
+                    onChange={() => onPermissionChange(opt.value)}
+                    className="mt-0.5"
+                    aria-label={PERMISSION_LEVEL_LABELS_KO[opt.value]}
+                  />
+                  <div className="flex-1">
+                    <p className="text-text-primary">
+                      <span className="font-medium">
+                        {PERMISSION_LEVEL_LABELS_KO[opt.value]}
+                      </span>
+                      {opt.value === 'workspace_write' && (
+                        <span className="ml-2 rounded bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent">
+                          권장
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-text-tertiary">{opt.hint}</p>
+                  </div>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </section>
   );
 }

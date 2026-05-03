@@ -218,4 +218,214 @@ describe('OnboardingWizard', () => {
     await user.click(screen.getByTestId('onboarding-start'));
     expect(progressbar).toHaveAttribute('aria-valuenow', '2');
   });
+
+  // ────────────────────────────────────────────────────────────
+  // v0.3.0 — Provider selector (Step 3) + Permission selector (Step 4)
+  // ────────────────────────────────────────────────────────────
+
+  describe('Provider selector (v0.3.0)', () => {
+    it('shows 4 provider options in Step 3', async () => {
+      const user = userEvent.setup();
+      render(<OnboardingWizard onComplete={vi.fn()} onSkip={vi.fn()} />);
+
+      // Skip to step 3 (auth)
+      await user.click(screen.getByTestId('onboarding-start'));
+      await waitFor(() =>
+        expect(screen.queryByTestId('cli-detecting')).not.toBeInTheDocument()
+      );
+      await user.click(screen.getByTestId('onboarding-next'));
+
+      expect(screen.getByTestId('provider-selector')).toBeInTheDocument();
+      expect(screen.getByTestId('provider-option-auto')).toBeInTheDocument();
+      expect(screen.getByTestId('provider-option-claude')).toBeInTheDocument();
+      expect(screen.getByTestId('provider-option-codex')).toBeInTheDocument();
+      expect(screen.getByTestId('provider-option-mock')).toBeInTheDocument();
+    });
+
+    it('selecting a provider option calls setDefaultProvider IPC', async () => {
+      __mockStore.aiDetection = {
+        claude: { path: '/usr/local/bin/claude', version: '1.0.0' },
+        codex: null,
+      };
+      const setSpy = window.dreampia.app.setDefaultProvider as unknown as {
+        mock: { calls: unknown[] };
+      };
+      const before = setSpy.mock.calls.length;
+
+      const user = userEvent.setup();
+      render(<OnboardingWizard onComplete={vi.fn()} onSkip={vi.fn()} />);
+
+      await user.click(screen.getByTestId('onboarding-start'));
+      await waitFor(() =>
+        expect(screen.queryByTestId('cli-detecting')).not.toBeInTheDocument()
+      );
+      await user.click(screen.getByTestId('onboarding-next'));
+
+      // Click Claude provider option (CLI detected → enabled)
+      const claudeRadio = screen
+        .getByTestId('provider-option-claude')
+        .querySelector('input[type="radio"]') as HTMLInputElement;
+      expect(claudeRadio).not.toBeNull();
+      expect(claudeRadio).not.toBeDisabled();
+      await user.click(claudeRadio);
+
+      await waitFor(() => {
+        expect(setSpy.mock.calls.length).toBe(before + 1);
+      });
+      expect(setSpy.mock.calls[before]).toEqual(['claude']);
+    });
+
+    it('disables provider option whose CLI is not detected', async () => {
+      __mockStore.aiDetection = { claude: null, codex: null };
+      const user = userEvent.setup();
+      render(<OnboardingWizard onComplete={vi.fn()} onSkip={vi.fn()} />);
+
+      await user.click(screen.getByTestId('onboarding-start'));
+      await waitFor(() =>
+        expect(screen.queryByTestId('cli-detecting')).not.toBeInTheDocument()
+      );
+      await user.click(screen.getByTestId('onboarding-next'));
+
+      const claudeRadio = screen
+        .getByTestId('provider-option-claude')
+        .querySelector('input[type="radio"]') as HTMLInputElement;
+      const codexRadio = screen
+        .getByTestId('provider-option-codex')
+        .querySelector('input[type="radio"]') as HTMLInputElement;
+      expect(claudeRadio).toBeDisabled();
+      expect(codexRadio).toBeDisabled();
+
+      // 'auto' / 'mock' 은 CLI 의존 X → enabled
+      const autoRadio = screen
+        .getByTestId('provider-option-auto')
+        .querySelector('input[type="radio"]') as HTMLInputElement;
+      expect(autoRadio).not.toBeDisabled();
+    });
+
+    it('initial selection comes from getDefaultProvider IPC', async () => {
+      // Mock server already returns 'auto' default. Override:
+      const original = window.dreampia.app.getDefaultProvider;
+      window.dreampia.app.getDefaultProvider = vi.fn(async () => ({
+        ok: true as const,
+        value: 'codex' as const,
+      }));
+      try {
+        __mockStore.aiDetection = {
+          claude: null,
+          codex: { path: '/usr/local/bin/codex', version: '0.5.0' },
+        };
+        const user = userEvent.setup();
+        render(<OnboardingWizard onComplete={vi.fn()} onSkip={vi.fn()} />);
+
+        await user.click(screen.getByTestId('onboarding-start'));
+        await waitFor(() =>
+          expect(screen.queryByTestId('cli-detecting')).not.toBeInTheDocument()
+        );
+        await user.click(screen.getByTestId('onboarding-next'));
+
+        await waitFor(() => {
+          const codexRadio = screen
+            .getByTestId('provider-option-codex')
+            .querySelector('input[type="radio"]') as HTMLInputElement;
+          expect(codexRadio.checked).toBe(true);
+        });
+      } finally {
+        window.dreampia.app.getDefaultProvider = original;
+      }
+    });
+  });
+
+  describe('Permission selector (v0.3.0)', () => {
+    it('shows 3 permission preset options in Step 4', async () => {
+      const user = userEvent.setup();
+      render(<OnboardingWizard onComplete={vi.fn()} onSkip={vi.fn()} />);
+
+      // Skip to step 4 (workspace)
+      await user.click(screen.getByTestId('onboarding-start'));
+      await waitFor(() =>
+        expect(screen.queryByTestId('cli-detecting')).not.toBeInTheDocument()
+      );
+      await user.click(screen.getByTestId('onboarding-next'));
+      await user.click(screen.getByTestId('onboarding-next'));
+
+      expect(screen.getByTestId('permission-selector')).toBeInTheDocument();
+      expect(screen.getByTestId('permission-option-read_only')).toBeInTheDocument();
+      expect(screen.getByTestId('permission-option-workspace_write')).toBeInTheDocument();
+      expect(screen.getByTestId('permission-option-full_access')).toBeInTheDocument();
+    });
+
+    it('default selection is workspace_write', async () => {
+      const user = userEvent.setup();
+      render(<OnboardingWizard onComplete={vi.fn()} onSkip={vi.fn()} />);
+
+      await user.click(screen.getByTestId('onboarding-start'));
+      await waitFor(() =>
+        expect(screen.queryByTestId('cli-detecting')).not.toBeInTheDocument()
+      );
+      await user.click(screen.getByTestId('onboarding-next'));
+      await user.click(screen.getByTestId('onboarding-next'));
+
+      await waitFor(() => {
+        const wwRadio = screen
+          .getByTestId('permission-option-workspace_write')
+          .querySelector('input[type="radio"]') as HTMLInputElement;
+        expect(wwRadio.checked).toBe(true);
+      });
+    });
+
+    it('selecting a permission option calls setDefaultPermissionLevel IPC', async () => {
+      const setSpy = window.dreampia.app.setDefaultPermissionLevel as unknown as {
+        mock: { calls: unknown[] };
+      };
+      const before = setSpy.mock.calls.length;
+
+      const user = userEvent.setup();
+      render(<OnboardingWizard onComplete={vi.fn()} onSkip={vi.fn()} />);
+
+      await user.click(screen.getByTestId('onboarding-start'));
+      await waitFor(() =>
+        expect(screen.queryByTestId('cli-detecting')).not.toBeInTheDocument()
+      );
+      await user.click(screen.getByTestId('onboarding-next'));
+      await user.click(screen.getByTestId('onboarding-next'));
+
+      const readOnlyRadio = screen
+        .getByTestId('permission-option-read_only')
+        .querySelector('input[type="radio"]') as HTMLInputElement;
+      await user.click(readOnlyRadio);
+
+      await waitFor(() => {
+        expect(setSpy.mock.calls.length).toBe(before + 1);
+      });
+      expect(setSpy.mock.calls[before]).toEqual(['read_only']);
+    });
+
+    it('initial selection comes from getDefaultPermissionLevel IPC', async () => {
+      const original = window.dreampia.app.getDefaultPermissionLevel;
+      window.dreampia.app.getDefaultPermissionLevel = vi.fn(async () => ({
+        ok: true as const,
+        value: 'full_access' as const,
+      }));
+      try {
+        const user = userEvent.setup();
+        render(<OnboardingWizard onComplete={vi.fn()} onSkip={vi.fn()} />);
+
+        await user.click(screen.getByTestId('onboarding-start'));
+        await waitFor(() =>
+          expect(screen.queryByTestId('cli-detecting')).not.toBeInTheDocument()
+        );
+        await user.click(screen.getByTestId('onboarding-next'));
+        await user.click(screen.getByTestId('onboarding-next'));
+
+        await waitFor(() => {
+          const faRadio = screen
+            .getByTestId('permission-option-full_access')
+            .querySelector('input[type="radio"]') as HTMLInputElement;
+          expect(faRadio.checked).toBe(true);
+        });
+      } finally {
+        window.dreampia.app.getDefaultPermissionLevel = original;
+      }
+    });
+  });
 });

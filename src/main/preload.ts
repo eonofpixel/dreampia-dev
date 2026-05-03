@@ -191,6 +191,11 @@ const ALLOWED_INVOKE_CHANNELS = [
   'app:get-default-workspace',
   'app:get-onboarding-status',
   'app:complete-onboarding',
+  'app:reset-onboarding',
+  'app:get-default-provider',
+  'app:set-default-provider',
+  'app:get-default-permission-level',
+  'app:set-default-permission-level',
   'workspace/pick-folder',
   'workspace/get',
   'session/list',
@@ -290,6 +295,48 @@ const api = {
      */
     completeOnboarding: (): Promise<Result<void>> =>
       ipcRenderer.invoke('app:complete-onboarding') as Promise<Result<void>>,
+
+    /**
+     * v0.3.0 — Sidebar 의 [온보딩 다시 보기] 버튼이 호출. workspace 등 다른
+     * settings 는 보존하고 onboarding_completed=false 만 reset.
+     */
+    resetOnboarding: (): Promise<Result<void>> =>
+      ipcRenderer.invoke('app:reset-onboarding') as Promise<Result<void>>,
+
+    /**
+     * v0.3.0 — wizard / 설정에서 사용자가 선택한 기본 provider 조회.
+     * 'auto' | 'claude' | 'codex' | 'mock'. 미설정 시 'auto'.
+     */
+    getDefaultProvider: (): Promise<Result<'auto' | 'claude' | 'codex' | 'mock'>> =>
+      ipcRenderer.invoke('app:get-default-provider') as Promise<
+        Result<'auto' | 'claude' | 'codex' | 'mock'>
+      >,
+
+    /**
+     * v0.3.0 — wizard / 설정에서 호출. main 측 Zod 가 enum 검증.
+     */
+    setDefaultProvider: (
+      provider: 'auto' | 'claude' | 'codex' | 'mock'
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('app:set-default-provider', provider) as Promise<Result<void>>,
+
+    /**
+     * v0.3.0 — 새 세션의 default_level 결정. 미설정 시 'workspace_write'.
+     */
+    getDefaultPermissionLevel: (): Promise<
+      Result<'read_only' | 'workspace_write' | 'full_access' | 'custom'>
+    > =>
+      ipcRenderer.invoke('app:get-default-permission-level') as Promise<
+        Result<'read_only' | 'workspace_write' | 'full_access' | 'custom'>
+      >,
+
+    /**
+     * v0.3.0 — wizard / 설정에서 호출. main 측 Zod 가 enum 검증.
+     */
+    setDefaultPermissionLevel: (
+      level: 'read_only' | 'workspace_write' | 'full_access' | 'custom'
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('app:set-default-permission-level', level) as Promise<Result<void>>,
   },
 
   /**

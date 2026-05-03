@@ -132,4 +132,46 @@ describe('Sidebar', () => {
     expect(screen.getByText('채팅')).toBeInTheDocument();
     expect(screen.getByText('설정')).toBeInTheDocument();
   });
+
+  // ────────────────────────────────────────────────────────────
+  // v0.3.0 — [온보딩 다시 보기] 버튼
+  // ────────────────────────────────────────────────────────────
+
+  describe('Reopen onboarding (v0.3.0)', () => {
+    it('hides 온보딩 다시 보기 button when onReopenOnboarding undefined', () => {
+      render(
+        <Sidebar sessions={[]} onSelectSession={() => {}} onNewChat={() => {}} />
+      );
+      expect(screen.queryByTestId('sidebar-reopen-onboarding')).not.toBeInTheDocument();
+    });
+
+    it('shows 온보딩 다시 보기 button when onReopenOnboarding provided', () => {
+      render(
+        <Sidebar
+          sessions={[]}
+          onSelectSession={() => {}}
+          onNewChat={() => {}}
+          onReopenOnboarding={() => {}}
+        />
+      );
+      expect(screen.getByTestId('sidebar-reopen-onboarding')).toBeInTheDocument();
+      expect(screen.getByText('온보딩 다시 보기')).toBeInTheDocument();
+    });
+
+    it('clicking 온보딩 다시 보기 calls onReopenOnboarding', async () => {
+      const onReopenOnboarding = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <Sidebar
+          sessions={[]}
+          onSelectSession={() => {}}
+          onNewChat={() => {}}
+          onReopenOnboarding={onReopenOnboarding}
+        />
+      );
+
+      await user.click(screen.getByTestId('sidebar-reopen-onboarding'));
+      expect(onReopenOnboarding).toHaveBeenCalledTimes(1);
+    });
+  });
 });

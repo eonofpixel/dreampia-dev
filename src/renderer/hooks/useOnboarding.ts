@@ -29,6 +29,12 @@ export interface UseOnboardingApi {
   loading: boolean;
   /** Wizard 완료 처리 — settings.json 에 onboarding_completed=true 영속. */
   complete: () => Promise<void>;
+  /**
+   * v0.3.0 — Sidebar 의 [온보딩 다시 보기] 버튼에서 호출.
+   * settings.onboarding_completed=false 로 reset 후 in-memory state 도 갱신.
+   * App.tsx 가 자동으로 wizard 를 다시 표시.
+   */
+  reset: () => Promise<void>;
 }
 
 function hasOnboardingApi(): boolean {
@@ -39,6 +45,13 @@ function hasOnboardingApi(): boolean {
     window.dreampia.app !== null &&
     typeof window.dreampia.app.getOnboardingStatus === 'function' &&
     typeof window.dreampia.app.completeOnboarding === 'function'
+  );
+}
+
+function hasResetOnboardingApi(): boolean {
+  return (
+    hasOnboardingApi() &&
+    typeof window.dreampia.app.resetOnboarding === 'function'
   );
 }
 
@@ -85,9 +98,25 @@ export function useOnboarding(): UseOnboardingApi {
     setCompleted(true);
   }, []);
 
+  const reset = useCallback(async (): Promise<void> => {
+    // v0.3.0 — IPC 미존재 시에도 in-memory 만 토글 (vitest 격리에서도 동작).
+    if (!hasResetOnboardingApi()) {
+      setCompleted(false);
+      return;
+    }
+    try {
+      await window.dreampia.app.resetOnboarding();
+    } catch {
+      // 영속 실패해도 in-memory 는 false 로 — wizard 가 표시되어 사용자가
+      // 직접 다시 완료할 수 있다.
+    }
+    setCompleted(false);
+  }, []);
+
   return {
     completed,
     loading: completed === null,
     complete,
+    reset,
   };
 }

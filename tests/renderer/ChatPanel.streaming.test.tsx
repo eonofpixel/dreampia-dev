@@ -200,4 +200,91 @@ describe('null session + static', () => {
   });
 });
 
+// ────────────────────────────────────────────────────────────
+// v0.3.0 — WelcomeMessage in empty MessagesArea
+// ────────────────────────────────────────────────────────────
+
+describe('WelcomeMessage (v0.3.0)', () => {
+  it('renders WelcomeMessage when session has zero turns', () => {
+    render(
+      <ChatPanel
+        session={makeSession([])}
+        onSubmit={() => {}}
+        workspaceName="dreampia-dev"
+      />
+    );
+    expect(screen.getByTestId('welcome-message')).toBeInTheDocument();
+    expect(screen.getByText('안녕하세요')).toBeInTheDocument();
+  });
+
+  it('does NOT render WelcomeMessage when there are turns', () => {
+    render(<ChatPanel session={makeSession([makeCT('hi')])} onSubmit={() => {}} />);
+    expect(screen.queryByTestId('welcome-message')).not.toBeInTheDocument();
+  });
+
+  it('renders 3 suggestion chips', () => {
+    render(
+      <ChatPanel
+        session={makeSession([])}
+        onSubmit={() => {}}
+        workspaceName="dreampia-dev"
+      />
+    );
+    const chips = screen.getAllByTestId('welcome-suggestion-chip');
+    expect(chips.length).toBe(3);
+  });
+
+  it('clicking a suggestion chip calls onSubmit with that prompt', () => {
+    const onSubmit = vi.fn();
+    render(
+      <ChatPanel
+        session={makeSession([])}
+        onSubmit={onSubmit}
+        workspaceName="dreampia-dev"
+      />
+    );
+    const chips = screen.getAllByTestId('welcome-suggestion-chip');
+    const first = chips[0];
+    if (first === undefined) throw new Error('expected at least one chip');
+    fireEvent.click(first);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    // 첫 chip 의 프롬프트 = '이 프로젝트 구조 분석해줘' (WELCOME_SUGGESTIONS[0])
+    expect(onSubmit).toHaveBeenCalledWith('이 프로젝트 구조 분석해줘');
+  });
+
+  it('clicking each chip submits with its own prompt text', () => {
+    const onSubmit = vi.fn();
+    render(
+      <ChatPanel
+        session={makeSession([])}
+        onSubmit={onSubmit}
+        workspaceName="x"
+      />
+    );
+    const chips = screen.getAllByTestId('welcome-suggestion-chip');
+    chips.forEach((chip) => fireEvent.click(chip));
+    expect(onSubmit).toHaveBeenCalledTimes(3);
+    expect(onSubmit).toHaveBeenNthCalledWith(1, '이 프로젝트 구조 분석해줘');
+    expect(onSubmit).toHaveBeenNthCalledWith(2, '최근 변경 사항 리뷰');
+    expect(onSubmit).toHaveBeenNthCalledWith(3, '테스트 통과시키기');
+  });
+
+  it('shows workspaceName in greeting', () => {
+    render(
+      <ChatPanel
+        session={makeSession([])}
+        onSubmit={() => {}}
+        workspaceName="my-cool-project"
+      />
+    );
+    expect(screen.getByText(/my-cool-project 작업 시작/)).toBeInTheDocument();
+  });
+
+  it('falls back to safe default when workspaceName undefined', () => {
+    render(<ChatPanel session={makeSession([])} onSubmit={() => {}} />);
+    // "작업 폴더" fallback in WelcomeMessage
+    expect(screen.getByText(/작업 폴더 작업 시작/)).toBeInTheDocument();
+  });
+});
+
 export {};

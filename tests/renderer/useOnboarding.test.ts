@@ -79,4 +79,61 @@ describe('useOnboarding', () => {
       window.dreampia.app.getOnboardingStatus = original;
     }
   });
+
+  // ────────────────────────────────────────────────────────────
+  // v0.3.0 — reset method
+  // ────────────────────────────────────────────────────────────
+
+  describe('reset method (v0.3.0)', () => {
+    it('reset() updates completed → false even if it was true', async () => {
+      __mockStore.onboardingCompleted = true;
+      const { result } = renderHook(() => useOnboarding());
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.completed).toBe(true);
+
+      await act(async () => {
+        await result.current.reset();
+      });
+
+      expect(result.current.completed).toBe(false);
+      expect(__mockStore.onboardingCompleted).toBe(false);
+    });
+
+    it('reset() triggers IPC call', async () => {
+      __mockStore.onboardingCompleted = true;
+      const spy = window.dreampia.app.resetOnboarding as unknown as {
+        mock: { calls: unknown[] };
+      };
+      const before = spy.mock.calls.length;
+
+      const { result } = renderHook(() => useOnboarding());
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      await act(async () => {
+        await result.current.reset();
+      });
+
+      expect(spy.mock.calls.length).toBe(before + 1);
+    });
+
+    it('reset() handles missing IPC method gracefully (in-memory toggle only)', async () => {
+      __mockStore.onboardingCompleted = true;
+      const original = window.dreampia.app.resetOnboarding;
+      const appAny = window.dreampia.app as unknown as Record<string, unknown>;
+      appAny['resetOnboarding'] = undefined;
+      try {
+        const { result } = renderHook(() => useOnboarding());
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        await act(async () => {
+          await result.current.reset();
+        });
+
+        // IPC 미존재 → in-memory state 만 false 로 토글.
+        expect(result.current.completed).toBe(false);
+      } finally {
+        appAny['resetOnboarding'] = original;
+      }
+    });
+  });
 });

@@ -2,6 +2,100 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [0.3.0] — 2026-05-03
+
+**Feature release — Onboarding 5-step wizard polish.**
+
+Codex (read-only audit) 권고 v0.3.0. 기능 추가가 아니라 "처음 켰을 때 성공" 비율
+을 끌어올리는 첫 사용자 경험 polish. v0.2.0 의 MCP Bridge 위에 사용자 진입 부분
+을 다듬어 10-30 명 초기 사용자 funnel 의 가장 큰 병목 (= empty chat 에서 무엇을
+할 지 모름) 을 해소.
+
+### Added
+
+- **WelcomeMessage 통합** — 빈 채팅에 진입하면 ChatPanel 의 MessagesArea 가
+  WelcomeMessage 를 자동 렌더. 이전엔 빈 turn 배열 → `null` 렌더로 화면이 비어
+  사용자가 "뭘 해야 하지?" 상태였음. 이제 환영 인사 + 3개 추천 prompt chip 표시.
+- **SuggestionChip onClick** — WelcomeMessage 의 chip 클릭 시 즉시 `onSubmit`
+  호출 (wizard FirstChatStep 와 달리 사용자가 이미 채팅 안이라 submit-on-click
+  이 자연스러움). 3개 추천: "이 프로젝트 구조 분석해줘" / "최근 변경 사항 리뷰" /
+  "테스트 통과시키기".
+- **온보딩 다시 보기 진입점** — Sidebar 하단에 [온보딩 다시 보기] 버튼 추가.
+  클릭 시 `app:reset-onboarding` IPC → `settings.onboarding_completed=false`
+  영속 → `useOnboarding.reset()` 가 in-memory state 도 토글 → wizard 가 다시
+  mount. 다른 settings (workspace_root 등) 는 보존.
+- **wizard Step 3 — Provider 선택** — AuthGuideStep 에 4개 옵션 라디오 그룹
+  (자동 / Claude CLI / Codex CLI / Mock). CLI 미감지 옵션은 disable + "감지 안 됨"
+  뱃지. 선택 즉시 `app:set-default-provider` IPC.
+- **wizard Step 4 — Permission preset 선택** — WorkspaceStep 에 3개 옵션 라디오
+  그룹 (read_only / workspace_write 권장 / full_access). 한국어 라벨은
+  `PERMISSION_LEVEL_LABELS_KO` 재사용. 선택 즉시 `app:set-default-permission-level`
+  IPC.
+- **auto.ts userDefaultProvider override** — `getDefaultProvider` 시그니처에
+  5번째 옵션 파라미터 추가. wizard 에서 사용자가 'claude' / 'codex' / 'mock' 를
+  명시 선택했고 해당 CLI 가 감지된 경우 model-prefix routing 보다 우선. 'auto'
+  나 미지정 시 종전 동작.
+- **createDemoSession defaultPermissionLevel** — 새 세션의 `permission.default_level`
+  이 더 이상 hardcoded 'workspace_write' 가 아니라 `app:get-default-permission-level`
+  결과를 inherit. wizard 에서 변경한 값이 다음 세션부터 즉시 반영.
+- **5개 신규 IPC channel (모두 `app:*` namespace)**:
+  - `app:reset-onboarding` — 다른 settings 는 보존하고 onboarding_completed 만 reset
+  - `app:get-default-provider` / `app:set-default-provider` — 사용자 provider
+    선호 (Zod enum 검증)
+  - `app:get-default-permission-level` / `app:set-default-permission-level` —
+    권한 preset (Zod PermissionLevelSchema 검증)
+- **`useOnboarding.reset()` API** — Sidebar 의 [온보딩 다시 보기] 가 직접 호출.
+  IPC 미존재 (vitest 격리) 시에도 in-memory 만 토글하여 안전 fallback.
+
+### Changed
+
+- `package.json`: `0.2.0` → `0.3.0` (minor bump for new feature).
+- `src/main/settings.ts` AppSettings 에 `default_provider` / `default_permission_level`
+  필드 추가. 알 수 없는 값은 silent drop (graceful degradation).
+- `src/main/preload.ts` whitelist 에 5개 새 IPC channel + `app` namespace 5개
+  메서드 추가 (sandbox-safe inline shape).
+- `src/renderer/App.tsx` `defaultPermissionLevel` state 추가 + wizard 완료 시
+  re-fetch 후 새 session 에 반영. Sidebar 에 `onReopenOnboarding` 연결.
+
+### Tests
+
+- 새 vitest: 745 → **797 tests pass** (+52 new).
+  - `tests/main/settings.test.ts` (13 tests) — default_provider /
+    default_permission_level read/write/validation/graceful degradation.
+  - `tests/main/ipc.workspace.test.ts` (+13 tests) — 새 5개 IPC channel +
+    Zod validation + Result wrapping.
+  - `tests/renderer/ChatPanel.streaming.test.tsx` (+6 tests) — WelcomeMessage
+    렌더 + 3개 chip + onClick → onSubmit 위임 + workspaceName fallback.
+  - `tests/renderer/OnboardingWizard.test.tsx` (+8 tests) — provider /
+    permission selector 렌더 + IPC 호출 + 초기값 fetch + CLI 미감지 disable.
+  - `tests/providers/auto.test.ts` (+5 tests) — userDefaultProvider override
+    + claude/codex/mock 강제 + auto fallback + CLI 미감지 시 model-prefix
+    routing 으로 fallback.
+  - `tests/renderer/Sidebar.test.tsx` (+3 tests) — [온보딩 다시 보기] 버튼
+    조건부 렌더 + 클릭 → callback 호출.
+  - `tests/renderer/useOnboarding.test.ts` (+3 tests) — reset() 동작 + IPC
+    호출 + IPC 미존재 시 in-memory fallback.
+- 새 e2e: `e2e/first-chat.spec.ts` (3 tests) — fresh profile → wizard 5단계
+  통과 + WelcomeMessage chip → streaming 응답 + Sidebar 의 reopen.
+- typecheck: 0 errors / lint: 0 errors / 기존 e2e 영향 없음.
+
+### Out of scope (별도 issue, v0.4.0+)
+
+- MCP server 상태 step (대부분 fresh 사용자가 0 MCP server — 가치 낮음)
+- Wizard step 재구조 (위험 큼)
+- Cross-AI verify / compare (별도 feature)
+- Cost tracking dashboard
+- 영어 i18n
+
+### Migration notes
+
+- 기존 settings.json 호환 — `default_provider` / `default_permission_level` 미존재
+  시 'auto' / 'workspace_write' 자동 적용 (silent fallback).
+- 기존 IPC channel 변경 X — 추가만 발생.
+- 기존 세션의 `permission.default_level` 보존 — 새 default 는 신규 세션부터 적용.
+
+[0.3.0]: https://github.com/eonofpixel/dreampia-dev/releases/tag/v0.3.0
+
 ## [0.2.0] — 2026-05-02
 
 **Feature release — MCP Bridge MVP (Issue #5).**

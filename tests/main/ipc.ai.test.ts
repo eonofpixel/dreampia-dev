@@ -9,7 +9,7 @@
  * tests don't spawn child processes.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // ────────────────────────────────────────────────────────────
 // Mock electron — must come before importing anything that uses it
@@ -22,9 +22,22 @@ type Handler = (
 
 const handlers = new Map<string, Handler>();
 
+// v0.3.0 — ai/start-stream 핸들러가 매 호출마다 readSettings() 로 사용자
+// default_provider 를 읽으므로 app.getPath('userData') 가 필요. 빈 dir 을
+// 가리키면 settings.json 미존재 → 빈 객체 반환 → default 'auto' 로 동작.
+const mockUserDataDir = vi.hoisted(() => {
+  return { current: '' };
+});
+
 vi.mock('electron', () => {
   return {
-    app: { getVersion: () => '0.0.1-test' },
+    app: {
+      getVersion: () => '0.0.1-test',
+      getPath: (_name: string): string => mockUserDataDir.current,
+      get isPackaged(): boolean {
+        return false;
+      },
+    },
     ipcMain: {
       handle: (channel: string, handler: Handler): void => {
         handlers.set(channel, handler);
@@ -37,11 +50,15 @@ vi.mock('electron', () => {
 });
 
 // Imports MUST come after vi.mock so they pick up the stub.
+import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   registerIpcHandlers,
   shutdownAiHandlers,
   type AiHandlerConfig,
 } from '../../src/main/ipc';
+import { __resetSettingsCache } from '../../src/main/settings';
 import type { Result } from '../../src/main/types';
 import type {
   StreamEvent,
@@ -120,11 +137,22 @@ function flushMicrotasks(): Promise<void> {
 describe('IPC ai handlers', () => {
   let sent: SentEvent[];
   let provider: StreamingProvider;
+  let tmpDir: string;
 
   beforeEach(() => {
     handlers.clear();
     shutdownAiHandlers();
     sent = [];
+    // v0.3.0 — settings.json 격리. 매 테스트마다 fresh tmp dir.
+    tmpDir = mkdtempSync(join(tmpdir(), 'dreampia-ipc-ai-'));
+    mockUserDataDir.current = tmpDir;
+    __resetSettingsCache();
+  });
+
+  afterEach(() => {
+    if (tmpDir.length > 0 && existsSync(tmpDir)) {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   function register(opts?: Partial<AiHandlerConfig>): {

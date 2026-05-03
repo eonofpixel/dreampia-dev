@@ -55,6 +55,18 @@ export interface ChatPanelProps {
   initialInputValue?: string;
 }
 
+interface MessagesAreaProps {
+  turns: Turn[];
+  /**
+   * v0.3.0 — empty 상태일 때 WelcomeMessage 의 추천 prompt 가 클릭되면
+   * 즉시 onSubmit 으로 위임. wizard 의 FirstChatStep 와 달리 사용자가 이미
+   * 채팅 화면 안이라 fill-only 가 아닌 즉시 submit 이 자연스럽다.
+   */
+  onPickPrompt?: (prompt: string) => void;
+  /** Empty WelcomeMessage 의 헤더에 폴더 이름 표시. */
+  workspaceName?: string;
+}
+
 export function ChatPanel({
   session,
   onSubmit,
@@ -84,7 +96,11 @@ export function ChatPanel({
         onPickWorkspace={onPickWorkspace}
       />
       {ipcUnavailable && <IpcUnavailableBanner />}
-      <MessagesArea turns={session.conversation.turns} />
+      <MessagesArea
+        turns={session.conversation.turns}
+        onPickPrompt={onSubmit}
+        workspaceName={workspaceName}
+      />
       <InputArea
         onSubmit={onSubmit}
         isStreaming={isStreaming}
@@ -114,11 +130,7 @@ function IpcUnavailableBanner(): React.JSX.Element {
   );
 }
 
-interface MessagesAreaProps {
-  turns: Turn[];
-}
-
-function MessagesArea({ turns }: MessagesAreaProps): React.JSX.Element {
+function MessagesArea({ turns, onPickPrompt, workspaceName }: MessagesAreaProps): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const lastTurn = turns[turns.length - 1];
@@ -133,7 +145,14 @@ function MessagesArea({ turns }: MessagesAreaProps): React.JSX.Element {
 
   return (
     <div className="flex-1 overflow-y-auto p-4">
-      {turns.length === 0 ? null : (
+      {turns.length === 0 ? (
+        // v0.3.0 — 빈 채팅에 진입하면 환영 메시지 + 추천 prompt 표시.
+        // workspaceName 미정 시에도 안전한 default 로 fallback.
+        <WelcomeMessage
+          workspaceName={workspaceName ?? '작업 폴더'}
+          onPickPrompt={onPickPrompt}
+        />
+      ) : (
         <div className="mx-auto max-w-3xl space-y-4">
           {turns.map((turn, index) => (
             <TurnDisplay
@@ -279,25 +298,70 @@ function CliStatusBadge({ status }: { status: CliStatus }): React.JSX.Element | 
   );
 }
 
-export function WelcomeMessage({ workspaceName }: { workspaceName: string }): React.JSX.Element {
+/**
+ * v0.3.0 — 빈 채팅에 진입했을 때 표시되는 환영 메시지 + 추천 prompt.
+ *
+ * 추천 prompt 는 wizard 의 FirstChatStep 과 동일한 4개를 사용해 일관성 유지.
+ * 클릭 시 즉시 `onPickPrompt(prompt)` 호출 → ChatPanel 의 onSubmit 으로 이어져
+ * 사용자가 "추천을 클릭하면 곧바로 대화가 시작" 하는 직관에 맞춘다.
+ */
+export const WELCOME_SUGGESTIONS: ReadonlyArray<string> = [
+  '이 프로젝트 구조 분석해줘',
+  '최근 변경 사항 리뷰',
+  '테스트 통과시키기',
+];
+
+export interface WelcomeMessageProps {
+  workspaceName: string;
+  /**
+   * 추천 chip 클릭 시 호출. 미지정 시 chip 은 비활성화 (disabled) — 외부 prop
+   * 누락으로 인한 silent no-op 을 방지.
+   */
+  onPickPrompt?: (prompt: string) => void;
+}
+
+export function WelcomeMessage({
+  workspaceName,
+  onPickPrompt,
+}: WelcomeMessageProps): React.JSX.Element {
   return (
-    <div className="mx-auto mt-16 max-w-md text-center">
-      <div className="text-5xl">👋</div>
+    <div className="mx-auto mt-16 max-w-md text-center" data-testid="welcome-message">
+      <div className="text-5xl" aria-hidden="true">
+        👋
+      </div>
       <h2 className="mt-4 text-xl font-semibold">안녕하세요</h2>
       <p className="mt-1 text-sm text-text-secondary">{workspaceName} 작업 시작</p>
       <div className="mt-6 space-y-2 text-left text-sm">
         <p className="font-medium text-text-secondary">추천:</p>
-        <SuggestionChip>이 프로젝트 구조 분석해줘</SuggestionChip>
-        <SuggestionChip>최근 변경 사항 리뷰</SuggestionChip>
-        <SuggestionChip>테스트 통과시키기</SuggestionChip>
+        {WELCOME_SUGGESTIONS.map((prompt) => (
+          <SuggestionChip
+            key={prompt}
+            onClick={onPickPrompt === undefined ? undefined : () => onPickPrompt(prompt)}
+          >
+            {prompt}
+          </SuggestionChip>
+        ))}
       </div>
     </div>
   );
 }
 
-function SuggestionChip({ children }: { children: React.ReactNode }): React.JSX.Element {
+function SuggestionChip({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+}): React.JSX.Element {
+  const isInteractive = onClick !== undefined;
   return (
-    <button className="block w-full rounded-md border border-border-primary bg-bg-secondary px-3 py-2 text-left text-sm hover:bg-bg-tertiary">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!isInteractive}
+      data-testid="welcome-suggestion-chip"
+      className="block w-full rounded-md border border-border-primary bg-bg-secondary px-3 py-2 text-left text-sm hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-60"
+    >
       • {children}
     </button>
   );

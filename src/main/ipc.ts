@@ -22,7 +22,11 @@ import {
 } from 'electron';
 import path from 'node:path';
 import { z } from 'zod';
-import { readSettings, writeSettings } from './settings';
+import {
+  readSettings,
+  writeSettings,
+  type DefaultProviderChoice,
+} from './settings';
 import {
   McpServerConfigSchema,
   PermissionLevelSchema,
@@ -243,6 +247,71 @@ export function registerIpcHandlers(
       // 사용자가 wizard 5단계 모두 끝냈거나 [건너뛰기] 클릭 시 호출.
       // Spec: docs/ia/onboarding.md
       writeSettings({ onboarding_completed: true });
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('app:reset-onboarding', (): Result<void> => {
+    try {
+      // v0.3.0 — Sidebar 의 [온보딩 다시 보기] 클릭 시 호출. 다른 settings 는
+      // 그대로 두고 onboarding_completed 만 false 로 reset → 다음 mount 에서
+      // wizard 표시. workspace 등 사용자 설정은 보존.
+      writeSettings({ onboarding_completed: false });
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('app:get-default-provider', (): Result<DefaultProviderChoice> => {
+    try {
+      // v0.3.0 — wizard / 설정에서 사용자가 선택한 기본 provider 조회.
+      // 미설정 시 'auto' fallback (model-prefix 기반 routing).
+      const settings = readSettings();
+      return ok(settings.default_provider ?? 'auto');
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('app:set-default-provider', (_evt, raw: unknown): Result<void> => {
+    try {
+      // v0.3.0 — wizard 또는 설정에서 호출. Zod 스키마 대신 명시적 enum
+      // 검증 — 작은 string union 에 schema 가 과하다.
+      if (
+        raw !== 'auto' &&
+        raw !== 'claude' &&
+        raw !== 'codex' &&
+        raw !== 'mock'
+      ) {
+        throw new Error(
+          'default_provider must be one of: auto, claude, codex, mock'
+        );
+      }
+      writeSettings({ default_provider: raw });
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('app:get-default-permission-level', (): Result<PermissionLevel> => {
+    try {
+      // v0.3.0 — 새 세션의 default_level. 미설정 시 'workspace_write'.
+      const settings = readSettings();
+      return ok(settings.default_permission_level ?? 'workspace_write');
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('app:set-default-permission-level', (_evt, raw: unknown): Result<void> => {
+    try {
+      // v0.3.0 — Zod 로 enum 검증 후 영속.
+      const validated = PermissionLevelSchema.parse(raw);
+      writeSettings({ default_permission_level: validated });
       return ok(undefined);
     } catch (err) {
       return fail(err);
@@ -828,12 +897,16 @@ function registerMcpHandlers(mcp: McpManager): void {
 export interface AiHandlerConfig {
   /** Renderer 로 stream-event 를 보낼 BrowserWindow getter. null 시 emit skip. */
   getMainWindow: () => BrowserWindow | null;
-  /** Override for tests. Default: @/providers getDefaultProvider. */
+  /**
+   * Override for tests. Default: @/providers getDefaultProvider.
+   * v0.3.0 — userDefaultProvider 옵션 추가 (wizard 에서 사용자가 선택한 값).
+   */
   getDefaultProvider?: (
     model: string,
     signal?: AbortSignal,
     cwd?: string,
-    permissionLevel?: PermissionLevel
+    permissionLevel?: PermissionLevel,
+    userDefaultProvider?: 'auto' | 'claude' | 'codex' | 'mock'
   ) => Promise<AutoProviderResult>;
   /** Override for tests. Default: @/providers detectCli. */
   detectCli?: () => Promise<CliDetectionResult>;
@@ -891,12 +964,18 @@ function registerAiHandlers(cfg: AiHandlerConfig): void {
         // Codex spec 의 안전한 default — renderer 가 명시 안 했어도 sandbox 가
         // 강제되도록. Spec: docs/permission/provider-mapping.md
         const effectiveLevel: PermissionLevel = permission_level ?? 'workspace_write';
+        // v0.3.0 — settings.default_provider 를 매 stream 마다 fresh 로 읽음.
+        // 사용자가 wizard 또는 설정에서 변경하면 즉시 반영. 'auto' 는 종전 동작.
+        const settings = readSettings();
+        const userDefaultProvider: DefaultProviderChoice =
+          settings.default_provider ?? 'auto';
         const controller = new AbortController();
         const { provider, source } = await getDefaultProviderFn(
           model,
           controller.signal,
           workspace_root,
-          effectiveLevel
+          effectiveLevel,
+          userDefaultProvider
         );
         activeStreams.set(stream_id, {
           abort: () => controller.abort(),

@@ -24,6 +24,7 @@ import {
   workspaceIdFor,
   partitionIdFor,
   nowIso,
+  type PermissionLevel,
   type Session,
   type SessionId,
   type Turn,
@@ -56,7 +57,16 @@ function isMockAllowed(): boolean {
   return Boolean(import.meta.env.DEV);
 }
 
-function createDemoSession(title: string, workspace: WorkspaceInfo): Session {
+/**
+ * v0.3.0 — defaultPermissionLevel 인자가 추가됨. wizard / 설정에서 사용자가
+ * 선택한 값을 그대로 새 session 의 default_level 로 inherit. 미지정 시
+ * 'workspace_write' (codebase 의 기존 default).
+ */
+function createDemoSession(
+  title: string,
+  workspace: WorkspaceInfo,
+  defaultPermissionLevel: PermissionLevel = 'workspace_write'
+): Session {
   const id = newSessionId();
   const now = nowIso();
   const workspaceId = workspaceIdFor(workspace.root);
@@ -97,7 +107,7 @@ function createDemoSession(title: string, workspace: WorkspaceInfo): Session {
     plan: { active: false, browser_tool_enabled: false },
     permission: {
       grants: [],
-      default_level: 'workspace_write',
+      default_level: defaultPermissionLevel,
       temporarily_blocked_capabilities: [],
     },
     metadata: {},
@@ -114,10 +124,12 @@ export function App(): React.JSX.Element {
 
   // Phase 3 B2: 첫 실행 wizard. completed=true 면 main app, false 면 wizard 표시.
   // null 동안은 splash (flicker 방지) — Spec: docs/ia/onboarding.md
+  // v0.3.0: reset 추가 — Sidebar 의 [온보딩 다시 보기] 클릭 시 호출.
   const {
     completed: onboardingCompleted,
     loading: onboardingLoading,
     complete: completeOnboarding,
+    reset: resetOnboarding,
   } = useOnboarding();
 
   // The full active session lives only in the renderer during chat;
@@ -246,6 +258,35 @@ export function App(): React.JSX.Element {
     return null;
   }, []);
 
+  // v0.3.0 — wizard / 설정에서 사용자가 선택한 기본 permission level.
+  // 새 session 생성 시 default_level 로 inherit. IPC 응답 전엔 'workspace_write'
+  // safe default 유지.
+  const [defaultPermissionLevel, setDefaultPermissionLevel] =
+    useState<PermissionLevel>('workspace_write');
+  useEffect(() => {
+    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+    if (appApi === undefined || typeof appApi.getDefaultPermissionLevel !== 'function') {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await appApi.getDefaultPermissionLevel();
+        if (cancelled) return;
+        if (result.ok) setDefaultPermissionLevel(result.value);
+      } catch {
+        // safe default 유지
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    // useOnboarding 의 completed 가 false → true 로 바뀐 시점 (= wizard 끝
+    // 직후) 에 사용자가 wizard 에서 변경한 default 를 다시 fetch 해 반영.
+    onboardingCompleted,
+  ]);
+
   // CLI 감지 결과 — onMount 한 번 가져와 ChatHeader 에 표시.
   const [cliStatus, setCliStatus] = useState<CliStatus>(null);
   useEffect(() => {
@@ -337,12 +378,24 @@ export function App(): React.JSX.Element {
       if (picked === null) return;
       workspace = { root: picked.path, name: picked.name };
     }
-    const newSession = createDemoSession(`새 채팅 ${sessions.length + 1}`, workspace);
+    // v0.3.0 — settings.default_permission_level 을 새 session 의 default_level
+    // 로 사용. wizard step 4 / 설정에서 사용자가 변경하면 다음 session 부터 반영.
+    const newSession = createDemoSession(
+      `새 채팅 ${sessions.length + 1}`,
+      workspace,
+      defaultPermissionLevel
+    );
     const created = await createSession(newSession);
     if (created !== null) {
       setActiveSessionId(created.id);
     }
-  }, [createSession, defaultWorkspace, pickWorkspace, sessions.length]);
+  }, [
+    createSession,
+    defaultWorkspace,
+    defaultPermissionLevel,
+    pickWorkspace,
+    sessions.length,
+  ]);
 
   const handleSubmitMessage = useCallback(
     async (text: string): Promise<void> => {
@@ -416,22 +469,49 @@ export function App(): React.JSX.Element {
 
   // Phase 3 B2: Wizard 완료 시 호출 — settings 영속 + 옵션으로 첫 채팅 생성.
   // firstPrompt 가 있으면 새 세션 + ChatInput 자동 채움 (auto-submit X).
+  // v0.3.0 — wizard 가 default_permission_level 을 변경했을 수 있으므로 다시
+  // fetch 한 후 새 session 의 default_level 로 사용. wizard 가 IPC 호출에
+  // 실패해도 기존 state 의 default 값 유지.
   const handleOnboardingComplete = useCallback(
     async (firstPrompt?: string): Promise<void> => {
       await completeOnboarding();
+      // wizard 에서 변경됐을 가능성 — 한 번 더 read 후 새 session 에 반영.
+      let levelForNewSession: PermissionLevel = defaultPermissionLevel;
+      const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+      if (appApi !== undefined && typeof appApi.getDefaultPermissionLevel === 'function') {
+        try {
+          const result = await appApi.getDefaultPermissionLevel();
+          if (result.ok) {
+            levelForNewSession = result.value;
+            setDefaultPermissionLevel(result.value);
+          }
+        } catch {
+          // 실패해도 in-memory state 사용 — 매우 안전한 fallback
+        }
+      }
       if (firstPrompt === undefined || firstPrompt.length === 0) return;
       // workspace 결정: wizard step 4 에서 사용자가 선택했거나 기존 settings 사용.
       // 둘 다 null 이면 새 세션 생성 X (process.cwd() 우연 매칭 방지).
       const refreshedDefault = defaultWorkspace;
       if (refreshedDefault === null) return;
-      const newSession = createDemoSession(`새 채팅 ${sessions.length + 1}`, refreshedDefault);
+      const newSession = createDemoSession(
+        `새 채팅 ${sessions.length + 1}`,
+        refreshedDefault,
+        levelForNewSession
+      );
       const created = await createSession(newSession);
       if (created !== null) {
         setActiveSessionId(created.id);
         setPendingPrompt(firstPrompt);
       }
     },
-    [completeOnboarding, defaultWorkspace, createSession, sessions.length]
+    [
+      completeOnboarding,
+      defaultWorkspace,
+      defaultPermissionLevel,
+      createSession,
+      sessions.length,
+    ]
   );
 
   const handleOnboardingSkip = useCallback(async (): Promise<void> => {
@@ -463,6 +543,12 @@ export function App(): React.JSX.Element {
             }}
             onOpenSettings={() => {
               setMcpSettingsOpen(true);
+            }}
+            onReopenOnboarding={() => {
+              // v0.3.0 — settings 의 onboarding_completed=false 영속 + state 토글.
+              // useOnboarding 의 completed 가 false 로 바뀌면 showOnboarding=true →
+              // OnboardingWizard 가 다시 mount.
+              void resetOnboarding();
             }}
           />
         }

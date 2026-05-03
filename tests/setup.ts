@@ -137,6 +137,14 @@ const mockStore = {
   // 첫 실행 wizard 표시 여부. 기본 true — App.tsx 회귀 테스트가 wizard 와
   // 충돌하지 않도록. Wizard 자체 검증 테스트는 false 로 override.
   onboardingCompleted: true,
+  // v0.3.0 — wizard / 설정에서 사용자가 선택할 수 있는 기본 provider 와
+  // permission level. 기본값은 main 측 fallback 과 일치 ('auto' / 'workspace_write').
+  defaultProvider: 'auto' as 'auto' | 'claude' | 'codex' | 'mock',
+  defaultPermissionLevel: 'workspace_write' as
+    | 'read_only'
+    | 'workspace_write'
+    | 'full_access'
+    | 'custom',
   aiStartedStreams: new Map<
     string,
     {
@@ -245,6 +253,8 @@ beforeEach(() => {
   mockStore.workspace = null;
   mockStore.workspacePickNext = undefined;
   mockStore.onboardingCompleted = true;
+  mockStore.defaultProvider = 'auto';
+  mockStore.defaultPermissionLevel = 'workspace_write';
   // Phase 3 B2: vi.fn 의 call history 도 매 테스트마다 초기화. 그렇지 않으면
   // `expect(mock).toHaveBeenCalled()` 가 이전 테스트의 잔여 호출 때문에
   // 즉시 true 가 되어 waitFor 가 실제 호출을 기다리지 않는다.
@@ -268,6 +278,20 @@ beforeEach(() => {
       (appApi.getDefaultWorkspace as unknown as { mockClear?: () => void }).mockClear?.();
       (appApi.getOnboardingStatus as unknown as { mockClear?: () => void }).mockClear?.();
       (appApi.completeOnboarding as unknown as { mockClear?: () => void }).mockClear?.();
+      // v0.3.0 — 새 settings IPC mock clear (정의돼 있을 때만).
+      (appApi.resetOnboarding as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
+      (
+        appApi.getDefaultProvider as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
+      (
+        appApi.setDefaultProvider as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
+      (
+        appApi.getDefaultPermissionLevel as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
+      (
+        appApi.setDefaultPermissionLevel as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
     }
     const ai = window.dreampia.ai;
     if (ai !== undefined) {
@@ -319,6 +343,48 @@ if (typeof window !== 'undefined') {
         completeOnboarding: vi.fn(
           async (): Promise<Result<void>> => {
             mockStore.onboardingCompleted = true;
+            return { ok: true, value: undefined };
+          }
+        ),
+
+        // v0.3.0 — Sidebar 의 [온보딩 다시 보기] 버튼 + 새 settings 항목들.
+        resetOnboarding: vi.fn(
+          async (): Promise<Result<void>> => {
+            mockStore.onboardingCompleted = false;
+            return { ok: true, value: undefined };
+          }
+        ),
+
+        getDefaultProvider: vi.fn(
+          async (): Promise<Result<'auto' | 'claude' | 'codex' | 'mock'>> => ({
+            ok: true,
+            value: mockStore.defaultProvider,
+          })
+        ),
+
+        setDefaultProvider: vi.fn(
+          async (
+            provider: 'auto' | 'claude' | 'codex' | 'mock'
+          ): Promise<Result<void>> => {
+            mockStore.defaultProvider = provider;
+            return { ok: true, value: undefined };
+          }
+        ),
+
+        getDefaultPermissionLevel: vi.fn(
+          async (): Promise<
+            Result<'read_only' | 'workspace_write' | 'full_access' | 'custom'>
+          > => ({
+            ok: true,
+            value: mockStore.defaultPermissionLevel,
+          })
+        ),
+
+        setDefaultPermissionLevel: vi.fn(
+          async (
+            level: 'read_only' | 'workspace_write' | 'full_access' | 'custom'
+          ): Promise<Result<void>> => {
+            mockStore.defaultPermissionLevel = level;
             return { ok: true, value: undefined };
           }
         ),

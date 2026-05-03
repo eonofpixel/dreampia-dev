@@ -31,6 +31,19 @@ export interface AutoProviderResult {
 }
 
 /**
+ * v0.3.0 — 사용자가 wizard / 설정에서 선택한 default_provider override.
+ *
+ *   undefined / 'auto' → 종전 동작 (model prefix 기반 routing)
+ *   'claude' / 'codex' → CLI 가 감지된 경우 강제 사용 (model prefix 무시)
+ *   'mock'             → MockProvider 강제 (단 shouldAllowMockFallback() 통과 시).
+ *
+ * Production 에서 'mock' 을 강제하려는 사용자가 있을 수 있어 fail-closed 가
+ * 깨지진 않게 — packaged 빌드는 여전히 DREAMPIA_ALLOW_MOCK_PROVIDER 가
+ * 필요하다 (preview 디버깅용 옵션).
+ */
+export type DefaultProviderOverride = 'auto' | 'claude' | 'codex' | 'mock';
+
+/**
  * 모델 이름 + CLI 설치 상태로 best provider 선택.
  *
  * `signal` 은 CliProvider 에 전달되어 mid-stream abort 를 지원한다.
@@ -39,13 +52,17 @@ export interface AutoProviderResult {
  * 기대지 않는다.
  * `permissionLevel` 은 session.permission.default_level 을 그대로 받아 CLI
  * 의 sandbox / tool-policy 옵션으로 매핑된다. 미지정 시 'workspace_write'.
+ * `userDefaultProvider` (v0.3.0) — 사용자가 wizard 에서 선택한 override.
+ * 'auto' 또는 undefined 면 model-prefix 기반 routing 으로 fallback.
+ *
  * Spec: docs/permission/provider-mapping.md
  */
 export async function getDefaultProvider(
   model: string,
   signal?: AbortSignal,
   cwd?: string,
-  permissionLevel?: PermissionLevel
+  permissionLevel?: PermissionLevel,
+  userDefaultProvider?: DefaultProviderOverride
 ): Promise<AutoProviderResult> {
   // ★ E2E test 환경 (DREAMPIA_TEST=1) 에선 CLI 감지/사용 강제 disable.
   // 이유: 실제 CLI 가 설치돼 있으면 인증 안 된 상태로 stream 실패하여
@@ -60,6 +77,34 @@ export async function getDefaultProvider(
   }
 
   const detected = await detectCli();
+
+  // v0.3.0 — 사용자 명시 선택은 model-prefix routing 보다 우선.
+  // 'auto' 는 종전 동작이므로 분기 X.
+  if (userDefaultProvider === 'claude' && detected.claude !== null) {
+    return {
+      provider: makeCliProvider(detected.claude, 'claude', signal, cwd, permissionLevel),
+      source: 'claude-cli',
+      detected,
+    };
+  }
+  if (userDefaultProvider === 'codex' && detected.codex !== null) {
+    return {
+      provider: makeCliProvider(detected.codex, 'codex', signal, cwd, permissionLevel),
+      source: 'codex-cli',
+      detected,
+    };
+  }
+  if (userDefaultProvider === 'mock' && shouldAllowMockFallback()) {
+    return {
+      provider: new MockProvider({ delayMs: 15 }),
+      source: 'mock',
+      detected,
+    };
+  }
+  // 사용자가 명시했지만 그 CLI 가 감지 안 된 경우 → 종전 routing 으로 fallback
+  // 하여 silent 실패 대신 가능한 다른 provider 를 시도. mock 의 경우는
+  // production 에서 fail-closed 가 보장되어야 하므로 fallback 통과 시켜 둔다.
+
   const lower = model.toLowerCase();
 
   // model prefix 분류 (routing.ts 의 MODEL_PREFIXES 와 맞춤)

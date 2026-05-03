@@ -122,6 +122,141 @@ describe('IPC workspace handlers', () => {
     expect(handlers.has('app:complete-onboarding')).toBe(true);
   });
 
+  it('registers v0.3.0 onboarding/settings channels', () => {
+    expect(handlers.has('app:reset-onboarding')).toBe(true);
+    expect(handlers.has('app:get-default-provider')).toBe(true);
+    expect(handlers.has('app:set-default-provider')).toBe(true);
+    expect(handlers.has('app:get-default-permission-level')).toBe(true);
+    expect(handlers.has('app:set-default-permission-level')).toBe(true);
+  });
+
+  describe('app:reset-onboarding', () => {
+    it('persists onboarding_completed=false when previously true', async () => {
+      writeFileSync(
+        join(testTmpDir, 'settings.json'),
+        JSON.stringify({ onboarding_completed: true })
+      );
+      __resetSettingsCache();
+
+      const result = await call<Result<void>>('app:reset-onboarding');
+      expect(result).toEqual({ ok: true, value: undefined });
+
+      const parsed = JSON.parse(
+        readFileSync(join(testTmpDir, 'settings.json'), 'utf-8')
+      ) as Record<string, unknown>;
+      expect(parsed['onboarding_completed']).toBe(false);
+    });
+
+    it('preserves workspace_root / workspace_name on reset', async () => {
+      writeFileSync(
+        join(testTmpDir, 'settings.json'),
+        JSON.stringify({
+          onboarding_completed: true,
+          workspace_root: '/preserved',
+          workspace_name: 'preserved',
+        })
+      );
+      __resetSettingsCache();
+
+      await call<Result<void>>('app:reset-onboarding');
+
+      const parsed = JSON.parse(
+        readFileSync(join(testTmpDir, 'settings.json'), 'utf-8')
+      ) as Record<string, unknown>;
+      expect(parsed['workspace_root']).toBe('/preserved');
+      expect(parsed['workspace_name']).toBe('preserved');
+      expect(parsed['onboarding_completed']).toBe(false);
+    });
+
+    it('subsequent get-onboarding-status reflects reset (cache invalidation)', async () => {
+      writeFileSync(
+        join(testTmpDir, 'settings.json'),
+        JSON.stringify({ onboarding_completed: true })
+      );
+      __resetSettingsCache();
+
+      await call<Result<void>>('app:reset-onboarding');
+
+      const result = await call<Result<{ completed: boolean }>>(
+        'app:get-onboarding-status'
+      );
+      expect(result).toEqual({ ok: true, value: { completed: false } });
+    });
+  });
+
+  describe('app:get/set-default-provider', () => {
+    it('returns auto when settings missing default_provider', async () => {
+      const result = await call<Result<string>>('app:get-default-provider');
+      expect(result).toEqual({ ok: true, value: 'auto' });
+    });
+
+    it('returns persisted default_provider', async () => {
+      writeFileSync(
+        join(testTmpDir, 'settings.json'),
+        JSON.stringify({ default_provider: 'claude' })
+      );
+      __resetSettingsCache();
+      const result = await call<Result<string>>('app:get-default-provider');
+      expect(result).toEqual({ ok: true, value: 'claude' });
+    });
+
+    it('set-default-provider persists value', async () => {
+      const result = await call<Result<void>>('app:set-default-provider', 'codex');
+      expect(result).toEqual({ ok: true, value: undefined });
+      const parsed = JSON.parse(
+        readFileSync(join(testTmpDir, 'settings.json'), 'utf-8')
+      ) as Record<string, unknown>;
+      expect(parsed['default_provider']).toBe('codex');
+    });
+
+    it('set-default-provider rejects invalid choice', async () => {
+      const result = await call<Result<void>>('app:set-default-provider', 'gemini');
+      expect(result.ok).toBe(false);
+    });
+
+    it('set-default-provider rejects non-string', async () => {
+      const result = await call<Result<void>>('app:set-default-provider', 42);
+      expect(result.ok).toBe(false);
+    });
+  });
+
+  describe('app:get/set-default-permission-level', () => {
+    it('returns workspace_write when settings missing default_permission_level', async () => {
+      const result = await call<Result<string>>('app:get-default-permission-level');
+      expect(result).toEqual({ ok: true, value: 'workspace_write' });
+    });
+
+    it('returns persisted default_permission_level', async () => {
+      writeFileSync(
+        join(testTmpDir, 'settings.json'),
+        JSON.stringify({ default_permission_level: 'read_only' })
+      );
+      __resetSettingsCache();
+      const result = await call<Result<string>>('app:get-default-permission-level');
+      expect(result).toEqual({ ok: true, value: 'read_only' });
+    });
+
+    it('set-default-permission-level persists value', async () => {
+      const result = await call<Result<void>>(
+        'app:set-default-permission-level',
+        'full_access'
+      );
+      expect(result).toEqual({ ok: true, value: undefined });
+      const parsed = JSON.parse(
+        readFileSync(join(testTmpDir, 'settings.json'), 'utf-8')
+      ) as Record<string, unknown>;
+      expect(parsed['default_permission_level']).toBe('full_access');
+    });
+
+    it('set-default-permission-level rejects invalid level via Zod', async () => {
+      const result = await call<Result<void>>(
+        'app:set-default-permission-level',
+        'admin'
+      );
+      expect(result.ok).toBe(false);
+    });
+  });
+
   describe('app:get-onboarding-status', () => {
     it('returns completed=false when settings missing onboarding_completed', async () => {
       const result = await call<Result<{ completed: boolean }>>(
