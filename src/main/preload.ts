@@ -16,6 +16,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { Session, SessionId, Turn } from '@/types';
 import type {
   ConversationPatch,
+  PermissionPatch,
   Result,
   SessionMetaPatch,
   WorkspaceInfo,
@@ -308,6 +309,10 @@ const ALLOWED_INVOKE_CHANNELS = [
   'app:set-default-provider',
   'app:get-default-permission-level',
   'app:set-default-permission-level',
+  // v0.8.0 — Settings 모달 [테마] 탭 + [권한] 탭 capability 표시.
+  'app:get-theme',
+  'app:set-theme',
+  'app:get-permission-capabilities',
   'workspace/pick-folder',
   'workspace/get',
   // v0.6.0 (F-019) — @ mention 가 사용하는 file enumeration / read.
@@ -324,6 +329,8 @@ const ALLOWED_INVOKE_CHANNELS = [
   'session/update-conversation',
   // v0.7.0 (F-026) — Sidebar 검색.
   'session/search',
+  // v0.8.0 — H Permission Dropdown (세션 단위 권한 변경).
+  'session/update-permission',
   'lock/acquire',
   'lock/release',
   'lock/get',
@@ -461,6 +468,31 @@ const api = {
       level: 'read_only' | 'workspace_write' | 'full_access' | 'custom'
     ): Promise<Result<void>> =>
       ipcRenderer.invoke('app:set-default-permission-level', level) as Promise<Result<void>>,
+
+    /**
+     * v0.8.0 — Settings 모달 [테마] 탭. 'system' 은 OS 의 prefers-color-scheme
+     * 을 따라가며, renderer 가 document.documentElement.data-theme 을 설정.
+     */
+    getTheme: (): Promise<Result<'light' | 'dark' | 'system'>> =>
+      ipcRenderer.invoke('app:get-theme') as Promise<Result<'light' | 'dark' | 'system'>>,
+
+    setTheme: (theme: 'light' | 'dark' | 'system'): Promise<Result<void>> =>
+      ipcRenderer.invoke('app:set-theme', theme) as Promise<Result<void>>,
+
+    /**
+     * v0.8.0 — Settings 모달 [권한] 탭이 표시할 capability set (read-only).
+     * PermissionLevel 별로 plain string[] 를 반환 — IPC 직렬화 안전.
+     */
+    getPermissionCapabilities: (): Promise<
+      Result<
+        Record<'read_only' | 'workspace_write' | 'full_access' | 'custom', string[]>
+      >
+    > =>
+      ipcRenderer.invoke('app:get-permission-capabilities') as Promise<
+        Result<
+          Record<'read_only' | 'workspace_write' | 'full_access' | 'custom', string[]>
+        >
+      >,
   },
 
   /**
@@ -554,6 +586,19 @@ const api = {
     search: (args: SearchTurnsArgsShape): Promise<Result<TurnSearchResultShape[]>> =>
       ipcRenderer.invoke('session/search', args) as Promise<
         Result<TurnSearchResultShape[]>
+      >,
+
+    /**
+     * v0.8.0 — H Permission Dropdown 가 호출. 세션의 default_level 변경 후
+     * 갱신된 Session 반환. main 측 Zod 가 enum 검증 + strict mode 로 unknown
+     * field 거절.
+     */
+    updatePermission: (
+      id: SessionId,
+      patch: PermissionPatch
+    ): Promise<Result<Session>> =>
+      ipcRenderer.invoke('session/update-permission', id, patch) as Promise<
+        Result<Session>
       >,
   },
 

@@ -18,8 +18,7 @@ import { ChatPanel, type CliStatus } from './components/chat/ChatPanel';
 import type { ResolverContext } from './mentions/resolver';
 import { PreviewPanel } from './components/preview/PreviewPanel';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
-import { McpSettings } from './components/settings/McpSettings';
-import { UsageSettings } from './components/settings/UsageSettings';
+import { SettingsModal, applyTheme, type SettingsTabId } from './components/settings/SettingsModal';
 import { SlashHelpModal } from './components/chat/SlashHelpModal';
 import { KNOWN_MODELS, type SlashCommandId } from './commands/registry';
 import {
@@ -127,6 +126,7 @@ export function App(): React.JSX.Element {
     appendTurn: persistTurn,
     clearTurns: persistClearTurns,
     updateConversation: persistUpdateConversation,
+    updatePermission: persistUpdatePermission,
   } = useSessionStore();
 
   // Phase 3 B2: 첫 실행 wizard. completed=true 면 main app, false 면 wizard 표시.
@@ -152,10 +152,12 @@ export function App(): React.JSX.Element {
   // null 이 반환되므로 nullable. dev/e2e 에선 process.cwd() 가 들어옴.
   const [launchWorkspace, setLaunchWorkspace] = useState<WorkspaceInfo | null>(null);
   const [launchWorkspaceLoaded, setLaunchWorkspaceLoaded] = useState(false);
-  // v0.2.0 — Issue #5: MCP 서버 설정 모달 표시.
-  const [mcpSettingsOpen, setMcpSettingsOpen] = useState(false);
-  // v0.4.0 — Sidebar [사용량] 클릭 시 표시되는 token / cost 모달.
-  const [usageSettingsOpen, setUsageSettingsOpen] = useState(false);
+  // v0.8.0 — 통합 SettingsModal. 이전엔 McpSettings + UsageSettings 가 별도
+  // state 였으나, D1 + H 작업으로 7-tab 단일 모달로 통합. tab 은 슬래시 명령
+  // 또는 진입 버튼에 따라 분기 — `/settings` → 'mcp' (default), `/usage` →
+  // 'usage', Sidebar 사용량 버튼 → 'usage'.
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTabId>('mcp');
   // v0.5.0 (F-018) — `/help` 슬래시 명령으로 여는 명령어 도움말 모달.
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
   // v0.7.0 (F-026) — Sidebar 메시지 검색 state. 입력은 즉시 반영, 실제 IPC
@@ -506,6 +508,57 @@ export function App(): React.JSX.Element {
     );
   }, [activeSession, persistClearTurns]);
 
+  // v0.8.0 — H Permission Dropdown. ChatHeader 의 dropdown 변경 시 호출.
+  // optimistic local update + IPC 영속. 영속 결과 반환된 Session 으로 다시
+  // shadow 갱신해 server-canonical 상태로 reconcile.
+  const handleChangePermission = useCallback(
+    async (next: PermissionLevel): Promise<void> => {
+      if (activeSession === null) return;
+      // 1) Optimistic local update — UI 즉시 반응.
+      setActiveSession((prev) =>
+        prev === null
+          ? prev
+          : {
+              ...prev,
+              updated_at: nowIso(),
+              permission: { ...prev.permission, default_level: next },
+            }
+      );
+      // 2) IPC 영속. 실패해도 optimistic state 가 그대로 — 다음 fetch 에서
+      //    reconcile (또는 사용자가 다시 변경). p2 toast UI 추가 가능.
+      const updated = await persistUpdatePermission(activeSession.id, {
+        default_level: next,
+      });
+      if (updated !== null) {
+        setActiveSession(updated);
+      }
+    },
+    [activeSession, persistUpdatePermission]
+  );
+
+  // v0.8.0 — App 부팅 시 settings.theme 을 한 번 fetch + data-theme 적용.
+  // SettingsModal 의 ThemePanel 도 mount 시 동일 fetch 를 하지만, 모달이 한
+  // 번도 안 열렸을 때도 사용자 선호가 즉시 적용되도록 root 에서도 호출.
+  useEffect(() => {
+    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+    if (appApi === undefined || typeof appApi.getTheme !== 'function') return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await appApi.getTheme();
+        if (cancelled) return;
+        if (result.ok) {
+          applyTheme(result.value);
+        }
+      } catch {
+        // safe default — data-theme 미설정 시 CSS 기본값 fallback.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // v0.5.0 (F-018) — `/model <name>` 슬래시 명령. KNOWN_MODELS 화이트리스트
   // 검증은 ChatInput 단에서 이미 거치지만 호출자도 방어적으로 체크.
   const handleChangeModel = useCallback(
@@ -655,10 +708,14 @@ export function App(): React.JSX.Element {
         void handleChangeModel(arg);
       },
       settings: () => {
-        setMcpSettingsOpen(true);
+        // v0.8.0 — 슬래시 `/settings` → 통합 모달의 MCP 탭으로 진입.
+        setSettingsInitialTab('mcp');
+        setSettingsModalOpen(true);
       },
       usage: () => {
-        setUsageSettingsOpen(true);
+        // v0.8.0 — 슬래시 `/usage` → 통합 모달의 사용량 탭으로 진입.
+        setSettingsInitialTab('usage');
+        setSettingsModalOpen(true);
       },
       onboarding: () => {
         void resetOnboarding();
@@ -742,7 +799,9 @@ export function App(): React.JSX.Element {
               void handleNewChat();
             }}
             onOpenSettings={() => {
-              setMcpSettingsOpen(true);
+              // v0.8.0 — 통합 SettingsModal 진입 (default tab=MCP).
+              setSettingsInitialTab('mcp');
+              setSettingsModalOpen(true);
             }}
             onReopenOnboarding={() => {
               // v0.3.0 — settings 의 onboarding_completed=false 영속 + state 토글.
@@ -751,8 +810,9 @@ export function App(): React.JSX.Element {
               void resetOnboarding();
             }}
             onOpenUsage={() => {
-              // v0.4.0 — token / cost 모달 열기.
-              setUsageSettingsOpen(true);
+              // v0.8.0 — 통합 SettingsModal 의 '사용량' 탭으로 직진입.
+              setSettingsInitialTab('usage');
+              setSettingsModalOpen(true);
             }}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
@@ -791,6 +851,9 @@ export function App(): React.JSX.Element {
             })}
             pendingFocusTurnId={pendingFocusTurnId}
             onTurnFocused={handleTurnFocused}
+            onChangePermission={(next) => {
+              void handleChangePermission(next);
+            }}
           />
         }
         preview={
@@ -800,16 +863,15 @@ export function App(): React.JSX.Element {
           />
         }
       />
-      <McpSettings
-        open={mcpSettingsOpen}
+      <SettingsModal
+        open={settingsModalOpen}
+        initialTab={settingsInitialTab}
         onClose={() => {
-          setMcpSettingsOpen(false);
+          setSettingsModalOpen(false);
         }}
-      />
-      <UsageSettings
-        open={usageSettingsOpen}
-        onClose={() => {
-          setUsageSettingsOpen(false);
+        onReopenOnboarding={() => {
+          setSettingsModalOpen(false);
+          void resetOnboarding();
         }}
       />
       <SlashHelpModal

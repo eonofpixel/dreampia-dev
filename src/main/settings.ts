@@ -40,6 +40,18 @@ function isDefaultProviderChoice(v: unknown): v is DefaultProviderChoice {
   return typeof v === 'string' && (DEFAULT_PROVIDER_VALUES as readonly string[]).includes(v);
 }
 
+/**
+ * v0.8.0 — Settings 모달의 [테마] 탭에서 선택. 'system' 이면 prefers-color-scheme
+ * 매핑 (renderer 가 적용). 미지정 시 'system'. data-theme 속성으로 CSS 토큰
+ * (bg-primary 등) 을 분기.
+ */
+export const THEME_VALUES = ['light', 'dark', 'system'] as const;
+export type ThemeChoice = (typeof THEME_VALUES)[number];
+
+function isThemeChoice(v: unknown): v is ThemeChoice {
+  return typeof v === 'string' && (THEME_VALUES as readonly string[]).includes(v);
+}
+
 export interface AppSettings {
   /** 마지막으로 선택한 작업 폴더 절대 경로. */
   workspace_root?: string;
@@ -68,6 +80,12 @@ export interface AppSettings {
    * 미지정 시 'workspace_write' (codebase 의 기존 default).
    */
   default_permission_level?: PermissionLevel;
+  /**
+   * v0.8.0 — UI 테마 선택. 'system' 이면 OS 의 prefers-color-scheme 을 따라가며,
+   * renderer 가 document.documentElement 에 data-theme 속성을 적용한다.
+   * 미지정 시 'system'.
+   */
+  theme?: ThemeChoice;
 }
 
 let cached: AppSettings | null = null;
@@ -120,6 +138,10 @@ export function readSettings(): AppSettings {
       const dplResult = PermissionLevelSchema.safeParse(obj['default_permission_level']);
       if (dplResult.success) {
         next.default_permission_level = dplResult.data;
+      }
+      // v0.8.0 — theme. 알 수 없는 값은 silent drop.
+      if (isThemeChoice(obj['theme'])) {
+        next.theme = obj['theme'];
       }
       cached = next;
     } else {

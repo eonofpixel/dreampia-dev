@@ -55,3 +55,14 @@ export interface WorkspaceInfo {
   root: string;
   name: string;
 }
+
+/**
+ * v0.8.0 — Patch shape for `session/update-permission` IPC.
+ *
+ * 세션의 permission.default_level 만 바꾸는 metadata 변경. grants 는 별도
+ * 채널 (향후 추가 예정 — v0.13.0 custom 권한 management). Defined here (not
+ * in `@/storage`) so preload can reference it without pulling in SessionStore.
+ */
+export interface PermissionPatch {
+  default_level?: 'read_only' | 'workspace_write' | 'full_access' | 'custom';
+}

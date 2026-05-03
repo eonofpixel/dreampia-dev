@@ -206,6 +206,50 @@ const mockStore = {
     | 'workspace_write'
     | 'full_access'
     | 'custom',
+  // v0.8.0 — Settings 모달 [테마] 탭 + [권한] 탭 capability 표시용 mock state.
+  // theme 기본값은 'system' (main side 와 동일). capabilities 는 LEVEL_CAPABILITIES
+  // 의 단순 mirror — 테스트가 customize 가능.
+  theme: 'system' as 'light' | 'dark' | 'system',
+  permissionCapabilities: {
+    read_only: ['LOCAL_READ', 'NETWORK_LOCAL', 'NETWORK_AI', 'SYSTEM_NOTIFICATION'],
+    workspace_write: [
+      'LOCAL_READ',
+      'NETWORK_LOCAL',
+      'NETWORK_AI',
+      'SYSTEM_NOTIFICATION',
+      'LOCAL_WRITE',
+      'LOCAL_WRITE.create',
+      'LOCAL_WRITE.modify',
+      'LOCAL_WRITE.rename',
+      'LOCAL_EXECUTE',
+      'NETWORK_REMOTE',
+      'SYSTEM_CLIPBOARD.read',
+    ],
+    full_access: [
+      'LOCAL_READ',
+      'NETWORK_LOCAL',
+      'NETWORK_AI',
+      'SYSTEM_NOTIFICATION',
+      'LOCAL_WRITE',
+      'LOCAL_WRITE.create',
+      'LOCAL_WRITE.modify',
+      'LOCAL_WRITE.rename',
+      'LOCAL_EXECUTE',
+      'NETWORK_REMOTE',
+      'SYSTEM_CLIPBOARD.read',
+      'LOCAL_OUTSIDE_CWD',
+      'LOCAL_OUTSIDE_CWD.read',
+      'LOCAL_OUTSIDE_CWD.write',
+      'LOCAL_EXECUTE.elevated',
+      'NETWORK_REMOTE.upload',
+      'SYSTEM_AUTOMATION',
+      'SYSTEM_AUTOMATION.cron',
+      'SYSTEM_AUTOMATION.event',
+      'SYSTEM_CLIPBOARD.write',
+      'SYSTEM_HOTKEY',
+    ],
+    custom: [] as string[],
+  },
   aiStartedStreams: new Map<
     string,
     {
@@ -338,6 +382,8 @@ beforeEach(() => {
   mockStore.onboardingCompleted = true;
   mockStore.defaultProvider = 'auto';
   mockStore.defaultPermissionLevel = 'workspace_write';
+  // v0.8.0 — theme 도 매 테스트마다 default 로 reset.
+  mockStore.theme = 'system';
   // Phase 3 B2: vi.fn 의 call history 도 매 테스트마다 초기화. 그렇지 않으면
   // `expect(mock).toHaveBeenCalled()` 가 이전 테스트의 잔여 호출 때문에
   // 즉시 true 가 되어 waitFor 가 실제 호출을 기다리지 않는다.
@@ -369,6 +415,10 @@ beforeEach(() => {
       (
         sess.search as unknown as { mockClear?: () => void } | undefined
       )?.mockClear?.();
+      // v0.8.0 — H Permission Dropdown mock clear.
+      (
+        sess.updatePermission as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
     }
     const appApi = window.dreampia.app;
     if (appApi !== undefined) {
@@ -388,6 +438,16 @@ beforeEach(() => {
       )?.mockClear?.();
       (
         appApi.setDefaultPermissionLevel as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
+      // v0.8.0 — theme + capability IPC mock clear (정의돼 있을 때만).
+      (
+        appApi.getTheme as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
+      (
+        appApi.setTheme as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
+      (
+        appApi.getPermissionCapabilities as unknown as { mockClear?: () => void } | undefined
       )?.mockClear?.();
     }
     const ai = window.dreampia.ai;
@@ -490,6 +550,37 @@ if (typeof window !== 'undefined') {
             mockStore.defaultPermissionLevel = level;
             return { ok: true, value: undefined };
           }
+        ),
+
+        // v0.8.0 — Settings 모달 [테마] 탭 + [권한] 탭 capability 표시.
+        getTheme: vi.fn(
+          async (): Promise<Result<'light' | 'dark' | 'system'>> => ({
+            ok: true,
+            value: mockStore.theme,
+          })
+        ),
+
+        setTheme: vi.fn(
+          async (theme: 'light' | 'dark' | 'system'): Promise<Result<void>> => {
+            mockStore.theme = theme;
+            return { ok: true, value: undefined };
+          }
+        ),
+
+        getPermissionCapabilities: vi.fn(
+          async (): Promise<
+            Result<
+              Record<'read_only' | 'workspace_write' | 'full_access' | 'custom', string[]>
+            >
+          > => ({
+            ok: true,
+            value: {
+              read_only: [...mockStore.permissionCapabilities.read_only],
+              workspace_write: [...mockStore.permissionCapabilities.workspace_write],
+              full_access: [...mockStore.permissionCapabilities.full_access],
+              custom: [...mockStore.permissionCapabilities.custom],
+            },
+          })
         ),
       },
 
@@ -670,6 +761,34 @@ if (typeof window !== 'undefined') {
             const all = mockStore.searchResults.get(args.q) ?? [];
             const limit = args.limit ?? 50;
             return { ok: true, value: all.slice(0, limit) };
+          }
+        ),
+
+        // v0.8.0 — H Permission Dropdown. session.permission.default_level 갱신
+        // 후 갱신된 Session 반환. session 미존재 시 실패.
+        updatePermission: vi.fn(
+          async (
+            id: string,
+            patch: {
+              default_level?: 'read_only' | 'workspace_write' | 'full_access' | 'custom';
+            }
+          ): Promise<Result<Session>> => {
+            const s = mockStore.sessions.get(id);
+            if (s === undefined) {
+              return { ok: false, error: `session ${id} not found` };
+            }
+            const next: Session = {
+              ...s,
+              updated_at: new Date().toISOString(),
+              permission: {
+                ...s.permission,
+                ...(patch.default_level !== undefined && {
+                  default_level: patch.default_level,
+                }),
+              },
+            };
+            mockStore.sessions.set(id, next);
+            return { ok: true, value: next };
           }
         ),
       },

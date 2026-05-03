@@ -26,8 +26,11 @@ import { z } from 'zod';
 import {
   readSettings,
   writeSettings,
+  THEME_VALUES,
   type DefaultProviderChoice,
+  type ThemeChoice,
 } from './settings';
+import { LEVEL_CAPABILITIES } from '@/permission';
 import {
   ChatModeSchema,
   EffortLevelSchema,
@@ -72,12 +75,13 @@ import type { BrowserManager, BrowserTabState } from './BrowserManager';
 import type { FileContent, FileEntry } from '@/types/workspace';
 import type {
   ConversationPatch,
+  PermissionPatch,
   Result,
   SessionMetaPatch,
   WorkspaceInfo,
 } from './types';
 
-export type { ConversationPatch, Result, SessionMetaPatch } from './types';
+export type { ConversationPatch, PermissionPatch, Result, SessionMetaPatch } from './types';
 
 // Types shared with renderer (preload only exposes whitelisted channels)
 export type AppInfo = {
@@ -106,6 +110,14 @@ const ConversationPatchSchema = z
     current_model: z.string().min(1).optional(),
     current_effort: EffortLevelSchema.optional(),
     current_mode: ChatModeSchema.optional(),
+  })
+  .strict();
+
+// v0.8.0 — Session permission 변경 IPC. 현재는 default_level 만 노출 — grants
+// 는 별도 IPC 로 추가 예정 (v0.13.0 custom 권한 management).
+const PermissionPatchSchema = z
+  .object({
+    default_level: PermissionLevelSchema.optional(),
   })
   .strict();
 
@@ -527,6 +539,52 @@ export function registerIpcHandlers(
     }
   });
 
+  // v0.8.0 — Settings 모달 [테마] 탭. 'system' 은 OS 설정을 따라가며, renderer
+  // 가 document.documentElement 의 data-theme 을 수동으로 갱신.
+  ipcMain.handle('app:get-theme', (): Result<ThemeChoice> => {
+    try {
+      const settings = readSettings();
+      return ok(settings.theme ?? 'system');
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('app:set-theme', (_evt, raw: unknown): Result<void> => {
+    try {
+      if (
+        typeof raw !== 'string' ||
+        !(THEME_VALUES as readonly string[]).includes(raw)
+      ) {
+        throw new Error(`theme must be one of: ${THEME_VALUES.join(', ')}`);
+      }
+      writeSettings({ theme: raw as ThemeChoice });
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  // v0.8.0 — Settings 모달 [권한] 탭이 capability set 을 read-only 로 표시.
+  // PermissionLevel 별 ReadonlySet<Capability> 를 plain string[] 로 직렬화해
+  // renderer 로 전달 (Set 은 IPC 직렬화 시 빈 객체가 됨).
+  ipcMain.handle(
+    'app:get-permission-capabilities',
+    (): Result<Record<PermissionLevel, string[]>> => {
+      try {
+        const out: Record<PermissionLevel, string[]> = {
+          read_only: Array.from(LEVEL_CAPABILITIES.read_only),
+          workspace_write: Array.from(LEVEL_CAPABILITIES.workspace_write),
+          full_access: Array.from(LEVEL_CAPABILITIES.full_access),
+          custom: Array.from(LEVEL_CAPABILITIES.custom),
+        };
+        return ok(out);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
   ipcMain.handle('app:get-default-workspace', (): Result<WorkspaceInfo | null> => {
     try {
       // 사용자가 picker 로 선택한 경로가 있으면 우선.
@@ -860,6 +918,29 @@ function registerSessionHandlers(store: SessionStore): void {
       try {
         const { q, limit } = SearchTurnsArgsSchema.parse(raw);
         return ok(store.searchTurns(q, limit ?? 50));
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  // v0.8.0 — H Permission Dropdown — 세션의 default_level 변경. metadata-only
+  // change. 갱신된 Session 을 반환해 caller (renderer) 가 즉시 local state 에
+  // shadow update 가능.
+  ipcMain.handle(
+    'session/update-permission',
+    (_evt, sessionId: unknown, patch: unknown): Result<Session> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        const validated: PermissionPatch = PermissionPatchSchema.parse(patch);
+        store.updatePermission(sessionId as SessionId, validated);
+        const reloaded = store.getSession(sessionId as SessionId);
+        if (reloaded === null) {
+          throw new Error(`Cannot update permission: session ${sessionId} not found`);
+        }
+        return ok(reloaded);
       } catch (err) {
         return fail(err);
       }

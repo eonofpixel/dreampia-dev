@@ -197,13 +197,16 @@ test.describe('first-chat flow (v0.3.0)', () => {
       'true'
     );
 
-    // Enter → UsageSettings 모달 열림 + popover 닫힘 + input clear.
+    // Enter → 통합 SettingsModal 의 '사용량' 탭 열림 + popover 닫힘.
+    // v0.8.0 — 이전엔 별도 UsageSettings 모달이었으나 7-tab 통합 SettingsModal
+    // 의 'usage' 탭으로 변경. dialog aria-label 은 '설정' 이고 active panel 이
+    // settings-panel-usage 가 된다.
     await input.press('Enter');
     await expect(window.getByTestId('slash-command-popover')).toBeHidden();
-    // UsageSettings 의 dialog 가 등장한다 — 한국어 라벨 "사용량" 으로 매칭.
-    await expect(window.getByRole('dialog', { name: /사용량/i })).toBeVisible({
+    await expect(window.getByRole('dialog', { name: /설정/i })).toBeVisible({
       timeout: 5_000,
     });
+    await expect(window.getByTestId('settings-panel-usage')).toBeVisible();
 
     // 닫고 /help 도 검증.
     await window.keyboard.press('Escape');

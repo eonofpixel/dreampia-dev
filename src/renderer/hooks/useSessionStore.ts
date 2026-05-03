@@ -27,7 +27,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Session, SessionId, Turn } from '@/types';
-import type { ConversationPatch, Result, SessionMetaPatch } from '@/main/types';
+import type {
+  ConversationPatch,
+  PermissionPatch,
+  Result,
+  SessionMetaPatch,
+} from '@/main/types';
 
 // SessionMeta shape (kept in sync with `@/storage` and preload).
 // Defined here (not imported from `@/storage`) so the renderer never
@@ -84,6 +89,13 @@ export interface UseSessionStoreApi {
    * 반환해 caller 가 즉시 UI 에 반영할 수 있도록 한다 (활성 session shadow).
    */
   updateConversation: (id: SessionId, patch: ConversationPatch) => Promise<Session | null>;
+
+  /**
+   * v0.8.0 — H Permission Dropdown. 세션의 permission.default_level 갱신.
+   * 갱신된 Session 을 반환해 caller (App.tsx) 가 local activeSession shadow
+   * 즉시 갱신. 실패 (preload 누락 / store error) 시 null.
+   */
+  updatePermission: (id: SessionId, patch: PermissionPatch) => Promise<Session | null>;
 }
 
 /**
@@ -258,6 +270,24 @@ export function useSessionStore(): UseSessionStoreApi {
     [refresh, safeSetState]
   );
 
+  const updatePermission = useCallback(
+    async (id: SessionId, patch: PermissionPatch): Promise<Session | null> => {
+      if (!hasSessionApi()) return null;
+      const sessionApi = window.dreampia.session;
+      // updatePermission 은 v0.8.0 추가 — 구버전 preload / 테스트 격리에서
+      // 안전하게 null 반환.
+      if (typeof sessionApi.updatePermission !== 'function') return null;
+      const result = await sessionApi.updatePermission(id, patch);
+      if (result.ok) {
+        await refresh();
+        return result.value;
+      }
+      safeSetState((s) => ({ ...s, error: result.error }));
+      return null;
+    },
+    [refresh, safeSetState]
+  );
+
   return {
     state,
     refresh,
@@ -268,5 +298,6 @@ export function useSessionStore(): UseSessionStoreApi {
     remove,
     clearTurns,
     updateConversation,
+    updatePermission,
   };
 }

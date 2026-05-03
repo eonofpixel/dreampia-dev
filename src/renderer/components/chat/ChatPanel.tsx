@@ -12,10 +12,11 @@
 
 import { useEffect, useRef } from 'react';
 import { ChatInput } from './ChatInput';
-import type { Session, Turn, ToolResultRef } from '@/types';
+import type { PermissionLevel, Session, Turn, ToolResultRef } from '@/types';
 import { EFFORT_LABELS_KO } from '@/types';
 import { ToolCallCard } from './ToolCallCard';
 import { findToolResult } from './toolDisplayHelpers';
+import { PermissionDropdown } from './PermissionDropdown';
 import type { SlashCommandId } from '../../commands/registry';
 import type { ResolverContext } from '../../mentions/resolver';
 
@@ -80,6 +81,12 @@ export interface ChatPanelProps {
    */
   pendingFocusTurnId?: string | null;
   onTurnFocused?: () => void;
+  /**
+   * v0.8.0 (H Permission Dropdown) — ChatHeader 의 권한 dropdown 변경 시
+   * 호출. 미지정 시 dropdown 표시되지만 disabled. caller (App.tsx) 는 IPC
+   * 호출 + local activeSession shadow 갱신을 수행.
+   */
+  onChangePermission?: (next: PermissionLevel) => void;
 }
 
 interface MessagesAreaProps {
@@ -118,6 +125,7 @@ export function ChatPanel({
   mentionResolverContext,
   pendingFocusTurnId,
   onTurnFocused,
+  onChangePermission,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -135,6 +143,8 @@ export function ChatPanel({
         cliStatus={cliStatus}
         workspaceName={workspaceName}
         onPickWorkspace={onPickWorkspace}
+        onChangePermission={onChangePermission}
+        permissionDisabled={ipcUnavailable}
       />
       {ipcUnavailable && <IpcUnavailableBanner />}
       <MessagesArea
@@ -302,11 +312,15 @@ function ChatHeader({
   cliStatus,
   workspaceName,
   onPickWorkspace,
+  onChangePermission,
+  permissionDisabled = false,
 }: {
   session: Session;
   cliStatus: CliStatus;
   workspaceName?: string;
   onPickWorkspace?: () => void;
+  onChangePermission?: (next: PermissionLevel) => void;
+  permissionDisabled?: boolean;
 }): React.JSX.Element {
   return (
     <div className="flex h-12 items-center justify-between border-b border-border-primary px-4">
@@ -324,6 +338,13 @@ function ChatHeader({
             📁 {workspaceName}
           </button>
         )}
+        <PermissionDropdown
+          level={session.permission.default_level}
+          onChange={(next) => {
+            if (onChangePermission !== undefined) onChangePermission(next);
+          }}
+          disabled={permissionDisabled || onChangePermission === undefined}
+        />
         <CliStatusBadge status={cliStatus} />
         <span>
           {session.conversation.current_model}

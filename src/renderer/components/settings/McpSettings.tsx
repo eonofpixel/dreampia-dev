@@ -9,7 +9,10 @@
  *  - [재시작] / [제거] / [로그 보기] 버튼
  *
  * UI 결정:
- *  - 사이드바의 [설정] 클릭 시 fixed overlay 로 표시 — z-50
+ *  - v0.2.0 ~ v0.7.x — 사이드바의 [설정] 클릭 시 fixed overlay 로 표시 — z-50
+ *  - v0.8.0 — SettingsModal 의 'MCP' 탭 panel 로 embed 가능 (`McpSettingsPanel`).
+ *    standalone 모달 진입점인 `McpSettings` 도 그대로 유지 — 기존 caller / e2e
+ *    회귀 0.
  *  - 단순 form: env / args 는 textarea (each line one entry)
  *  - 생성 시간/추가일은 자동 채움 (new Date().toISOString())
  *
@@ -47,21 +50,6 @@ const STATUS_COLORS: Record<McpServerStatusUI, string> = {
 };
 
 export function McpSettings({ open, onClose }: McpSettingsProps): React.JSX.Element | null {
-  const { servers, loading, error, refresh, add, remove, restart, getLogs } = useMcp();
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [logsForServer, setLogsForServer] = useState<{
-    id: string;
-    lines: string[];
-  } | null>(null);
-
-  const handleViewLogs = useCallback(
-    async (id: string): Promise<void> => {
-      const lines = await getLogs(id);
-      setLogsForServer({ id, lines });
-    },
-    [getLogs]
-  );
-
   if (!open) return null;
 
   return (
@@ -88,64 +76,91 @@ export function McpSettings({ open, onClose }: McpSettingsProps): React.JSX.Elem
             <X className="h-4 w-4" />
           </button>
         </div>
+        <McpSettingsPanel />
+      </div>
+    </div>
+  );
+}
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {error !== null && (
-            <div className="mb-3 flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">
-              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
+/**
+ * v0.8.0 — SettingsModal 의 'MCP' 탭 안에 mount 되는 body. McpSettings (모달
+ * frame) 와 동일한 hook 흐름을 공유하지만 자체 chrome (header / close) 은
+ * 가지지 않는다. 호출자는 panel-only 컴포넌트로 import 해 사용.
+ */
+export function McpSettingsPanel(): React.JSX.Element {
+  const { servers, loading, error, refresh, add, remove, restart, getLogs } = useMcp();
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [logsForServer, setLogsForServer] = useState<{
+    id: string;
+    lines: string[];
+  } | null>(null);
 
-          {loading ? (
-            <p className="text-sm text-text-secondary">불러오는 중...</p>
-          ) : servers.length === 0 ? (
-            <div className="py-8 text-center text-sm text-text-secondary">
-              등록된 MCP 서버가 없어요. 우측 하단 [+ 서버 추가] 버튼으로 시작해보세요.
-            </div>
-          ) : (
-            <ul className="space-y-2">
-              {servers.map((server) => (
-                <McpServerRow
-                  key={server.config.id}
-                  server={server}
-                  onRestart={() => {
-                    void restart(server.config.id);
-                  }}
-                  onRemove={() => {
-                    void remove(server.config.id);
-                  }}
-                  onViewLogs={() => {
-                    void handleViewLogs(server.config.id);
-                  }}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
+  const handleViewLogs = useCallback(
+    async (id: string): Promise<void> => {
+      const lines = await getLogs(id);
+      setLogsForServer({ id, lines });
+    },
+    [getLogs]
+  );
 
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-border-primary p-3">
-          <button
-            onClick={() => {
-              void refresh();
-            }}
-            className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-bg-tertiary"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            새로고침
-          </button>
-          <button
-            onClick={() => {
-              setShowAddForm(true);
-            }}
-            className="flex items-center gap-2 rounded-md bg-bg-tertiary px-3 py-1.5 text-sm font-medium hover:bg-bg-quaternary"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            서버 추가
-          </button>
-        </div>
+  return (
+    <>
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto p-4">
+        {error !== null && (
+          <div className="mb-3 flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {loading ? (
+          <p className="text-sm text-text-secondary">불러오는 중...</p>
+        ) : servers.length === 0 ? (
+          <div className="py-8 text-center text-sm text-text-secondary">
+            등록된 MCP 서버가 없어요. 우측 하단 [+ 서버 추가] 버튼으로 시작해보세요.
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {servers.map((server) => (
+              <McpServerRow
+                key={server.config.id}
+                server={server}
+                onRestart={() => {
+                  void restart(server.config.id);
+                }}
+                onRemove={() => {
+                  void remove(server.config.id);
+                }}
+                onViewLogs={() => {
+                  void handleViewLogs(server.config.id);
+                }}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between border-t border-border-primary p-3">
+        <button
+          onClick={() => {
+            void refresh();
+          }}
+          className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-bg-tertiary"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          새로고침
+        </button>
+        <button
+          onClick={() => {
+            setShowAddForm(true);
+          }}
+          className="flex items-center gap-2 rounded-md bg-bg-tertiary px-3 py-1.5 text-sm font-medium hover:bg-bg-quaternary"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          서버 추가
+        </button>
       </div>
 
       {showAddForm && (
@@ -172,7 +187,7 @@ export function McpSettings({ open, onClose }: McpSettingsProps): React.JSX.Elem
           }}
         />
       )}
-    </div>
+    </>
   );
 }
 

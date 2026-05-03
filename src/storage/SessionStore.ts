@@ -563,6 +563,47 @@ export class SessionStore {
       .run(JSON.stringify(next), now, id);
   }
 
+  /**
+   * v0.8.0 — 세션의 permission.default_level 을 갱신.
+   *
+   * conversation 처럼 default_level 도 metadata_json 의 _extra.permission 에
+   * 저장돼 있어 sessions 행의 metadata_json 만 갱신하면 된다 (turns / 자식 row
+   * 는 그대로). updated_at 도 새 시각으로 force update.
+   *
+   * Permission grants 자체는 별도 테이블이라 이 메서드로 변경되지 않는다 —
+   * 그건 향후 grant API 의 책임. 이 메서드는 "이 세션의 기본 권한 preset"
+   * 만 바꾼다.
+   */
+  updatePermission(
+    id: SessionId,
+    patch: {
+      default_level?: PermissionState['default_level'];
+    }
+  ): void {
+    const row = this.getSelectSessionStmt().get(id) as SessionRow | undefined;
+    if (!row) {
+      throw new Error(`Cannot update permission: session ${id} not found`);
+    }
+    if (patch.default_level === undefined) {
+      return;
+    }
+    const meta = this.parseMetadata(row.metadata_json);
+    const next: StoredMetadata = {
+      ...meta,
+      _extra: {
+        ...meta._extra,
+        permission: {
+          ...meta._extra.permission,
+          default_level: patch.default_level,
+        },
+      },
+    };
+    const now = new Date().toISOString();
+    this.db
+      .prepare(`UPDATE sessions SET metadata_json = ?, updated_at = ? WHERE id = ?`)
+      .run(JSON.stringify(next), now, id);
+  }
+
   updateSessionMeta(
     id: SessionId,
     patch: { title?: string; pinned?: boolean; archived?: boolean }

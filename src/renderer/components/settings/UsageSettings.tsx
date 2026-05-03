@@ -12,6 +12,9 @@
  *
  * 한국어 우선, 비용은 USD 4자리 소수까지 (Intl.NumberFormat). v0.4.0 에선
  * 차트 / CSV export 없이 표만 — 추가는 v0.5.0+.
+ *
+ * v0.8.0 — `UsageSettingsPanel` 도 함께 export. SettingsModal '사용량' 탭이
+ * 자체 header 없이 panel 만 mount 한다.
  */
 
 import { useCallback } from 'react';
@@ -82,17 +85,7 @@ function formatRefreshTime(ts: number | null): string {
 }
 
 export function UsageSettings({ open, onClose }: UsageSettingsProps): React.JSX.Element | null {
-  const { summary, daily, loading, error, lastRefreshedAt, preset, setPreset, refresh } =
-    useUsage('7d');
-
-  const handleRefresh = useCallback((): void => {
-    void refresh();
-  }, [refresh]);
-
   if (!open) return null;
-
-  const totalCost = summary.reduce((acc, row) => acc + row.total_cost_usd, 0);
-  const totalEvents = summary.reduce((acc, row) => acc + row.event_count, 0);
 
   return (
     <div
@@ -121,82 +114,104 @@ export function UsageSettings({ open, onClose }: UsageSettingsProps): React.JSX.
             <X className="h-4 w-4" />
           </button>
         </div>
-
-        {/* Preset tabs */}
-        <div
-          role="radiogroup"
-          aria-label="기간 선택"
-          className="flex gap-1 border-b border-border-primary p-2"
-        >
-          {PRESETS.map((p) => (
-            <button
-              key={p}
-              role="radio"
-              aria-checked={preset === p}
-              data-active={preset === p}
-              onClick={() => {
-                setPreset(p);
-              }}
-              className="rounded-md px-3 py-1.5 text-sm hover:bg-bg-tertiary data-[active=true]:bg-bg-tertiary data-[active=true]:font-medium"
-            >
-              {PRESET_LABELS[p]}
-            </button>
-          ))}
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {error !== null && (
-            <div className="mb-3 flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">
-              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {loading ? (
-            <p className="text-sm text-text-secondary">불러오는 중...</p>
-          ) : summary.length === 0 && daily.length === 0 ? (
-            <div className="py-12 text-center text-sm text-text-secondary">
-              아직 사용 기록이 없어요. 채팅을 시작하면 자동으로 기록됩니다.
-            </div>
-          ) : (
-            <>
-              {/* Total card */}
-              <section
-                aria-label="기간 합계"
-                className="mb-4 grid grid-cols-2 gap-2 rounded-md border border-border-primary bg-bg-secondary p-3 text-sm"
-              >
-                <div>
-                  <div className="text-xs text-text-tertiary">{PRESET_LABELS[preset]} 합계</div>
-                  <div className="mt-0.5 text-base font-semibold">{formatCost(totalCost)}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-text-tertiary">기록된 이벤트</div>
-                  <div className="mt-0.5 text-base font-semibold">{totalEvents}건</div>
-                </div>
-              </section>
-
-              <SummarySection rows={summary} />
-              <DailySection rows={daily} />
-            </>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-border-primary p-3">
-          <span className="text-xs text-text-tertiary">
-            마지막 갱신: {formatRefreshTime(lastRefreshedAt)}
-          </span>
-          <button
-            onClick={handleRefresh}
-            className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-bg-tertiary"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            새로고침
-          </button>
-        </div>
+        <UsageSettingsPanel />
       </div>
     </div>
+  );
+}
+
+/**
+ * v0.8.0 — SettingsModal 의 '사용량' 탭 안에 mount 되는 body. 자체 header /
+ * close 버튼은 가지지 않는다 (탭 sidebar 가 navigation 을 owner). 기존
+ * UsageSettings 모달 caller / e2e 회귀 0.
+ */
+export function UsageSettingsPanel(): React.JSX.Element {
+  const { summary, daily, loading, error, lastRefreshedAt, preset, setPreset, refresh } =
+    useUsage('7d');
+
+  const handleRefresh = useCallback((): void => {
+    void refresh();
+  }, [refresh]);
+
+  const totalCost = summary.reduce((acc, row) => acc + row.total_cost_usd, 0);
+  const totalEvents = summary.reduce((acc, row) => acc + row.event_count, 0);
+
+  return (
+    <>
+      {/* Preset tabs */}
+      <div
+        role="radiogroup"
+        aria-label="기간 선택"
+        className="flex gap-1 border-b border-border-primary p-2"
+      >
+        {PRESETS.map((p) => (
+          <button
+            key={p}
+            role="radio"
+            aria-checked={preset === p}
+            data-active={preset === p}
+            onClick={() => {
+              setPreset(p);
+            }}
+            className="rounded-md px-3 py-1.5 text-sm hover:bg-bg-tertiary data-[active=true]:bg-bg-tertiary data-[active=true]:font-medium"
+          >
+            {PRESET_LABELS[p]}
+          </button>
+        ))}
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto p-4">
+        {error !== null && (
+          <div className="mb-3 flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {loading ? (
+          <p className="text-sm text-text-secondary">불러오는 중...</p>
+        ) : summary.length === 0 && daily.length === 0 ? (
+          <div className="py-12 text-center text-sm text-text-secondary">
+            아직 사용 기록이 없어요. 채팅을 시작하면 자동으로 기록됩니다.
+          </div>
+        ) : (
+          <>
+            {/* Total card */}
+            <section
+              aria-label="기간 합계"
+              className="mb-4 grid grid-cols-2 gap-2 rounded-md border border-border-primary bg-bg-secondary p-3 text-sm"
+            >
+              <div>
+                <div className="text-xs text-text-tertiary">{PRESET_LABELS[preset]} 합계</div>
+                <div className="mt-0.5 text-base font-semibold">{formatCost(totalCost)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-text-tertiary">기록된 이벤트</div>
+                <div className="mt-0.5 text-base font-semibold">{totalEvents}건</div>
+              </div>
+            </section>
+
+            <SummarySection rows={summary} />
+            <DailySection rows={daily} />
+          </>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between border-t border-border-primary p-3">
+        <span className="text-xs text-text-tertiary">
+          마지막 갱신: {formatRefreshTime(lastRefreshedAt)}
+        </span>
+        <button
+          onClick={handleRefresh}
+          className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-bg-tertiary"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          새로고침
+        </button>
+      </div>
+    </>
   );
 }
 

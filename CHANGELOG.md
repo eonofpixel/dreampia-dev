@@ -2,6 +2,104 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [0.8.0] — 2026-05-03
+
+**Feature release — D1 통합 Settings 모달 + H Permission Dropdown.**
+
+Codex 권고 v0.8.0. 두 항목을 함께 묶어 처리해 중복 UI churn 을 방지하고
+권한 의미론을 먼저 고정. 이전엔 `McpSettings` / `UsageSettings` 두 별도
+모달과 wizard step 4 에만 권한 preset 이 있었지만, 이제 사이드바 [설정]
+한 진입점에서 7개 카테고리 (MCP / 사용량 / Provider / 권한 / 테마 /
+단축키 / 온보딩) 를 모두 다루며, 채팅 헤더의 dropdown 으로 세션 단위 권한
+변경이 가능하다.
+
+### Added
+
+- **`src/renderer/components/settings/SettingsModal.tsx`** — 7-tab 통합
+  모달. 좌측 sidebar (180px) + 우측 panel. `initialTab` prop 으로 슬래시
+  명령 진입점 분기 (`/settings` → mcp, `/usage` → usage). 각 탭이
+  자체 panel: `McpSettingsPanel` / `UsageSettingsPanel` (refactor 된
+  panel-only 변형) / Provider radio group / Permission level + capability
+  list / Theme radio group / Keyboard placeholder + 매핑 미리 보기 /
+  Onboarding [다시 보기] 버튼. `applyTheme(choice)` 헬퍼 export — App
+  부팅 시 한 번 호출해 data-theme 즉시 적용.
+- **`src/renderer/components/settings/McpSettings.tsx`** — `McpSettingsPanel`
+  추가 export (chrome 없는 body-only 변형). 기존 `McpSettings` 모달은
+  그대로 유지 — backwards compat 0 회귀.
+- **`src/renderer/components/settings/UsageSettings.tsx`** — `UsageSettingsPanel`
+  추가 export (chrome 없는 body-only 변형). 기존 모달도 유지.
+- **`src/renderer/components/chat/PermissionDropdown.tsx`** — H Permission
+  Dropdown. native `<select>` + `ShieldCheck` icon. 4개 preset (read_only /
+  workspace_write / full_access / custom) 한국어 라벨로 노출.
+- **신규 IPC channel `session/update-permission`** — `(sessionId, {default_level?})`
+  → `Result<Session>`. Zod strict validation + Result wrapping. 갱신된
+  Session 을 반환해 caller 가 즉시 shadow update.
+- **신규 IPC channel `app:get-theme` / `app:set-theme`** — `'light' | 'dark' | 'system'`.
+  미설정 시 `'system'` fallback. enum-only validation.
+- **신규 IPC channel `app:get-permission-capabilities`** — read-only.
+  `Record<PermissionLevel, string[]>` 반환. SettingsModal 의 권한 탭이
+  사용자에게 each level 의 capability 를 명시적으로 보여줌.
+- **`SessionStore.updatePermission(id, patch)`** — metadata-only update
+  (sessions.metadata_json 만 변경). `default_level` 만 patch 가능. 향후
+  grants API 는 별도 채널 (v0.13.0).
+- **`AppSettings.theme` 필드** — `'light' | 'dark' | 'system'`. 알 수 없는
+  값은 silent drop. 기존 corrupt-tolerant 패턴 유지.
+- **`PermissionPatch` 타입** — preload-safe (`@/main/types`).
+- **`ChatPanel` `onChangePermission` prop** — ChatHeader 의 dropdown 변경
+  시 호출. `permissionDisabled` 도 함께 — IPC 미지원 / 스트리밍 중일 때
+  dropdown disabled.
+- **`useSessionStore.updatePermission(id, patch)`** — IPC + refresh wrapper.
+  preload 에 메서드 미존재 시 silent null fallback (구버전 호환).
+- **App.tsx `handleChangePermission`** — optimistic local shadow update +
+  IPC 영속 + reconcile. 부팅 시 `applyTheme(getTheme().value)` 한 번 호출.
+- **`tests/renderer/SettingsModal.test.tsx`** — 12 tests. 7 탭 모두 표시 /
+  탭 전환 / `initialTab` 분기 / Provider 변경 / Permission 변경 +
+  capability 표시 / Theme 변경 + data-theme 적용 / Keyboard placeholder /
+  Onboarding 버튼 / 닫기.
+- **`tests/renderer/PermissionDropdown.test.tsx`** — 6 tests. 현재 level /
+  4 preset 옵션 / Korean 라벨 / onChange / disabled / title.
+- **`tests/main/ipc.session-permission.test.ts`** — 6 tests. round-trip /
+  strict mode / invalid enum / not-found / non-string id / 등록.
+- **`tests/main/ipc.app-theme.test.ts`** — 8 tests. theme get/set/persist /
+  invalid / 3 capability handler.
+- **`tests/storage/SessionStore.permission.test.ts`** — 5 tests. round-trip /
+  grants 보존 / 빈 patch no-op / not-found / updated_at bump.
+- **`tests/renderer/Sidebar.settings.test.tsx`** — 3 tests. [설정] / [사용량]
+  진입 wiring + omit when undefined.
+
+### Changed
+
+- **App.tsx — modal 통합** — 이전의 `mcpSettingsOpen` + `usageSettingsOpen`
+  두 state 를 `settingsModalOpen` + `settingsInitialTab` 로 통합. 기존
+  컴포넌트는 모두 import 되지 않지만 파일은 유지 (downstream backwards
+  compat).
+- **ChatHeader — Permission dropdown** — workspace pick 버튼과 CLI 뱃지
+  사이에 dropdown 삽입. 기존 모델/effort 표시 그대로 유지.
+- **preload.ts** — `app:get-theme` / `app:set-theme` /
+  `app:get-permission-capabilities` / `session/update-permission` 4
+  channel whitelist + API 노출.
+
+### Settings 의미론
+
+- **default_permission_level (settings)** — 새 세션이 만들어질 때 inherit
+  하는 기본 level. wizard / SettingsModal 양쪽에서 변경 가능.
+- **session.permission.default_level** — 각 세션이 자기 기본 level 을
+  복제 보유. ChatHeader dropdown 으로 세션 단위 변경 — 다른 세션엔 영향
+  없음. AI start-stream IPC 가 이 값을 forward.
+
+### Migrations / Compat
+
+- 데이터 마이그레이션 0. metadata_json 의 `_extra.permission.default_level`
+  필드는 v0.3.0부터 이미 영속됨. v0.8.0 은 그 값을 변경할 IPC + UI 만 추가.
+- preload 가 v0.7.x 인 경우 `useSessionStore.updatePermission` 은 silent
+  null 반환 — UI 는 변경되지 않음을 사용자가 인지 가능.
+
+### Verification
+
+- `npm run typecheck` 0 errors
+- `npm run lint` 0 errors
+- `npm test` 1066 → 1106 passes (+40 tests across 5 new files)
+
 ## [0.7.0] — 2026-05-03
 
 **Feature release — F-026 Chat Search (SQLite FTS5).**
