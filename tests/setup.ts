@@ -319,6 +319,13 @@ beforeEach(() => {
       (sess.appendTurn as unknown as { mockClear?: () => void }).mockClear?.();
       (sess.updateMeta as unknown as { mockClear?: () => void }).mockClear?.();
       (sess.delete as unknown as { mockClear?: () => void }).mockClear?.();
+      // v0.5.0 (F-018) — 새 mutation IPC mock clear (정의돼 있을 때만).
+      (
+        sess.clearTurns as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
+      (
+        sess.updateConversation as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
     }
     const appApi = window.dreampia.app;
     if (appApi !== undefined) {
@@ -525,6 +532,59 @@ if (typeof window !== 'undefined') {
           mockStore.sessions.delete(id);
           return { ok: true, value: undefined };
         }),
+
+        // v0.5.0 (F-018) — `/clear` 슬래시 명령. session 은 유지하고 turns 만
+        // 비운다. updated_at 도 새 시각으로 갱신.
+        clearTurns: vi.fn(async (id: string): Promise<Result<void>> => {
+          const s = mockStore.sessions.get(id);
+          if (s === undefined) {
+            return { ok: false, error: `session ${id} not found` };
+          }
+          const next: Session = {
+            ...s,
+            updated_at: new Date().toISOString(),
+            conversation: {
+              ...s.conversation,
+              turns: [],
+            },
+          };
+          mockStore.sessions.set(id, next);
+          return { ok: true, value: undefined };
+        }),
+
+        // v0.5.0 (F-018) — `/model <name>` 슬래시 명령. conversation patch
+        // 적용 후 갱신된 Session 반환.
+        updateConversation: vi.fn(
+          async (
+            id: string,
+            patch: {
+              current_model?: string;
+              current_effort?: 'minimum' | 'low' | 'medium' | 'high' | 'maximum';
+              current_mode?: 'standard' | 'plan' | 'speed' | 'custom';
+            }
+          ): Promise<Result<Session>> => {
+            const s = mockStore.sessions.get(id);
+            if (s === undefined) {
+              return { ok: false, error: `session ${id} not found` };
+            }
+            const next: Session = {
+              ...s,
+              updated_at: new Date().toISOString(),
+              conversation: {
+                ...s.conversation,
+                ...(patch.current_model !== undefined && {
+                  current_model: patch.current_model,
+                }),
+                ...(patch.current_effort !== undefined && {
+                  current_effort: patch.current_effort,
+                }),
+                ...(patch.current_mode !== undefined && { current_mode: patch.current_mode }),
+              },
+            };
+            mockStore.sessions.set(id, next);
+            return { ok: true, value: next };
+          }
+        ),
       },
 
       // Mock for SS-5 multi-window leader election. Mirrors the production

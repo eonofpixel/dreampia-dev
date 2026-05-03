@@ -27,7 +27,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Session, SessionId, Turn } from '@/types';
-import type { Result, SessionMetaPatch } from '@/main/types';
+import type { ConversationPatch, Result, SessionMetaPatch } from '@/main/types';
 
 // SessionMeta shape (kept in sync with `@/storage` and preload).
 // Defined here (not imported from `@/storage`) so the renderer never
@@ -71,6 +71,19 @@ export interface UseSessionStoreApi {
 
   /** Delete a session and all child rows. */
   remove: (id: SessionId) => Promise<boolean>;
+
+  /**
+   * v0.5.0 (F-018) — `/clear` 슬래시 명령. 현재 세션의 모든 turn 삭제.
+   * Refresh 까지 수행해 sidebar updated_at 도 즉시 반영.
+   */
+  clearTurns: (id: SessionId) => Promise<boolean>;
+
+  /**
+   * v0.5.0 (F-018) — `/model <name>` 슬래시 명령. conversation 의
+   * current_model / current_effort / current_mode 갱신. 갱신된 Session 을
+   * 반환해 caller 가 즉시 UI 에 반영할 수 있도록 한다 (활성 session shadow).
+   */
+  updateConversation: (id: SessionId, patch: ConversationPatch) => Promise<Session | null>;
 }
 
 /**
@@ -211,5 +224,49 @@ export function useSessionStore(): UseSessionStoreApi {
     [refresh, safeSetState]
   );
 
-  return { state, refresh, create, get, appendTurn, updateMeta, remove };
+  const clearTurns = useCallback(
+    async (id: SessionId): Promise<boolean> => {
+      if (!hasSessionApi()) return false;
+      // clearTurns 는 v0.5.0 추가 — preload 가 안 갱신된 환경 (테스트 격리,
+      // 구버전 build) 에서도 안전하게 false 반환.
+      const sessionApi = window.dreampia.session;
+      if (typeof sessionApi.clearTurns !== 'function') return false;
+      const result = await sessionApi.clearTurns(id);
+      if (result.ok) {
+        await refresh();
+        return true;
+      }
+      safeSetState((s) => ({ ...s, error: result.error }));
+      return false;
+    },
+    [refresh, safeSetState]
+  );
+
+  const updateConversation = useCallback(
+    async (id: SessionId, patch: ConversationPatch): Promise<Session | null> => {
+      if (!hasSessionApi()) return null;
+      const sessionApi = window.dreampia.session;
+      if (typeof sessionApi.updateConversation !== 'function') return null;
+      const result = await sessionApi.updateConversation(id, patch);
+      if (result.ok) {
+        await refresh();
+        return result.value;
+      }
+      safeSetState((s) => ({ ...s, error: result.error }));
+      return null;
+    },
+    [refresh, safeSetState]
+  );
+
+  return {
+    state,
+    refresh,
+    create,
+    get,
+    appendTurn,
+    updateMeta,
+    remove,
+    clearTurns,
+    updateConversation,
+  };
 }

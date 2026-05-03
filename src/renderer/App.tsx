@@ -18,6 +18,8 @@ import { PreviewPanel } from './components/preview/PreviewPanel';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { McpSettings } from './components/settings/McpSettings';
 import { UsageSettings } from './components/settings/UsageSettings';
+import { SlashHelpModal } from './components/chat/SlashHelpModal';
+import { KNOWN_MODELS, type SlashCommandId } from './commands/registry';
 import {
   SessionSchema,
   newSessionId,
@@ -121,6 +123,8 @@ export function App(): React.JSX.Element {
     create: createSession,
     get: getSession,
     appendTurn: persistTurn,
+    clearTurns: persistClearTurns,
+    updateConversation: persistUpdateConversation,
   } = useSessionStore();
 
   // Phase 3 B2: 첫 실행 wizard. completed=true 면 main app, false 면 wizard 표시.
@@ -150,6 +154,8 @@ export function App(): React.JSX.Element {
   const [mcpSettingsOpen, setMcpSettingsOpen] = useState(false);
   // v0.4.0 — Sidebar [사용량] 클릭 시 표시되는 token / cost 모달.
   const [usageSettingsOpen, setUsageSettingsOpen] = useState(false);
+  // v0.5.0 (F-018) — `/help` 슬래시 명령으로 여는 명령어 도움말 모달.
+  const [slashHelpOpen, setSlashHelpOpen] = useState(false);
   // Phase 3 audit (HIGH): picker auto-launch 가 사용자 취소 시 무한루프 방지.
   // Phase 3 B2: useState + useRef 이중 보호 — useState 는 React deps 에 반영,
   // useRef 는 같은 commit 내 빠른 연속 effect 실행에도 즉시 차단.
@@ -400,6 +406,43 @@ export function App(): React.JSX.Element {
     sessions.length,
   ]);
 
+  // v0.5.0 (F-018) — `/clear` 슬래시 명령. 활성 세션의 turn 만 비우고 session
+  // 자체는 유지. local activeSession shadow 도 즉시 갱신해 UI 가 빠르게 반응.
+  const handleClearTurns = useCallback(async (): Promise<void> => {
+    if (activeSession === null) return;
+    const ok = await persistClearTurns(activeSession.id);
+    if (!ok) return;
+    setActiveSession((prev) =>
+      prev === null
+        ? prev
+        : {
+            ...prev,
+            updated_at: nowIso(),
+            conversation: { ...prev.conversation, turns: [] },
+          }
+    );
+  }, [activeSession, persistClearTurns]);
+
+  // v0.5.0 (F-018) — `/model <name>` 슬래시 명령. KNOWN_MODELS 화이트리스트
+  // 검증은 ChatInput 단에서 이미 거치지만 호출자도 방어적으로 체크.
+  const handleChangeModel = useCallback(
+    async (model: string): Promise<void> => {
+      if (activeSession === null) return;
+      if (!KNOWN_MODELS.includes(model)) {
+        // ChatInput 의 commandHandlers 가 이미 검증했지만 외부 호출도 보호.
+        console.warn(`[slash] unknown model rejected: ${model}`);
+        return;
+      }
+      const updated = await persistUpdateConversation(activeSession.id, {
+        current_model: model,
+      });
+      if (updated !== null) {
+        setActiveSession(updated);
+      }
+    },
+    [activeSession, persistUpdateConversation]
+  );
+
   const handleSubmitMessage = useCallback(
     async (text: string): Promise<void> => {
       if (activeSession === null || isStreaming) return;
@@ -469,6 +512,50 @@ export function App(): React.JSX.Element {
   // 이전엔 항상 defaultWorkspace.name 만 보여서 session.workspace 와 drift 가
   // 났다 (사용자가 picker 로 폴더 바꿔도 기존 session 에는 반영 X).
   const chatHeaderWorkspaceName = activeSession?.workspace.name ?? defaultWorkspace?.name;
+
+  // v0.5.0 (F-018) — slash command handler 맵. ChatInput 으로 forward 되어
+  // 사용자가 `/help`, `/clear` 등을 입력했을 때 호출된다. 인자가 없는 명령은
+  // arg 인자를 무시한다. KNOWN_MODELS 화이트리스트는 `/model` 에서만 사용.
+  const commandHandlers = useMemo<
+    Partial<Record<SlashCommandId, (arg?: string) => void>>
+  >(
+    () => ({
+      help: () => {
+        setSlashHelpOpen(true);
+      },
+      clear: () => {
+        if (activeSession === null) return;
+        void handleClearTurns();
+      },
+      new: () => {
+        void handleNewChat();
+      },
+      model: (arg) => {
+        if (arg === undefined || arg.length === 0) {
+          // 빈 인자 → 도움말 모달로 안내.
+          setSlashHelpOpen(true);
+          return;
+        }
+        if (!KNOWN_MODELS.includes(arg)) {
+          // 알 수 없는 모델 → 도움말 모달로 안내 + 콘솔 경고. 향후 toast 추가 가능.
+          console.warn(`[slash] unknown model: ${arg}`);
+          setSlashHelpOpen(true);
+          return;
+        }
+        void handleChangeModel(arg);
+      },
+      settings: () => {
+        setMcpSettingsOpen(true);
+      },
+      usage: () => {
+        setUsageSettingsOpen(true);
+      },
+      onboarding: () => {
+        void resetOnboarding();
+      },
+    }),
+    [activeSession, handleClearTurns, handleNewChat, handleChangeModel, resetOnboarding]
+  );
 
   // Phase 3 B2: Wizard 완료 시 호출 — settings 영속 + 옵션으로 첫 채팅 생성.
   // firstPrompt 가 있으면 새 세션 + ChatInput 자동 채움 (auto-submit X).
@@ -575,6 +662,7 @@ export function App(): React.JSX.Element {
             }}
             ipcUnavailable={provider === null}
             initialInputValue={pendingPrompt}
+            commandHandlers={commandHandlers}
           />
         }
         preview={
@@ -594,6 +682,12 @@ export function App(): React.JSX.Element {
         open={usageSettingsOpen}
         onClose={() => {
           setUsageSettingsOpen(false);
+        }}
+      />
+      <SlashHelpModal
+        open={slashHelpOpen}
+        onClose={() => {
+          setSlashHelpOpen(false);
         }}
       />
     </>

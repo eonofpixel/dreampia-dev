@@ -14,7 +14,12 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { Session, SessionId, Turn } from '@/types';
-import type { Result, SessionMetaPatch, WorkspaceInfo } from './types';
+import type {
+  ConversationPatch,
+  Result,
+  SessionMetaPatch,
+  WorkspaceInfo,
+} from './types';
 
 // SessionMeta is a struct from `@/storage`. Re-declare inline so this file
 // stays free of the storage module. Keep this in sync with `SessionStore`.
@@ -271,6 +276,9 @@ const ALLOWED_INVOKE_CHANNELS = [
   'session/append-turn',
   'session/update-meta',
   'session/delete',
+  // v0.5.0 (F-018) — slash command 들이 호출하는 추가 mutation IPC.
+  'session/clear-turns',
+  'session/update-conversation',
   'lock/acquire',
   'lock/release',
   'lock/get',
@@ -451,6 +459,21 @@ const api = {
 
     delete: (id: SessionId): Promise<Result<void>> =>
       ipcRenderer.invoke('session/delete', id) as Promise<Result<void>>,
+
+    /**
+     * v0.5.0 (F-018) — `/clear` 슬래시 명령. 현재 세션의 모든 turn 삭제.
+     * destructive — 사용자가 명시적으로 trigger 했을 때만 호출되어야 한다.
+     */
+    clearTurns: (id: SessionId): Promise<Result<void>> =>
+      ipcRenderer.invoke('session/clear-turns', id) as Promise<Result<void>>,
+
+    /**
+     * v0.5.0 (F-018) — `/model <name>` 슬래시 명령. conversation 의
+     * current_model / current_effort / current_mode 변경. main 측 Zod 가
+     * enum 검증.
+     */
+    updateConversation: (id: SessionId, patch: ConversationPatch): Promise<Result<Session>> =>
+      ipcRenderer.invoke('session/update-conversation', id, patch) as Promise<Result<Session>>,
   },
 
   /**

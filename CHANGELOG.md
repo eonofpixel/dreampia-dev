@@ -2,6 +2,100 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [0.5.0] — 2026-05-03
+
+**Feature release — Slash Commands (F-018).**
+
+Codex (read-only audit) 권고 v0.5.0. v0.4.0 까지 Provider / MCP / Onboarding /
+Usage 가 빠르게 쌓이면서 사용자가 기능을 "찾아가는" 비용이 생기기 시작했다.
+슬래쉬 명령은 새 도메인을 추가하지 않고 기존 기능 접근성을 크게 올린다 —
+v1.0 의 "마우스 없이 주요 화면/액션 접근 가능" 목표에 정렬된 첫 키보드-우선
+변경.
+
+### Added
+
+- **`src/renderer/commands/registry.ts`** — slash command 등록부.
+  `SLASH_COMMANDS` 7개 (`/help`, `/clear`, `/new`, `/model`, `/settings`,
+  `/usage`, `/onboarding`) + `KNOWN_MODELS` 화이트리스트 (Claude / Codex).
+  `parseSlashInput(text)` 는 `/trigger arg` 형식을 파싱, `filterCommands(query)`
+  는 popover 용 매칭 (prefix → label substring 순 정렬).
+- **`SlashCommandPopover` 컴포넌트** — textarea 위쪽 floating popover.
+  `role="listbox"` + `role="option"` + `aria-selected` + 안정 id (caller 가
+  `aria-activedescendant` 로 가리킬 수 있도록). Footer 힌트 (↑↓ 탐색 · Enter
+  선택 · Esc 닫기). mousedown preventDefault 로 textarea focus 유지.
+- **`SlashHelpModal` 컴포넌트** — `/help` 가 여는 도움말 모달. 모든 명령을
+  표 형태로 표시 (trigger / argHint / 라벨 / 설명). McpSettings / UsageSettings
+  와 동일한 fixed overlay 패턴 + Esc 닫기.
+- **ChatInput 통합** — `/` 입력 시 popover 자동 열림 (IME composition 중에는
+  열리지 않음 — 한글 자모 결합 보호). ↑↓ 탐색, Enter 선택, Esc 닫기, Tab 자동완성
+  (인자 필요 명령은 trigger + space 까지 채움). 알 수 없는 trigger / handler 미등록
+  시에는 그냥 메시지로 fallback (silent no-op 방지).
+- **`SessionStore.clearTurns(id)`** — `/clear` 슬래시 명령 백엔드.
+  현재 세션의 모든 turn + turn-level annotation 삭제, session 자체와
+  conversation 메타 (current_model 등) 는 유지. updated_at 갱신.
+- **`SessionStore.updateConversation(id, patch)`** — `/model <name>` 백엔드.
+  metadata_json 의 `_extra.conversation` 의 current_model / current_effort /
+  current_mode 갱신. 빈 patch 는 no-op.
+- **2개 신규 IPC channel (모두 `session/*` namespace, mutation)**:
+  - `session/clear-turns` — sessionId → Result<void>. Zod string 검증.
+  - `session/update-conversation` — `(sessionId, patch)` → Result<Session>.
+    patch 는 strict zod schema 로 enum 까지 검증.
+- **preload.ts 의 `session.clearTurns` / `session.updateConversation`** —
+  renderer 노출 + 채널 화이트리스트.
+- **`useSessionStore.clearTurns` / `updateConversation` 메서드** — App.tsx 가
+  쓰는 훅 단의 thin wrapper. 자동 refresh 로 sidebar updated_at 즉시 반영.
+- **`commandHandlers` prop on ChatPanel + ChatInput** — App.tsx 가 빌드한
+  `Partial<Record<SlashCommandId, (arg?: string) => void>>` 를 ChatInput 까지
+  forward. App.tsx 는 7개 명령을 기존 state setter (mcpSettingsOpen 등) 와
+  연결.
+- **`tests/renderer/commands/registry.test.ts`** — 19 tests.
+  parseSlashInput / filterCommands edge cases + KNOWN_MODELS 검증.
+- **`tests/renderer/SlashCommandPopover.test.tsx`** — 8 tests.
+  렌더 / 클릭 / a11y 속성 / argHint 표시 / id linkage.
+- **`tests/renderer/ChatInput.slash.test.tsx`** — 14 tests.
+  popover open/close, ↑↓ 키, Enter 실행, Esc 닫기, Tab 자동완성,
+  ★ IME composition 중 popover 안 뜸, unknown trigger fallback,
+  `/model gpt-4o` arg 전달, combobox a11y 속성.
+- **`tests/main/ipc.session-clear-update.test.ts`** — 11 tests.
+  채널 등록 / round-trip / 잘못된 sessionId / 알 수 없는 patch field /
+  존재하지 않는 session 에러 메시지.
+- **`tests/storage/SessionStore.clearTurns.test.ts`** — 11 tests.
+  clearTurns + updateConversation round-trip / annotation 정리 /
+  no-op patch / not-found throw.
+- **e2e/first-chat.spec.ts** 에 slash command 시나리오 1개 추가 —
+  `/usage` 로 사용량 모달 열기 + `/help` 로 도움말 모달 열기 + Esc 닫기.
+
+### Changed
+
+- `package.json`: `0.4.0` → `0.5.0` (minor bump for new feature).
+- `src/main/types.ts` — `ConversationPatch` interface export (preload-safe).
+- `src/main/preload.ts` whitelist 에 2개 새 IPC channel
+  (`session/clear-turns`, `session/update-conversation`).
+- `src/main/ipc.ts` — `ChatModeSchema` / `EffortLevelSchema` import + 새
+  `ConversationPatchSchema` (strict). registerSessionHandlers 에 2개 새
+  handler 추가.
+- `tests/setup.ts` — mock IPC 에 `session.clearTurns` / `updateConversation`
+  추가, beforeEach mockClear 에도 등록.
+
+### Acceptance
+
+- "마우스 없이 주요 화면/액션 접근 가능" — `/` 만 누르면 7개 모두 도달 가능.
+- `npm run typecheck` — 0 errors.
+- `npm run lint` — 0 errors.
+- `npm test` — 953 passed (890 → 953, +63 신규).
+
+### Notes
+
+- `/help`, `/settings`, `/usage` 는 새 도메인을 추가하지 않고 기존 모달을 재
+  활용 (UsageSettings, McpSettings, SlashHelpModal). 이 PR 의 핵심 가치는
+  "추가" 가 아니라 "도달성".
+- 슬래시 명령은 IME 와 무관하게 한글 입력 보호 — composition 중에는 popover
+  자체가 열리지 않는다. ChatInput 의 기존 `isComposing` 가드를 그대로 활용.
+- 미등록 명령 (`/foo`) 또는 handler 가 없는 명령은 메시지로 fallback —
+  사용자에게 "엇? 그냥 보내졌네?" 정도로 읽혀 silent failure 가 아니다.
+- `/model <name>` 의 화이트리스트는 ChatInput 단 + App.tsx 단 양쪽에서 검증
+  (UI 가드 + 외부 호출 방어). 미등록 모델은 콘솔 경고 + `/help` 모달로 안내.
+
 ## [0.4.0] — 2026-05-03
 
 **Feature release — Usage / Cost Tracking MVP.**

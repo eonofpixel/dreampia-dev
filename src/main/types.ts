@@ -30,6 +30,22 @@ export interface SessionMetaPatch {
 }
 
 /**
+ * v0.5.0 (F-018) — Patch shape for `session/update-conversation` IPC.
+ *
+ * 슬래시 명령 `/model <name>` 에서 호출. current_effort / current_mode 도
+ * 같은 채널로 변경 가능하도록 함께 노출 — 향후 `/effort high` 같은 명령을
+ * 추가할 때 IPC 채널을 늘리지 않아도 된다.
+ *
+ * Defined here (not in `@/storage`) so preload can reference it without
+ * pulling in SessionStore.
+ */
+export interface ConversationPatch {
+  current_model?: string;
+  current_effort?: 'minimum' | 'low' | 'medium' | 'high' | 'maximum';
+  current_mode?: 'standard' | 'plan' | 'speed' | 'custom';
+}
+
+/**
  * Default workspace surfaced to the renderer for new sessions.
  *
  * Kept preload-safe: no branded types here because the renderer derives the

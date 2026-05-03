@@ -16,6 +16,7 @@ import type { Session, Turn, ToolResultRef } from '@/types';
 import { EFFORT_LABELS_KO } from '@/types';
 import { ToolCallCard } from './ToolCallCard';
 import { findToolResult } from './toolDisplayHelpers';
+import type { SlashCommandId } from '../../commands/registry';
 
 /**
  * CLI 감지 상태 — App 이 useEffect 에서 ai/detect-cli 호출 후 설정.
@@ -53,6 +54,11 @@ export interface ChatPanelProps {
    * 외부에서 값이 바뀌면 input 에 반영. auto-submit 은 하지 않아 사용자가 검토 가능.
    */
   initialInputValue?: string;
+  /**
+   * v0.5.0 (F-018) — slash command handler 맵. ChatInput 으로 그대로 forward.
+   * 미지정이면 슬래시 명령은 그냥 메시지로 취급된다.
+   */
+  commandHandlers?: Partial<Record<SlashCommandId, (arg?: string) => void>>;
 }
 
 interface MessagesAreaProps {
@@ -77,6 +83,7 @@ export function ChatPanel({
   onPickWorkspace,
   ipcUnavailable = false,
   initialInputValue,
+  commandHandlers,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -107,6 +114,7 @@ export function ChatPanel({
         onCancel={onCancel}
         disabled={ipcUnavailable}
         initialValue={initialInputValue}
+        commandHandlers={commandHandlers}
       />
     </main>
   );
@@ -176,6 +184,7 @@ interface InputAreaProps {
   onCancel?: () => void;
   disabled?: boolean;
   initialValue?: string;
+  commandHandlers?: Partial<Record<SlashCommandId, (arg?: string) => void>>;
 }
 
 function InputArea({
@@ -184,6 +193,7 @@ function InputArea({
   onCancel,
   disabled = false,
   initialValue,
+  commandHandlers,
 }: InputAreaProps): React.JSX.Element {
   return (
     <div>
@@ -203,6 +213,7 @@ function InputArea({
         onSubmit={onSubmit}
         disabled={isStreaming || disabled}
         initialValue={initialValue}
+        commandHandlers={commandHandlers}
       />
     </div>
   );

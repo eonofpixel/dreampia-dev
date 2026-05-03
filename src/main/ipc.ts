@@ -28,6 +28,8 @@ import {
   type DefaultProviderChoice,
 } from './settings';
 import {
+  ChatModeSchema,
+  EffortLevelSchema,
   McpServerConfigSchema,
   PermissionLevelSchema,
   SessionSchema,
@@ -65,9 +67,14 @@ import {
 } from '@/providers/auto';
 import { detectCli as defaultDetectCli, type CliDetectionResult } from '@/providers/cli/detect';
 import type { BrowserManager, BrowserTabState } from './BrowserManager';
-import type { Result, SessionMetaPatch, WorkspaceInfo } from './types';
+import type {
+  ConversationPatch,
+  Result,
+  SessionMetaPatch,
+  WorkspaceInfo,
+} from './types';
 
-export type { Result, SessionMetaPatch } from './types';
+export type { ConversationPatch, Result, SessionMetaPatch } from './types';
 
 // Types shared with renderer (preload only exposes whitelisted channels)
 export type AppInfo = {
@@ -86,6 +93,16 @@ const SessionMetaPatchSchema = z
     title: z.string().min(1).optional(),
     pinned: z.boolean().optional(),
     archived: z.boolean().optional(),
+  })
+  .strict();
+
+// v0.5.0 (F-018) — `/model <name>` 같은 슬래시 명령이 보내는 conversation
+// patch. main 측 store 가 신뢰할 수 있도록 enum 도 schema 로 검증.
+const ConversationPatchSchema = z
+  .object({
+    current_model: z.string().min(1).optional(),
+    current_effort: EffortLevelSchema.optional(),
+    current_mode: ChatModeSchema.optional(),
   })
   .strict();
 
@@ -530,6 +547,44 @@ function registerSessionHandlers(store: SessionStore): void {
       return fail(err);
     }
   });
+
+  // v0.5.0 (F-018) — `/clear` 슬래시 명령. 현재 세션의 turn 만 모두 비우고
+  // 세션 자체는 유지. 같은 channel 안에서 destructive 작업 명시 — 사용자가
+  // 의도적으로 호출했을 때만 trigger.
+  ipcMain.handle('session/clear-turns', (_evt, sessionId: unknown): Result<void> => {
+    try {
+      if (typeof sessionId !== 'string') {
+        throw new Error('session id must be string');
+      }
+      store.clearTurns(sessionId as SessionId);
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  // v0.5.0 (F-018) — `/model <name>` 슬래시 명령. session.conversation 의
+  // current_model / current_effort / current_mode 변경. patch 는 strict zod
+  // 검증으로 알 수 없는 필드 / 잘못된 enum 모두 거절.
+  ipcMain.handle(
+    'session/update-conversation',
+    (_evt, sessionId: unknown, patch: unknown): Result<Session> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        const validated: ConversationPatch = ConversationPatchSchema.parse(patch);
+        store.updateConversation(sessionId as SessionId, validated);
+        const reloaded = store.getSession(sessionId as SessionId);
+        if (reloaded === null) {
+          throw new Error(`Cannot update conversation: session ${sessionId} not found`);
+        }
+        return ok(reloaded);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
 }
 
 function registerLockHandlers(electionSource: LockHandlerSource): void {

@@ -437,6 +437,84 @@ export class SessionStore {
     tx(sessionId, turn);
   }
 
+  /**
+   * v0.5.0 (F-018) — `/clear` 슬래시 명령. 현재 세션의 모든 turn 을 삭제.
+   *
+   * 의도적으로 destructive 한 작업 — 사용자가 명시적으로 호출했을 때만 실행.
+   * Append-only 설계가 아닌 이유: 사용자가 "처음부터 다시 시작" 을 원할 때
+   * 새 session 을 만드는 것보다 의미가 있다 (= 같은 workspace + 같은 모델 +
+   * 같은 권한으로, conversation 만 비움).
+   *
+   * Turn-level annotations 도 함께 삭제 (FK 가 turns 를 가리키지 않더라도
+   * `session_id + turn_id` 조합으로 orphan 이 되므로). updated_at 도 갱신.
+   */
+  clearTurns(id: SessionId): void {
+    const tx = this.db.transaction((sid: string) => {
+      const exists = this.getSessionExistsStmt().get(sid) as { id: string } | undefined;
+      if (!exists) {
+        throw new Error(`Cannot clear turns: session ${sid} not found`);
+      }
+      // Annotations 가 turn-level 로 붙어 있을 수 있어 같이 삭제 (session_id 로
+      // 묶인 모든 annotation 을 비우면 browser-tab annotation 까지 사라지지만,
+      // /clear 의 사용자 의도는 "이 세션의 메시지+그에 따른 모든 흔적 정리"
+      // 이므로 OK).
+      this.getDeleteAnnotationsBySessionStmt().run(sid);
+      this.getDeleteTurnsBySessionStmt().run(sid);
+      const now = new Date().toISOString();
+      // updated_at 은 무조건 새 시각으로 — bump 가 아니라 force.
+      this.db.prepare(`UPDATE sessions SET updated_at = ? WHERE id = ?`).run(now, sid);
+    });
+
+    tx(id);
+  }
+
+  /**
+   * v0.5.0 (F-018) — `/model <name>` 슬래시 명령용. session 의
+   * conversation.current_model / current_effort / current_mode 를 갱신.
+   *
+   * 이 값들은 metadata_json 의 _extra.conversation 에 저장돼 있다 — 즉시
+   * 직접 SQL 로 update 가 어려워 session 전체를 read → patch → write 하는
+   * 식이지만, write 는 sessions 행의 metadata_json 만 갱신하면 된다 (turns /
+   * 다른 자식 row 는 건드리지 않는다).
+   */
+  updateConversation(
+    id: SessionId,
+    patch: {
+      current_model?: string;
+      current_effort?: Conversation['current_effort'];
+      current_mode?: Conversation['current_mode'];
+    }
+  ): void {
+    const row = this.getSelectSessionStmt().get(id) as SessionRow | undefined;
+    if (!row) {
+      throw new Error(`Cannot update conversation: session ${id} not found`);
+    }
+    if (
+      patch.current_model === undefined &&
+      patch.current_effort === undefined &&
+      patch.current_mode === undefined
+    ) {
+      return;
+    }
+    const meta = this.parseMetadata(row.metadata_json);
+    const next: StoredMetadata = {
+      ...meta,
+      _extra: {
+        ...meta._extra,
+        conversation: {
+          ...meta._extra.conversation,
+          ...(patch.current_model !== undefined && { current_model: patch.current_model }),
+          ...(patch.current_effort !== undefined && { current_effort: patch.current_effort }),
+          ...(patch.current_mode !== undefined && { current_mode: patch.current_mode }),
+        },
+      },
+    };
+    const now = new Date().toISOString();
+    this.db
+      .prepare(`UPDATE sessions SET metadata_json = ?, updated_at = ? WHERE id = ?`)
+      .run(JSON.stringify(next), now, id);
+  }
+
   updateSessionMeta(
     id: SessionId,
     patch: { title?: string; pinned?: boolean; archived?: boolean }

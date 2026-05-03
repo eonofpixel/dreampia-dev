@@ -166,4 +166,55 @@ test.describe('first-chat flow (v0.3.0)', () => {
     });
     await expect(window.getByTestId('onboarding-step-welcome')).toBeVisible();
   });
+
+  // v0.5.0 (F-018) — slash command popover + /help 모달 동작 검증.
+  test('slash commands: /help opens help modal, popover navigates by keyboard', async ({
+    window,
+  }) => {
+    // Wizard skip → main app 로 진입.
+    await expect(window.getByTestId('onboarding-wizard')).toBeVisible({
+      timeout: 10_000,
+    });
+    await window.getByTestId('onboarding-skip').click();
+    await expect(window.getByTestId('onboarding-wizard')).toBeHidden();
+
+    // 새 채팅 생성 (입력창이 mount 되도록).
+    await window.getByRole('button', { name: '새 채팅', exact: false }).first().click();
+    const input = window.getByTestId('chat-input');
+    await expect(input).toBeVisible({ timeout: 10_000 });
+
+    // / 입력 → popover 표시 + 7개 명령 노출.
+    await input.click();
+    await input.fill('/');
+    await expect(window.getByTestId('slash-command-popover')).toBeVisible();
+    await expect(window.getByTestId('slash-command-option-help')).toBeVisible();
+    await expect(window.getByTestId('slash-command-option-usage')).toBeVisible();
+
+    // /usage 로 좁히기 → option 1개만 표시.
+    await input.fill('/usage');
+    await expect(window.getByTestId('slash-command-option-usage')).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+
+    // Enter → UsageSettings 모달 열림 + popover 닫힘 + input clear.
+    await input.press('Enter');
+    await expect(window.getByTestId('slash-command-popover')).toBeHidden();
+    // UsageSettings 의 dialog 가 등장한다 — 한국어 라벨 "사용량" 으로 매칭.
+    await expect(window.getByRole('dialog', { name: /사용량/i })).toBeVisible({
+      timeout: 5_000,
+    });
+
+    // 닫고 /help 도 검증.
+    await window.keyboard.press('Escape');
+    await input.fill('/help');
+    await input.press('Enter');
+    await expect(window.getByTestId('slash-help-modal')).toBeVisible();
+    // 7개 명령 모두 표 안에 있다.
+    await expect(window.getByTestId('slash-help-row-help')).toBeVisible();
+    await expect(window.getByTestId('slash-help-row-onboarding')).toBeVisible();
+    // Esc 로 닫기 동작.
+    await window.keyboard.press('Escape');
+    await expect(window.getByTestId('slash-help-modal')).toBeHidden();
+  });
 });
