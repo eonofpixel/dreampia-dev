@@ -2,6 +2,32 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.0.1] — 2026-05-04
+
+**Patch — Smoke test outdated 수정 (실제 앱 검증 후 발견).**
+
+사용자가 v1.0.0 release 후 "직접 앱 켜서 사용성/기능 테스트" 요청 →
+Playwright Electron e2e 28 testcase 중 1 outdated test 발견. 실제 앱 동작은
+정상. 테스트만 v0.7.0 변경에 맞춰 갱신.
+
+### Fixed
+
+- `e2e/smoke.spec.ts:35-44` — v0.7.0 (F-026 Chat Search) 에서 사이드바의
+  "검색" placeholder button 을 SearchSection `<input>` 으로 의도적 변환했는데,
+  smoke test 가 여전히 button 검색 → fail. testid + aria-label 기반으로 갱신.
+
+### Verified
+
+- `npm test` — 1430 vitest pass (변동 없음)
+- `npm run test:e2e` — **28/28 pass** (이전 27/28)
+- `npm run typecheck` / `lint` — 0 errors
+
+### 사용자가 직접 검증한 항목
+
+- 부팅 / 3-panel layout / IPC bridge / Korean nav (플러그인/자동화/프로젝트/
+  채팅/설정/사용량) / SearchSection input / @ 멘션 popover / Slash 명령 popover
+  / Settings 모달 / 단축키 모두 정상 동작 확인.
+
 ## [1.0.0] — 2026-05-03
 
 **Production Release — feature complete, production-ready 한국어 우선

@@ -33,9 +33,14 @@ test.describe('smoke', () => {
   });
 
   test('shows Korean nav labels in sidebar', async ({ window }) => {
-    // exact:true keeps these from matching the nested ChatItem text.
-    await expect(window.getByRole('button', { name: '검색', exact: false }))
+    // v0.7.0 변경: "검색" placeholder button → SearchSection <input>
+    // (메시지 전체 FTS5 검색). data-testid 와 aria-label 로 검증.
+    await expect(window.getByTestId('sidebar-search-input'))
       .toBeVisible();
+    await expect(window.getByLabel('메시지 검색'))
+      .toBeVisible();
+
+    // 나머지 nav 버튼들은 그대로 — i18n key 적용 후에도 한국어 default 라벨 유지.
     await expect(window.getByRole('button', { name: '플러그인', exact: false }))
       .toBeVisible();
     await expect(window.getByRole('button', { name: '자동화', exact: false }))
