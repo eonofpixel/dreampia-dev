@@ -5,6 +5,14 @@
 
 [![CI](https://github.com/dreampia-org/dreampia-dev/actions/workflows/ci.yml/badge.svg)](https://github.com/dreampia-org/dreampia-dev/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Version](https://img.shields.io/badge/version-0.1.0-brightgreen.svg)](./CHANGELOG.md)
+
+---
+
+## 🎉 v0.1.0 Released (2026-05-03)
+
+첫 공식 릴리스 — Phase 1 + Phase 2 완료. 684 vitest + 19 Playwright E2E 통과.
+자세한 내용은 [CHANGELOG.md](./CHANGELOG.md) 참조.
 
 ---
 
@@ -45,7 +53,7 @@ npm run build
 
 ### E2E 테스트 (Playwright Electron)
 
-Vitest 605개는 mocked I/O 단위 테스트. 실제 Electron 부팅 + 사용자 클릭 흐름 검증은
+Vitest 684개는 mocked I/O 단위 테스트. 실제 Electron 부팅 + 사용자 클릭 흐름 검증은
 Playwright `_electron` 으로 자동화됨 (`e2e/`).
 
 ```bash
@@ -128,7 +136,7 @@ OS       Windows 10+ / macOS 12+ / Linux (Ubuntu 22+)
 ### 검증 현황
 
 ```
-588 tests pass (vitest, mocked I/O)
+684 tests pass (vitest, mocked I/O)
 0 typecheck errors
 production build 성공 (vite + electron-builder)
 Electron 창 실제 부팅 확인 (V1 commit 에서 검증)
@@ -405,7 +413,7 @@ GitHub Releases 채널 폴링. 자세한 절차 (secrets, 아이콘, 버전 bump
 
 ---
 
-## 📊 현재 작업 통계 (2026-05-02)
+## 📊 현재 작업 통계 (2026-05-03)
 
 ```
 위키 구조 (dreampia-dev/docs/):

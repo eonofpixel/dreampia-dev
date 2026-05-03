@@ -2,7 +2,7 @@
 title: Release Process
 parent: ../README.md
 status: stable
-last_updated: 2026-05-02
+last_updated: 2026-05-03
 ---
 
 # Release 프로세스
@@ -11,7 +11,19 @@ last_updated: 2026-05-02
 
 `v0.1.0` 같은 git tag push → GitHub Actions 자동 빌드 (Win/macOS/Linux) → GitHub Release 발행.
 
-## 첫 release 전 체크리스트
+## 첫 release 전 체크리스트 (v0.1.0)
+
+> **현재 상태**: `package.json` version `0.1.0` 설정 완료. 아래 단계 완료 후 tag push 가능.
+
+### 0. 아이콘 파일 생성 (권장, unsigned release 허용 시 건너뛸 수 있음)
+
+`build/icon.svg` 가 source-of-truth. 다음 포맷을 생성해 `build/` 에 추가:
+- `icon.icns` — macOS
+- `icon.ico` — Windows
+- `icon.png` — Linux
+
+생성 명령어는 [build/README.md](../build/README.md) 참고.
+미생성 시 electron-builder 가 기본 Electron 아이콘으로 대체 (배포 가능, unbranded).
 
 ### 1. Secrets 설정 (GitHub repo settings → Secrets and variables → Actions)
 
@@ -46,22 +58,28 @@ last_updated: 2026-05-02
 
 ### 3. 버전 bump + tag push
 
-```bash
-# 1. package.json 의 version 수동 변경 (예: 0.0.1 → 0.1.0)
+> **v0.1.0**: `package.json` 이미 `0.1.0`. commit + tag 만 하면 됨.
 
-# 2. commit + tag
-git add package.json
-git commit -m "chore: bump version to 0.1.0"
+```bash
+# v0.1.0 tag push (B3 commit 후)
 git tag -a v0.1.0 -m "Release v0.1.0"
 git push origin main
 git push origin v0.1.0
 
-# 3. GitHub Actions 자동 트리거 → 60분 내 GitHub Release 발행
+# GitHub Actions 자동 트리거 → 60분 내 GitHub Release 발행
 ```
 
-또는 `gh` CLI:
+다음 버전 (v0.1.1 / v0.2.0):
 ```bash
-npm version 0.1.0   # bumps version + commits + tags
+# package.json version 수동 변경 후:
+git add package.json CHANGELOG.md
+git commit -m "chore: bump version to 0.1.1"
+git tag -a v0.1.1 -m "Release v0.1.1"
+git push origin main --follow-tags
+
+# 또는 npm version 사용:
+npm version patch   # 0.1.0 → 0.1.1 (버그 픽스)
+npm version minor   # 0.1.0 → 0.2.0 (기능 추가)
 git push origin main --follow-tags
 ```
 
@@ -104,4 +122,6 @@ dev/e2e 환경 (`app.isPackaged === false`) 에선 early return 이라 영향 X.
 - [electron-builder.yml](../electron-builder.yml) — 패키징 설정
 - [.github/workflows/release.yml](../.github/workflows/release.yml) — CI 파이프라인
 - [package.json](../package.json) — version 필드 + electron-updater dep
+- [CHANGELOG.md](../CHANGELOG.md) — 버전별 변경 내역
+- [build/README.md](../build/README.md) — 아이콘 생성 명령어
 - [docs/performance/electron-tuning.md](./performance/electron-tuning.md#auto-update-성능) — autoUpdater tuning
