@@ -2,6 +2,37 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [0.1.1] — 2026-05-03
+
+**Hardening release — macOS DMG 추가 + 운영 장치.**
+
+### Fixed
+
+- **Issue #1**: macOS DMG publish race condition. 3 OS matrix 가 동시에
+  GitHub Releases create 시도 → 422 already_exists 로 macOS 누락.
+  release.yml 을 2-stage 파이프라인 (build matrix `--publish never` →
+  단일 publish job 이 atomic Release 생성) 으로 재작성. v0.1.1-rc1 dry-run
+  으로 macOS DMG x64 + arm64 둘 다 release 에 업로드되는 것 검증.
+
+### Added
+
+- `.github/ISSUE_TEMPLATE/`: 4 template (bug-report / install-problem /
+  feedback / config). Discussions 링크 포함.
+- GitHub Labels (10): platform (windows/linux/macos) + 영역 (installer /
+  cli-detection / onboarding / browser-view / permission / feedback / v0.1.1).
+- Milestone `v0.1.1 Hardening` (#1).
+- `.gitignore`: `.omc/` `.omx/` (Claude Code 멀티에이전트 runtime).
+
+### Distributed Artifacts
+
+- ✅ Linux AppImage (`Dreampia-Dev-0.1.1-x86_64.AppImage`)
+- ✅ Linux Debian (`Dreampia-Dev-0.1.1-amd64.deb`)
+- ✅ Windows NSIS (`Dreampia-Dev-Setup-0.1.1-x64.exe`)
+- ✅ **macOS Intel** (`Dreampia-Dev-0.1.1-x64.dmg`) — v0.1.0 누락 fix
+- ✅ **macOS Apple Silicon** (`Dreampia-Dev-0.1.1-arm64.dmg`) — v0.1.0 누락 fix
+
+[0.1.1]: https://github.com/eonofpixel/dreampia-dev/releases/tag/v0.1.1
+
 ## [0.1.0] — 2026-05-03
 
 **첫 unsigned early adopter build (Linux + Windows only).**
