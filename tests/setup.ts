@@ -62,6 +62,18 @@ interface MockWorkspaceInfo {
   name: string;
 }
 
+// v0.6.0 (F-019) — @ mention 의 file IPC 가 반환하는 형태.
+interface MockFileEntry {
+  path: string;
+  size_bytes: number;
+  mtime: string;
+}
+interface MockFileContent {
+  content: string;
+  truncated: boolean;
+  line_count: number;
+}
+
 type BrowserUpdateListener = (state: MockBrowserTabState) => void;
 
 // ── ai/* (P1-4) — mock IPC for IpcStreamingProvider tests ──
@@ -167,6 +179,10 @@ const mockStore = {
   // pickFolder 호출 시 반환할 다음 값. null = 사용자 취소. undefined = default
   // (path: '/picked/dir', name: 'dir'). Tests can inject via __mockStore.
   workspacePickNext: undefined as MockWorkspaceInfo | null | undefined,
+  // v0.6.0 (F-019) — file IPC mock state. Tests 가 미리 채워두면 ChatInput @
+  // popover 가 실제 파일 검색 흐름을 검증할 수 있다.
+  workspaceFiles: [] as MockFileEntry[],
+  workspaceFileContents: new Map<string, MockFileContent>(),
 
   // ── onboarding (Phase 3 B2) ────────────────────────────
   // 첫 실행 wizard 표시 여부. 기본 true — App.tsx 회귀 테스트가 wizard 와
@@ -299,6 +315,8 @@ beforeEach(() => {
   mockStore.usageError = null;
   mockStore.workspace = null;
   mockStore.workspacePickNext = undefined;
+  mockStore.workspaceFiles = [];
+  mockStore.workspaceFileContents.clear();
   mockStore.onboardingCompleted = true;
   mockStore.defaultProvider = 'auto';
   mockStore.defaultPermissionLevel = 'workspace_write';
@@ -310,6 +328,9 @@ beforeEach(() => {
     if (ws !== undefined) {
       (ws.pickFolder as unknown as { mockClear?: () => void }).mockClear?.();
       (ws.get as unknown as { mockClear?: () => void }).mockClear?.();
+      // v0.6.0 (F-019) — file IPC mock clear (정의돼 있을 때만).
+      (ws.listFiles as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
+      (ws.readFile as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
     }
     const sess = window.dreampia.session;
     if (sess !== undefined) {
@@ -470,6 +491,34 @@ if (typeof window !== 'undefined') {
           mockStore.workspacePickNext = undefined;
           return { ok: true, value: next };
         }),
+
+        // v0.6.0 (F-019) — @ mention 의 file enumeration / read.
+        // mockStore.workspaceFiles 가 비어 있으면 빈 배열 반환. 테스트가
+        // 실제 파일 검색 흐름을 검증하려면 미리 채워넣음.
+        listFiles: vi.fn(
+          async (_args: {
+            workspace_root: string;
+            ignore_patterns?: string[];
+            max_files?: number;
+          }): Promise<Result<MockFileEntry[]>> => ({
+            ok: true,
+            value: [...mockStore.workspaceFiles],
+          })
+        ),
+
+        readFile: vi.fn(
+          async (args: {
+            workspace_root: string;
+            rel_path: string;
+            max_bytes?: number;
+          }): Promise<Result<MockFileContent>> => {
+            const content = mockStore.workspaceFileContents.get(args.rel_path);
+            if (content === undefined) {
+              return { ok: false, error: `file not found: ${args.rel_path}` };
+            }
+            return { ok: true, value: content };
+          }
+        ),
       },
 
       session: {

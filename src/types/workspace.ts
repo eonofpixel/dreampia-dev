@@ -97,3 +97,37 @@ export const WorkspaceSchema = z.object({
 });
 
 export type Workspace = z.infer<typeof WorkspaceSchema>;
+
+// ────────────────────────────────────────────────────────────
+// FileEntry / FileContent (v0.6.0 — F-019 @ mention)
+// ────────────────────────────────────────────────────────────
+
+/**
+ * `workspace/list-files` IPC 가 반환하는 한 파일의 메타데이터.
+ *
+ * `path` 는 workspace_root 기준 relative POSIX 경로 (e.g. `src/main/index.ts`).
+ * Windows 의 backslash 는 main 측에서 forward slash 로 정규화되므로 멘션
+ * 비교/표시 모두 일관되게 동작한다.
+ *
+ * Spec: docs/ux/patterns/F-019-mention-palette.md
+ */
+export interface FileEntry {
+  path: string;
+  size_bytes: number;
+  /** ISO 8601 modified timestamp. */
+  mtime: string;
+}
+
+/**
+ * `workspace/read-file` IPC 가 반환하는 파일 본문 + 메타.
+ *
+ * `truncated` 가 true 면 `content` 는 `max_bytes` 까지만 채워진 prefix.
+ * `line_count` 는 truncated content 기준 라인 수 (\n 개수 + 1).
+ *
+ * Spec: docs/ux/patterns/F-019-mention-palette.md
+ */
+export interface FileContent {
+  content: string;
+  truncated: boolean;
+  line_count: number;
+}

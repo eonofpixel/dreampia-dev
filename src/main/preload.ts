@@ -256,6 +256,30 @@ interface UsageDailyArgsShape {
   provider?: UsageProviderShape;
 }
 
+// v0.6.0 (F-019) — @ mention 의 file IPC. main 의 workspace/list-files 와
+// workspace/read-file 이 반환하는 형태와 sync. 본 preload 가 사용하는 다른
+// 인라인 shape 와 동일하게 zod runtime 을 import 하지 않는다.
+interface FileEntryShape {
+  path: string;
+  size_bytes: number;
+  mtime: string;
+}
+interface FileContentShape {
+  content: string;
+  truncated: boolean;
+  line_count: number;
+}
+interface ListFilesArgsShape {
+  workspace_root: string;
+  ignore_patterns?: string[];
+  max_files?: number;
+}
+interface ReadFileArgsShape {
+  workspace_root: string;
+  rel_path: string;
+  max_bytes?: number;
+}
+
 // Whitelist of IPC channels (security)
 const ALLOWED_INVOKE_CHANNELS = [
   'app:get-version',
@@ -270,6 +294,9 @@ const ALLOWED_INVOKE_CHANNELS = [
   'app:set-default-permission-level',
   'workspace/pick-folder',
   'workspace/get',
+  // v0.6.0 (F-019) — @ mention 가 사용하는 file enumeration / read.
+  'workspace/list-files',
+  'workspace/read-file',
   'session/list',
   'session/get',
   'session/create',
@@ -432,6 +459,31 @@ const api = {
 
     get: (): Promise<Result<{ path: string; name: string } | null>> =>
       ipcRenderer.invoke('workspace/get') as Promise<Result<{ path: string; name: string } | null>>,
+
+    /**
+     * v0.6.0 (F-019) — workspace 내 파일 enumerate. ignore_patterns 는
+     * minimatch-lite (small, no-deps) 로 매칭. 결과의 `path` 는 forward-slash
+     * relative POSIX 경로 (Windows backslash 변환됨). max_files 도달 시 부분
+     * 결과만 반환되고 truncated 표시는 따로 없으니 (caller 가 length 로 판단)
+     * 큰 monorepo 에선 ignore_patterns 를 신중히 지정하는 게 권장.
+     */
+    listFiles: (args: ListFilesArgsShape): Promise<Result<FileEntryShape[]>> =>
+      ipcRenderer.invoke('workspace/list-files', args) as Promise<
+        Result<FileEntryShape[]>
+      >,
+
+    /**
+     * v0.6.0 (F-019) — workspace 내 단일 파일 read. 다음 케이스는 거절:
+     *   - rel_path 가 traversal 로 root 바깥
+     *   - 디렉토리
+     *   - 1MB 초과
+     *   - binary (NUL byte 검출)
+     * 정상 read 라도 max_bytes 초과면 truncated=true + content 는 prefix.
+     */
+    readFile: (args: ReadFileArgsShape): Promise<Result<FileContentShape>> =>
+      ipcRenderer.invoke('workspace/read-file', args) as Promise<
+        Result<FileContentShape>
+      >,
   },
 
   /**

@@ -20,6 +20,7 @@ import {
   type BrowserWindow,
   type IpcMainInvokeEvent,
 } from 'electron';
+import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import {
@@ -67,6 +68,7 @@ import {
 } from '@/providers/auto';
 import { detectCli as defaultDetectCli, type CliDetectionResult } from '@/providers/cli/detect';
 import type { BrowserManager, BrowserTabState } from './BrowserManager';
+import type { FileContent, FileEntry } from '@/types/workspace';
 import type {
   ConversationPatch,
   Result,
@@ -181,6 +183,51 @@ const UsageDailyArgsSchema = z
   .strict();
 
 // ────────────────────────────────────────────────────────────
+// workspace/list-files + workspace/read-file (v0.6.0 — F-019)
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Workspace file enumeration limits.
+ *
+ * `MAX_FILES` 는 한 호출에서 돌려줄 수 있는 항목 수 상한 — 매우 큰 monorepo
+ * 에서도 IPC payload 가 폭주하지 않도록. `MAX_DEPTH` 는 재귀 디렉토리 탐색
+ * 최대 깊이로, 무한 심볼릭 루프 / 의도치 않은 거대한 트리에 대한 안전망.
+ */
+const FILE_LIST_DEFAULT_MAX_FILES = 5000;
+const FILE_LIST_HARD_MAX_FILES = 10000;
+const FILE_LIST_MAX_DEPTH = 16;
+
+/** 단일 파일 read 의 byte 상한. 1MB 이상은 거절 — chat context 에 부적절. */
+const FILE_READ_HARD_MAX_BYTES = 1024 * 1024;
+const FILE_READ_DEFAULT_MAX_BYTES = 8192;
+
+const ListFilesArgsSchema = z
+  .object({
+    workspace_root: z.string().min(1),
+    ignore_patterns: z.array(z.string()).optional(),
+    max_files: z
+      .number()
+      .int()
+      .positive()
+      .max(FILE_LIST_HARD_MAX_FILES)
+      .optional(),
+  })
+  .strict();
+
+const ReadFileArgsSchema = z
+  .object({
+    workspace_root: z.string().min(1),
+    rel_path: z.string().min(1),
+    max_bytes: z
+      .number()
+      .int()
+      .positive()
+      .max(FILE_READ_HARD_MAX_BYTES)
+      .optional(),
+  })
+  .strict();
+
+// ────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────
 
@@ -192,6 +239,103 @@ function toErrorMessage(err: unknown): string {
   }
   if (err instanceof Error) return err.message;
   return String(err);
+}
+
+// ────────────────────────────────────────────────────────────
+// Glob matcher (small, dependency-free) — used by workspace/list-files
+// ────────────────────────────────────────────────────────────
+
+/**
+ * 단일 glob → RegExp. 의존성 없이 minimatch 의 가장 흔한 케이스만 지원:
+ *   - `*`  : 한 path segment 안의 임의 문자 (`/` 제외) 0개 이상
+ *   - `**` : path segment 들 0개 이상 포함 임의 문자
+ *   - `?`  : 한 글자 (`/` 제외)
+ *   - 그 외 정규식 메타문자는 escape
+ *
+ * 입력 / 비교 모두 forward-slash 정규화된 경로라고 가정 (Windows 의 `\` 는
+ * 호출 측에서 미리 변환). 패턴은 path 의 어느 위치에도 매칭되도록
+ * 'absolute' 가 아닌 'contains' 의미로 동작 — 사용자가
+ * 'node_modules/**' 만 적어도 'src/.../node_modules/foo' 가 매칭된다.
+ */
+function compileGlob(pattern: string): RegExp {
+  // 1) 정규식 메타문자 escape (단, `*`, `?` 는 곧 별도로 처리)
+  let re = '';
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i];
+    if (ch === '*') {
+      // `**` → 모든 문자 (multi-segment)
+      if (pattern[i + 1] === '*') {
+        re += '.*';
+        i += 1;
+        // 다음 문자가 `/` 면 함께 소비 — `**/foo` 패턴은 `foo` 한정
+        if (pattern[i + 1] === '/') {
+          re += '(?:/|$)';
+          i += 1;
+        }
+        continue;
+      }
+      // 단일 `*` → `/` 를 제외한 임의 문자
+      re += '[^/]*';
+      continue;
+    }
+    if (ch === '?') {
+      re += '[^/]';
+      continue;
+    }
+    if (ch === '.' || ch === '+' || ch === '(' || ch === ')' || ch === '|' || ch === '^' ||
+        ch === '$' || ch === '{' || ch === '}' || ch === '[' || ch === ']' || ch === '\\') {
+      re += '\\' + ch;
+      continue;
+    }
+    re += ch ?? '';
+  }
+  // 'contains' 매칭 — 양 끝에 .* 추가. 단, `^` 또는 `/` 시작 패턴은 root 부터.
+  return new RegExp(re);
+}
+
+/**
+ * 한 relative path 가 ignore_patterns 중 하나라도 매칭하면 true.
+ * relPath 는 forward-slash 정규화되어 있어야 한다.
+ */
+function isIgnored(relPath: string, compiledPatterns: ReadonlyArray<RegExp>): boolean {
+  for (const re of compiledPatterns) {
+    if (re.test(relPath)) return true;
+  }
+  return false;
+}
+
+// ────────────────────────────────────────────────────────────
+// Path traversal guard — used by workspace/read-file
+// ────────────────────────────────────────────────────────────
+
+/**
+ * `workspace_root` 안쪽의 파일에만 접근 허용. `..` 또는 절대경로 입력으로
+ * workspace 바깥 (`/etc/passwd`, `C:\Windows\System32\...`) 으로 빠지는
+ * traversal 공격 방어. 반환은 정규화된 절대경로.
+ *
+ * Throws "path traversal" 메시지의 Error 가 발생하면 호출 측 try/catch 가
+ * `Result<never>` 의 fail 로 변환한다 (renderer 는 string 만 받음).
+ */
+function resolveInsideWorkspace(workspaceRoot: string, relPath: string): string {
+  const root = path.resolve(workspaceRoot);
+  const target = path.resolve(root, relPath);
+  // root 와 정확히 같거나, root 의 separator 로 시작해야 안쪽.
+  // Windows / POSIX 모두 path.sep 이 적절히 사용된다.
+  const sep = path.sep;
+  if (target !== root && !target.startsWith(root + sep)) {
+    throw new Error('path traversal: rel_path resolves outside workspace_root');
+  }
+  return target;
+}
+
+/** Buffer 가 binary 파일인지 단순 휴리스틱: NUL byte 존재 여부. */
+function looksBinary(buf: Buffer): boolean {
+  // 처음 8KB 만 검사 — 매우 큰 파일도 즉시 판단 가능.
+  const slice = buf.length > 8192 ? buf.subarray(0, 8192) : buf;
+  for (let i = 0; i < slice.length; i++) {
+    if (slice[i] === 0) return true;
+  }
+  return false;
 }
 
 function ok<T>(value: T): { ok: true; value: T } {
@@ -460,6 +604,116 @@ function registerWorkspaceHandlers(): void {
         return ok({ path: settings.workspace_root, name: settings.workspace_name });
       }
       return ok(null);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  // ── workspace/list-files (v0.6.0 — F-019 @ 멘션) ────────────────────
+  // 입력: { workspace_root, ignore_patterns?, max_files? }
+  // 출력: FileEntry[]  (path = forward-slash relative)
+  // - root 바깥 / 비-디렉토리는 거절
+  // - ignore_patterns 매칭 항목은 enumerate 단계에서 skip (디렉토리 단위로
+  //   prune 해서 node_modules 같은 거대한 트리에 진입 X)
+  // - max_files 도달 시 즉시 중단, 부분 결과 반환
+  // - 심볼릭 / 권한 오류는 silently skip — 한 손상 항목이 전체 enumerate 를 깨뜨리지 않도록
+  ipcMain.handle('workspace/list-files', async (_evt, raw: unknown): Promise<Result<FileEntry[]>> => {
+    try {
+      const args = ListFilesArgsSchema.parse(raw);
+      const root = path.resolve(args.workspace_root);
+      const stat = await fsp.stat(root).catch(() => null);
+      if (stat === null || !stat.isDirectory()) {
+        throw new Error('workspace_root must be an existing directory');
+      }
+      const cap = args.max_files ?? FILE_LIST_DEFAULT_MAX_FILES;
+      const compiled = (args.ignore_patterns ?? []).map(compileGlob);
+      const out: FileEntry[] = [];
+      // BFS 가 아닌 DFS — 결과 순서는 caller 가 sort 한다.
+      const stack: Array<{ abs: string; rel: string; depth: number }> = [
+        { abs: root, rel: '', depth: 0 },
+      ];
+      while (stack.length > 0) {
+        if (out.length >= cap) break;
+        const top = stack.pop();
+        if (top === undefined) break;
+        if (top.depth > FILE_LIST_MAX_DEPTH) continue;
+        let entries: import('node:fs').Dirent[] = [];
+        try {
+          entries = await fsp.readdir(top.abs, { withFileTypes: true });
+        } catch {
+          // 권한 / 손상 디렉토리는 skip — silent
+          continue;
+        }
+        for (const ent of entries) {
+          if (out.length >= cap) break;
+          const childRel = top.rel.length === 0 ? ent.name : `${top.rel}/${ent.name}`;
+          // POSIX-style relative path 로 정규화
+          const relForMatch = childRel.split(path.sep).join('/');
+          if (isIgnored(relForMatch, compiled)) continue;
+          const childAbs = path.join(top.abs, ent.name);
+          if (ent.isDirectory()) {
+            stack.push({ abs: childAbs, rel: relForMatch, depth: top.depth + 1 });
+            continue;
+          }
+          if (!ent.isFile()) continue; // symlink / device 등은 skip
+          let size_bytes = 0;
+          let mtime = '';
+          try {
+            const fileStat = await fsp.stat(childAbs);
+            size_bytes = fileStat.size;
+            mtime = fileStat.mtime.toISOString();
+          } catch {
+            continue; // stat 실패 → skip
+          }
+          out.push({ path: relForMatch, size_bytes, mtime });
+        }
+      }
+      return ok(out);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  // ── workspace/read-file (v0.6.0 — F-019 @ 멘션) ─────────────────────
+  // 입력: { workspace_root, rel_path, max_bytes? }
+  // 출력: FileContent { content, truncated, line_count }
+  // 안전성:
+  //   - path traversal 거절 (resolveInsideWorkspace)
+  //   - 디렉토리 / 1MB 초과 / binary 파일 거절
+  //   - max_bytes 까지만 읽고 truncated=true 표시
+  ipcMain.handle('workspace/read-file', async (_evt, raw: unknown): Promise<Result<FileContent>> => {
+    try {
+      const args = ReadFileArgsSchema.parse(raw);
+      const abs = resolveInsideWorkspace(args.workspace_root, args.rel_path);
+      const stat = await fsp.stat(abs).catch(() => null);
+      if (stat === null) {
+        throw new Error('file not found');
+      }
+      if (stat.isDirectory()) {
+        throw new Error('path is a directory, not a file');
+      }
+      if (stat.size > FILE_READ_HARD_MAX_BYTES) {
+        throw new Error(
+          `file too large: ${stat.size} bytes (max ${FILE_READ_HARD_MAX_BYTES})`
+        );
+      }
+      const limit = args.max_bytes ?? FILE_READ_DEFAULT_MAX_BYTES;
+      const buf = await fsp.readFile(abs);
+      if (looksBinary(buf)) {
+        throw new Error('binary file rejected');
+      }
+      const truncated = buf.length > limit;
+      const slice = truncated ? buf.subarray(0, limit) : buf;
+      const content = slice.toString('utf8');
+      // line_count = '\n' 개수 + 1 (빈 파일은 1줄로 간주). truncated 인 경우
+      // 실제 파일은 더 많은 줄을 포함할 수 있지만 caller 에 표시되는 snippet
+      // 기준 라인 수가 더 유용하다.
+      let nl = 0;
+      for (let i = 0; i < content.length; i++) {
+        if (content.charCodeAt(i) === 10) nl++;
+      }
+      const line_count = nl + 1;
+      return ok({ content, truncated, line_count });
     } catch (err) {
       return fail(err);
     }

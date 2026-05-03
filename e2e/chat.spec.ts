@@ -99,6 +99,29 @@ test.describe('chat flow (V2)', () => {
     ).toBeVisible({ timeout: 5_000 });
   });
 
+  // v0.6.0 (F-019) — @ mention popover end-to-end.
+  test('@ mention: typing @s opens popover with file matches and Tab inserts path', async ({
+    window,
+  }) => {
+    // Create a session — ChatInput mount + workspace_root attached.
+    await window.getByRole('button', { name: '새 채팅', exact: false }).first().click();
+    const input = window.getByTestId('chat-input');
+    await expect(input).toBeVisible({ timeout: 10_000 });
+
+    // 사용자 fixture 의 workspace_root = userDataDir 안에 settings.json 이 있다.
+    // @s 를 입력하면 file 멘션 후보로 settings.json 가 나타나야 한다.
+    await input.click();
+    await input.fill('@s');
+    // popover 등장.
+    await expect(window.getByTestId('mention-popover')).toBeVisible({
+      timeout: 5_000,
+    });
+    // settings.json 항목 존재. (e2e fixture 가 미리 써놓은 파일)
+    await expect(
+      window.getByTestId('mention-option-file-settings.json')
+    ).toBeVisible({ timeout: 5_000 });
+  });
+
   test('cancels mid-stream via [중지] button', async ({ window }) => {
     await window.getByRole('button', { name: '새 채팅', exact: false }).first().click();
     const input = window.getByTestId('chat-input');

@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ThreePanelLayout } from './components/layout/ThreePanelLayout';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { ChatPanel, type CliStatus } from './components/chat/ChatPanel';
+import type { ResolverContext } from './mentions/resolver';
 import { PreviewPanel } from './components/preview/PreviewPanel';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { McpSettings } from './components/settings/McpSettings';
@@ -506,6 +507,33 @@ export function App(): React.JSX.Element {
   // 사용자가 picker 누르도록 안내 placeholder.
   const projectName = activeSession?.workspace.name ?? defaultWorkspace?.name ?? '폴더 선택 필요';
 
+  // v0.6.0 (F-019) — @ mention 의 file/session 후보 + resolver context.
+  // 활성 session 의 workspace.root / ignore_patterns 를 그대로 forward.
+  // resolverContext 는 IPC 가 누락된 환경 (preload 깨짐 등) 에서 파일 read 를
+  // sliently 실패시키도록 fallback `Result<>` 를 직접 반환.
+  const mentionSessions = useMemo(
+    () => sessions.map((s) => ({ id: s.id, title: s.title })),
+    [sessions]
+  );
+  const mentionWorkspaceRoot = activeSession?.workspace.root;
+  const mentionIgnorePatterns = activeSession?.workspace.ignore_patterns;
+  const mentionResolverContext = useMemo<ResolverContext | undefined>(() => {
+    if (mentionWorkspaceRoot === undefined) return undefined;
+    return {
+      workspaceRoot: mentionWorkspaceRoot,
+      readFile: async (args) => {
+        const ws = typeof window !== 'undefined' ? window.dreampia?.workspace : undefined;
+        if (ws === undefined || typeof ws.readFile !== 'function') {
+          return { ok: false, error: 'IPC unavailable' } as const;
+        }
+        return ws.readFile(args);
+      },
+      getSession: async (id: string) => {
+        return getSession(id as SessionId);
+      },
+    };
+  }, [mentionWorkspaceRoot, getSession]);
+
   // Phase 3 audit fix #4 — ChatHeader 가 표시할 workspace name.
   // 우선순위: active session 의 workspace.name (실제 메시지가 향하는 폴더) >
   //          defaultWorkspace.name (새 채팅이 만들어질 폴더).
@@ -663,6 +691,16 @@ export function App(): React.JSX.Element {
             ipcUnavailable={provider === null}
             initialInputValue={pendingPrompt}
             commandHandlers={commandHandlers}
+            {...(mentionWorkspaceRoot !== undefined && {
+              mentionWorkspaceRoot,
+            })}
+            {...(mentionIgnorePatterns !== undefined && {
+              mentionIgnorePatterns,
+            })}
+            mentionSessions={mentionSessions}
+            {...(mentionResolverContext !== undefined && {
+              mentionResolverContext,
+            })}
           />
         }
         preview={

@@ -17,6 +17,7 @@ import { EFFORT_LABELS_KO } from '@/types';
 import { ToolCallCard } from './ToolCallCard';
 import { findToolResult } from './toolDisplayHelpers';
 import type { SlashCommandId } from '../../commands/registry';
+import type { ResolverContext } from '../../mentions/resolver';
 
 /**
  * CLI 감지 상태 — App 이 useEffect 에서 ai/detect-cli 호출 후 설정.
@@ -59,6 +60,17 @@ export interface ChatPanelProps {
    * 미지정이면 슬래시 명령은 그냥 메시지로 취급된다.
    */
   commandHandlers?: Partial<Record<SlashCommandId, (arg?: string) => void>>;
+  /**
+   * v0.6.0 (F-019) — @ mention popover 가 file 후보를 enumerate 할 root.
+   * 미지정 시 file 멘션은 빈 popover.
+   */
+  mentionWorkspaceRoot?: string;
+  /** v0.6.0 — file enumeration ignore patterns. */
+  mentionIgnorePatterns?: ReadonlyArray<string>;
+  /** v0.6.0 — `@session:` 멘션 후보 (id + title 만 사용). */
+  mentionSessions?: ReadonlyArray<{ id: string; title: string }>;
+  /** v0.6.0 — 멘션 resolve 단계의 IPC / store 의존성. */
+  mentionResolverContext?: ResolverContext;
 }
 
 interface MessagesAreaProps {
@@ -84,6 +96,10 @@ export function ChatPanel({
   ipcUnavailable = false,
   initialInputValue,
   commandHandlers,
+  mentionWorkspaceRoot,
+  mentionIgnorePatterns,
+  mentionSessions,
+  mentionResolverContext,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -115,6 +131,10 @@ export function ChatPanel({
         disabled={ipcUnavailable}
         initialValue={initialInputValue}
         commandHandlers={commandHandlers}
+        mentionWorkspaceRoot={mentionWorkspaceRoot}
+        mentionIgnorePatterns={mentionIgnorePatterns}
+        mentionSessions={mentionSessions}
+        mentionResolverContext={mentionResolverContext}
       />
     </main>
   );
@@ -185,6 +205,10 @@ interface InputAreaProps {
   disabled?: boolean;
   initialValue?: string;
   commandHandlers?: Partial<Record<SlashCommandId, (arg?: string) => void>>;
+  mentionWorkspaceRoot?: string;
+  mentionIgnorePatterns?: ReadonlyArray<string>;
+  mentionSessions?: ReadonlyArray<{ id: string; title: string }>;
+  mentionResolverContext?: ResolverContext;
 }
 
 function InputArea({
@@ -194,6 +218,10 @@ function InputArea({
   disabled = false,
   initialValue,
   commandHandlers,
+  mentionWorkspaceRoot,
+  mentionIgnorePatterns,
+  mentionSessions,
+  mentionResolverContext,
 }: InputAreaProps): React.JSX.Element {
   return (
     <div>
@@ -214,6 +242,12 @@ function InputArea({
         disabled={isStreaming || disabled}
         initialValue={initialValue}
         commandHandlers={commandHandlers}
+        {...(mentionWorkspaceRoot !== undefined && { workspaceRoot: mentionWorkspaceRoot })}
+        {...(mentionIgnorePatterns !== undefined && { ignorePatterns: mentionIgnorePatterns })}
+        {...(mentionSessions !== undefined && { sessions: mentionSessions })}
+        {...(mentionResolverContext !== undefined && {
+          resolverContext: mentionResolverContext,
+        })}
       />
     </div>
   );

@@ -2,6 +2,102 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [0.6.0] — 2026-05-03
+
+**Feature release — @ Mention palette (F-019).**
+
+Codex (read-only audit) 권고 v0.6.0. v0.5.0 의 슬래시 popover/IME/listbox 패턴을
+그대로 재사용해 "내 파일/세션을 대화 컨텍스트로 넣는" 핵심 가치를 제공한다.
+사용자가 메시지 안에서 `@<query>` 만 치면 workspace 파일 또는 다른 세션을
+선택해 본문에 첨부할 수 있다. v1.0 의 "마우스 없이 주요 화면/액션 접근 가능"
+방향에 맞춰 키보드-우선 + IME-안전 + workspace-안전.
+
+### Added
+
+- **`src/renderer/components/chat/ChatInputSuggestionPopover.tsx`** — 슬래시
+  /멘션 양쪽이 공유하는 generic listbox popover. `SuggestionItem`(badge /
+  primary / secondary) 추상화 + role="listbox" + role="option" + aria-selected
+  + 안정 id (suggestionOptionId). emptyMessage / footerHint / ariaLabel /
+  testid 모두 caller 가 한국어로 주입. mousedown preventDefault 로 textarea
+  focus 유지.
+- **`src/renderer/mentions/parser.ts`** — `@<query>` 토큰 파서. cursor 위치
+  기준으로 활성 멘션을 detect (이메일 같은 `user@host` 거부 — `@` 앞이
+  whitespace 또는 BOF 일 때만). kind 분류: file / session / unknown.
+  `findActiveMention(text, cursorPos)` 와 `findAllMentions(text)` 두 함수
+  export.
+- **`src/renderer/mentions/resolver.ts`** — mention → context 변환.
+  `resolveMentions(mentions, ctx)` 가 file IPC + getSession 으로 병렬 fetch.
+  `formatMentionsAsContext(text, resolved)` 는 plain-text 컨텍스트 섹션을
+  원본 텍스트 끝에 prepend (Turn.content schema 변경 X — MVP).
+- **2개 신규 IPC channel (모두 `workspace/*`)**:
+  - `workspace/list-files` — `{workspace_root, ignore_patterns?, max_files?}`
+    → `Result<FileEntry[]>`. forward-slash relative 경로, max 5000 (default)
+    / 10000 (hard cap), depth 16 한도, dependency-free glob matcher 로
+    ignore_patterns 매칭. 권한/심볼릭 오류는 silent skip.
+  - `workspace/read-file` — `{workspace_root, rel_path, max_bytes?}`
+    → `Result<FileContent>`. **path traversal 거절** (workspace 바깥 거절),
+    1MB 초과 거절, binary 파일 (NUL byte) 거절, max_bytes (default 8KB,
+    hard cap 1MB) 까지 truncate.
+- **ChatInput @ trigger 통합** — `@` 입력 시 mention popover 자동 열림.
+  IME composition 중에는 안 뜸 (한글 자모 결합 보호). cursor 위치 추적
+  (onChange / onSelect / onKeyUp / onClick 모두 sync). 슬래시 popover 와
+  mutually exclusive (`/...` 입력 시 mention 숨김). ↑↓ 탐색, Enter 선택
+  (텍스트 교체), Esc 닫기, Tab 자동완성. 첫 `@` trigger 시 `listFiles` 한 번
+  lazy load. file (path 매칭) / session (title/id 매칭) / unknown (helper
+  `session:` 1개) 분기.
+- **ChatInput / ChatPanel 신규 props** — `workspaceRoot`, `ignorePatterns`,
+  `sessions`, `resolverContext` (ChatPanel 은 `mention*` prefix 로 forward).
+  resolverContext 미지정 시 멘션 resolve 단계 skip → raw 텍스트 그대로 전송.
+- **`@/types/workspace`** 에 `FileEntry` / `FileContent` 인터페이스 추가
+  (preload-safe).
+- **`tests/renderer/ChatInputSuggestionPopover.test.tsx`** — 7 tests.
+  empty / emptyMessage / 항목 렌더 / aria-selected / mousedown / id linkage /
+  footerHint.
+- **`tests/main/ipc.workspace-files.test.ts`** — 19 tests. 채널 등록 /
+  enumerate 정상 / ignore_patterns 매칭 / max_files cap / forward-slash 정규화 /
+  read content + line_count / truncated / path traversal 거절 / binary 거절 /
+  directory 거절 / 1MB 초과 거절 / 존재하지 않는 파일 / Zod 검증 /
+  max_bytes 1MB 한도.
+- **`tests/renderer/mentions/parser.test.ts`** — 20 tests. findActiveMention
+  / findAllMentions / kind 분류 / cursor edge cases / 이메일 거부 / 공백
+  경계 / start/end 정확성.
+- **`tests/renderer/mentions/resolver.test.ts`** — 12 tests. resolveMentions
+  병렬 / file 정상 + 실패 + throw / session 정상 + 미발견 / unknown 처리 /
+  formatMentionsAsContext file/session/error 직렬화.
+- **`tests/renderer/ChatInput.mention.test.tsx`** — 12 tests. `@` 단독 /
+  `@s` file 매칭 / `@session:` 후보 / IME composition 중 popover 미표시 /
+  슬래시 우선순위 / ↑↓ 키 / Esc 닫기 / Enter 텍스트 교체 / mouseDown 클릭 /
+  resolver 미주입 → raw / resolver 주입 → context prepend / 일반 텍스트 submit.
+- **e2e/chat.spec.ts** 에 `@s` → mention popover + settings.json 후보 표시
+  시나리오 1개 추가.
+
+### Changed
+
+- `package.json`: `0.5.0` → `0.6.0` (minor bump for new feature).
+- `src/renderer/components/chat/SlashCommandPopover.tsx` 가 generic
+  ChatInputSuggestionPopover 의 thin wrapper 로 refactor — 기존 호출 측
+  인터페이스 (testid, aria-label, 표시 텍스트, commandOptionId) 모두 보존,
+  내부 구현만 listbox 패턴을 공유.
+- `src/main/ipc.ts` — `node:fs/promises` import 추가, ListFiles / ReadFile
+  Zod 스키마, dependency-free glob matcher (`compileGlob`), path traversal
+  guard (`resolveInsideWorkspace`), binary detector (`looksBinary`),
+  `registerWorkspaceHandlers` 안에 2개 새 handler.
+- `src/main/preload.ts` whitelist 에 2개 새 IPC channel
+  (`workspace/list-files`, `workspace/read-file`) + `workspace.listFiles` /
+  `workspace.readFile` API 노출.
+- `tests/setup.ts` — mock IPC 에 `workspace.listFiles` / `workspace.readFile`
+  추가, mockStore 에 `workspaceFiles` / `workspaceFileContents` state +
+  beforeEach reset + mockClear 등록.
+
+### Acceptance
+
+- `npm run typecheck` — 0 errors.
+- `npm run lint` — 0 errors.
+- `npm test` — 953 → 1023 tests, all passing (+70 신규).
+- 수동 스모크: `@s` → 파일 후보, `@session:` → 세션 후보, ↑↓/Enter/Esc 동작,
+  한글 조합 중 popover 미표시, `@README.md` 첨부 후 submit → user turn 본문에
+  README 내용 포함, `@../../../etc/passwd` → IPC 거절 (path traversal).
+
 ## [0.5.0] — 2026-05-03
 
 **Feature release — Slash Commands (F-018).**
