@@ -28,6 +28,7 @@ import {
   X,
   Folder,
   FolderOpen,
+  Server,
   Sparkles,
   Terminal,
   KeyRound,
@@ -108,6 +109,21 @@ interface PickedWorkspace {
   name: string;
 }
 
+/**
+ * v0.9.0 — wizard 가 노출하는 MCP 상태 미니 안내.
+ *
+ * count: 등록된 서버 수.
+ * readyCount: status='ready' 인 서버 수.
+ * errorCount: status='error' 인 서버 수.
+ *
+ * 모두 0 이면 "없음" 안내. 1+ 이면 status badge 와 [더 알아보기] 링크.
+ */
+interface McpMiniStatus {
+  count: number;
+  readyCount: number;
+  errorCount: number;
+}
+
 export interface OnboardingWizardProps {
   /**
    * Wizard 완료 처리. firstPrompt 있으면 App.tsx 가 새 세션 + 자동 채움.
@@ -116,6 +132,11 @@ export interface OnboardingWizardProps {
   onComplete: (firstPrompt?: string) => void | Promise<void>;
   /** [건너뛰기] — 마찬가지로 완료 처리되지만 추천 prompt 스킵. */
   onSkip: () => void | Promise<void>;
+  /**
+   * v0.9.0 — wizard 의 MCP 미니 안내에서 [더 알아보기] 클릭 시 호출.
+   * 미지정 시 링크 자체를 숨김. App.tsx 가 SettingsModal('mcp' tab) 으로 wire up.
+   */
+  onOpenMcpSettings?: () => void;
 }
 
 const TOTAL_STEPS = 5;
@@ -127,7 +148,11 @@ const RECOMMENDED_PROMPTS: ReadonlyArray<string> = [
   '새 기능 구현 가이드',
 ];
 
-export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps): React.JSX.Element {
+export function OnboardingWizard({
+  onComplete,
+  onSkip,
+  onOpenMcpSettings,
+}: OnboardingWizardProps): React.JSX.Element {
   // 0..4 — Step 1 = index 0, Step 5 = index 4.
   const [step, setStep] = useState(0);
   const [cliStatus, setCliStatus] = useState<CliDetection | null>(null);
@@ -138,6 +163,12 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps):
   // 시도 후 fallback. mount 직후 IPC 응답 도착 전까진 'auto' / 'workspace_write'.
   const [providerChoice, setProviderChoice] = useState<DefaultProviderChoice>('auto');
   const [permissionChoice, setPermissionChoice] = useState<PermissionLevel>('workspace_write');
+  // v0.9.0 — wizard 의 MCP 미니 안내. 0/0/0 default.
+  const [mcpStatus, setMcpStatus] = useState<McpMiniStatus>({
+    count: 0,
+    readyCount: 0,
+    errorCount: 0,
+  });
 
   // ── CLI 감지 — Step 2 진입 시 한 번 실행 ──────────────────
   useEffect(() => {
@@ -219,6 +250,34 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps):
       cancelled = true;
     };
   }, []);
+
+  // v0.9.0 — MCP 서버 상태 fetch. step 2 (인증 가이드) 진입 시 표시되므로
+  // mount 시 한 번 + step 변경 시 새로 fetch (다른 wizard 진입 후 변경 가능성).
+  useEffect(() => {
+    if (step !== 2) return;
+    const mcpApi = typeof window !== 'undefined' ? window.dreampia?.mcp : undefined;
+    if (mcpApi === undefined || typeof mcpApi.list !== 'function') return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await mcpApi.list();
+        if (cancelled || !result.ok) return;
+        const servers = result.value;
+        let readyCount = 0;
+        let errorCount = 0;
+        for (const s of servers) {
+          if (s.status === 'ready') readyCount += 1;
+          else if (s.status === 'error') errorCount += 1;
+        }
+        setMcpStatus({ count: servers.length, readyCount, errorCount });
+      } catch {
+        // ignore — 0/0/0 유지
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step]);
 
   const goNext = useCallback((): void => {
     setStep((s) => Math.min(TOTAL_STEPS - 1, s + 1));
@@ -330,6 +389,8 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps):
               onProviderChange={(v) => {
                 void handleProviderChange(v);
               }}
+              mcpStatus={mcpStatus}
+              onOpenMcpSettings={onOpenMcpSettings}
             />
           )}
           {step === 3 && (
@@ -517,10 +578,14 @@ function AuthGuideStep({
   cliStatus,
   providerChoice,
   onProviderChange,
+  mcpStatus,
+  onOpenMcpSettings,
 }: {
   cliStatus: CliDetection | null;
   providerChoice: DefaultProviderChoice;
   onProviderChange: (next: DefaultProviderChoice) => void;
+  mcpStatus: McpMiniStatus;
+  onOpenMcpSettings?: () => void;
 }): React.JSX.Element {
   const claudeDetected = cliStatus?.claude !== undefined && cliStatus?.claude !== null;
   const codexDetected = cliStatus?.codex !== undefined && cliStatus?.codex !== null;
@@ -609,7 +674,51 @@ function AuthGuideStep({
           })}
         </ul>
       </div>
+
+      {/* v0.9.0 — MCP 서버 미니 안내 */}
+      <McpMiniSection mcpStatus={mcpStatus} onOpenMcpSettings={onOpenMcpSettings} />
     </section>
+  );
+}
+
+function McpMiniSection({
+  mcpStatus,
+  onOpenMcpSettings,
+}: {
+  mcpStatus: McpMiniStatus;
+  onOpenMcpSettings?: () => void;
+}): React.JSX.Element {
+  return (
+    <div
+      className="mt-5 border-t border-border-primary pt-4"
+      data-testid="onboarding-mcp-mini"
+    >
+      <header className="mb-2 flex items-center gap-2">
+        <Server className="h-4 w-4 text-text-secondary" aria-hidden="true" />
+        <p className="text-sm font-medium text-text-primary">MCP 서버 (선택)</p>
+      </header>
+      {mcpStatus.count === 0 ? (
+        <p className="text-xs text-text-tertiary" data-testid="onboarding-mcp-empty">
+          등록된 MCP 서버가 없어요. 나중에 설정에서 추천 서버를 추가할 수 있어요.
+        </p>
+      ) : (
+        <p className="text-xs text-text-secondary" data-testid="onboarding-mcp-summary">
+          {mcpStatus.count}개 서버
+          {mcpStatus.readyCount > 0 && ` · ${mcpStatus.readyCount}개 준비 완료`}
+          {mcpStatus.errorCount > 0 && ` · ${mcpStatus.errorCount}개 오류`}
+        </p>
+      )}
+      {onOpenMcpSettings !== undefined && (
+        <button
+          type="button"
+          onClick={onOpenMcpSettings}
+          className="mt-1 text-xs text-accent hover:underline"
+          data-testid="onboarding-mcp-open-settings"
+        >
+          더 알아보기 →
+        </button>
+      )}
+    </div>
   );
 }
 

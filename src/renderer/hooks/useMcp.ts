@@ -58,12 +58,29 @@ export interface McpServerStateUI {
 // IPC API shape (preload only)
 // ────────────────────────────────────────────────────────────
 
+// v0.9.0 — Discovery shapes
+export interface SuggestedMcpServerUI {
+  id: string;
+  name: string;
+  description: string;
+  command: string;
+  args: string[];
+  install_hint: string;
+}
+
+export interface McpDiscoveryUI {
+  suggested: SuggestedMcpServerUI[];
+  from_claude: McpServerConfigUI[];
+  from_codex: McpServerConfigUI[];
+}
+
 interface McpApi {
   list: () => Promise<Result<McpServerStateUI[]>>;
   add: (config: McpServerConfigUI) => Promise<Result<void>>;
   remove: (id: string) => Promise<Result<void>>;
   restart: (id: string) => Promise<Result<void>>;
   getLogs: (id: string) => Promise<Result<string[]>>;
+  discover?: () => Promise<Result<McpDiscoveryUI>>;
 }
 
 function getMcpApi(): McpApi | null {
@@ -91,6 +108,11 @@ export interface UseMcpApi {
   restart: (id: string) => Promise<boolean>;
   /** 서버 로그 조회. 실패 시 빈 배열. */
   getLogs: (id: string) => Promise<string[]>;
+  /**
+   * v0.9.0 — 추천 서버 + Claude/Codex CLI config 의 server 자동 탐지.
+   * IPC 미지원 / 실패 시 null. 이미 등록된 서버는 제외된 결과.
+   */
+  discover: () => Promise<McpDiscoveryUI | null>;
 }
 
 export function useMcp(): UseMcpApi {
@@ -187,9 +209,27 @@ export function useMcp(): UseMcpApi {
     return result.value;
   }, []);
 
+  const discover = useCallback(async (): Promise<McpDiscoveryUI | null> => {
+    const api = getMcpApi();
+    if (api === null || typeof api.discover !== 'function') return null;
+    try {
+      const result = await api.discover();
+      if (!result.ok) {
+        if (mountedRef.current) setError(result.error);
+        return null;
+      }
+      return result.value;
+    } catch (err) {
+      if (mountedRef.current) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  return { servers, loading, error, refresh, add, remove, restart, getLogs };
+  return { servers, loading, error, refresh, add, remove, restart, getLogs, discover };
 }

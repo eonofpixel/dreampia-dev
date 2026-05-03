@@ -19,13 +19,23 @@
  * 한국어 우선 — Spec: docs/design/principles.md
  */
 
-import { useCallback, useState } from 'react';
-import { X, RefreshCw, Trash2, FileText, Plus, AlertCircle } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  X,
+  RefreshCw,
+  Trash2,
+  FileText,
+  Plus,
+  AlertCircle,
+  Sparkles,
+} from 'lucide-react';
 import {
   useMcp,
+  type McpDiscoveryUI,
   type McpServerConfigUI,
   type McpServerStateUI,
   type McpServerStatusUI,
+  type SuggestedMcpServerUI,
 } from '../../hooks/useMcp';
 
 export interface McpSettingsProps {
@@ -86,14 +96,44 @@ export function McpSettings({ open, onClose }: McpSettingsProps): React.JSX.Elem
  * v0.8.0 — SettingsModal 의 'MCP' 탭 안에 mount 되는 body. McpSettings (모달
  * frame) 와 동일한 hook 흐름을 공유하지만 자체 chrome (header / close) 은
  * 가지지 않는다. 호출자는 panel-only 컴포넌트로 import 해 사용.
+ *
+ * v0.9.0 — 추천 서버 + Claude/Codex auto-discovery 결과 표시. 사용자가 [추가]
+ * 버튼 클릭 시 add form 에 미리 채워진 상태로 열림.
  */
 export function McpSettingsPanel(): React.JSX.Element {
-  const { servers, loading, error, refresh, add, remove, restart, getLogs } = useMcp();
+  const {
+    servers,
+    loading,
+    error,
+    refresh,
+    add,
+    remove,
+    restart,
+    getLogs,
+    discover,
+  } = useMcp();
   const [showAddForm, setShowAddForm] = useState(false);
+  /** add form 의 초기값 — suggested server / discovered server 를 템플릿으로 제공. */
+  const [addFormInitial, setAddFormInitial] = useState<McpServerConfigUI | null>(null);
+  const [discovery, setDiscovery] = useState<McpDiscoveryUI | null>(null);
   const [logsForServer, setLogsForServer] = useState<{
     id: string;
     lines: string[];
   } | null>(null);
+
+  // discovery 는 mount 시 한 번 — 서버 add/remove 후엔 따로 refresh.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const result = await discover();
+      if (!cancelled) {
+        setDiscovery(result);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [discover, servers.length]);
 
   const handleViewLogs = useCallback(
     async (id: string): Promise<void> => {
@@ -101,6 +141,33 @@ export function McpSettingsPanel(): React.JSX.Element {
       setLogsForServer({ id, lines });
     },
     [getLogs]
+  );
+
+  const openAddForm = useCallback((initial: McpServerConfigUI | null): void => {
+    setAddFormInitial(initial);
+    setShowAddForm(true);
+  }, []);
+
+  const handleAddSuggested = useCallback(
+    (s: SuggestedMcpServerUI): void => {
+      openAddForm({
+        id: s.id,
+        name: s.name,
+        command: s.command,
+        args: [...s.args],
+        env: {},
+        enabled: true,
+        added_at: new Date().toISOString(),
+      });
+    },
+    [openAddForm]
+  );
+
+  const handleAddDiscovered = useCallback(
+    (config: McpServerConfigUI): void => {
+      openAddForm(config);
+    },
+    [openAddForm]
   );
 
   return (
@@ -114,6 +181,15 @@ export function McpSettingsPanel(): React.JSX.Element {
           </div>
         )}
 
+        {/* v0.9.0 — 추천 + 자동 탐지 결과 */}
+        {discovery !== null && (
+          <McpDiscoverySection
+            discovery={discovery}
+            onAddSuggested={handleAddSuggested}
+            onAddDiscovered={handleAddDiscovered}
+          />
+        )}
+
         {loading ? (
           <p className="text-sm text-text-secondary">불러오는 중...</p>
         ) : servers.length === 0 ? (
@@ -121,7 +197,7 @@ export function McpSettingsPanel(): React.JSX.Element {
             등록된 MCP 서버가 없어요. 우측 하단 [+ 서버 추가] 버튼으로 시작해보세요.
           </div>
         ) : (
-          <ul className="space-y-2">
+          <ul className="space-y-2" data-testid="mcp-server-list">
             {servers.map((server) => (
               <McpServerRow
                 key={server.config.id}
@@ -154,9 +230,10 @@ export function McpSettingsPanel(): React.JSX.Element {
         </button>
         <button
           onClick={() => {
-            setShowAddForm(true);
+            openAddForm(null);
           }}
           className="flex items-center gap-2 rounded-md bg-bg-tertiary px-3 py-1.5 text-sm font-medium hover:bg-bg-quaternary"
+          data-testid="mcp-add-button"
         >
           <Plus className="h-3.5 w-3.5" />
           서버 추가
@@ -165,13 +242,16 @@ export function McpSettingsPanel(): React.JSX.Element {
 
       {showAddForm && (
         <McpAddForm
+          initial={addFormInitial}
           onClose={() => {
             setShowAddForm(false);
+            setAddFormInitial(null);
           }}
           onSubmit={async (config) => {
             const success = await add(config);
             if (success) {
               setShowAddForm(false);
+              setAddFormInitial(null);
             }
             return success;
           }}
@@ -188,6 +268,141 @@ export function McpSettingsPanel(): React.JSX.Element {
         />
       )}
     </>
+  );
+}
+
+// ────────────────────────────────────────────────────────────
+// 추천 + 자동 탐지 section (v0.9.0)
+// ────────────────────────────────────────────────────────────
+
+interface McpDiscoverySectionProps {
+  discovery: McpDiscoveryUI;
+  onAddSuggested: (s: SuggestedMcpServerUI) => void;
+  onAddDiscovered: (config: McpServerConfigUI) => void;
+}
+
+function McpDiscoverySection({
+  discovery,
+  onAddSuggested,
+  onAddDiscovered,
+}: McpDiscoverySectionProps): React.JSX.Element | null {
+  const hasDiscovered = discovery.from_claude.length + discovery.from_codex.length > 0;
+  const hasSuggested = discovery.suggested.length > 0;
+  if (!hasDiscovered && !hasSuggested) return null;
+
+  return (
+    <section className="mb-4 space-y-3" data-testid="mcp-discovery-section">
+      {hasDiscovered && (
+        <div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+            CLI 에서 발견된 서버
+          </h3>
+          <ul className="space-y-1.5">
+            {discovery.from_claude.map((c) => (
+              <DiscoveredRow
+                key={`claude-${c.id}`}
+                source="Claude"
+                config={c}
+                onAdd={() => onAddDiscovered(c)}
+              />
+            ))}
+            {discovery.from_codex.map((c) => (
+              <DiscoveredRow
+                key={`codex-${c.id}`}
+                source="Codex"
+                config={c}
+                onAdd={() => onAddDiscovered(c)}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {hasSuggested && (
+        <div>
+          <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+            <Sparkles className="h-3 w-3" aria-hidden="true" />
+            추천 서버
+          </h3>
+          <ul className="space-y-1.5">
+            {discovery.suggested.map((s) => (
+              <SuggestedRow
+                key={`suggested-${s.id}`}
+                suggested={s}
+                onAdd={() => onAddSuggested(s)}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+interface DiscoveredRowProps {
+  source: 'Claude' | 'Codex';
+  config: McpServerConfigUI;
+  onAdd: () => void;
+}
+
+function DiscoveredRow({ source, config, onAdd }: DiscoveredRowProps): React.JSX.Element {
+  return (
+    <li
+      className="flex items-start justify-between gap-3 rounded-md border border-border-primary bg-bg-elevated p-2.5"
+      data-testid={`discovered-${config.id}`}
+    >
+      <div className="min-w-0 flex-1">
+        <p className="text-sm">
+          <span className="font-medium">{config.name}</span>
+          <span className="ml-2 rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px] text-text-tertiary">
+            {source} CLI
+          </span>
+        </p>
+        <p className="mt-0.5 truncate text-xs text-text-tertiary">
+          <code className="font-mono">
+            {config.command} {config.args.join(' ')}
+          </code>
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onAdd}
+        className="flex flex-shrink-0 items-center gap-1 rounded-md border border-border-primary bg-bg-secondary px-2.5 py-1 text-xs hover:bg-bg-tertiary"
+        data-testid={`discovered-add-${config.id}`}
+      >
+        <Plus className="h-3 w-3" />
+        추가
+      </button>
+    </li>
+  );
+}
+
+interface SuggestedRowProps {
+  suggested: SuggestedMcpServerUI;
+  onAdd: () => void;
+}
+
+function SuggestedRow({ suggested, onAdd }: SuggestedRowProps): React.JSX.Element {
+  return (
+    <li
+      className="flex items-start justify-between gap-3 rounded-md border border-border-primary bg-bg-elevated p-2.5"
+      data-testid={`suggested-${suggested.id}`}
+    >
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">{suggested.name}</p>
+        <p className="mt-0.5 text-xs text-text-secondary">{suggested.description}</p>
+        <p className="mt-0.5 text-[10px] text-text-tertiary">{suggested.install_hint}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onAdd}
+        className="flex flex-shrink-0 items-center gap-1 rounded-md border border-border-primary bg-bg-secondary px-2.5 py-1 text-xs hover:bg-bg-tertiary"
+        data-testid={`suggested-add-${suggested.id}`}
+      >
+        <Plus className="h-3 w-3" />
+        추가
+      </button>
+    </li>
   );
 }
 
@@ -274,16 +489,24 @@ function McpServerRow({
 interface McpAddFormProps {
   onClose: () => void;
   onSubmit: (config: McpServerConfigUI) => Promise<boolean>;
+  /** v0.9.0 — 초기 값 (suggested / discovered server 클릭 시 사용). */
+  initial?: McpServerConfigUI | null;
 }
 
-function McpAddForm({ onClose, onSubmit }: McpAddFormProps): React.JSX.Element {
-  const [id, setId] = useState('');
-  const [name, setName] = useState('');
-  const [command, setCommand] = useState('');
-  const [argsText, setArgsText] = useState(''); // 줄바꿈 separated
-  const [envText, setEnvText] = useState(''); // KEY=VALUE per line
-  const [cwd, setCwd] = useState('');
-  const [enabled, setEnabled] = useState(true);
+function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.Element {
+  const [id, setId] = useState(initial?.id ?? '');
+  const [name, setName] = useState(initial?.name ?? '');
+  const [command, setCommand] = useState(initial?.command ?? '');
+  const [argsText, setArgsText] = useState(initial?.args.join('\n') ?? ''); // 줄바꿈 separated
+  const [envText, setEnvText] = useState(
+    initial !== undefined && initial !== null
+      ? Object.entries(initial.env)
+          .map(([k, v]) => `${k}=${v}`)
+          .join('\n')
+      : ''
+  ); // KEY=VALUE per line
+  const [cwd, setCwd] = useState(initial?.cwd ?? '');
+  const [enabled, setEnabled] = useState(initial?.enabled ?? true);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 

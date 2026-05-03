@@ -277,6 +277,23 @@ const mockStore = {
   usageDaily: [] as MockDailyUsageRow[],
   usageBySession: new Map<string, MockUsageEvent[]>(),
   usageError: null as string | null,
+  // v0.9.0 — CSV export 가 반환할 mock string. 비어 있으면 header 만.
+  usageExportCsv: '' as string,
+  // v0.9.0 — 비용 한도 / 임계값. limits 가 null 이면 설정 없음.
+  usageLimits: { alert_threshold: 0.8 } as { cost_limit_usd?: number; alert_threshold: number },
+  // v0.9.0 — MCP discovery mock state.
+  mcpDiscovery: {
+    suggested: [] as Array<{
+      id: string;
+      name: string;
+      description: string;
+      command: string;
+      args: string[];
+      install_hint: string;
+    }>,
+    from_claude: [] as MockMcpServerConfig[],
+    from_codex: [] as MockMcpServerConfig[],
+  },
 
   // ── session/search (v0.7.0 F-026) ──────────────────────
   // Tests 가 query 별 결과를 미리 inject. 키는 query 문자열, 값은 결과 배열.
@@ -373,6 +390,14 @@ beforeEach(() => {
   mockStore.usageDaily = [];
   mockStore.usageBySession.clear();
   mockStore.usageError = null;
+  // v0.9.0 — usage / mcp discovery mock state reset.
+  mockStore.usageExportCsv = '';
+  mockStore.usageLimits = { alert_threshold: 0.8 };
+  mockStore.mcpDiscovery = {
+    suggested: [],
+    from_claude: [],
+    from_codex: [],
+  };
   mockStore.workspace = null;
   mockStore.workspacePickNext = undefined;
   mockStore.workspaceFiles = [];
@@ -463,12 +488,26 @@ beforeEach(() => {
       (mcp['remove'] as unknown as { mockClear?: () => void }).mockClear?.();
       (mcp['restart'] as unknown as { mockClear?: () => void }).mockClear?.();
       (mcp['getLogs'] as unknown as { mockClear?: () => void }).mockClear?.();
+      // v0.9.0 — discover mock 도 reset.
+      (
+        mcp['discover'] as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
     }
     const usageNs = (window.dreampia as unknown as { usage?: Record<string, unknown> }).usage;
     if (usageNs !== undefined) {
       (usageNs['summary'] as unknown as { mockClear?: () => void }).mockClear?.();
       (usageNs['daily'] as unknown as { mockClear?: () => void }).mockClear?.();
       (usageNs['bySession'] as unknown as { mockClear?: () => void }).mockClear?.();
+      // v0.9.0 — exportCsv / getLimits / setLimits 는 새 IPC.
+      (
+        usageNs['exportCsv'] as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
+      (
+        usageNs['getLimits'] as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
+      (
+        usageNs['setLimits'] as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
     }
   }
 });
@@ -1089,6 +1128,31 @@ if (typeof window !== 'undefined') {
             value: server !== undefined ? [...server.last_log] : [],
           };
         }),
+
+        // v0.9.0 — discovery mock. mockStore.mcpDiscovery 를 그대로 반환.
+        discover: vi.fn(
+          async (): Promise<
+            Result<{
+              suggested: Array<{
+                id: string;
+                name: string;
+                description: string;
+                command: string;
+                args: string[];
+                install_hint: string;
+              }>;
+              from_claude: MockMcpServerConfig[];
+              from_codex: MockMcpServerConfig[];
+            }>
+          > => ({
+            ok: true,
+            value: {
+              suggested: [...mockStore.mcpDiscovery.suggested],
+              from_claude: [...mockStore.mcpDiscovery.from_claude],
+              from_codex: [...mockStore.mcpDiscovery.from_codex],
+            },
+          })
+        ),
       },
 
       // v0.4.0 — Usage / cost telemetry (read-only).
@@ -1133,6 +1197,57 @@ if (typeof window !== 'undefined') {
               ok: true,
               value: [...(mockStore.usageBySession.get(sessionId) ?? [])],
             };
+          }
+        ),
+
+        // v0.9.0 — CSV export. mockStore.usageExportCsv 가 비어있으면 header 만 반환.
+        exportCsv: vi.fn(
+          async (
+            _args?: {
+              from?: string;
+              to?: string;
+              provider?: MockUsageProvider;
+              model?: string;
+              session_id?: string;
+            }
+          ): Promise<Result<string>> => {
+            if (mockStore.usageError !== null) {
+              return { ok: false, error: mockStore.usageError };
+            }
+            const csv =
+              mockStore.usageExportCsv === ''
+                ? 'timestamp,session_id,turn_id,provider,model,input_tokens,output_tokens,cache_creation,cache_read,reasoning,total_cost_usd\n'
+                : mockStore.usageExportCsv;
+            return { ok: true, value: csv };
+          }
+        ),
+
+        getLimits: vi.fn(
+          async (): Promise<
+            Result<{ cost_limit_usd?: number; alert_threshold: number }>
+          > => ({ ok: true, value: { ...mockStore.usageLimits } })
+        ),
+
+        setLimits: vi.fn(
+          async (patch: {
+            cost_limit_usd?: number | null;
+            alert_threshold?: number | null;
+          }): Promise<Result<void>> => {
+            if (Object.prototype.hasOwnProperty.call(patch, 'cost_limit_usd')) {
+              if (patch.cost_limit_usd === null || patch.cost_limit_usd === undefined) {
+                delete mockStore.usageLimits.cost_limit_usd;
+              } else {
+                mockStore.usageLimits.cost_limit_usd = patch.cost_limit_usd;
+              }
+            }
+            if (Object.prototype.hasOwnProperty.call(patch, 'alert_threshold')) {
+              if (patch.alert_threshold === null || patch.alert_threshold === undefined) {
+                mockStore.usageLimits.alert_threshold = 0.8;
+              } else {
+                mockStore.usageLimits.alert_threshold = patch.alert_threshold;
+              }
+            }
+            return { ok: true, value: undefined };
           }
         ),
       },

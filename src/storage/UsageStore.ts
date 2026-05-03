@@ -370,4 +370,112 @@ export class UsageStore {
       .all(session_id) as UsageEventRow[];
     return rows.map(rowToEvent);
   }
+
+  // ── export (v0.9.0) ───────────────────────────────────────────
+
+  /**
+   * v0.9.0 — Range filter 안의 usage event 들을 CSV 문자열로 export.
+   *
+   * 컬럼 순서: timestamp, session_id, turn_id, provider, model,
+   *           input_tokens, output_tokens, cache_creation, cache_read,
+   *           reasoning, total_cost_usd
+   *
+   * RFC 4180 호환:
+   *  - 모든 필드는 콤마/따옴표/줄바꿈 검사 후 필요 시 `"..."` 로 wrap
+   *  - 따옴표는 `""` 로 escape
+   *  - 줄 구분은 `\n` (CRLF X — 단순화. recharts/Excel 모두 처리 가능)
+   *
+   * 결과는 ISO 8601 timestamp 그대로 (UTC). 사용자 timezone 변환은 caller 책임.
+   * 결과는 항상 header 1줄 + 데이터 N줄 + 마지막 줄 끝 `\n` 으로 끝남.
+   */
+  exportCsv(range: UsageRangeFilter = {}): string {
+    const wheres: string[] = [];
+    const params: unknown[] = [];
+    if (range.from !== undefined) {
+      wheres.push('recorded_at >= ?');
+      params.push(range.from);
+    }
+    if (range.to !== undefined) {
+      wheres.push('recorded_at < ?');
+      params.push(range.to);
+    }
+    if (range.provider !== undefined) {
+      wheres.push('provider = ?');
+      params.push(range.provider);
+    }
+    if (range.model !== undefined) {
+      wheres.push('model = ?');
+      params.push(range.model);
+    }
+    if (range.session_id !== undefined) {
+      wheres.push('session_id = ?');
+      params.push(range.session_id);
+    }
+    const whereSql = wheres.length > 0 ? `WHERE ${wheres.join(' AND ')}` : '';
+    const sql = `
+      SELECT id, session_id, turn_id, provider, model,
+             input_tokens, output_tokens, cache_creation_input_tokens,
+             cache_read_input_tokens, reasoning_output_tokens,
+             total_cost_usd, recorded_at, source
+      FROM usage_events
+      ${whereSql}
+      ORDER BY recorded_at ASC, id ASC
+    `;
+    const rows = this.db.prepare(sql).all(...params) as UsageEventRow[];
+
+    const header = [
+      'timestamp',
+      'session_id',
+      'turn_id',
+      'provider',
+      'model',
+      'input_tokens',
+      'output_tokens',
+      'cache_creation',
+      'cache_read',
+      'reasoning',
+      'total_cost_usd',
+    ];
+    const lines: string[] = [header.map(csvEscape).join(',')];
+    for (const r of rows) {
+      const cells = [
+        r.recorded_at,
+        r.session_id,
+        r.turn_id,
+        r.provider,
+        r.model,
+        String(r.input_tokens),
+        String(r.output_tokens),
+        String(r.cache_creation_input_tokens),
+        String(r.cache_read_input_tokens),
+        String(r.reasoning_output_tokens),
+        // USD — 6자리까지 충분 (pricing.ts 가 round). number → string 직변환
+        // 시 e-notation 위험이 있으므로 toFixed(6) 사용.
+        r.total_cost_usd.toFixed(6),
+      ];
+      lines.push(cells.map(csvEscape).join(','));
+    }
+    return lines.join('\n') + '\n';
+  }
+}
+
+/**
+ * RFC 4180 호환 CSV escape — 콤마/따옴표/줄바꿈/캐리지리턴이 있으면 wrap +
+ * 안의 따옴표는 `""` 로 escape. 그 외는 그대로 반환 (효율).
+ *
+ * 빈 문자열은 그대로 — 공백 필드를 의미.
+ *
+ * Module-level helper: UsageStore class 외부에 둬서 다른 storage 모듈도 재사용
+ * 가능하지만 현재는 export 하지 않음 (필요해질 때 외부화).
+ */
+function csvEscape(value: string): string {
+  if (
+    value.includes(',') ||
+    value.includes('"') ||
+    value.includes('\n') ||
+    value.includes('\r')
+  ) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
 }

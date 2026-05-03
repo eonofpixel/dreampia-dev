@@ -17,15 +17,17 @@
  * 자체 header 없이 panel 만 mount 한다.
  */
 
-import { useCallback } from 'react';
-import { X, RefreshCw, AlertCircle, BarChart3 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { X, RefreshCw, AlertCircle, BarChart3, Download, ShieldAlert } from 'lucide-react';
 import {
   useUsage,
+  useUsageLimits,
   type DailyUsageRowUI,
   type UsageProviderUI,
   type UsageRangePreset,
   type UsageSummaryUI,
 } from '../../hooks/useUsage';
+import { UsageChart } from './UsageChart';
 
 export interface UsageSettingsProps {
   open: boolean;
@@ -124,14 +126,51 @@ export function UsageSettings({ open, onClose }: UsageSettingsProps): React.JSX.
  * v0.8.0 — SettingsModal 의 '사용량' 탭 안에 mount 되는 body. 자체 header /
  * close 버튼은 가지지 않는다 (탭 sidebar 가 navigation 을 owner). 기존
  * UsageSettings 모달 caller / e2e 회귀 0.
+ *
+ * v0.9.0 — CSV 내보내기 + 일별 chart + 비용 한도 / 임계 알림 추가.
  */
 export function UsageSettingsPanel(): React.JSX.Element {
-  const { summary, daily, loading, error, lastRefreshedAt, preset, setPreset, refresh } =
-    useUsage('7d');
+  const {
+    summary,
+    daily,
+    loading,
+    error,
+    lastRefreshedAt,
+    preset,
+    setPreset,
+    refresh,
+    exportCsv,
+  } = useUsage('7d');
 
   const handleRefresh = useCallback((): void => {
     void refresh();
   }, [refresh]);
+
+  // v0.9.0 — CSV 다운로드. Blob + <a download> 를 동적으로 생성해 트리거.
+  // IPC 미지원 환경 (preload 누락 / 테스트) 에선 silently no-op.
+  const handleExportCsv = useCallback(async (): Promise<void> => {
+    const csv = await exportCsv();
+    if (csv === null) return;
+    const range = preset === 'today' ? 'today' : preset;
+    const today = new Date().toISOString().slice(0, 10);
+    const filename = `dreampia-usage-${range}-${today}.csv`;
+    // 안전: BOM 추가해 Excel 한국어 호환 (UTF-8 BOM EF BB BF).
+    const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    try {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } finally {
+      // setTimeout 으로 revoke — Firefox 가 click 직후 revoke 하면 download
+      // 실패 사례 보고가 있어 macroTask 다음 frame 에 정리.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  }, [exportCsv, preset]);
 
   const totalCost = summary.reduce((acc, row) => acc + row.total_cost_usd, 0);
   const totalEvents = summary.reduce((acc, row) => acc + row.event_count, 0);
@@ -142,7 +181,7 @@ export function UsageSettingsPanel(): React.JSX.Element {
       <div
         role="radiogroup"
         aria-label="기간 선택"
-        className="flex gap-1 border-b border-border-primary p-2"
+        className="flex items-center gap-1 border-b border-border-primary p-2"
       >
         {PRESETS.map((p) => (
           <button
@@ -158,6 +197,21 @@ export function UsageSettingsPanel(): React.JSX.Element {
             {PRESET_LABELS[p]}
           </button>
         ))}
+        {/* v0.9.0 — CSV export. preset 의 range 그대로 export. */}
+        <div className="ml-auto">
+          <button
+            type="button"
+            onClick={() => {
+              void handleExportCsv();
+            }}
+            className="flex items-center gap-1.5 rounded-md border border-border-primary bg-bg-elevated px-2.5 py-1 text-xs hover:bg-bg-tertiary"
+            data-testid="usage-export-csv"
+            aria-label="CSV 내보내기"
+          >
+            <Download className="h-3 w-3" />
+            CSV 내보내기
+          </button>
+        </div>
       </div>
 
       {/* Body */}
@@ -168,6 +222,9 @@ export function UsageSettingsPanel(): React.JSX.Element {
             <span>{error}</span>
           </div>
         )}
+
+        {/* v0.9.0 — 비용 한도 / 임계 알림. summary 데이터 없어도 표시 (한도 설정 가능). */}
+        <CostLimitSection currentMonthCost={getCurrentMonthCost(summary)} />
 
         {loading ? (
           <p className="text-sm text-text-secondary">불러오는 중...</p>
@@ -192,6 +249,16 @@ export function UsageSettingsPanel(): React.JSX.Element {
               </div>
             </section>
 
+            {/* v0.9.0 — 일별 chart (토큰 stacked bar) */}
+            {daily.length > 0 && (
+              <section className="mb-4">
+                <SectionHeader>일별 추이 차트</SectionHeader>
+                <div className="rounded-md border border-border-primary bg-bg-secondary p-3 text-text-secondary">
+                  <UsageChart data={daily} metric="tokens" maxDays={30} />
+                </div>
+              </section>
+            )}
+
             <SummarySection rows={summary} />
             <DailySection rows={daily} />
           </>
@@ -212,6 +279,173 @@ export function UsageSettingsPanel(): React.JSX.Element {
         </button>
       </div>
     </>
+  );
+}
+
+// ────────────────────────────────────────────────────────────
+// 비용 한도 / 임계 알림 (v0.9.0)
+// ────────────────────────────────────────────────────────────
+
+/**
+ * 현재 달 (UTC 기준 1일~) 의 총 비용을 summary 에서 추출.
+ * useUsage 의 summary 는 preset 의 range 안의 row 만 가지므로 정확한 월 합계
+ * 가 아닐 수 있음 — 'today' / '7d' 가 month 의 일부만 포함. 실제 정확한 월
+ * 합계는 별도 IPC 가 필요하지만 v0.9.0 MVP 는 preset 합계 기준 (UI 명시).
+ */
+function getCurrentMonthCost(summary: ReadonlyArray<UsageSummaryUI>): number {
+  return summary.reduce((acc, row) => acc + row.total_cost_usd, 0);
+}
+
+interface CostLimitSectionProps {
+  currentMonthCost: number;
+}
+
+const THRESHOLD_OPTIONS = [
+  { value: 0.5, label: '50%' },
+  { value: 0.8, label: '80%' },
+  { value: 0.9, label: '90%' },
+];
+
+function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JSX.Element {
+  const { limits, loading, setLimits } = useUsageLimits();
+  const [draftLimit, setDraftLimit] = useState<string>('');
+
+  // limits 가 로딩되면 input 의 default 값을 채움.
+  useEffect(() => {
+    if (limits === null) return;
+    setDraftLimit(
+      limits.cost_limit_usd !== undefined ? String(limits.cost_limit_usd) : ''
+    );
+  }, [limits]);
+
+  const threshold = limits?.alert_threshold ?? 0.8;
+  const limitUsd = limits?.cost_limit_usd;
+
+  const handleSaveLimit = useCallback((): void => {
+    const trimmed = draftLimit.trim();
+    if (trimmed.length === 0) {
+      // 빈 입력 → 한도 제거
+      void setLimits({ cost_limit_usd: null });
+      return;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0) return;
+    void setLimits({ cost_limit_usd: parsed });
+  }, [draftLimit, setLimits]);
+
+  const handleThresholdChange = useCallback(
+    (value: number): void => {
+      void setLimits({ alert_threshold: value });
+    },
+    [setLimits]
+  );
+
+  // 상태 계산 — '미설정' / '안전' / '경고' / '한도 초과'.
+  const status = useMemo(() => {
+    if (limitUsd === undefined) {
+      return { kind: 'unset' as const, label: '한도 미설정', color: 'text-text-tertiary' };
+    }
+    if (limitUsd === 0) {
+      return { kind: 'over' as const, label: '한도 초과', color: 'text-red-400' };
+    }
+    const ratio = currentMonthCost / limitUsd;
+    if (ratio >= 1) {
+      return {
+        kind: 'over' as const,
+        label: `한도 초과 (${(ratio * 100).toFixed(0)}% 사용)`,
+        color: 'text-red-400',
+      };
+    }
+    if (ratio >= threshold) {
+      return {
+        kind: 'warn' as const,
+        label: `경고: ${(ratio * 100).toFixed(0)}% 사용`,
+        color: 'text-yellow-400',
+      };
+    }
+    return {
+      kind: 'safe' as const,
+      label: `안전 (${(ratio * 100).toFixed(0)}% / ${formatCost(limitUsd)})`,
+      color: 'text-green-400',
+    };
+  }, [limitUsd, currentMonthCost, threshold]);
+
+  return (
+    <section
+      className="mb-4 rounded-md border border-border-primary bg-bg-secondary p-3"
+      data-testid="cost-limit-section"
+    >
+      <header className="mb-2 flex items-center gap-2">
+        <ShieldAlert className="h-4 w-4 text-text-secondary" aria-hidden="true" />
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+          비용 한도
+        </h3>
+        <span className={`ml-auto text-xs font-medium ${status.color}`} data-testid="cost-limit-status">
+          {status.label}
+        </span>
+      </header>
+
+      {loading ? (
+        <p className="text-xs text-text-tertiary">불러오는 중...</p>
+      ) : (
+        <div className="space-y-2 text-xs">
+          {/* 한도 입력 */}
+          <div className="flex items-center gap-2">
+            <label
+              className="flex flex-1 items-center gap-2"
+              data-testid="cost-limit-input-label"
+            >
+              <span className="w-20 text-text-tertiary">한도 (USD/월)</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={draftLimit}
+                onChange={(e) => {
+                  setDraftLimit(e.target.value);
+                }}
+                placeholder="비워두면 한도 없음"
+                className="flex-1 rounded-md border border-border-primary bg-bg-elevated px-2 py-1 text-sm font-mono"
+                data-testid="cost-limit-input"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={handleSaveLimit}
+              className="rounded-md border border-border-primary bg-bg-elevated px-2 py-1 hover:bg-bg-tertiary"
+              data-testid="cost-limit-save"
+            >
+              저장
+            </button>
+          </div>
+
+          {/* 임계 옵션 */}
+          <div className="flex items-center gap-2">
+            <span className="w-20 text-text-tertiary">알림 임계</span>
+            <div role="radiogroup" aria-label="알림 임계" className="flex gap-1">
+              {THRESHOLD_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={threshold === opt.value}
+                  data-active={threshold === opt.value}
+                  data-testid={`cost-limit-threshold-${opt.value}`}
+                  onClick={() => handleThresholdChange(opt.value)}
+                  className="rounded-md px-2.5 py-0.5 hover:bg-bg-tertiary data-[active=true]:bg-bg-tertiary data-[active=true]:font-medium"
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <p className="text-[10px] text-text-tertiary">
+            ※ 표시되는 사용량은 현재 선택된 기간 합계입니다 (월 정확값은 v0.10.0 추가 예정).
+          </p>
+        </div>
+      )}
+    </section>
   );
 }
 

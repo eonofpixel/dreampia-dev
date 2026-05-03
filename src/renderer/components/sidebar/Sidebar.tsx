@@ -16,8 +16,10 @@ import {
   Settings,
   Compass,
   BarChart3,
+  Server,
 } from 'lucide-react';
 import { SearchSection, type SearchResultEntry } from './SearchSection';
+import { useMcp } from '../../hooks/useMcp';
 
 export interface SidebarProps {
   sessions: ReadonlyArray<Pick<Session, 'id' | 'title' | 'pinned'>>;
@@ -37,6 +39,11 @@ export interface SidebarProps {
    * App.tsx 가 UsageSettings 모달을 mount.
    */
   onOpenUsage?: () => void;
+  /**
+   * v0.9.0 — Sidebar 의 MCP status indicator 클릭 시 호출. 미지정 시 indicator
+   * 자체를 숨김. App.tsx 가 SettingsModal('mcp' tab) 으로 wire up.
+   */
+  onOpenMcpSettings?: () => void;
 
   // ── v0.7.0 (F-026 Chat Search) ────────────────────────────
   /**
@@ -63,6 +70,7 @@ export function Sidebar({
   onOpenSettings,
   onReopenOnboarding,
   onOpenUsage,
+  onOpenMcpSettings,
   searchQuery = '',
   onSearchQueryChange,
   searchResults,
@@ -168,8 +176,9 @@ export function Sidebar({
         )}
       </nav>
 
-      {/* Bottom: 사용량 (v0.4.0) + 설정 + 온보딩 재진입 (v0.3.0) */}
+      {/* Bottom: 사용량 (v0.4.0) + MCP 상태 (v0.9.0) + 설정 + 온보딩 재진입 (v0.3.0) */}
       <div className="border-t border-border-primary p-2">
+        {onOpenMcpSettings !== undefined && <McpStatusIndicator onOpen={onOpenMcpSettings} />}
         {onOpenUsage !== undefined && (
           <SidebarNavItem
             icon={<BarChart3 className="h-4 w-4" />}
@@ -194,6 +203,80 @@ export function Sidebar({
         />
       </div>
     </aside>
+  );
+}
+
+// ────────────────────────────────────────────────────────────
+// MCP 상태 indicator (v0.9.0)
+//
+// useMcp 가 자동 refresh — Sidebar mount 시 1회 fetch + 추후 refresh 호출
+// 시 갱신 (App 다른 부분에서 mcp 변경 후 렌더 트리거).
+//
+// 표시:
+//  - 0 서버: "MCP" + dot:gray + "0 서버"
+//  - all ready: dot:green + "X 서버"
+//  - any connecting: dot:yellow + "X (Y connecting)"
+//  - any error: dot:red + "X (Y 오류)"
+// ────────────────────────────────────────────────────────────
+
+function McpStatusIndicator({ onOpen }: { onOpen: () => void }): React.JSX.Element {
+  const { servers, loading } = useMcp();
+
+  let dotColor = 'bg-gray-500';
+  let label = '0 서버';
+  if (loading) {
+    dotColor = 'bg-gray-400';
+    label = '...';
+  } else if (servers.length > 0) {
+    let readyCount = 0;
+    let errorCount = 0;
+    let connectingCount = 0;
+    for (const s of servers) {
+      if (s.status === 'ready') readyCount += 1;
+      else if (s.status === 'error') errorCount += 1;
+      else if (s.status === 'connecting') connectingCount += 1;
+    }
+    if (errorCount > 0) {
+      dotColor = 'bg-red-500';
+      label = `${servers.length} (${errorCount} 오류)`;
+    } else if (connectingCount > 0) {
+      dotColor = 'bg-yellow-500';
+      label = `${servers.length} (${connectingCount} 연결 중)`;
+    } else if (readyCount === servers.length) {
+      dotColor = 'bg-green-500';
+      label = `${servers.length} 준비`;
+    } else {
+      dotColor = 'bg-gray-500';
+      label = `${servers.length} 서버`;
+    }
+  }
+
+  const tooltip =
+    servers.length === 0
+      ? 'MCP 서버 없음 — 클릭해 추가'
+      : `MCP: ${servers.length} 서버 (${servers.map((s) => `${s.config.id}: ${s.status}`).join(', ')})`;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title={tooltip}
+      data-testid="sidebar-mcp-status"
+      className="group flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm hover:bg-bg-tertiary"
+      aria-label={tooltip}
+    >
+      <span className="flex-shrink-0">
+        <Server className="h-4 w-4" />
+      </span>
+      <span className="flex-1 truncate">MCP</span>
+      <span className="flex flex-shrink-0 items-center gap-1.5 text-xs text-text-tertiary">
+        <span
+          className={`inline-block h-2 w-2 rounded-full ${dotColor}`}
+          aria-hidden="true"
+        />
+        {label}
+      </span>
+    </button>
   );
 }
 

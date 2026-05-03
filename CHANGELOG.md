@@ -2,6 +2,129 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [0.9.0] — 2026-05-03
+
+**Feature release — F (Usage 보강) + E (MCP discovery): 운영 가시성 강화.**
+
+Codex 권고 v0.9.0. v0.8.0 의 통합 Settings 진입점을 토대로, 사용자가 비용 /
+사용량 / MCP 운영 상태를 한 눈에 확인할 수 있게 했다. CSV 내보내기로
+스프레드시트 분석을 가능하게 하고, 일별 SVG 차트로 추세를 시각화하며,
+비용 한도 / 임계 알림으로 폭주를 방지한다. MCP 측면은 Claude/Codex CLI
+config 자동 탐지 + 정적 추천 서버 (filesystem / github / memory) 로 1-클릭
+등록을 지원하고, Sidebar 에 상태 indicator (green/yellow/red dot) 와 wizard
+의 미니 안내까지 노출한다.
+
+### Added
+
+- **`UsageStore.exportCsv(range)`** — RFC 4180 호환 CSV export. 콤마/따옴표/
+  줄바꿈을 정확히 escape (`""` doubling), ISO 8601 timestamp 보존, 비용은
+  6자리 fixed (no e-notation). 11 컬럼: timestamp, session_id, turn_id,
+  provider, model, input_tokens, output_tokens, cache_creation, cache_read,
+  reasoning, total_cost_usd. range filter (from/to/provider/model/session_id)
+  지원, 시간 ASC 정렬.
+- **신규 IPC channel `usage/export-csv`** — Range filter 입력, CSV 문자열
+  반환. UsageSummaryArgsSchema 재사용 + Result wrapping.
+- **신규 IPC channel `usage/get-limits` / `usage/set-limits`** — 비용 한도
+  (`usage_cost_limit_usd`) 와 알림 임계 (`usage_alert_threshold`) 영속.
+  threshold 는 0~1 범위 강제, 한도는 nonnegative. null patch 로 한도 제거.
+- **`AppSettings.usage_cost_limit_usd` / `usage_alert_threshold` 필드** —
+  음수 / 범위 외 / non-finite 값은 silent drop (corrupt-tolerant 패턴 유지).
+- **`src/renderer/components/settings/UsageChart.tsx`** — 일별 stacked bar
+  chart. 외부 dependency (recharts 등) 없이 plain SVG — 번들 크기 0,
+  jsdom 호환, accessibility (`role="img"`, `<title>`). Provider 별 색상
+  구분, ko-KR 한국어 tick formatter (M/D, 1.5K, $0).
+- **UsageSettings 모달 / 패널 — `[CSV 내보내기]` 버튼** — 현재 preset
+  range 의 데이터를 Blob + `<a download>` 로 트리거. UTF-8 BOM 추가해
+  Excel 한글 호환. 파일명 `dreampia-usage-{range}-{date}.csv`.
+- **UsageSettings — 비용 한도 section** — 한도 입력 (USD/월) + 임계 라디오
+  (50% / 80% / 90%) + 상태 뱃지 (한도 미설정 / 안전 / 경고 / 한도 초과).
+  `useUsageLimits` hook 으로 IPC 영속 + 자동 refresh.
+- **UsageSettings — 일별 추이 차트 섹션** — 데이터 있을 시 표 위에 chart
+  추가 표시. preset 변경 시 1/7/30 일 자동 재집계.
+- **`useUsageLimits` hook** — `useUsage` 와 분리한 별도 hook. limits 가
+  preset-independent 한 lifecycle 을 가지므로 useUsage 의 매-preset refresh
+  와 충돌 방지.
+- **`src/main/mcp/discovery.ts`** — MCP discovery 엔진. 정적 추천 (filesystem
+  / github / memory) + Claude CLI (`~/.claude.json` / `~/.claude/config.json`)
+  + Codex CLI (`~/.codex/config.json`) 자동 탐지. mcpServers map / mcp_servers
+  array / nested mcp.servers 패턴 모두 지원, id 자동 sanitize. best-effort —
+  파일 부재 / 권한 / parse 실패는 silent fallback (빈 배열).
+- **신규 IPC channel `mcp/discover`** — `{ suggested, from_claude, from_codex }`
+  반환. 이미 등록된 server id 는 from_claude / from_codex 에서 자동 제외 →
+  사용자에게 중복 노출 X.
+- **McpSettings 패널 — 추천 + 발견된 서버 section** — discovery 결과를
+  add form 위에 표시. 각 행의 [추가] 버튼 클릭 시 add form 이 미리 채워진
+  상태로 열림 (id / name / command / args / env 모두 prefill).
+- **`McpAddForm.initial` prop** — discovery 클릭 진입 시 초기값 제공.
+- **OnboardingWizard step 3 — MCP 미니 안내** — `mcp.list` 결과 기반
+  상태 (등록된 서버 수 / ready / error 분포) 표시. `onOpenMcpSettings`
+  prop 으로 `[더 알아보기]` 링크 → SettingsModal('mcp') 진입.
+- **Sidebar — MCP status indicator** — bottom 영역에 dot+label. 색상:
+  gray (0 서버), green (all ready), yellow (any connecting), red (any error).
+  툴팁에 모든 서버의 status 노출. 클릭 시 `onOpenMcpSettings` 호출.
+- **`useMcp().discover()` hook 메서드** — preload IPC 미지원 시 null 반환
+  (기존 graceful fallback 패턴).
+- **`tests/storage/UsageStore.csv.test.ts`** — 13 tests. header / 빈 결과 /
+  RFC 4180 escaping (콤마, `""`, 줄바꿈) / 토큰 컬럼 / range filter (from/to/
+  provider) / 시간 정렬 / cost 6자리 fixed (no e-notation).
+- **`tests/main/ipc.usage-csv.test.ts`** — 9 tests. CSV export Result wrap /
+  range 전달 / Zod 검증 / get-limits default / set-limits round-trip /
+  null patch / negative 거절 / threshold > 1 거절 / strict mode.
+- **`tests/main/settings.usage-limits.test.ts`** — 11 tests. cost limit
+  read/write/clamp/silent-drop / threshold 범위 / 0 허용 (한도 0) /
+  두 필드 동시 영속.
+- **`tests/main/mcp/discovery.test.ts`** — 13 tests. SUGGESTED_MCP_SERVERS
+  형태 / mcpServers map / mcp_servers array / nested mcp.servers / id sanitize
+  / 깨진 항목 drop / 중복 dedup / detectMcpFromClaudeConfig 빈 배열 fallback.
+- **`tests/main/ipc.mcp-discover.test.ts`** — 3 tests. discover Result
+  wrap / suggested ids / 다중 호출 안전.
+- **`tests/renderer/UsageChart.test.tsx`** — 6 tests. empty placeholder /
+  svg + bars / legend / stacked / metric=cost / maxDays truncate.
+- **`tests/renderer/UsageSettings.csv-limits.test.tsx`** — 9 tests.
+  CSV 버튼 / IPC 호출 / 한도 status (미설정 / 안전 / 경고 / 초과) / save
+  버튼 IPC / threshold radio.
+- **`tests/renderer/McpSettings.discovery.test.tsx`** — 5 tests. 추천
+  section / 발견된 section / [추가] 버튼 prefill / discovery 비어 있을
+  때 section 숨김.
+- **`tests/renderer/Sidebar.mcp-status.test.tsx`** — 5 tests. indicator
+  표시 조건 / 0 서버 / all ready / any error / 클릭 wiring.
+- **`tests/renderer/OnboardingWizard.mcp-mini.test.tsx`** — 4 tests.
+  empty 표시 / 서버 카운트 + 상태 분포 / [더 알아보기] visible/hidden.
+
+### Changed
+
+- **`src/main/preload.ts`** — `usage/export-csv`, `usage/get-limits`,
+  `usage/set-limits`, `mcp/discover` 4 channel whitelist + API 노출.
+  `usage.exportCsv()`, `usage.getLimits()`, `usage.setLimits()`,
+  `mcp.discover()` 메서드 추가.
+- **`src/renderer/hooks/useUsage.ts`** — `exportCsv()` 메서드를 `useUsage`
+  return 에 추가. `useUsageLimits` 별도 hook 추가 export.
+- **`src/renderer/hooks/useMcp.ts`** — `discover()` 메서드 추가. preload
+  미지원 시 null fallback.
+- **App.tsx — wizard / Sidebar 의 `onOpenMcpSettings` wire up** —
+  SettingsModal('mcp' tab) 진입점 통합.
+- **tests/setup.ts** — `mockStore.usageExportCsv`, `mockStore.usageLimits`,
+  `mockStore.mcpDiscovery` 추가. `usage.exportCsv` / `usage.getLimits` /
+  `usage.setLimits` / `mcp.discover` mock IPC 추가.
+
+### Verification
+
+- `npm run typecheck` — 0 errors.
+- `npm run lint` — 0 errors / 0 warnings.
+- `npm test` — 1106 → 1181 tests pass (75 new). 0 회귀.
+
+### Notes
+
+- **Recharts 미사용 결정** — 원래 plan 은 recharts 의존 추가였지만, plain
+  SVG 가 (a) 번들 크기 0 (b) jsdom 호환 (ResizeObserver mock 불필요) (c)
+  ko-KR formatter 즉시 적용 등 장점이 명확해 채택. 향후 인터랙티브 hover
+  / drilldown 이 필요해지면 그때 도입.
+- **MCP discovery 의 enabled=false default** — 자동 탐지된 server 는 사용자
+  의 의도된 등록이 아니므로 자동 spawn 하지 않는다. UI 의 `[추가]` 버튼
+  클릭 → add form 에서 `[저장 후 즉시 실행]` 토글로 사용자가 명시 결정.
+- **월 정확 비용 표시는 v0.10.0** — 현재 한도 비교는 preset 합계 기준
+  (UI 명시). 정확한 월별 합계 IPC 추가 시 함께 갱신 예정.
+
 ## [0.8.0] — 2026-05-03
 
 **Feature release — D1 통합 Settings 모달 + H Permission Dropdown.**

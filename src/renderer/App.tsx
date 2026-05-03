@@ -786,7 +786,16 @@ export function App(): React.JSX.Element {
   return (
     <>
       {showOnboarding && (
-        <OnboardingWizard onComplete={handleOnboardingComplete} onSkip={handleOnboardingSkip} />
+        <OnboardingWizard
+          onComplete={handleOnboardingComplete}
+          onSkip={handleOnboardingSkip}
+          onOpenMcpSettings={() => {
+            // v0.9.0 — wizard 의 [더 알아보기] 클릭 시 wizard 닫고 settings 의 MCP 탭으로.
+            setSettingsInitialTab('mcp');
+            setSettingsModalOpen(true);
+            // wizard 는 onboarding_completed 와 별도 — settings 모달이 위에 표시.
+          }}
+        />
       )}
       <ThreePanelLayout
         sidebar={
@@ -812,6 +821,11 @@ export function App(): React.JSX.Element {
             onOpenUsage={() => {
               // v0.8.0 — 통합 SettingsModal 의 '사용량' 탭으로 직진입.
               setSettingsInitialTab('usage');
+              setSettingsModalOpen(true);
+            }}
+            onOpenMcpSettings={() => {
+              // v0.9.0 — Sidebar 의 MCP status indicator 클릭 시 MCP 탭으로 직진입.
+              setSettingsInitialTab('mcp');
               setSettingsModalOpen(true);
             }}
             searchQuery={searchQuery}

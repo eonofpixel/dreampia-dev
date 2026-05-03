@@ -64,6 +64,12 @@ import type {
 import type { StreamEvent, StreamingProvider } from '@/providers';
 import type { ToolCall, ToolQueue, ToolRegistry, ToolResult } from '@/tools';
 import type { McpManager } from './mcp';
+import {
+  SUGGESTED_MCP_SERVERS,
+  detectMcpFromClaudeConfig,
+  detectMcpFromCodexConfig,
+  type SuggestedMcpServer,
+} from './mcp/discovery';
 // CLI / auto 는 Node-only — main 에서만 import. providers barrel 은
 // renderer 와 공유되므로 여기서 직접 명시적 경로로 가져온다.
 import {
@@ -1336,6 +1342,33 @@ function registerMcpHandlers(mcp: McpManager): void {
       return fail(err);
     }
   });
+
+  // v0.9.0 — MCP discovery. 정적 추천 + Claude/Codex CLI config 자동 탐지.
+  // 모든 단계는 best-effort — fs 실패 / 권한 / 파일 부재 시 빈 배열 (silent).
+  ipcMain.handle('mcp/discover', async (): Promise<Result<McpDiscoveryResult>> => {
+    try {
+      const [from_claude, from_codex] = await Promise.all([
+        detectMcpFromClaudeConfig().catch(() => []),
+        detectMcpFromCodexConfig().catch(() => []),
+      ]);
+      // 이미 등록된 server id 는 from_claude / from_codex 에서 제거 — 중복 추가
+      // 방지 (사용자가 [추가] 버튼 누르면 등록되지만 이미 있는 건 노출 X).
+      const registeredIds = new Set(mcp.listServers().map((s) => s.config.id));
+      return ok({
+        suggested: [...SUGGESTED_MCP_SERVERS],
+        from_claude: from_claude.filter((c) => !registeredIds.has(c.id)),
+        from_codex: from_codex.filter((c) => !registeredIds.has(c.id)),
+      });
+    } catch (err) {
+      return fail(err);
+    }
+  });
+}
+
+interface McpDiscoveryResult {
+  suggested: SuggestedMcpServer[];
+  from_claude: import('@/types').McpServerConfig[];
+  from_codex: import('@/types').McpServerConfig[];
 }
 
 // ────────────────────────────────────────────────────────────
@@ -1388,6 +1421,76 @@ function registerUsageHandlers(usageStore: UsageStore): void {
       return fail(err);
     }
   });
+
+  // v0.9.0 — Usage CSV export. Range filter 는 summary 와 동일 schema 재사용
+  // (from/to/provider/model/session_id). 응답은 string — renderer 가 Blob 으로
+  // wrap 해 download 트리거.
+  ipcMain.handle('usage/export-csv', (_evt, raw: unknown): Result<string> => {
+    try {
+      const args = UsageSummaryArgsSchema.parse(raw ?? {});
+      const filter: UsageRangeFilter = {};
+      if (args.from !== undefined) filter.from = args.from;
+      if (args.to !== undefined) filter.to = args.to;
+      if (args.provider !== undefined) filter.provider = args.provider;
+      if (args.model !== undefined) filter.model = args.model;
+      if (args.session_id !== undefined) filter.session_id = args.session_id;
+      return ok(usageStore.exportCsv(filter));
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  // v0.9.0 — 비용 한도 / 임계값 read+write. settings.json 에 영속.
+  ipcMain.handle('usage/get-limits', (): Result<UsageLimits> => {
+    try {
+      const settings = readSettings();
+      return ok({
+        ...(typeof settings.usage_cost_limit_usd === 'number' && {
+          cost_limit_usd: settings.usage_cost_limit_usd,
+        }),
+        alert_threshold:
+          typeof settings.usage_alert_threshold === 'number'
+            ? settings.usage_alert_threshold
+            : 0.8,
+      });
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('usage/set-limits', (_evt, raw: unknown): Result<void> => {
+    try {
+      const args = UsageLimitsSchema.parse(raw);
+      // 부분 patch — 미지정 키는 기존 값 유지. null 은 명시적 삭제 (한도/임계 제거).
+      const patch: Partial<{
+        usage_cost_limit_usd: number | undefined;
+        usage_alert_threshold: number | undefined;
+      }> = {};
+      if (Object.prototype.hasOwnProperty.call(args, 'cost_limit_usd')) {
+        patch.usage_cost_limit_usd = args.cost_limit_usd ?? undefined;
+      }
+      if (Object.prototype.hasOwnProperty.call(args, 'alert_threshold')) {
+        patch.usage_alert_threshold = args.alert_threshold ?? undefined;
+      }
+      writeSettings(patch);
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+}
+
+// v0.9.0 — Usage limits 입력/출력 shape. 비용 한도 / 임계값.
+const UsageLimitsSchema = z
+  .object({
+    cost_limit_usd: z.number().nonnegative().nullable().optional(),
+    alert_threshold: z.number().min(0).max(1).nullable().optional(),
+  })
+  .strict();
+
+interface UsageLimits {
+  cost_limit_usd?: number;
+  alert_threshold: number;
 }
 
 // ────────────────────────────────────────────────────────────

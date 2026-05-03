@@ -11,3 +11,10 @@ export {
   type McpManagerSettingsAdapter,
 } from './McpManager';
 export { createSettingsAdapter } from './settingsAdapter';
+export {
+  SUGGESTED_MCP_SERVERS,
+  detectMcpFromClaudeConfig,
+  detectMcpFromCodexConfig,
+  __extractServersFromConfigForTesting,
+  type SuggestedMcpServer,
+} from './discovery';

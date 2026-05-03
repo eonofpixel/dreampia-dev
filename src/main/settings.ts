@@ -86,6 +86,17 @@ export interface AppSettings {
    * 미지정 시 'system'.
    */
   theme?: ThemeChoice;
+  /**
+   * v0.9.0 — 월별 비용 한도 (USD). 미설정 시 한도 없음.
+   * 음수 금지 (writeSettings 에서 검증). 0 은 "한도 없음" 으로 해석되지 않고
+   * "한도 0 USD" — UI 에서 즉시 경고 표시.
+   */
+  usage_cost_limit_usd?: number;
+  /**
+   * v0.9.0 — 알림 임계값 비율 (0~1). 예: 0.8 → 한도의 80% 도달 시 경고.
+   * 미설정 시 0.8 default. 한도 미설정 시엔 의미 없음.
+   */
+  usage_alert_threshold?: number;
 }
 
 let cached: AppSettings | null = null;
@@ -142,6 +153,22 @@ export function readSettings(): AppSettings {
       // v0.8.0 — theme. 알 수 없는 값은 silent drop.
       if (isThemeChoice(obj['theme'])) {
         next.theme = obj['theme'];
+      }
+      // v0.9.0 — usage limits. 음수 / non-finite 는 silent drop.
+      if (
+        typeof obj['usage_cost_limit_usd'] === 'number' &&
+        Number.isFinite(obj['usage_cost_limit_usd']) &&
+        obj['usage_cost_limit_usd'] >= 0
+      ) {
+        next.usage_cost_limit_usd = obj['usage_cost_limit_usd'];
+      }
+      if (
+        typeof obj['usage_alert_threshold'] === 'number' &&
+        Number.isFinite(obj['usage_alert_threshold']) &&
+        obj['usage_alert_threshold'] >= 0 &&
+        obj['usage_alert_threshold'] <= 1
+      ) {
+        next.usage_alert_threshold = obj['usage_alert_threshold'];
       }
       cached = next;
     } else {

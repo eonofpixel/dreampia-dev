@@ -257,6 +257,32 @@ interface UsageDailyArgsShape {
   provider?: UsageProviderShape;
 }
 
+// v0.9.0 — Usage limits + MCP discovery shapes.
+interface UsageLimitsShape {
+  cost_limit_usd?: number;
+  alert_threshold: number;
+}
+
+interface UsageLimitsPatchShape {
+  cost_limit_usd?: number | null;
+  alert_threshold?: number | null;
+}
+
+interface SuggestedMcpServerShape {
+  id: string;
+  name: string;
+  description: string;
+  command: string;
+  args: string[];
+  install_hint: string;
+}
+
+interface McpDiscoveryShape {
+  suggested: SuggestedMcpServerShape[];
+  from_claude: McpServerConfigShape[];
+  from_codex: McpServerConfigShape[];
+}
+
 // v0.7.0 (F-026) — Sidebar 검색 결과. SessionStore 의 TurnSearchResult 와 sync.
 // snippet 은 `<mark>...</mark>` markup 을 포함할 수 있어 renderer 가 split-and-
 // render 패턴으로 안전하게 렌더링해야 한다 (dangerouslySetInnerHTML 금지).
@@ -362,6 +388,11 @@ const ALLOWED_INVOKE_CHANNELS = [
   'usage/summary',
   'usage/daily',
   'usage/by-session',
+  // v0.9.0 — Usage CSV export + cost limits + MCP discovery
+  'usage/export-csv',
+  'usage/get-limits',
+  'usage/set-limits',
+  'mcp/discover',
 ] as const;
 
 const ALLOWED_RECEIVE_CHANNELS = [
@@ -791,6 +822,13 @@ const api = {
 
     getLogs: (id: string): Promise<Result<string[]>> =>
       ipcRenderer.invoke('mcp/get-logs', id) as Promise<Result<string[]>>,
+
+    /**
+     * v0.9.0 — 추천 MCP 서버 + Claude/Codex CLI config 에서 발견된 서버.
+     * best-effort: 권한 / 파일 부재 시 빈 배열 반환 (silent).
+     */
+    discover: (): Promise<Result<McpDiscoveryShape>> =>
+      ipcRenderer.invoke('mcp/discover') as Promise<Result<McpDiscoveryShape>>,
   },
 
   /**
@@ -813,6 +851,26 @@ const api = {
 
     bySession: (sessionId: string): Promise<Result<UsageEventShape[]>> =>
       ipcRenderer.invoke('usage/by-session', sessionId) as Promise<Result<UsageEventShape[]>>,
+
+    /**
+     * v0.9.0 — Range filter 안의 usage 를 CSV (RFC 4180) 문자열로 export.
+     * Renderer 가 Blob + <a download> 로 다운로드 트리거.
+     */
+    exportCsv: (args?: UsageSummaryArgsShape): Promise<Result<string>> =>
+      ipcRenderer.invoke('usage/export-csv', args ?? {}) as Promise<Result<string>>,
+
+    /**
+     * v0.9.0 — 비용 한도 / 알림 임계값 조회. cost_limit_usd 가 undefined 면
+     * "한도 미설정". alert_threshold 는 0~1 default 0.8.
+     */
+    getLimits: (): Promise<Result<UsageLimitsShape>> =>
+      ipcRenderer.invoke('usage/get-limits') as Promise<Result<UsageLimitsShape>>,
+
+    /**
+     * v0.9.0 — 비용 한도 / 알림 임계값 영속. null 을 보내면 해당 필드 제거.
+     */
+    setLimits: (patch: UsageLimitsPatchShape): Promise<Result<void>> =>
+      ipcRenderer.invoke('usage/set-limits', patch) as Promise<Result<void>>,
   },
 };
 
