@@ -214,6 +214,31 @@ export function registerIpcHandlers(
     return process.platform;
   });
 
+  ipcMain.handle('app:get-onboarding-status', (): Result<{ completed: boolean }> => {
+    try {
+      // Phase 3 B2: 첫 실행 wizard 표시 여부.
+      // settings.onboarding_completed === true 만 true 로 취급. absent / null /
+      // 다른 값은 모두 false (= wizard 표시) 로 fallback — corrupt JSON 에서도
+      // 사용자에게 wizard 보여주는 게 침묵 실패보다 안전.
+      // Spec: docs/ia/onboarding.md
+      const settings = readSettings();
+      return ok({ completed: settings.onboarding_completed === true });
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('app:complete-onboarding', (): Result<void> => {
+    try {
+      // 사용자가 wizard 5단계 모두 끝냈거나 [건너뛰기] 클릭 시 호출.
+      // Spec: docs/ia/onboarding.md
+      writeSettings({ onboarding_completed: true });
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
   ipcMain.handle('app:get-default-workspace', (): Result<WorkspaceInfo | null> => {
     try {
       // 사용자가 picker 로 선택한 경로가 있으면 우선.

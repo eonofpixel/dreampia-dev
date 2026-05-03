@@ -10,11 +10,12 @@
  *       docs/session/persistence.md, docs/session/cross-ai-sync.md
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ThreePanelLayout } from './components/layout/ThreePanelLayout';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { ChatPanel, type CliStatus } from './components/chat/ChatPanel';
 import { PreviewPanel } from './components/preview/PreviewPanel';
+import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import {
   SessionSchema,
   newSessionId,
@@ -33,6 +34,7 @@ import { IpcStreamingProvider } from './providers/IpcStreamingProvider';
 import { useStreamingTurn } from './hooks/useStreamingTurn';
 import { useSessionStore } from './hooks/useSessionStore';
 import { useWorkspace } from './hooks/useWorkspace';
+import { useOnboarding } from './hooks/useOnboarding';
 
 /**
  * Renderer-side mock fallback gate.
@@ -109,17 +111,32 @@ export function App(): React.JSX.Element {
     appendTurn: persistTurn,
   } = useSessionStore();
 
+  // Phase 3 B2: 첫 실행 wizard. completed=true 면 main app, false 면 wizard 표시.
+  // null 동안은 splash (flicker 방지) — Spec: docs/ia/onboarding.md
+  const {
+    completed: onboardingCompleted,
+    loading: onboardingLoading,
+    complete: completeOnboarding,
+  } = useOnboarding();
+
   // The full active session lives only in the renderer during chat;
   // the database holds the source of truth, but we shadow it locally
   // so streaming text_delta events update synchronously.
   const [activeSessionId, setActiveSessionId] = useState<string>('');
   const [activeSession, setActiveSession] = useState<Session | null>(null);
+  // Onboarding 추천 prompt → ChatInput 자동 채움. 새 prompt 가 도착할 때마다
+  // 식별 가능하도록 Date.now() 같은 monotonic 값으로 들고 다닐 수 있지만,
+  // ChatInput 의 useEffect 가 빈 문자열 무시하므로 string 자체로 충분.
+  const [pendingPrompt, setPendingPrompt] = useState<string | undefined>(undefined);
   // launchWorkspace 는 main 이 보내준 default. packaged 에서 settings 없으면
   // null 이 반환되므로 nullable. dev/e2e 에선 process.cwd() 가 들어옴.
   const [launchWorkspace, setLaunchWorkspace] = useState<WorkspaceInfo | null>(null);
   const [launchWorkspaceLoaded, setLaunchWorkspaceLoaded] = useState(false);
   // Phase 3 audit (HIGH): picker auto-launch 가 사용자 취소 시 무한루프 방지.
+  // Phase 3 B2: useState + useRef 이중 보호 — useState 는 React deps 에 반영,
+  // useRef 는 같은 commit 내 빠른 연속 effect 실행에도 즉시 차단.
   const [workspacePickAttempted, setWorkspacePickAttempted] = useState(false);
+  const workspacePickAttemptedRef = useRef(false);
 
   // 사용자가 picker 로 선택한 워크스페이스 (settings.json 영속). 있으면 우선,
   // 없으면 main 이 보내준 launch workspace (보통 process.cwd()) 로 폴백.
@@ -193,14 +210,29 @@ export function App(): React.JSX.Element {
   // Phase 3 audit (HIGH): packaged 에서 workspace 가 null 이면 자동으로
   // picker 띄우기. 단 한 번만 시도 — 사용자가 picker 취소하면 onboarding
   // screen 으로 안내 (무한 루프 방지).
+  //
+  // Phase 3 B2: onboarding wizard 가 step 4 에서 picker 를 직접 호출하므로
+  // wizard 표시 중에는 auto picker 비활성화 (이중 dialog 방지). wizard 완료
+  // 후 (onboardingCompleted=true) 까지 보류.
   const workspaceResolved = launchWorkspaceLoaded && !pickedWorkspaceLoading;
+  const showOnboarding =
+    !onboardingLoading && onboardingCompleted === false;
   useEffect(() => {
     if (!workspaceResolved) return;
     if (defaultWorkspace !== null) return;
     if (workspacePickAttempted) return;
+    if (workspacePickAttemptedRef.current) return;
+    if (showOnboarding) return; // wizard 가 picker 를 owner
+    workspacePickAttemptedRef.current = true;
     setWorkspacePickAttempted(true);
     void pickWorkspace();
-  }, [workspaceResolved, defaultWorkspace, workspacePickAttempted, pickWorkspace]);
+  }, [
+    workspaceResolved,
+    defaultWorkspace,
+    workspacePickAttempted,
+    pickWorkspace,
+    showOnboarding,
+  ]);
 
   // P1-4: IpcStreamingProvider 가 main 의 ai/start-stream 으로 위임.
   // window.dreampia.ai 가 없는 환경 (preload script 로딩 실패 / legacy build)
@@ -388,41 +420,86 @@ export function App(): React.JSX.Element {
   const chatHeaderWorkspaceName =
     activeSession?.workspace.name ?? defaultWorkspace?.name;
 
+  // Phase 3 B2: Wizard 완료 시 호출 — settings 영속 + 옵션으로 첫 채팅 생성.
+  // firstPrompt 가 있으면 새 세션 + ChatInput 자동 채움 (auto-submit X).
+  const handleOnboardingComplete = useCallback(
+    async (firstPrompt?: string): Promise<void> => {
+      await completeOnboarding();
+      if (firstPrompt === undefined || firstPrompt.length === 0) return;
+      // workspace 결정: wizard step 4 에서 사용자가 선택했거나 기존 settings 사용.
+      // 둘 다 null 이면 새 세션 생성 X (process.cwd() 우연 매칭 방지).
+      const refreshedDefault = defaultWorkspace;
+      if (refreshedDefault === null) return;
+      const newSession = createDemoSession(
+        `새 채팅 ${sessions.length + 1}`,
+        refreshedDefault
+      );
+      const created = await createSession(newSession);
+      if (created !== null) {
+        setActiveSessionId(created.id);
+        setPendingPrompt(firstPrompt);
+      }
+    },
+    [completeOnboarding, defaultWorkspace, createSession, sessions.length]
+  );
+
+  const handleOnboardingSkip = useCallback(async (): Promise<void> => {
+    await completeOnboarding();
+  }, [completeOnboarding]);
+
+  // Wizard 표시 중일 땐 main 3-panel 도 mount — 사용자가 wizard 끝낸 직후
+  // 데이터가 이미 fetch 되어 있도록. wizard 가 z-50 overlay 라 위에 덮인다.
+  // 단 onboarding loading 중 (= null) 에는 빈 div 로 splash 처럼 처리해
+  // 잠깐 wizard 가 깜빡이는 걸 방지.
+  if (onboardingLoading) {
+    return <div className="h-full w-full bg-bg-primary" aria-hidden="true" />;
+  }
+
   return (
-    <ThreePanelLayout
-      sidebar={
-        <Sidebar
-          sessions={sidebarSessions}
-          activeSessionId={activeSessionId}
-          projectName={projectName}
-          onSelectSession={setActiveSessionId}
-          onNewChat={() => {
-            void handleNewChat();
-          }}
+    <>
+      {showOnboarding && (
+        <OnboardingWizard
+          onComplete={handleOnboardingComplete}
+          onSkip={handleOnboardingSkip}
         />
-      }
-      chat={
-        <ChatPanel
-          session={activeSession}
-          onSubmit={(text) => {
-            void handleSubmitMessage(text);
-          }}
-          isStreaming={isStreaming}
-          onCancel={cancelStream}
-          cliStatus={cliStatus}
-          workspaceName={chatHeaderWorkspaceName}
-          onPickWorkspace={() => {
-            void pickWorkspace();
-          }}
-          ipcUnavailable={provider === null}
-        />
-      }
-      preview={
-        <PreviewPanel
-          sessionId={(activeSession?.id ?? null) as SessionId | null}
-          browser={activeSession?.browser ?? null}
-        />
-      }
-    />
+      )}
+      <ThreePanelLayout
+        sidebar={
+          <Sidebar
+            sessions={sidebarSessions}
+            activeSessionId={activeSessionId}
+            projectName={projectName}
+            onSelectSession={setActiveSessionId}
+            onNewChat={() => {
+              void handleNewChat();
+            }}
+          />
+        }
+        chat={
+          <ChatPanel
+            session={activeSession}
+            onSubmit={(text) => {
+              setPendingPrompt(undefined);
+              void handleSubmitMessage(text);
+            }}
+            isStreaming={isStreaming}
+            onCancel={cancelStream}
+            cliStatus={cliStatus}
+            workspaceName={chatHeaderWorkspaceName}
+            onPickWorkspace={() => {
+              void pickWorkspace();
+            }}
+            ipcUnavailable={provider === null}
+            initialInputValue={pendingPrompt}
+          />
+        }
+        preview={
+          <PreviewPanel
+            sessionId={(activeSession?.id ?? null) as SessionId | null}
+            browser={activeSession?.browser ?? null}
+          />
+        }
+      />
+    </>
   );
 }

@@ -152,6 +152,8 @@ const ALLOWED_INVOKE_CHANNELS = [
   'app:get-version',
   'app:get-platform',
   'app:get-default-workspace',
+  'app:get-onboarding-status',
+  'app:complete-onboarding',
   'workspace/pick-folder',
   'workspace/get',
   'session/list',
@@ -231,6 +233,23 @@ const api = {
      */
     getDefaultWorkspace: (): Promise<Result<WorkspaceInfo | null>> =>
       ipcRenderer.invoke('app:get-default-workspace') as Promise<Result<WorkspaceInfo | null>>,
+
+    /**
+     * Phase 3 B2: 첫 실행 wizard 표시 여부 결정용.
+     * settings.onboarding_completed === true 인 경우만 completed:true.
+     * Spec: docs/ia/onboarding.md
+     */
+    getOnboardingStatus: (): Promise<Result<{ completed: boolean }>> =>
+      ipcRenderer.invoke('app:get-onboarding-status') as Promise<
+        Result<{ completed: boolean }>
+      >,
+
+    /**
+     * Phase 3 B2: 사용자가 wizard 끝냈을 때 또는 건너뛰기 클릭 시 호출.
+     * settings.onboarding_completed=true 로 영속.
+     */
+    completeOnboarding: (): Promise<Result<void>> =>
+      ipcRenderer.invoke('app:complete-onboarding') as Promise<Result<void>>,
   },
 
   /**

@@ -50,6 +50,11 @@ export interface ChatPanelProps {
    * 누락된 상태. true 면 입력을 disable 하고 명시적 error banner 를 띄운다.
    */
   ipcUnavailable?: boolean;
+  /**
+   * Onboarding 추천 prompt → ChatInput 자동 채움 (Phase 3 B2).
+   * 외부에서 값이 바뀌면 input 에 반영. auto-submit 은 하지 않아 사용자가 검토 가능.
+   */
+  initialInputValue?: string;
 }
 
 export function ChatPanel({
@@ -61,6 +66,7 @@ export function ChatPanel({
   workspaceName,
   onPickWorkspace,
   ipcUnavailable = false,
+  initialInputValue,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -86,6 +92,7 @@ export function ChatPanel({
         isStreaming={isStreaming}
         onCancel={onCancel}
         disabled={ipcUnavailable}
+        initialValue={initialInputValue}
       />
     </main>
   );
@@ -151,6 +158,7 @@ interface InputAreaProps {
   isStreaming: boolean;
   onCancel?: () => void;
   disabled?: boolean;
+  initialValue?: string;
 }
 
 function InputArea({
@@ -158,6 +166,7 @@ function InputArea({
   isStreaming,
   onCancel,
   disabled = false,
+  initialValue,
 }: InputAreaProps): React.JSX.Element {
   return (
     <div>
@@ -173,7 +182,11 @@ function InputArea({
           </button>
         </div>
       )}
-      <ChatInput onSubmit={onSubmit} disabled={isStreaming || disabled} />
+      <ChatInput
+        onSubmit={onSubmit}
+        disabled={isStreaming || disabled}
+        initialValue={initialValue}
+      />
     </div>
   );
 }

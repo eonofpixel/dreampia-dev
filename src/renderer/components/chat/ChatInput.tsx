@@ -8,22 +8,37 @@
  *   - docs/ux/patterns/F-019-mention-palette.md (@ trigger)
  */
 
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 
 export interface ChatInputProps {
   onSubmit: (text: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  /**
+   * Onboarding 추천 prompt → 자동 채움. 외부에서 값이 바뀔 때마다 input 에 반영.
+   * 사용자가 즉시 검토/수정할 수 있도록 auto-submit 은 하지 않는다.
+   */
+  initialValue?: string;
 }
 
 export function ChatInput({
   onSubmit,
   placeholder = '메시지를 입력하세요',
   disabled,
+  initialValue,
 }: ChatInputProps): React.JSX.Element {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState(initialValue ?? '');
   const [isComposing, setIsComposing] = useState(false);
+
+  // initialValue 가 외부에서 변경되면 (예: 추천 prompt 클릭) input 에 반영.
+  // 빈 문자열은 무시 — 사용자가 직접 입력 후 cleared 상태를 덮어쓰지 않도록.
+  useEffect(() => {
+    if (initialValue !== undefined && initialValue.length > 0) {
+      setValue(initialValue);
+      textareaRef.current?.focus();
+    }
+  }, [initialValue]);
 
   const submit = (): void => {
     const text = value.trim();

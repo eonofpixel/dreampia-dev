@@ -22,9 +22,9 @@
 import { _electron as electron } from 'playwright';
 import type { ElectronApplication, Page } from 'playwright';
 import { test as base } from '@playwright/test';
-import { resolve } from 'node:path';
+import { resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -56,6 +56,24 @@ export const test = base.extend<DreampiaFixtures>({
   },
 
   app: async ({ userDataDir }, use) => {
+    // Phase 3 B2: 기존 16 e2e 가 onboarding wizard 에 막히지 않도록 settings.json
+    // 을 미리 써둔다. wizard 자체를 검증하는 onboarding spec 은 별도 fixture 에서
+    // 이 파일을 쓰지 않거나 비워둔 상태로 launch.
+    // Spec: docs/ia/onboarding.md
+    writeFileSync(
+      join(userDataDir, 'settings.json'),
+      JSON.stringify(
+        {
+          onboarding_completed: true,
+          workspace_root: userDataDir,
+          workspace_name: basename(userDataDir),
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    );
+
     const mainEntry = resolve(__dirname, '..', 'dist', 'main', 'index.js');
     const electronApp = await electron.launch({
       args: [

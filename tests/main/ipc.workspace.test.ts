@@ -117,6 +117,97 @@ describe('IPC workspace handlers', () => {
     expect(handlers.has('workspace/get')).toBe(true);
   });
 
+  it('registers onboarding channels (Phase 3 B2)', () => {
+    expect(handlers.has('app:get-onboarding-status')).toBe(true);
+    expect(handlers.has('app:complete-onboarding')).toBe(true);
+  });
+
+  describe('app:get-onboarding-status', () => {
+    it('returns completed=false when settings missing onboarding_completed', async () => {
+      const result = await call<Result<{ completed: boolean }>>(
+        'app:get-onboarding-status'
+      );
+      expect(result).toEqual({ ok: true, value: { completed: false } });
+    });
+
+    it('returns completed=true when onboarding_completed=true persisted', async () => {
+      writeFileSync(
+        join(testTmpDir, 'settings.json'),
+        JSON.stringify({ onboarding_completed: true })
+      );
+      __resetSettingsCache();
+      const result = await call<Result<{ completed: boolean }>>(
+        'app:get-onboarding-status'
+      );
+      expect(result).toEqual({ ok: true, value: { completed: true } });
+    });
+
+    it('returns completed=false when onboarding_completed=false persisted', async () => {
+      writeFileSync(
+        join(testTmpDir, 'settings.json'),
+        JSON.stringify({ onboarding_completed: false })
+      );
+      __resetSettingsCache();
+      const result = await call<Result<{ completed: boolean }>>(
+        'app:get-onboarding-status'
+      );
+      expect(result).toEqual({ ok: true, value: { completed: false } });
+    });
+
+    it('non-boolean onboarding_completed → completed=false (safe default)', async () => {
+      // Corrupted / unexpected types should not crash; fallback to wizard.
+      writeFileSync(
+        join(testTmpDir, 'settings.json'),
+        JSON.stringify({ onboarding_completed: 'yes' })
+      );
+      __resetSettingsCache();
+      const result = await call<Result<{ completed: boolean }>>(
+        'app:get-onboarding-status'
+      );
+      expect(result).toEqual({ ok: true, value: { completed: false } });
+    });
+  });
+
+  describe('app:complete-onboarding', () => {
+    it('persists onboarding_completed=true to settings.json', async () => {
+      const result = await call<Result<void>>('app:complete-onboarding');
+      expect(result).toEqual({ ok: true, value: undefined });
+
+      const settingsPath = join(testTmpDir, 'settings.json');
+      expect(existsSync(settingsPath)).toBe(true);
+      const parsed = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<
+        string,
+        unknown
+      >;
+      expect(parsed['onboarding_completed']).toBe(true);
+    });
+
+    it('preserves existing workspace_root / workspace_name on complete', async () => {
+      writeFileSync(
+        join(testTmpDir, 'settings.json'),
+        JSON.stringify({ workspace_root: '/preserved', workspace_name: 'preserved' })
+      );
+      __resetSettingsCache();
+
+      await call<Result<void>>('app:complete-onboarding');
+
+      const parsed = JSON.parse(
+        readFileSync(join(testTmpDir, 'settings.json'), 'utf-8')
+      ) as Record<string, unknown>;
+      expect(parsed['workspace_root']).toBe('/preserved');
+      expect(parsed['workspace_name']).toBe('preserved');
+      expect(parsed['onboarding_completed']).toBe(true);
+    });
+
+    it('subsequent get-onboarding-status reflects complete (cache invalidation)', async () => {
+      await call<Result<void>>('app:complete-onboarding');
+      const result = await call<Result<{ completed: boolean }>>(
+        'app:get-onboarding-status'
+      );
+      expect(result).toEqual({ ok: true, value: { completed: true } });
+    });
+  });
+
   describe('workspace/get', () => {
     it('returns null when settings.json does not exist', async () => {
       const result = await call<Result<{ path: string; name: string } | null>>('workspace/get');

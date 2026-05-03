@@ -111,6 +111,11 @@ const mockStore = {
   // pickFolder 호출 시 반환할 다음 값. null = 사용자 취소. undefined = default
   // (path: '/picked/dir', name: 'dir'). Tests can inject via __mockStore.
   workspacePickNext: undefined as MockWorkspaceInfo | null | undefined,
+
+  // ── onboarding (Phase 3 B2) ────────────────────────────
+  // 첫 실행 wizard 표시 여부. 기본 true — App.tsx 회귀 테스트가 wizard 와
+  // 충돌하지 않도록. Wizard 자체 검증 테스트는 false 로 override.
+  onboardingCompleted: true,
   aiStartedStreams: new Map<
     string,
     {
@@ -210,6 +215,38 @@ beforeEach(() => {
   mockStore.aiEndListeners.clear();
   mockStore.workspace = null;
   mockStore.workspacePickNext = undefined;
+  mockStore.onboardingCompleted = true;
+  // Phase 3 B2: vi.fn 의 call history 도 매 테스트마다 초기화. 그렇지 않으면
+  // `expect(mock).toHaveBeenCalled()` 가 이전 테스트의 잔여 호출 때문에
+  // 즉시 true 가 되어 waitFor 가 실제 호출을 기다리지 않는다.
+  if (typeof window !== 'undefined' && window.dreampia !== undefined) {
+    const ws = window.dreampia.workspace;
+    if (ws !== undefined) {
+      (ws.pickFolder as unknown as { mockClear?: () => void }).mockClear?.();
+      (ws.get as unknown as { mockClear?: () => void }).mockClear?.();
+    }
+    const sess = window.dreampia.session;
+    if (sess !== undefined) {
+      (sess.create as unknown as { mockClear?: () => void }).mockClear?.();
+      (sess.list as unknown as { mockClear?: () => void }).mockClear?.();
+      (sess.get as unknown as { mockClear?: () => void }).mockClear?.();
+      (sess.appendTurn as unknown as { mockClear?: () => void }).mockClear?.();
+      (sess.updateMeta as unknown as { mockClear?: () => void }).mockClear?.();
+      (sess.delete as unknown as { mockClear?: () => void }).mockClear?.();
+    }
+    const appApi = window.dreampia.app;
+    if (appApi !== undefined) {
+      (appApi.getDefaultWorkspace as unknown as { mockClear?: () => void }).mockClear?.();
+      (appApi.getOnboardingStatus as unknown as { mockClear?: () => void }).mockClear?.();
+      (appApi.completeOnboarding as unknown as { mockClear?: () => void }).mockClear?.();
+    }
+    const ai = window.dreampia.ai;
+    if (ai !== undefined) {
+      (ai.detectCli as unknown as { mockClear?: () => void }).mockClear?.();
+      (ai.startStream as unknown as { mockClear?: () => void }).mockClear?.();
+      (ai.stopStream as unknown as { mockClear?: () => void }).mockClear?.();
+    }
+  }
 });
 
 afterEach(() => {
@@ -233,6 +270,21 @@ if (typeof window !== 'undefined') {
           ok: true,
           value: { root: process.cwd(), name: 'dreampia-dev' },
         })),
+
+        // Phase 3 B2: onboarding wizard 상태 IPC mock.
+        getOnboardingStatus: vi.fn(
+          async (): Promise<Result<{ completed: boolean }>> => ({
+            ok: true,
+            value: { completed: mockStore.onboardingCompleted },
+          })
+        ),
+
+        completeOnboarding: vi.fn(
+          async (): Promise<Result<void>> => {
+            mockStore.onboardingCompleted = true;
+            return { ok: true, value: undefined };
+          }
+        ),
       },
 
       // Phase 2: workspace picker — main 의 dialog.showOpenDialog 를 mock.

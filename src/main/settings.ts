@@ -23,6 +23,12 @@ export interface AppSettings {
   workspace_root?: string;
   /** UI 표시용 폴더 이름 (basename). */
   workspace_name?: string;
+  /**
+   * 첫 실행 onboarding wizard 완료 여부 (Phase 3 B2).
+   * absent / false → 다음 실행 시 wizard 표시. true → main app 으로 직행.
+   * Spec: docs/ia/onboarding.md
+   */
+  onboarding_completed?: boolean;
 }
 
 let cached: AppSettings | null = null;
@@ -49,6 +55,9 @@ export function readSettings(): AppSettings {
       }
       if (typeof obj['workspace_name'] === 'string') {
         next.workspace_name = obj['workspace_name'];
+      }
+      if (typeof obj['onboarding_completed'] === 'boolean') {
+        next.onboarding_completed = obj['onboarding_completed'];
       }
       cached = next;
     } else {
