@@ -21,9 +21,12 @@ Codex 3-tier              ↔  Dreampia-Dev Level
 ─────────────────────────────────────────────
 read-only                  →  Level 1 (read_only)
 workspace-write            →  Level 2 (workspace_write)
-full-access                →  Level 3 (full_access)
+danger-full-access         →  Level 3 (full_access)
                            +  Level 4 (custom — Codex 미지원)
 ```
+
+> **Codex CLI 의 실제 flag 값**은 `--sandbox danger-full-access` 다 (`full-access`
+> 가 아니다). 구현은 `src/providers/cli/CliProvider.ts:sandboxModeFor` 참고.
 
 ### Codex sandbox 호출 시
 
@@ -34,7 +37,7 @@ class CodexSandbox {
     switch (level) {
       case 'read_only':       return 'read-only';
       case 'workspace_write': return 'workspace-write';
-      case 'full_access':     return 'full-access';
+      case 'full_access':     return 'danger-full-access';
       case 'custom':          return 'workspace-write';  // 가장 가까운 옵션
     }
   }

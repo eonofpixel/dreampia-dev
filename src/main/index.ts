@@ -6,6 +6,7 @@
  */
 
 import { app, BrowserWindow, shell } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -31,6 +32,31 @@ interface WindowRuntime {
 }
 
 const windowRuntimes = new Map<number, WindowRuntime>();
+
+/**
+ * 자동 업데이트 — packaged build (production) 만 활성.
+ *
+ * - dev/e2e: app.isPackaged === false → early return.
+ *   electron-updater 가 lazy-load 하는 native 의존성이 dev 환경에서 실패할 수
+ *   있고, 그 외에도 GitHub Releases 체크는 의미가 없다 (어차피 dev URL 로드).
+ * - production: 첫 윈도우 ready 후 5초 뒤 한 번 체크 (앱 시작 부하 분산).
+ *   `autoDownload=true` + `autoInstallOnAppQuit=true` 로 사용자 개입 최소.
+ *
+ * Spec: docs/release.md, docs/performance/electron-tuning.md (Auto-update 섹션)
+ */
+function setupAutoUpdater(): void {
+  if (!app.isPackaged) return;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on('error', (err) => {
+    console.error('[autoUpdater]', err);
+  });
+  setTimeout(() => {
+    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+      console.error('[autoUpdater] check failed:', err);
+    });
+  }, 5_000);
+}
 
 function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -159,6 +185,9 @@ app.whenReady().then(() => {
     }
   );
   mainWindow = createMainWindow();
+
+  // packaged build 에서만 GitHub Releases 폴링. dev/e2e 엔 영향 X.
+  setupAutoUpdater();
 
   app.on('activate', () => {
     // macOS: re-create window when dock icon clicked

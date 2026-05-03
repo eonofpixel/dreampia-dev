@@ -2,7 +2,7 @@
 title: Release Process
 parent: ../README.md
 status: stable
-last_updated: 2026-05-03
+last_updated: 2026-05-02
 ---
 
 # Release 프로세스
@@ -15,16 +15,19 @@ last_updated: 2026-05-03
 
 ### 1. Secrets 설정 (GitHub repo settings → Secrets and variables → Actions)
 
+> Win/macOS 의 code-signing secret 은 **플랫폼별로 분리**돼 있다.
+> 이전엔 `CSC_LINK` / `CSC_KEY_PASSWORD` 가 두 OS 공유라 한쪽만 서명 가능했다.
+
 #### Windows code signing (선택, Phase 2 이후 필수)
-- `CSC_LINK`: .pfx 인증서 base64 인코딩
+- `WIN_CSC_LINK`: .pfx 인증서 base64 인코딩
   ```bash
   base64 -i certificate.pfx | tr -d '\n' > cert.b64
   ```
-- `CSC_KEY_PASSWORD`: 인증서 패스워드
+- `WIN_CSC_KEY_PASSWORD`: 인증서 패스워드
 
 #### macOS code signing + notarization (선택)
-- `CSC_LINK`: Developer ID Application 인증서 .p12 base64
-- `CSC_KEY_PASSWORD`: 인증서 패스워드
+- `MAC_CSC_LINK`: Developer ID Application 인증서 .p12 base64
+- `MAC_CSC_KEY_PASSWORD`: 인증서 패스워드
 - `APPLE_ID`: 애플 개발자 계정 이메일
 - `APPLE_APP_SPECIFIC_PASSWORD`: app-specific password
   (https://appleid.apple.com → Sign-In and Security → App-Specific Passwords)
@@ -66,20 +69,39 @@ git push origin main --follow-tags
 
 Code signing 환경 검증 시 secrets 만 설정 후:
 - GitHub Actions → Release workflow → Run workflow
-- tag input: `v0.1.0-test` 같은 임시 tag
+- tag input: `v0.1.0-test` 같은 임시 tag (이미 git tag 로 존재해야 한다 —
+  workflow 가 그 ref 를 checkout 해서 빌드한다)
 - artifacts 다운로드 후 검증 → 이상 없으면 진짜 tag push
 
 ## 자동 업데이트
 
-`electron-updater` 가 GitHub Releases 채널을 폴링.
+`electron-updater` (^6.8.3) 가 GitHub Releases 채널을 폴링.
 - Win NSIS: `latest.yml`
 - macOS DMG: `latest-mac.yml`
 - Linux AppImage: `latest-linux.yml`
 
 (electron-builder publish 시 자동 생성)
 
+### 어떻게 wire 됐나
+
+`src/main/index.ts` 의 `setupAutoUpdater()` 가:
+- `app.isPackaged === true` (production) 일 때만 활성
+- 첫 윈도우 ready 후 5초 뒤 한 번 `checkForUpdatesAndNotify()`
+- 새 버전 발견 시 `autoDownload=true` → 다운로드 → `autoInstallOnAppQuit=true`
+  로 다음 종료 시 자동 설치
+
+dev/e2e 환경 (`app.isPackaged === false`) 에선 early return 이라 영향 X.
+
+## 빌드 분리 (per-platform)
+
+각 OS runner 가 자기 타겟만 빌드한다 (`--win` / `--mac` / `--linux`):
+- 빌드 시간 단축 (한 OS 가 3-OS universal 빌드 안함)
+- electron-builder 가 OS-native dep 만 처리하면 됨
+- code-signing secret 누설 면 축소 (Win 잡엔 mac secret 미주입)
+
 ## 관련
 
 - [electron-builder.yml](../electron-builder.yml) — 패키징 설정
 - [.github/workflows/release.yml](../.github/workflows/release.yml) — CI 파이프라인
-- [package.json](../package.json) — version 필드
+- [package.json](../package.json) — version 필드 + electron-updater dep
+- [docs/performance/electron-tuning.md](./performance/electron-tuning.md#auto-update-성능) — autoUpdater tuning

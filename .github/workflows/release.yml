@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v0.1.0-test)'
+        description: 'Release tag (e.g. v0.1.0-test). Will be checked out — must already exist as a git tag.'
         required: true
         type: string
 
@@ -15,8 +15,10 @@ permissions:
   contents: write   # for creating GitHub Releases
 
 concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false  # don't cancel a release mid-build
+  # workflow_dispatch 은 입력 tag 단위, push 는 ref 단위로 직렬화.
+  # 다른 release 빌드를 cancel 하지 않음 (mid-build 폐기 방지).
+  group: release-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -30,9 +32,20 @@ jobs:
         os: [windows-latest, macos-latest, ubuntu-latest]
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout (push trigger)
+        if: github.event_name == 'push'
+        uses: actions/checkout@v4
         with:
           # Full history for changelog generation (future)
+          fetch-depth: 0
+
+      - name: Checkout (manual dispatch tag)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v4
+        with:
+          # workflow_dispatch.inputs.tag 가 가리키는 ref 를 명시적으로 checkout.
+          # 이전엔 input 이 선언만 있고 unused 라 항상 default branch 가 빌드됐다.
+          ref: ${{ github.event.inputs.tag }}
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -65,22 +78,36 @@ jobs:
       - name: Build Vite (renderer + main + preload)
         run: npx vite build
 
-      # === Code signing secrets ===
-      # Windows: CSC_LINK (.pfx base64) + CSC_KEY_PASSWORD
-      # macOS:   CSC_LINK (.p12 base64) + CSC_KEY_PASSWORD
-      #          + APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID
-      # Linux:   not required
-      - name: Package + Publish (electron-builder)
+      # === Per-platform packaging + signing ===
+      # Win/macOS code-signing secrets are platform-specific so both flows can
+      # coexist (이전엔 CSC_LINK / CSC_KEY_PASSWORD 가 공유돼서 한쪽만 가능).
+      # 또한 각 OS 가 자기 타겟만 빌드 (--win/--mac/--linux) — universal 빌드보다
+      # 빠르고, electron-builder 가 OS 별 native dep 를 자동 처리한다.
+
+      - name: Package + Publish (electron-builder, Windows)
+        if: matrix.os == 'windows-latest'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Windows + macOS code-signing
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          # macOS notarization
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: npx electron-builder --win --publish always
+
+      - name: Package + Publish (electron-builder, macOS)
+        if: matrix.os == 'macos-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npx electron-builder --publish always
+        run: npx electron-builder --mac --publish always
+
+      - name: Package + Publish (electron-builder, Linux)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --linux --publish always
 
       - name: Upload artifacts (manual workflow_dispatch only)
         if: github.event_name == 'workflow_dispatch'
