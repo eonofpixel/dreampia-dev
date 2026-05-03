@@ -299,6 +299,65 @@ interface SearchTurnsArgsShape {
   limit?: number;
 }
 
+// v0.12.0 (I) — Cross-AI Verify/Compare shapes. CompareStore 의 export 와
+// sync. preload 는 better-sqlite3 의 transitive import 를 피하기 위해 inline
+// 한다. main 의 zod CompareRunArgsSchema 가 IPC 경계에서 검증한다.
+type CompareSideStatusShape =
+  | 'pending'
+  | 'streaming'
+  | 'done'
+  | 'error'
+  | 'skipped';
+type CompareRunStatusShape = 'running' | 'completed' | 'failed';
+type CompareSideShape = 'claude' | 'codex';
+
+interface CompareSideResultShape {
+  status: CompareSideStatusShape;
+  model: string | null;
+  text: string;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+interface CompareRunShape {
+  id: string;
+  session_id: string;
+  prompt: string;
+  workspace_root: string;
+  permission_level: 'read_only' | 'workspace_write' | 'full_access' | 'custom';
+  created_at: string;
+  status: CompareRunStatusShape;
+  claude: CompareSideResultShape;
+  codex: CompareSideResultShape;
+}
+
+interface CompareRunArgsShape {
+  session_id: string;
+  prompt: string;
+  workspace_root: string;
+  permission_level?: 'read_only' | 'workspace_write' | 'full_access' | 'custom';
+  claude_model: string;
+  codex_model: string;
+}
+
+type CompareEventShape =
+  | { type: 'compare_start'; run_id: string }
+  | {
+      type: 'compare_side_delta';
+      run_id: string;
+      side: CompareSideShape;
+      text_delta: string;
+    }
+  | { type: 'compare_side_done'; run_id: string; side: CompareSideShape }
+  | {
+      type: 'compare_side_error';
+      run_id: string;
+      side: CompareSideShape;
+      error: string;
+    }
+  | { type: 'compare_complete'; run_id: string; run: CompareRunShape };
+
 // v0.6.0 (F-019) — @ mention 의 file IPC. main 의 workspace/list-files 와
 // workspace/read-file 이 반환하는 형태와 sync. 본 preload 가 사용하는 다른
 // 인라인 shape 와 동일하게 zod runtime 을 import 하지 않는다.
@@ -399,12 +458,19 @@ const ALLOWED_INVOKE_CHANNELS = [
   'usage/get-limits',
   'usage/set-limits',
   'mcp/discover',
+  // v0.12.0 (I) — Cross-AI Verify/Compare
+  'compare/run',
+  'compare/get',
+  'compare/list',
+  'compare/cancel',
 ] as const;
 
 const ALLOWED_RECEIVE_CHANNELS = [
   'browser/tab-updated',
   'ai/stream-event',
   'ai/stream-end',
+  // v0.12.0 (I) — Cross-AI Verify/Compare stream events.
+  'compare/stream-event',
   // Phase 2+:
   // 'session:updated',
   // 'tool:result',
@@ -908,6 +974,54 @@ const api = {
      */
     setLimits: (patch: UsageLimitsPatchShape): Promise<Result<void>> =>
       ipcRenderer.invoke('usage/set-limits', patch) as Promise<Result<void>>,
+  },
+
+  /**
+   * v0.12.0 (I) — Cross-AI Verify/Compare.
+   *
+   * Spec: ROADMAP.md (v0.12.0 I — Codex 권고)
+   *
+   * Flow:
+   *   1) run({prompt, models, ...}) — main 이 양쪽 provider 병렬 실행 시작.
+   *      즉시 run_id 반환, 후속 이벤트는 onStreamEvent 로 도착.
+   *   2) onStreamEvent — compare_start / compare_side_delta /
+   *      compare_side_done / compare_side_error / compare_complete.
+   *   3) cancel(run_id) — mid-stream cancel. 양쪽 모두 abort.
+   *   4) get(run_id) / list(session_id) — 영속된 run 조회.
+   *
+   * onStreamEvent 는 unsubscribe 함수 반환 — 반드시 호출.
+   */
+  compare: {
+    run: (args: CompareRunArgsShape): Promise<Result<{ run_id: string }>> =>
+      ipcRenderer.invoke('compare/run', args) as Promise<Result<{ run_id: string }>>,
+
+    get: (runId: string): Promise<Result<CompareRunShape | null>> =>
+      ipcRenderer.invoke('compare/get', { run_id: runId }) as Promise<
+        Result<CompareRunShape | null>
+      >,
+
+    list: (
+      sessionId: string,
+      limit?: number
+    ): Promise<Result<CompareRunShape[]>> =>
+      ipcRenderer.invoke(
+        'compare/list',
+        limit !== undefined ? { session_id: sessionId, limit } : { session_id: sessionId }
+      ) as Promise<Result<CompareRunShape[]>>,
+
+    cancel: (runId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('compare/cancel', { run_id: runId }) as Promise<Result<void>>,
+
+    onStreamEvent: (listener: (event: CompareEventShape) => void): (() => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: CompareEventShape
+      ): void => {
+        listener(payload);
+      };
+      ipcRenderer.on('compare/stream-event', handler);
+      return () => ipcRenderer.removeListener('compare/stream-event', handler);
+    },
   },
 };
 

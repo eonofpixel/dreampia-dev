@@ -20,7 +20,8 @@ export type SlashCommandId =
   | 'model'
   | 'settings'
   | 'usage'
-  | 'onboarding';
+  | 'onboarding'
+  | 'compare';
 
 export interface SlashCommand {
   id: SlashCommandId;
@@ -86,6 +87,14 @@ export const SLASH_COMMANDS: ReadonlyArray<SlashCommand> = [
     trigger: '/onboarding',
     label: '온보딩 다시 보기',
     description: '5-step 환영 가이드 다시 진행',
+  },
+  {
+    id: 'compare',
+    trigger: '/compare',
+    label: '응답 비교',
+    description: 'Claude 와 Codex 양쪽 응답을 나란히 비교',
+    hasArgs: true,
+    argHint: '<프롬프트>',
   },
 ];
 

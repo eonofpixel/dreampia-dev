@@ -18,6 +18,7 @@ import sql001 from './migrations/001_init.sql?raw';
 import sql002 from './migrations/002_locks.sql?raw';
 import sql003 from './migrations/003_usage_events.sql?raw';
 import sql004 from './migrations/004_fts5_turns.sql?raw';
+import sql005 from './migrations/005_compare_runs.sql?raw';
 
 // ────────────────────────────────────────────────────────────
 // Migration registry
@@ -35,6 +36,7 @@ const MIGRATIONS: readonly Migration[] = [
   { version: 2, description: 'session_locks for multi-window leader election', up: sql002 },
   { version: 3, description: 'usage_events for v0.4.0 cost tracking', up: sql003 },
   { version: 4, description: 'FTS5 full-text search over turn content (v0.7.0 F-026)', up: sql004 },
+  { version: 5, description: 'compare_runs for v0.12.0 cross-AI verify/compare', up: sql005 },
 ] as const;
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

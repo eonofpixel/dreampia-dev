@@ -131,5 +131,23 @@
   "onboarding.cli.detecting": "🔍 CLI 감지 중...",
   "onboarding.next": "다음 →",
   "onboarding.prev": "← 이전",
-  "onboarding.skip": "건너뛰기"
+  "onboarding.skip": "건너뛰기",
+
+  "compare.title": "응답 비교",
+  "compare.prompt.empty": "(prompt 미지정)",
+  "compare.side.claude": "Claude",
+  "compare.side.codex": "Codex",
+  "compare.status.pending": "대기",
+  "compare.status.streaming": "응답 중",
+  "compare.status.done": "완료",
+  "compare.status.error": "오류",
+  "compare.status.skipped": "건너뜀",
+  "compare.text.waiting": "응답 대기 중…",
+  "compare.text.streaming": "응답 시작 중…",
+  "compare.diff.show": "diff 표시",
+  "compare.diff.hide": "응답 표시",
+  "compare.diff.empty": "양쪽 응답이 모두 비어있어 diff 를 만들 수 없습니다.",
+  "compare.accept": "이 응답 채택",
+  "compare.cancel": "취소",
+  "compare.close": "닫기"
 }

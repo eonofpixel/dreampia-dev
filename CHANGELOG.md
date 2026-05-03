@@ -2,6 +2,109 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [0.12.0] — 2026-05-03
+
+**Feature release — I Cross-AI Verify/Compare MVP: Claude vs Codex 동일 prompt 동시 비교.**
+
+Codex 권고 v0.12.0. v1.0 차별화 기능. 사용자가 `/compare <prompt>` 슬래시
+명령으로 같은 prompt 를 Claude / Codex 양쪽으로 동시에 실행하고 응답을
+side-by-side 또는 line-by-line diff 로 비교한다. Codex 권고대로 MVP 범위:
+(1) 동일 prompt 양쪽 실행, (2) 결과 영속, (3) 좌우 columns + 단순 diff,
+(4) 실패 격리 — 한쪽이 detect / stream 실패해도 다른 쪽은 계속한다. 결과는
+"이 응답 채택" 클릭 시 active session 에 user/assistant turn pair 로 inject.
+
+### Added
+
+- **`src/storage/migrations/005_compare_runs.sql`** — `compare_runs` 테이블 +
+  `idx_compare_runs_session` / `idx_compare_runs_created` 두 인덱스.
+  한 row 가 양쪽 (claude / codex) 의 status / model / 누적 text / error / start
+  / finish timestamp 를 함께 보유. usage_events 와 동일하게 sessions 와 FK 는
+  의도적으로 두지 않는다 (dangling reference 허용 — cross-process 안전성).
+- **`src/storage/CompareStore.ts`** — `createRun` / `updateSide` /
+  `finalizeRun` / `getRun` / `listBySession` / `deleteRun`. side patch 는
+  REPLACE 시맨틱 (orchestrator 가 자체 누적 버퍼를 들고 매 delta 마다 통째로
+  저장). `finalizeRun` 의 overall status 결정 규칙: 한쪽이라도 done 이면
+  'completed' (실패 격리), 둘 다 error/skipped 면 'failed', 그 외엔 'running'.
+- **`src/main/compare/orchestrator.ts`** — `runCompare` 가 양쪽 provider 를
+  `Promise.allSettled` 로 병렬 실행. `pumpSide` 가 한쪽 stream 의 모든 yield
+  단계를 try/catch 로 wrapping 하여 한쪽 throw 가 다른 쪽 abort 시키지 않는다.
+  parent abortSignal 은 양쪽 sub-controller 로 forward.
+- **신규 IPC channel `compare/run` / `compare/get` / `compare/list` /
+  `compare/cancel`** — main 측 zod schema (`CompareRunArgsSchema` 등) 가
+  payload 검증. prompt 길이 1~4000자, model 이름 1~120자 한정. orchestrator 가
+  background 에서 stream 진행, 매 이벤트는 `compare/stream-event` 채널로 emit.
+  `CompareHandlerConfig` 의 store / factory / runCompare override 로 test 에서
+  child process 없이 검증 가능.
+- **`src/main/index.ts`** — `CompareStore` 인스턴스 + `getDefaultProvider` 를
+  wrap 한 `compareFactory` 주입. `before-quit` 에서 `shutdownCompareHandlers()`
+  호출하여 활성 run 모두 abort.
+- **`src/renderer/hooks/useCompare.ts`** — renderer-side state. `start` 가
+  optimistic placeholder 를 setState 한 뒤 `compare/run` IPC 호출, 그 후
+  `compare/stream-event` 를 구독하여 양쪽 누적 텍스트와 status 를 갱신. cancel
+  / reset 은 idempotent. compare_complete 는 main 의 final row 를 그대로 채택
+  (live accumulator 와 row 가 다를 수 있어 authoritative 가 우선).
+- **`src/renderer/components/chat/CompareModal.tsx`** — fixed inset-0 모달.
+  좌우 두 컬럼 (Claude | Codex), 각각 monospace + scrollable. 상단 header:
+  prompt 요약 + 양쪽 model + status badge. 토글 버튼: "diff 표시" / "응답 표시".
+  Diff 는 Codex 권고대로 LCS 같은 deep algorithm 없이 단순 line-by-line.
+  하단: 각 side 별 "이 응답 채택" 버튼 (status='done' 일 때만 enable). Esc 도
+  close (running 중이면 cancel 도 함께).
+- **`/compare <프롬프트>` 슬래시 명령** — `SLASH_COMMANDS` 에 추가. argHint
+  `<프롬프트>`. arg 가 비어 있으면 SlashHelpModal 로 안내. App.tsx 의
+  commandHandlers 가 `compareHook.start({...})` 호출 + 모달 open. 양쪽 model 은
+  MVP 에선 hard-coded (claude-3-5-sonnet-20241022 / gpt-5.5) — 향후 settings
+  default 모델 pair 추가 예정.
+- **응답 채택 (handleAcceptCompare)** — 사용자가 한쪽 응답을 채택하면 active
+  session 에 user turn (원본 prompt) + assistant turn (채택된 텍스트, model
+  metadata 보존) 을 append + persist. 모달 close + hook reset.
+- **`compare.*` i18n keys (ko/en 양쪽 17개)** — title, prompt empty, side
+  labels, status labels (pending/streaming/done/error/skipped), text waiting,
+  diff toggle, accept/cancel/close 버튼.
+- **`tests/storage/CompareStore.test.ts`** — 20 spec. migration / createRun
+  pending 초기화 / updateSide REPLACE 시맨틱 / finalizeRun 의 4가지 상태 derivation
+  / listBySession DESC + limit / deleteRun idempotent 검증.
+- **`tests/main/compare/orchestrator.test.ts`** — 8 spec. happy path,
+  failure isolation (one stream throws / one factory rejects), 양쪽 fail,
+  abortSignal forwarded, persisted row matches, empty prompt rejection,
+  message_start 이벤트로 model 갱신 검증.
+- **`tests/main/ipc.compare.test.ts`** — 11 spec. Result.ok, zod rejection
+  (empty / 4001자 prompt), stream events on `compare/stream-event` 채널,
+  failure isolation visible via IPC events, get/list/cancel 동작, malformed
+  payload 거절.
+- **`tests/renderer/CompareModal.test.tsx`** — 9 spec. open=false → null,
+  side panels render, status badge, accept disabled while streaming + enabled
+  on done, accept callback args, diff toggle 양방향 + line classification,
+  cancel 가시성, close 버튼, Esc 키 → onCancel + onClose, error 메시지 표시.
+- **`tests/renderer/useCompare.test.ts`** — 8 spec. initial state, start
+  optimistic seed, delta accumulator, compare_complete authoritative override,
+  cancel forwards run_id, start failure → onError + isRunning false, reset
+  clears state, unrelated run_id events ignored.
+- **`tests/setup.ts`** — `compare` namespace mock + `compareRuns` /
+  `compareEventListeners` / `compareCancelled` / `compareNextRunId` /
+  `compareRunBehavior` 상태 + `__emitCompareEvent` test helper.
+
+### Changed
+
+- **`SLASH_COMMANDS`** — `compare` 항목 추가. `SlashCommandId` union 도 확장.
+- **`src/storage/migrate.ts` + `LATEST_SCHEMA_VERSION`** — 4 → 5. migration
+  V5 (compare_runs) 등록.
+- **`tests/storage/SessionStore.test.ts`** — 두 곳의 `toBe(4)` 를 `toBe(5)` 로
+  업데이트 (LATEST_SCHEMA_VERSION 변경 추적).
+
+### Notes
+
+- compare 는 실패 격리가 핵심 가치. orchestrator 의 `pumpSide` 가 자체
+  try/catch 로 never-throws 라 한쪽 reject 가 절대 다른 쪽을 abort 하지 않는다.
+  `Promise.allSettled` 도 추가 보호막 역할.
+- diff 는 Codex 권고대로 단순 line-by-line. 두 array 를 같은 index 까지 비교
+  하며 다른 줄은 양쪽 표시, 길이 차이는 짧은 쪽 끝까지 채운 후 긴 쪽 나머지를
+  한쪽 only 로. LCS / Myers diff 같은 advanced algorithm 은 P1+ 검토.
+- accept 시 active session 에 user turn 의 timestamp 가 새로 발급된다 — 즉
+  compare 시점이 아닌 채택 시점이다. compare 가 chat history 의 일부가 아닌
+  별도 영속 (compare_runs 테이블) 으로 다뤄지므로 자연스러운 UX.
+- v0.13.0 후보 (Codex 권고): compare 결과의 비용 통합 비교, smart routing
+  learning (사용자가 어느 쪽을 자주 채택하는지 통계), 자동 라우팅, 음성 비교.
+
 ## [0.11.0] — 2026-05-03
 
 **Feature release — B2 영문 i18n: 핵심 화면 영어 opt-in.**

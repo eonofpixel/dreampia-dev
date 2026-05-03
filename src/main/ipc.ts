@@ -51,6 +51,8 @@ import {
   type TurnId,
 } from '@/types';
 import type {
+  CompareRun,
+  CompareStore,
   DailyUsageRow,
   LeaderElection,
   SessionLock,
@@ -79,6 +81,12 @@ import {
   type AutoProviderResult,
 } from '@/providers/auto';
 import { detectCli as defaultDetectCli, type CliDetectionResult } from '@/providers/cli/detect';
+import {
+  runCompare as defaultRunCompare,
+  type CompareEvent,
+  type CompareOrchestratorArgs,
+  type ProviderFactory,
+} from './compare/orchestrator';
 import type { BrowserManager, BrowserTabState } from './BrowserManager';
 import type { FileContent, FileEntry } from '@/types/workspace';
 import type {
@@ -210,6 +218,39 @@ const UsageDailyArgsSchema = z
   .object({
     days: z.number().int().positive().max(365),
     provider: UsageProviderSchema.optional(),
+  })
+  .strict();
+
+// ────────────────────────────────────────────────────────────
+// compare/* — v0.12.0 I (Cross-AI Verify/Compare MVP)
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Renderer 가 `/compare <prompt>` 슬래시 명령으로 호출. 양쪽 model 은 caller
+ * 가 명시 — 향후 settings 의 default 모델 자동 fill 추가 검토. prompt 는
+ * 1~4000자 (4KB 초과 paste 차단). models 는 1~120자.
+ */
+const CompareRunArgsSchema = z
+  .object({
+    session_id: z.string().min(1),
+    prompt: z.string().min(1).max(4000),
+    workspace_root: z.string().min(1),
+    permission_level: PermissionLevelSchema.optional(),
+    claude_model: z.string().min(1).max(120),
+    codex_model: z.string().min(1).max(120),
+  })
+  .strict();
+
+const CompareIdArgsSchema = z
+  .object({
+    run_id: z.string().min(1),
+  })
+  .strict();
+
+const CompareListArgsSchema = z
+  .object({
+    session_id: z.string().min(1),
+    limit: z.number().int().positive().max(100).optional(),
   })
   .strict();
 
@@ -433,6 +474,8 @@ function resolveElection(source: LockHandlerSource, event: IpcMainInvokeEvent): 
  *                   not registered. Spec: ROADMAP.md (v0.4.0). Note: `ai`
  *                   handler config also reads `usage` so stream pump can
  *                   persist usage events fire-and-forget.
+ * @param compare  - Optional Compare handler config. When omitted, `compare/*`
+ *                   handlers are not registered. Spec: ROADMAP.md (v0.12.0 I).
  */
 export function registerIpcHandlers(
   electronApp: App = app,
@@ -442,7 +485,8 @@ export function registerIpcHandlers(
   ai?: AiHandlerConfig,
   tools?: ToolHandlerConfig,
   mcp?: McpManager,
-  usage?: UsageStore
+  usage?: UsageStore,
+  compare?: CompareHandlerConfig
 ): void {
   ipcMain.handle('app:get-version', (): AppInfo => {
     return {
@@ -707,6 +751,7 @@ export function registerIpcHandlers(
   if (tools) registerToolHandlers(tools);
   if (mcp) registerMcpHandlers(mcp);
   if (usage) registerUsageHandlers(usage);
+  if (compare) registerCompareHandlers(compare);
 }
 
 // ────────────────────────────────────────────────────────────
@@ -1827,4 +1872,198 @@ async function runToolCallFromStream(args: {
     result: toolResultToRef(result),
   };
   args.send('ai/stream-event', { stream_id: args.streamId, event });
+}
+
+// ────────────────────────────────────────────────────────────
+// compare/* — v0.12.0 I (Cross-AI Verify/Compare MVP)
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Compare 핸들러 의존성 주입.
+ *
+ * Tests 는 mock store / factory 를 inject 하여 실제 child process / DB 없이
+ * 검증 가능. Production 은 SessionStore.getDb() 를 공유한 CompareStore 와
+ * defaultRunCompare 를 주입.
+ */
+export interface CompareHandlerConfig {
+  store: CompareStore;
+  /** Renderer 로 compare/stream-event 를 보낼 BrowserWindow getter. null 시 emit skip. */
+  getMainWindow: () => BrowserWindow | null;
+  /**
+   * Provider factory — orchestrator 가 양쪽 호출. test 에선 mock 주입.
+   * Production 은 main/index.ts 가 getDefaultProvider 를 wrap 한 factory 주입.
+   */
+  factory: ProviderFactory;
+  /**
+   * Override for tests. Default: orchestrator.runCompare. test 가 mock 으로
+   * resolve / reject 동작을 미리 정의 가능.
+   */
+  runCompare?: (
+    args: CompareOrchestratorArgs,
+    store: CompareStore,
+    factory: ProviderFactory,
+    emit: (event: CompareEvent) => void
+  ) => Promise<unknown>;
+}
+
+interface ActiveCompare {
+  abort: () => void;
+}
+
+const activeCompareRuns = new Map<string, ActiveCompare>();
+
+/**
+ * Test helper — 활성 compare run 모두 abort + 등록 해제.
+ * Production 은 app.before-quit 에서 호출하여 child process leak 방지.
+ */
+export function shutdownCompareHandlers(): void {
+  for (const [, c] of activeCompareRuns) {
+    try {
+      c.abort();
+    } catch {
+      // ignore
+    }
+  }
+  activeCompareRuns.clear();
+}
+
+function registerCompareHandlers(cfg: CompareHandlerConfig): void {
+  const runCompareFn = cfg.runCompare ?? defaultRunCompare;
+
+  ipcMain.handle('compare/run', async (_evt, raw: unknown): Promise<Result<{ run_id: string }>> => {
+    try {
+      const parsed = CompareRunArgsSchema.parse(raw);
+      const effectiveLevel: PermissionLevel = parsed.permission_level ?? 'workspace_write';
+      const controller = new AbortController();
+
+      // Pre-create the run so we can return the id immediately + register
+      // abort. The orchestrator itself also calls store.createRun in tests
+      // when invoked directly — we use a distinct path here: caller schedules
+      // in background, returns id, then orchestrator runs the same prompt.
+      // To avoid double-create we just call orchestrator and pull run_id from
+      // the first emitted compare_start event.
+      const send = (channel: string, payload: unknown): void => {
+        const win = cfg.getMainWindow();
+        if (win === null) return;
+        try {
+          if ('isDestroyed' in win && (win as { isDestroyed?: () => boolean }).isDestroyed?.()) {
+            return;
+          }
+          win.webContents.send(channel, payload);
+        } catch {
+          // ignore — renderer unmounted
+        }
+      };
+
+      let resolvedRunId: string | null = null;
+      const pending: CompareEvent[] = [];
+      let pendingResolve: ((id: string) => void) | null = null;
+      const startPromise = new Promise<string>((resolve) => {
+        pendingResolve = resolve;
+      });
+
+      const emit = (event: CompareEvent): void => {
+        if (event.type === 'compare_start') {
+          resolvedRunId = event.run_id;
+          activeCompareRuns.set(event.run_id, {
+            abort: () => controller.abort(),
+          });
+          if (pendingResolve !== null) {
+            pendingResolve(event.run_id);
+            pendingResolve = null;
+          }
+          // Flush queued events with run_id (none expected before start, defensive).
+          for (const queued of pending) {
+            send('compare/stream-event', queued);
+          }
+          pending.length = 0;
+        }
+        if (resolvedRunId === null) {
+          pending.push(event);
+        } else {
+          send('compare/stream-event', event);
+        }
+        if (event.type === 'compare_complete' && resolvedRunId !== null) {
+          activeCompareRuns.delete(resolvedRunId);
+        }
+      };
+
+      // Background pump — caller awaits only the first run_id.
+      void (async (): Promise<void> => {
+        try {
+          await runCompareFn(
+            {
+              prompt: parsed.prompt,
+              session_id: parsed.session_id,
+              workspace_root: parsed.workspace_root,
+              permission_level: effectiveLevel,
+              claude_model: parsed.claude_model,
+              codex_model: parsed.codex_model,
+              abortSignal: controller.signal,
+            },
+            cfg.store,
+            cfg.factory,
+            emit
+          );
+        } catch (err) {
+          // Orchestrator should be never-throws but defensive — surface as
+          // a fake error event so renderer can clean up.
+          if (resolvedRunId !== null) {
+            send('compare/stream-event', {
+              type: 'compare_side_error',
+              run_id: resolvedRunId,
+              side: 'claude',
+              error: err instanceof Error ? err.message : String(err),
+            } satisfies CompareEvent);
+          }
+        } finally {
+          if (resolvedRunId !== null) {
+            activeCompareRuns.delete(resolvedRunId);
+          }
+        }
+      })();
+
+      const runId = await startPromise;
+      return ok({ run_id: runId });
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('compare/get', (_evt, raw: unknown): Result<CompareRun | null> => {
+    try {
+      const { run_id } = CompareIdArgsSchema.parse(raw);
+      const run = cfg.store.getRun(run_id);
+      return ok(run);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('compare/list', (_evt, raw: unknown): Result<CompareRun[]> => {
+    try {
+      const { session_id, limit } = CompareListArgsSchema.parse(raw);
+      const runs =
+        limit !== undefined
+          ? cfg.store.listBySession(session_id, limit)
+          : cfg.store.listBySession(session_id);
+      return ok(runs);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('compare/cancel', (_evt, raw: unknown): Result<void> => {
+    try {
+      const { run_id } = CompareIdArgsSchema.parse(raw);
+      const active = activeCompareRuns.get(run_id);
+      if (active !== undefined) {
+        active.abort();
+        activeCompareRuns.delete(run_id);
+      }
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
+    }
+  });
 }

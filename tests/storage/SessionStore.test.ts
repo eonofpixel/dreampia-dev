@@ -68,8 +68,9 @@ describe('SessionStore', () => {
     it('apply on a fresh DB and report schema_version = LATEST', () => {
       expect(store.getSchemaVersion()).toBe(LATEST_SCHEMA_VERSION);
       // 1 → 2 in SS-5 (002_locks.sql), 2 → 3 in v0.4.0 (003_usage_events.sql),
-      // 3 → 4 in v0.7.0 (004_fts5_turns.sql for chat search).
-      expect(store.getSchemaVersion()).toBe(4);
+      // 3 → 4 in v0.7.0 (004_fts5_turns.sql for chat search), 4 → 5 in
+      // v0.12.0 (005_compare_runs.sql for cross-AI verify/compare).
+      expect(store.getSchemaVersion()).toBe(5);
     });
 
     it('are idempotent — re-opening the same DB does not reapply', () => {
@@ -78,7 +79,7 @@ describe('SessionStore', () => {
       // verify the constructor itself is idempotent: calling migrate via
       // a second SessionStore on the same path is what real apps do.
       // For :memory: we can only assert the version stays stable.
-      expect(store.getSchemaVersion()).toBe(4);
+      expect(store.getSchemaVersion()).toBe(5);
     });
 
     it('creates session_locks table at v2 (SS-5)', () => {

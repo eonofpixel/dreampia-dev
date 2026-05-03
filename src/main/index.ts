@@ -10,11 +10,22 @@ import { autoUpdater } from 'electron-updater';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { registerIpcHandlers, shutdownAiHandlers } from './ipc';
+import {
+  registerIpcHandlers,
+  shutdownAiHandlers,
+  shutdownCompareHandlers,
+} from './ipc';
 import { BrowserManager } from './BrowserManager';
 import { McpManager, createSettingsAdapter } from './mcp';
-import { LeaderElection, SessionStore, UsageStore } from '@/storage';
+import {
+  CompareStore,
+  LeaderElection,
+  SessionStore,
+  UsageStore,
+} from '@/storage';
 import { ShellRunTool, ToolQueue, ToolRegistry } from '@/tools';
+import { getDefaultProvider } from '@/providers/auto';
+import type { ProviderFactory } from './compare/orchestrator';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,6 +40,7 @@ let sessionStore: SessionStore | null = null;
 let browserManager: BrowserManager | null = null;
 let mcpManager: McpManager | null = null;
 let usageStore: UsageStore | null = null;
+let compareStore: CompareStore | null = null;
 
 interface WindowRuntime {
   election: LeaderElection;
@@ -153,6 +165,9 @@ app.whenReady().then(() => {
   // mutation 안 하고 stream pump 에서만 recordEvent 호출.
   usageStore = new UsageStore(sessionStore.getDb());
 
+  // v0.12.0 (I) — Cross-AI Verify/Compare runs. 동일 DB connection 공유.
+  compareStore = new CompareStore(sessionStore.getDb());
+
   // Tool Queue: main process owns all tool execution. Renderer/AI streams use
   // IPC only; subprocess-capable tools never cross into the sandboxed renderer.
   const registry = new ToolRegistry();
@@ -183,6 +198,22 @@ app.whenReady().then(() => {
   // P1-4: AI handlers (ai/detect-cli, ai/start-stream, ai/stop-stream).
   // Renderer 가 stream-event/end 를 받으려면 mainWindow getter 필요.
   // Spec: docs/session/cross-ai-sync.md
+  // v0.12.0 (I) — compare provider factory. Each side gets its own provider
+  // via getDefaultProvider so that user's wizard preference (claude / codex /
+  // mock override) still applies, but model prefix routing forces the chosen
+  // CLI per side. We pass `userDefaultProvider='auto'` so model prefix wins.
+  const compareFactory: ProviderFactory = async (
+    side,
+    model,
+    signal,
+    cwd,
+    permissionLevel
+  ) => {
+    const result = await getDefaultProvider(model, signal, cwd, permissionLevel, 'auto');
+    void side;
+    return { provider: result.provider, source: result.source };
+  };
+
   registerIpcHandlers(
     app,
     sessionStore,
@@ -199,7 +230,12 @@ app.whenReady().then(() => {
       queue,
     },
     mcpManager,
-    usageStore
+    usageStore,
+    {
+      store: compareStore,
+      getMainWindow: () => mainWindow,
+      factory: compareFactory,
+    }
   );
   mainWindow = createMainWindow();
 
@@ -230,6 +266,8 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   // 활성 AI streams 먼저 abort — subprocess leak 방지.
   shutdownAiHandlers();
+  // v0.12.0 — 활성 compare runs 도 abort.
+  shutdownCompareHandlers();
   // MCP children 도 stop. fire-and-forget — quit 흐름은 sync 한정.
   if (mcpManager !== null) {
     void mcpManager.shutdown();
@@ -241,9 +279,10 @@ app.on('before-quit', () => {
     runtime.election.shutdown();
   }
   windowRuntimes.clear();
-  // UsageStore 는 SessionStore 의 DB connection 을 공유하므로 별도 close X.
-  // SessionStore.close() 가 connection 도 닫는다.
+  // UsageStore / CompareStore 는 SessionStore 의 DB connection 을 공유하므로
+  // 별도 close X. SessionStore.close() 가 connection 도 닫는다.
   usageStore = null;
+  compareStore = null;
   sessionStore?.close();
   sessionStore = null;
 });

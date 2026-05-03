@@ -13,10 +13,10 @@ import {
 } from '../../../src/renderer/commands/registry';
 
 describe('SLASH_COMMANDS registry', () => {
-  it('contains 7 unique commands', () => {
-    expect(SLASH_COMMANDS).toHaveLength(7);
+  it('contains 8 unique commands (7 base + /compare in v0.12.0)', () => {
+    expect(SLASH_COMMANDS).toHaveLength(8);
     const ids = new Set(SLASH_COMMANDS.map((c) => c.id));
-    expect(ids.size).toBe(7);
+    expect(ids.size).toBe(8);
   });
 
   it('every trigger starts with /', () => {
@@ -32,11 +32,12 @@ describe('SLASH_COMMANDS registry', () => {
     }
   });
 
-  it('only /model has hasArgs', () => {
+  it('only /model and /compare have hasArgs (v0.12.0)', () => {
     const argsCommands = SLASH_COMMANDS.filter((c) => c.hasArgs === true);
-    expect(argsCommands.map((c) => c.id)).toEqual(['model']);
-    const modelCmd = argsCommands[0];
-    expect(modelCmd?.argHint).toBeDefined();
+    expect(argsCommands.map((c) => c.id).sort()).toEqual(['compare', 'model']);
+    for (const cmd of argsCommands) {
+      expect(cmd.argHint).toBeDefined();
+    }
   });
 });
 

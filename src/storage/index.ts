@@ -18,3 +18,13 @@ export type {
   UsageRangeFilter,
   UsageSummary,
 } from './UsageStore';
+export { CompareStore } from './CompareStore';
+export type {
+  CompareRun,
+  CompareRunCreateArgs,
+  CompareRunStatus,
+  CompareSide,
+  CompareSidePatch,
+  CompareSideResult,
+  CompareSideStatus,
+} from './CompareStore';

@@ -20,6 +20,8 @@ import { PreviewPanel } from './components/preview/PreviewPanel';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { SettingsModal, applyTheme, type SettingsTabId } from './components/settings/SettingsModal';
 import { SlashHelpModal } from './components/chat/SlashHelpModal';
+import { CompareModal } from './components/chat/CompareModal';
+import { useCompare, type CompareSide } from './hooks/useCompare';
 import { KNOWN_MODELS, type SlashCommandId } from './commands/registry';
 import {
   SessionSchema,
@@ -166,6 +168,13 @@ export function App(): React.JSX.Element {
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTabId>('mcp');
   // v0.5.0 (F-018) — `/help` 슬래시 명령으로 여는 명령어 도움말 모달.
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
+  // v0.12.0 (I) — `/compare <prompt>` 슬래시 명령으로 여는 cross-AI 비교 모달.
+  const [compareModalOpen, setCompareModalOpen] = useState(false);
+  const compareHook = useCompare({
+    onError: (msg) => {
+      console.error('[useCompare]', msg);
+    },
+  });
   // v0.10.0 (F-025) — 사이드바 토글. Mod+B 로 표시/숨김.
   const [sidebarVisible, setSidebarVisible] = useState(true);
   // v0.7.0 (F-026) — Sidebar 메시지 검색 state. 입력은 즉시 반영, 실제 IPC
@@ -752,8 +761,77 @@ export function App(): React.JSX.Element {
       onboarding: () => {
         void resetOnboarding();
       },
+      compare: (arg) => {
+        // v0.12.0 (I) — 양쪽 model 은 첫 MVP 에선 KNOWN_MODELS 에서 hard-code.
+        // 향후 settings 에 default 모델 pair 추가 검토. arg 가 없으면 modal 만
+        // 열고 사용자에게 prompt 입력을 안내 (이후 P1 에서 모달 내 prompt input
+        // 추가 예정 — 현재는 슬래시 인자 필수).
+        if (activeSession === null) return;
+        if (arg === undefined || arg.length === 0) {
+          // 빈 인자 → 도움말 모달로 안내. /compare 는 prompt 가 필수.
+          setSlashHelpOpen(true);
+          return;
+        }
+        compareHook.reset();
+        setCompareModalOpen(true);
+        void compareHook.start({
+          prompt: arg,
+          session_id: activeSession.id,
+          workspace_root: activeSession.workspace.root,
+          permission_level: activeSession.permission.default_level,
+          // MVP defaults: Claude Sonnet + GPT-5.5. 두 prefix 가 model-prefix
+          // routing 으로 각각 Claude / Codex CLI 로 향한다.
+          claude_model: 'claude-3-5-sonnet-20241022',
+          codex_model: 'gpt-5.5',
+        });
+      },
     }),
-    [activeSession, handleClearTurns, handleNewChat, handleChangeModel, resetOnboarding]
+    [activeSession, handleClearTurns, handleNewChat, handleChangeModel, resetOnboarding, compareHook]
+  );
+
+  // v0.12.0 (I) — 응답 채택. 사용자가 "이 응답 채택" 클릭 시 active session 에
+  // user/assistant turn pair 를 append. user turn 은 compare 의 원본 prompt,
+  // assistant turn 은 채택된 side 의 누적 text. model 정보도 보존.
+  const handleAcceptCompare = useCallback(
+    (side: CompareSide, text: string, model: string | null): void => {
+      if (activeSession === null) return;
+      const run = compareHook.run;
+      if (run === null || text.length === 0) return;
+      const userTurn: Turn = {
+        id: newTurnId(),
+        role: 'user',
+        timestamp: nowIso(),
+        status: 'completed',
+        content: [{ type: 'text', text: run.prompt }],
+      };
+      const assistantTurn: Turn = {
+        id: newTurnId(),
+        role: 'assistant',
+        timestamp: nowIso(),
+        status: 'completed',
+        content: [{ type: 'text', text }],
+        ...(model !== null && { model }),
+      };
+      // Optimistic local push + persist.
+      setActiveSession((prev) =>
+        prev === null
+          ? prev
+          : {
+              ...prev,
+              updated_at: nowIso(),
+              conversation: {
+                ...prev.conversation,
+                turns: [...prev.conversation.turns, userTurn, assistantTurn],
+              },
+            }
+      );
+      void persistTurn(activeSession.id, userTurn);
+      void persistTurn(activeSession.id, assistantTurn);
+      void side; // side 정보는 향후 metadata 활용 — 현재는 turn append 만.
+      setCompareModalOpen(false);
+      compareHook.reset();
+    },
+    [activeSession, compareHook, persistTurn]
   );
 
   // Phase 3 B2: Wizard 완료 시 호출 — settings 영속 + 옵션으로 첫 채팅 생성.
@@ -1015,6 +1093,19 @@ export function App(): React.JSX.Element {
         onClose={() => {
           setSlashHelpOpen(false);
         }}
+      />
+      <CompareModal
+        open={compareModalOpen}
+        run={compareHook.run}
+        isRunning={compareHook.isRunning}
+        onClose={() => {
+          setCompareModalOpen(false);
+          compareHook.reset();
+        }}
+        onCancel={() => {
+          void compareHook.cancel();
+        }}
+        onAccept={handleAcceptCompare}
       />
     </>
   );

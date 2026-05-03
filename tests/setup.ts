@@ -103,6 +103,52 @@ type MockStreamEndPayload = { stream_id: string };
 type AiStreamEventListener = (payload: MockStreamEventPayload) => void;
 type AiStreamEndListener = (payload: MockStreamEndPayload) => void;
 
+// ── compare/* (v0.12.0 I) — mock IPC for useCompare / CompareModal tests ──
+type MockCompareSide = 'claude' | 'codex';
+type MockCompareSideStatus =
+  | 'pending'
+  | 'streaming'
+  | 'done'
+  | 'error'
+  | 'skipped';
+type MockCompareRunStatus = 'running' | 'completed' | 'failed';
+interface MockCompareSideResult {
+  status: MockCompareSideStatus;
+  model: string | null;
+  text: string;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+interface MockCompareRun {
+  id: string;
+  session_id: string;
+  prompt: string;
+  workspace_root: string;
+  permission_level: 'read_only' | 'workspace_write' | 'full_access' | 'custom';
+  created_at: string;
+  status: MockCompareRunStatus;
+  claude: MockCompareSideResult;
+  codex: MockCompareSideResult;
+}
+type MockCompareEvent =
+  | { type: 'compare_start'; run_id: string }
+  | {
+      type: 'compare_side_delta';
+      run_id: string;
+      side: MockCompareSide;
+      text_delta: string;
+    }
+  | { type: 'compare_side_done'; run_id: string; side: MockCompareSide }
+  | {
+      type: 'compare_side_error';
+      run_id: string;
+      side: MockCompareSide;
+      error: string;
+    }
+  | { type: 'compare_complete'; run_id: string; run: MockCompareRun };
+type CompareEventListener = (event: MockCompareEvent) => void;
+
 // ── mcp/* (v0.2.0 Issue #5) — mock IPC for useMcp / McpSettings tests ──
 interface MockMcpServerConfig {
   id: string;
@@ -271,6 +317,13 @@ const mockStore = {
   aiEventListeners: new Set<AiStreamEventListener>(),
   aiEndListeners: new Set<AiStreamEndListener>(),
 
+  // ── compare/* (v0.12.0 I) ───────────────────────────────
+  compareRuns: new Map<string, MockCompareRun>(),
+  compareEventListeners: new Set<CompareEventListener>(),
+  compareCancelled: new Set<string>(),
+  compareNextRunId: '0190a0a0-0000-7000-8000-000000000099',
+  compareRunBehavior: 'success' as 'success' | 'fail',
+
   // ── mcp/* (v0.2.0 Issue #5) ───────────────────────────
   // 등록된 MCP 서버 목록 (in-memory). Tests 가 mcpServers 를 미리 채우거나
   // mcpAddBehavior 로 add 시 reject 시뮬레이션 가능.
@@ -339,6 +392,16 @@ function emitAiStreamEnd(payload: MockStreamEndPayload): void {
   }
 }
 
+function emitCompareEvent(event: MockCompareEvent): void {
+  for (const fn of mockStore.compareEventListeners) {
+    try {
+      fn(event);
+    } catch {
+      // ignore listener errors in tests
+    }
+  }
+}
+
 /**
  * Test helper: seed mockStore from a test file.
  *
@@ -356,6 +419,7 @@ export const __mockStore = mockStore;
 export const __emitBrowserUpdate = emitBrowserUpdate;
 export const __emitAiStreamEvent = emitAiStreamEvent;
 export const __emitAiStreamEnd = emitAiStreamEnd;
+export const __emitCompareEvent = emitCompareEvent;
 
 function toMeta(s: Session): MockSessionMeta {
   const meta: MockSessionMeta = {
@@ -391,6 +455,12 @@ beforeEach(() => {
   mockStore.aiStoppedStreams.clear();
   mockStore.aiEventListeners.clear();
   mockStore.aiEndListeners.clear();
+  // v0.12.0 (I) — compare mock state reset.
+  mockStore.compareRuns.clear();
+  mockStore.compareEventListeners.clear();
+  mockStore.compareCancelled.clear();
+  mockStore.compareNextRunId = '0190a0a0-0000-7000-8000-000000000099';
+  mockStore.compareRunBehavior = 'success';
   mockStore.mcpServers.clear();
   mockStore.mcpAddBehavior = 'success';
   mockStore.usageSummary = [];
@@ -1309,6 +1379,91 @@ if (typeof window !== 'undefined') {
             return { ok: true, value: undefined };
           }
         ),
+      },
+
+      // v0.12.0 (I) — Cross-AI Verify/Compare. In-memory mock of the main
+      // orchestrator: tests inject compare events with __emitCompareEvent and
+      // optionally pre-seed __mockStore.compareRuns. compareRunBehavior='fail'
+      // simulates the IPC failing (e.g. zod validation reject).
+      compare: {
+        run: vi.fn(
+          async (args: {
+            session_id: string;
+            prompt: string;
+            workspace_root: string;
+            permission_level?: 'read_only' | 'workspace_write' | 'full_access' | 'custom';
+            claude_model: string;
+            codex_model: string;
+          }): Promise<Result<{ run_id: string }>> => {
+            if (mockStore.compareRunBehavior === 'fail') {
+              return { ok: false, error: 'mock compare fail' };
+            }
+            const id = mockStore.compareNextRunId;
+            const now = new Date().toISOString();
+            const run: MockCompareRun = {
+              id,
+              session_id: args.session_id,
+              prompt: args.prompt,
+              workspace_root: args.workspace_root,
+              permission_level: args.permission_level ?? 'workspace_write',
+              created_at: now,
+              status: 'running',
+              claude: {
+                status: 'pending',
+                model: args.claude_model,
+                text: '',
+                error: null,
+                started_at: null,
+                finished_at: null,
+              },
+              codex: {
+                status: 'pending',
+                model: args.codex_model,
+                text: '',
+                error: null,
+                started_at: null,
+                finished_at: null,
+              },
+            };
+            mockStore.compareRuns.set(id, run);
+            return { ok: true, value: { run_id: id } };
+          }
+        ),
+
+        get: vi.fn(
+          async (runId: string): Promise<Result<MockCompareRun | null>> => ({
+            ok: true,
+            value: mockStore.compareRuns.get(runId) ?? null,
+          })
+        ),
+
+        list: vi.fn(
+          async (
+            sessionId: string,
+            limit?: number
+          ): Promise<Result<MockCompareRun[]>> => {
+            const all = Array.from(mockStore.compareRuns.values()).filter(
+              (r) => r.session_id === sessionId
+            );
+            // DESC by created_at.
+            all.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+            return { ok: true, value: all.slice(0, limit ?? 20) };
+          }
+        ),
+
+        cancel: vi.fn(
+          async (runId: string): Promise<Result<void>> => {
+            mockStore.compareCancelled.add(runId);
+            return { ok: true, value: undefined };
+          }
+        ),
+
+        onStreamEvent: vi.fn((listener: CompareEventListener): (() => void) => {
+          mockStore.compareEventListeners.add(listener);
+          return () => {
+            mockStore.compareEventListeners.delete(listener);
+          };
+        }),
       },
     },
   });

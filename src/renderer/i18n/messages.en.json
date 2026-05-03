@@ -131,5 +131,23 @@
   "onboarding.cli.detecting": "🔍 Detecting CLI...",
   "onboarding.next": "Next →",
   "onboarding.prev": "← Previous",
-  "onboarding.skip": "Skip"
+  "onboarding.skip": "Skip",
+
+  "compare.title": "Compare responses",
+  "compare.prompt.empty": "(no prompt)",
+  "compare.side.claude": "Claude",
+  "compare.side.codex": "Codex",
+  "compare.status.pending": "Pending",
+  "compare.status.streaming": "Streaming",
+  "compare.status.done": "Done",
+  "compare.status.error": "Error",
+  "compare.status.skipped": "Skipped",
+  "compare.text.waiting": "Waiting for response…",
+  "compare.text.streaming": "Starting…",
+  "compare.diff.show": "Show diff",
+  "compare.diff.hide": "Show responses",
+  "compare.diff.empty": "Both responses are empty — nothing to diff.",
+  "compare.accept": "Use this response",
+  "compare.cancel": "Cancel",
+  "compare.close": "Close"
 }
