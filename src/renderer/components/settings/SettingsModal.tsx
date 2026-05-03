@@ -20,7 +20,7 @@
  *  - provider   — radio group + 즉시 영속 (app:set-default-provider)
  *  - permission — default level + capability list (read-only)
  *  - theme      — light/dark/system + 즉시 영속 + data-theme 적용
- *  - keyboard   — placeholder ("v0.10.0 추가 예정")
+ *  - keyboard   — v0.10.0 단축키 사용자 지정 매핑 (KeyboardSettings)
  *  - onboarding — [온보딩 다시 보기] 버튼
  */
 
@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { McpSettingsPanel } from './McpSettings';
 import { UsageSettingsPanel } from './UsageSettings';
+import { KeyboardSettings } from './KeyboardSettings';
 import {
   PERMISSION_LEVEL_LABELS_KO,
   type PermissionLevel,
@@ -158,7 +159,7 @@ export function SettingsModal({
             {activeTab === 'provider' && <ProviderPanel />}
             {activeTab === 'permission' && <PermissionPanel />}
             {activeTab === 'theme' && <ThemePanel />}
-            {activeTab === 'keyboard' && <KeyboardPanel />}
+            {activeTab === 'keyboard' && <KeyboardSettings />}
             {activeTab === 'onboarding' && (
               <OnboardingPanel onReopenOnboarding={onReopenOnboarding} />
             )}
@@ -564,42 +565,11 @@ function ThemePanel(): React.JSX.Element {
 }
 
 // ────────────────────────────────────────────────────────────
-// Keyboard panel — placeholder + 매핑 미리 보기
+// Keyboard panel — KeyboardSettings 컴포넌트로 분리 (v0.10.0).
 // ────────────────────────────────────────────────────────────
-
-const KEY_PREVIEW: ReadonlyArray<{ keys: string; description: string }> = [
-  { keys: 'Ctrl+Enter', description: '메시지 전송' },
-  { keys: 'Ctrl+,', description: '설정 열기' },
-  { keys: 'Ctrl+K', description: '슬래시 명령 도움말' },
-  { keys: '@', description: '파일/세션 멘션' },
-  { keys: 'Esc', description: '입력/모달 취소' },
-];
-
-function KeyboardPanel(): React.JSX.Element {
-  return (
-    <section className="flex-1 overflow-y-auto p-6" data-testid="settings-keyboard-panel">
-      <header className="mb-4">
-        <h3 className="text-base font-semibold">단축키</h3>
-        <p className="text-xs text-text-secondary">v0.10.0 에서 추가됩니다.</p>
-      </header>
-      <div className="rounded-md border border-dashed border-border-primary bg-bg-secondary p-3 text-sm text-text-tertiary">
-        <p className="mb-2">
-          현재 사용 가능한 단축키 (사용자 지정은 v0.10.0 에서 지원 예정):
-        </p>
-        <ul className="space-y-1.5">
-          {KEY_PREVIEW.map((entry) => (
-            <li key={entry.keys} className="flex items-center justify-between gap-2">
-              <span>{entry.description}</span>
-              <kbd className="rounded bg-bg-tertiary px-2 py-0.5 font-mono text-xs text-text-secondary">
-                {entry.keys}
-              </kbd>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
-}
+//
+// 본 모달의 [단축키] 탭이 mount 하는 KeyboardSettings 는 사용자 지정 매핑을
+// IPC 로 영속하고 SHORTCUT_DEFS 를 기반으로 편집/리셋 UI 를 제공한다.
 
 // ────────────────────────────────────────────────────────────
 // Onboarding panel — [온보딩 다시 보기] 버튼

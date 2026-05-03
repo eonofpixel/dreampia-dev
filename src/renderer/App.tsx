@@ -41,6 +41,9 @@ import { useStreamingTurn } from './hooks/useStreamingTurn';
 import { useSessionStore } from './hooks/useSessionStore';
 import { useWorkspace } from './hooks/useWorkspace';
 import { useOnboarding } from './hooks/useOnboarding';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useKeyboardOverrides } from './hooks/useKeyboardOverrides';
+import type { ShortcutAction } from './keyboard/shortcuts';
 
 /**
  * Renderer-side mock fallback gate.
@@ -160,6 +163,8 @@ export function App(): React.JSX.Element {
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTabId>('mcp');
   // v0.5.0 (F-018) — `/help` 슬래시 명령으로 여는 명령어 도움말 모달.
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
+  // v0.10.0 (F-025) — 사이드바 토글. Mod+B 로 표시/숨김.
+  const [sidebarVisible, setSidebarVisible] = useState(true);
   // v0.7.0 (F-026) — Sidebar 메시지 검색 state. 입력은 즉시 반영, 실제 IPC
   // 호출은 300ms debounce 후 별도 useEffect 가 트리거. results / error /
   // loading 은 IPC 응답에 따라 갱신. pendingFocusTurnId 는 사용자가 검색 결과
@@ -775,6 +780,95 @@ export function App(): React.JSX.Element {
     await completeOnboarding();
   }, [completeOnboarding]);
 
+  // ── v0.10.0 (G F-025) — 키보드 단축키 시스템 ──────────────
+  // overrides 는 settings.json 에 영속된 사용자 지정 매핑. SettingsModal
+  // 에서 변경되면 즉시 반영 — useKeyboardOverrides 의 save 가 setOverrides
+  // 호출 후 IPC. App level 의 단축키 dispatcher 는 이 overrides 를 매번
+  // 최신 ref 로 참조 (useKeyboardShortcuts 내부 구현).
+  const { overrides: keyboardOverrides } = useKeyboardOverrides();
+
+  // 단축키 → 핸들러 맵. modal.close 와 chat.cancel 이 같은 Escape 를 공유
+  // 하므로 modal.close handler 안에서 priority chain 을 구현 + chat.cancel
+  // 은 모달이 모두 닫힌 상태에서만 streaming abort. 두 handler 가 모두
+  // 등록되어 있으면 SHORTCUT_DEFS 의 순서 (modal.close 가 chat.cancel 보다
+  // 먼저) 로 dispatch 되지만, 아래 modal.close 에서 모달이 없을 때는 false
+  // 반환으로 다음 handler 가 실행되도록 명시적 chain 을 짠다 — 단순화를
+  // 위해 modal.close handler 가 직접 cancel 도 처리한다.
+  const keyboardHandlers = useMemo<Partial<Record<ShortcutAction, () => void>>>(() => {
+    return {
+      'search.focus': (): void => {
+        const el = document.querySelector<HTMLInputElement>(
+          '[data-testid="sidebar-search-input"]'
+        );
+        if (el !== null) {
+          // 사이드바가 collapse 되어 있으면 먼저 펼쳐 input 이 표시되도록.
+          if (!sidebarVisible) setSidebarVisible(true);
+          // 다음 microtask 에 focus — display:none 직후엔 focus 가 적용 X.
+          requestAnimationFrame(() => {
+            el.focus();
+            el.select();
+          });
+        }
+      },
+      'usage.open': (): void => {
+        setSettingsInitialTab('usage');
+        setSettingsModalOpen(true);
+      },
+      'settings.open': (): void => {
+        setSettingsInitialTab('mcp');
+        setSettingsModalOpen(true);
+      },
+      'chat.new': (): void => {
+        void handleNewChat();
+      },
+      'sidebar.toggle': (): void => {
+        setSidebarVisible((v) => !v);
+      },
+      'help.open': (): void => {
+        setSlashHelpOpen(true);
+      },
+      // Escape 우선순위: open modal > popover > streaming cancel > no-op.
+      // 단일 handler 안에서 chain 을 직접 처리해 SHORTCUT_DEFS 순서 의존을
+      // 줄인다 — chat.cancel handler 는 모달이 없을 때만 실행되도록 modal.close
+      // 가 모달이 있을 때만 close + 그 외엔 cancel 까지 처리.
+      'modal.close': (): void => {
+        if (slashHelpOpen) {
+          setSlashHelpOpen(false);
+          return;
+        }
+        if (settingsModalOpen) {
+          setSettingsModalOpen(false);
+          return;
+        }
+        // 모달이 없으면 Escape 를 streaming cancel 로 사용.
+        if (isStreaming) {
+          cancelStream();
+        }
+      },
+      // chat.cancel 은 above 의 modal.close 가 이미 cancelStream 까지 처리.
+      // 이 handler 는 사실상 dead-code 지만 SHORTCUT_DEFS 표시 / 사용자
+      // override 가능성을 위해 유지. modal.close 와 같은 Escape 를 갖지만
+      // first-match-wins 으로 modal.close 가 항상 먼저 dispatch.
+      'chat.cancel': (): void => {
+        if (isStreaming) cancelStream();
+      },
+    };
+  }, [
+    sidebarVisible,
+    handleNewChat,
+    slashHelpOpen,
+    settingsModalOpen,
+    isStreaming,
+    cancelStream,
+  ]);
+
+  useKeyboardShortcuts({
+    handlers: keyboardHandlers,
+    overrides: keyboardOverrides,
+    // Wizard 활성 중에는 단축키 비활성 (wizard 자체 navigation 우선).
+    enabled: !showOnboarding,
+  });
+
   // Wizard 표시 중일 땐 main 3-panel 도 mount — 사용자가 wizard 끝낸 직후
   // 데이터가 이미 fetch 되어 있도록. wizard 가 z-50 overlay 라 위에 덮인다.
   // 단 onboarding loading 중 (= null) 에는 빈 div 로 splash 처럼 처리해
@@ -798,6 +892,7 @@ export function App(): React.JSX.Element {
         />
       )}
       <ThreePanelLayout
+        sidebarVisible={sidebarVisible}
         sidebar={
           <Sidebar
             sessions={sidebarSessions}

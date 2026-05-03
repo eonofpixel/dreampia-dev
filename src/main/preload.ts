@@ -339,6 +339,9 @@ const ALLOWED_INVOKE_CHANNELS = [
   'app:get-theme',
   'app:set-theme',
   'app:get-permission-capabilities',
+  // v0.10.0 — Settings 모달 [단축키] 탭. action → combo 영속.
+  'app:get-keyboard-shortcuts',
+  'app:set-keyboard-shortcuts',
   'workspace/pick-folder',
   'workspace/get',
   // v0.6.0 (F-019) — @ mention 가 사용하는 file enumeration / read.
@@ -523,6 +526,27 @@ const api = {
         Result<
           Record<'read_only' | 'workspace_write' | 'full_access' | 'custom', string[]>
         >
+      >,
+
+    /**
+     * v0.10.0 — Settings 모달 [단축키] 탭. 사용자 지정 매핑 조회.
+     * 키: ShortcutAction, 값: combo 문자열 ("Mod+K"). 미설정 시 빈 object.
+     */
+    getKeyboardShortcuts: (): Promise<Result<Record<string, string>>> =>
+      ipcRenderer.invoke('app:get-keyboard-shortcuts') as Promise<
+        Result<Record<string, string>>
+      >,
+
+    /**
+     * v0.10.0 — 사용자 지정 매핑 영속. 빈 object 를 보내면 모든 override 제거.
+     * action / combo 형식은 renderer 가 검증하고 main 은 plain string-string
+     * 매핑만 보존.
+     */
+    setKeyboardShortcuts: (
+      overrides: Record<string, string>
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('app:set-keyboard-shortcuts', overrides) as Promise<
+        Result<void>
       >,
   },
 

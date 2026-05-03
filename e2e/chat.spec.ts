@@ -175,4 +175,51 @@ test.describe('chat flow (V2)', () => {
       timeout: 5_000,
     });
   });
+
+  // v0.10.0 (G F-025) — 키보드 단축키 end-to-end.
+  test('keyboard shortcut: Mod+K focuses sidebar search input', async ({ window }) => {
+    // 사이드바 검색 input 이 ready.
+    const searchInput = window.getByTestId('sidebar-search-input');
+    await expect(searchInput).toBeVisible({ timeout: 10_000 });
+
+    // 다른 element 에 focus 를 옮긴 뒤 단축키로 검색으로 가져오는 흐름.
+    // ChatInput 이 mount 안 됐으면 body 에서 시작.
+    await window.evaluate(() => document.body.focus());
+
+    // platform 별 modifier — Playwright 의 'ControlOrMeta' 를 사용하면
+    // macOS 에서 Cmd, 그 외에서 Ctrl 로 자동 매핑.
+    await window.keyboard.press('ControlOrMeta+K');
+
+    // 검색 input 으로 focus 이동.
+    await expect(searchInput).toBeFocused({ timeout: 3_000 });
+  });
+
+  test('keyboard shortcut: Mod+, opens settings modal (mcp tab)', async ({ window }) => {
+    await expect(window.getByTestId('sidebar-search-input')).toBeVisible({
+      timeout: 10_000,
+    });
+    await window.evaluate(() => document.body.focus());
+
+    await window.keyboard.press('ControlOrMeta+,');
+
+    await expect(window.getByTestId('settings-modal')).toBeVisible({ timeout: 5_000 });
+    await expect(window.getByTestId('settings-panel-mcp')).toBeVisible();
+  });
+
+  test('keyboard shortcut: Esc closes top-most modal', async ({ window }) => {
+    await expect(window.getByTestId('sidebar-search-input')).toBeVisible({
+      timeout: 10_000,
+    });
+    await window.evaluate(() => document.body.focus());
+
+    // 1) Mod+, 로 settings 모달 열기.
+    await window.keyboard.press('ControlOrMeta+,');
+    await expect(window.getByTestId('settings-modal')).toBeVisible({ timeout: 5_000 });
+
+    // 2) Escape 로 닫기.
+    await window.keyboard.press('Escape');
+    await expect(window.getByTestId('settings-modal')).not.toBeVisible({
+      timeout: 3_000,
+    });
+  });
 });

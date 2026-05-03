@@ -97,6 +97,13 @@ export interface AppSettings {
    * 미설정 시 0.8 default. 한도 미설정 시엔 의미 없음.
    */
   usage_alert_threshold?: number;
+  /**
+   * v0.10.0 — 사용자가 [단축키] 패널에서 변경한 키 매핑.
+   * 키: ShortcutAction (e.g. 'search.focus'), 값: combo 문자열 ("Mod+K").
+   * 미설정 시 SHORTCUT_DEFS 의 default 사용. 본 필드는 plain object —
+   * IPC 직렬화 안전. 알 수 없는 액션은 silent drop.
+   */
+  keyboard_shortcut_overrides?: Record<string, string>;
 }
 
 let cached: AppSettings | null = null;
@@ -169,6 +176,25 @@ export function readSettings(): AppSettings {
         obj['usage_alert_threshold'] <= 1
       ) {
         next.usage_alert_threshold = obj['usage_alert_threshold'];
+      }
+      // v0.10.0 — keyboard_shortcut_overrides. plain Record<string,string>.
+      // string 키 / string 값만 보존, 그 외 (number / object / null) 은 drop.
+      // 빈 string 값도 silent drop — 의미 없는 매핑이 영속되지 않도록.
+      if (
+        obj['keyboard_shortcut_overrides'] !== null &&
+        typeof obj['keyboard_shortcut_overrides'] === 'object' &&
+        !Array.isArray(obj['keyboard_shortcut_overrides'])
+      ) {
+        const raw = obj['keyboard_shortcut_overrides'] as Record<string, unknown>;
+        const validated: Record<string, string> = {};
+        for (const [k, v] of Object.entries(raw)) {
+          if (typeof k === 'string' && k.length > 0 && typeof v === 'string' && v.length > 0) {
+            validated[k] = v;
+          }
+        }
+        if (Object.keys(validated).length > 0) {
+          next.keyboard_shortcut_overrides = validated;
+        }
       }
       cached = next;
     } else {

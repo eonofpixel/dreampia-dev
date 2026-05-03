@@ -591,6 +591,49 @@ export function registerIpcHandlers(
     }
   );
 
+  // v0.10.0 — Settings 모달 [단축키] 탭. 사용자 지정 매핑 (action → combo).
+  // GET 은 settings.json 의 keyboard_shortcut_overrides 를 그대로 반환 — 미설정
+  // 시 빈 object. Renderer 의 useKeyboardShortcuts 가 default 와 merge.
+  ipcMain.handle(
+    'app:get-keyboard-shortcuts',
+    (): Result<Record<string, string>> => {
+      try {
+        const settings = readSettings();
+        return ok(settings.keyboard_shortcut_overrides ?? {});
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  // SET 은 plain Record<string,string> 으로 검증. 빈 object 는 모든 override
+  // 제거 = default 복원. action / combo 형식 검증은 renderer 가 책임 — main
+  // 은 단순 영속 layer (corrupt-tolerant: 빈 키/값 drop, 그 외는 그대로 저장).
+  ipcMain.handle(
+    'app:set-keyboard-shortcuts',
+    (_evt, raw: unknown): Result<void> => {
+      try {
+        if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+          throw new Error('keyboard_shortcut_overrides must be a plain object');
+        }
+        const obj = raw as Record<string, unknown>;
+        const validated: Record<string, string> = {};
+        for (const [k, v] of Object.entries(obj)) {
+          if (typeof k !== 'string' || k.length === 0) continue;
+          if (typeof v !== 'string' || v.length === 0) continue;
+          // 키 / 값 길이 상한 — 의도치 않은 거대 payload 차단.
+          if (k.length > 64) continue;
+          if (v.length > 64) continue;
+          validated[k] = v;
+        }
+        writeSettings({ keyboard_shortcut_overrides: validated });
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
   ipcMain.handle('app:get-default-workspace', (): Result<WorkspaceInfo | null> => {
     try {
       // 사용자가 picker 로 선택한 경로가 있으면 우선.

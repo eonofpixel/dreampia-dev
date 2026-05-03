@@ -210,6 +210,8 @@ const mockStore = {
   // theme 기본값은 'system' (main side 와 동일). capabilities 는 LEVEL_CAPABILITIES
   // 의 단순 mirror — 테스트가 customize 가능.
   theme: 'system' as 'light' | 'dark' | 'system',
+  // v0.10.0 — 사용자 지정 단축키 매핑. 비어 있으면 default 사용.
+  keyboardShortcuts: {} as Record<string, string>,
   permissionCapabilities: {
     read_only: ['LOCAL_READ', 'NETWORK_LOCAL', 'NETWORK_AI', 'SYSTEM_NOTIFICATION'],
     workspace_write: [
@@ -409,6 +411,8 @@ beforeEach(() => {
   mockStore.defaultPermissionLevel = 'workspace_write';
   // v0.8.0 — theme 도 매 테스트마다 default 로 reset.
   mockStore.theme = 'system';
+  // v0.10.0 — keyboard shortcuts overrides 도 reset.
+  mockStore.keyboardShortcuts = {};
   // Phase 3 B2: vi.fn 의 call history 도 매 테스트마다 초기화. 그렇지 않으면
   // `expect(mock).toHaveBeenCalled()` 가 이전 테스트의 잔여 호출 때문에
   // 즉시 true 가 되어 waitFor 가 실제 호출을 기다리지 않는다.
@@ -473,6 +477,13 @@ beforeEach(() => {
       )?.mockClear?.();
       (
         appApi.getPermissionCapabilities as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
+      // v0.10.0 — keyboard shortcuts mock clear.
+      (
+        appApi.getKeyboardShortcuts as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
+      (
+        appApi.setKeyboardShortcuts as unknown as { mockClear?: () => void } | undefined
       )?.mockClear?.();
     }
     const ai = window.dreampia.ai;
@@ -620,6 +631,22 @@ if (typeof window !== 'undefined') {
               custom: [...mockStore.permissionCapabilities.custom],
             },
           })
+        ),
+
+        // v0.10.0 — Settings 모달 [단축키] 탭. mockStore.keyboardShortcuts 가
+        // 사용자 지정 매핑 — 비어 있으면 default 사용 (renderer side merge).
+        getKeyboardShortcuts: vi.fn(
+          async (): Promise<Result<Record<string, string>>> => ({
+            ok: true,
+            value: { ...mockStore.keyboardShortcuts },
+          })
+        ),
+
+        setKeyboardShortcuts: vi.fn(
+          async (overrides: Record<string, string>): Promise<Result<void>> => {
+            mockStore.keyboardShortcuts = { ...overrides };
+            return { ok: true, value: undefined };
+          }
         ),
       },
 

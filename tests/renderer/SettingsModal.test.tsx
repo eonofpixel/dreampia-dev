@@ -126,13 +126,20 @@ describe('SettingsModal (v0.8.0)', () => {
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
   });
 
-  it('Keyboard panel shows v0.10.0 placeholder + key preview', async () => {
+  it('Keyboard panel mounts KeyboardSettings with all SHORTCUT_DEFS rows', async () => {
     render(<SettingsModal open={true} onClose={() => {}} initialTab="keyboard" />);
     await waitFor(() => {
       expect(screen.getByTestId('settings-keyboard-panel')).toBeInTheDocument();
     });
-    expect(screen.getByText(/v0\.10\.0 에서 추가됩니다/i)).toBeInTheDocument();
-    expect(screen.getByText(/Ctrl\+Enter/i)).toBeInTheDocument();
+    // v0.10.0 — placeholder 가 KeyboardSettings 로 교체. 행이 표시되는지 검증.
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('settings-keyboard-row-search.focus')
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.getByTestId('settings-keyboard-row-modal.close')
+    ).toBeInTheDocument();
   });
 
   it('Onboarding panel calls onReopenOnboarding when button clicked', async () => {

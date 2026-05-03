@@ -2,6 +2,128 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [0.10.0] — 2026-05-03
+
+**Feature release — G (F-025 키보드 단축키): power-user UX 완성.**
+
+Codex 권고 v0.10.0. v0.7.0 FTS 검색 / v0.9.0 사용량 가시성을 토대로 Cmd+K /
+Cmd+U / Esc 등 핵심 단축키를 얹어 마우스 없는 navigation 을 가능하게 했다.
+한글 IME composition 중 단축키 충돌은 `e.isComposing` + keyCode 229 이중
+가드로 차단, macOS Cmd / Windows Ctrl 매핑은 "Mod" 토큰을 platform 별로
+auto-resolve 해 같은 정의 한 벌로 양쪽 OS 를 커버한다. 사용자는 Settings
+모달의 [단축키] 탭에서 모든 액션의 매핑을 자유롭게 변경할 수 있고, 충돌
+검출 + 기본값 복원 + 전체 초기화까지 지원한다.
+
+### Added
+
+- **`src/renderer/keyboard/shortcuts.ts`** — 단축키 시스템의 single-source-of-
+  truth. 8개 액션 (`search.focus`, `sidebar.toggle`, `settings.open`,
+  `usage.open`, `chat.new`, `help.open`, `modal.close`, `chat.cancel`) 의
+  default + 라벨 + 설명 + 카테고리 정의. `parseShortcut` / `matchesShortcut`
+  / `formatShortcut` / `canonicalizeKeyEvent` / `shortcutsEqual` /
+  `isMacOS` 함수 제공. "Mod" 토큰은 macOS 에서 ⌘ (Meta), 그 외엔 Ctrl 로
+  resolve. macOS 표시는 ⌃ ⌥ ⇧ ⌘ 기호 (Apple HIG 순서), 그 외는
+  "Ctrl+Shift+K" 형태.
+- **`src/renderer/hooks/useKeyboardShortcuts.ts`** — 전역 keydown listener
+  hook. App.tsx 에서 한 번만 mount 되어 SHORTCUT_DEFS 의 정의를 기반으로
+  매 키 이벤트를 매칭. **IME 안전**: `e.isComposing` 또는 `e.keyCode === 229`
+  검출 시 즉시 무시. **Editable element 가드**: input/textarea/contentEditable
+  안에서는 Mod 가 없는 단순 글자키는 무시 (텍스트 입력 충돌 방지),
+  단 Escape 와 Mod 조합은 항상 통과. `enabled=false` 로 wizard 활성 중에는
+  전체 비활성. `overrides` 가 default 를 override.
+- **`src/renderer/hooks/useKeyboardOverrides.ts`** — 사용자 지정 매핑을
+  IPC 로 fetch + save. preload 미지원 시 빈 object → 모든 단축키 default
+  사용 (graceful degrade).
+- **`src/renderer/components/settings/KeyboardSettings.tsx`** — Settings
+  모달 [단축키] 탭의 활성 패널. 카테고리별 (탐색 / 설정 / 채팅 / 모달)
+  그룹핑 + 각 행의 [편집] / [기본값 복원] / [전체 초기화] 버튼. [편집]
+  클릭 시 inline capture 모드 — 다음 keydown 이벤트를 캡처해 영속.
+  충돌 검출 (다른 액션의 매핑과 같으면 reject + 한국어 error 메시지).
+  default 와 같은 값을 입력하면 override 자체를 저장 안 함 (minimal 영속).
+  헬프 라인: "Mod = ⌘ Cmd (macOS) / Ctrl (Windows / Linux)".
+- **`AppSettings.keyboard_shortcut_overrides` 필드** — `Record<string,string>`
+  영속. 알 수 없는 / 비-string / 빈 값 / 64자 초과 키/값은 silent drop
+  (corrupt-tolerant 패턴 유지).
+- **신규 IPC channel `app:get-keyboard-shortcuts` / `app:set-keyboard-shortcuts`**
+  — plain object 검증, 빈 object 로 reset 지원.
+- **App.tsx 의 단축키 wiring** — `keyboardHandlers` map 에서 `search.focus`
+  (sidebar 검색 input focus + 사이드바 collapse 시 자동 펼침), `settings.open` /
+  `usage.open` (SettingsModal 의 해당 탭으로 진입), `chat.new`, `sidebar.toggle`
+  (Mod+B), `help.open`, `modal.close` (priority chain: slash help > settings >
+  streaming cancel) handler 정의. `useKeyboardShortcuts` 가 wizard 비활성 중
+  에만 enabled.
+- **ThreePanelLayout `sidebarVisible` prop** — Mod+B 단축키로 사이드바 자리를
+  0px 로 collapse, chat 이 그 자리를 차지. `data-sidebar-visible` attribute
+  로 e2e 검증 가능.
+- **SlashHelpModal — "키보드 단축키" 섹션** — 슬래시 명령 표 아래에 모든
+  SHORTCUT_DEFS 를 platform-specific 형태로 표시. 사용자 override 가 있으면
+  그 값을 우선 표시.
+- **`tests/renderer/keyboard/shortcuts.test.ts`** — 31 tests. parseShortcut /
+  matchesShortcut (macOS Mod=Meta, 그 외 Mod=Ctrl) / formatShortcut (⌘K vs
+  Ctrl+K) / canonicalizeKeyEvent / shortcutsEqual / isMacOS / SHORTCUT_DEFS
+  shape.
+- **`tests/renderer/hooks/useKeyboardShortcuts.test.tsx`** — 11 tests. Mod+K
+  fires / IME 가드 (isComposing + keyCode 229) / textarea 안 가드 / Escape
+  always fires / overrides 적용 / enabled=false 무시 / first-match-wins
+  (modal.close 가 chat.cancel 보다 우선).
+- **`tests/renderer/KeyboardSettings.test.tsx`** — 8 tests. 8 행 표시 /
+  default 표시 (Ctrl+K) / overrides 반영 / [편집] capture 모드 / 캡처된
+  combo IPC 영속 / [전체 초기화] / [개별 reset] / 충돌 검출.
+- **`tests/renderer/App.shortcuts.test.tsx`** — 8 tests. Mod+K → search
+  focus / Mod+, → settings (mcp) / Mod+U → settings (usage) / Mod+/ →
+  slash help / Esc → 모달 닫기 / Mod+B → sidebar toggle / IME 가드 /
+  사용자 override 반영.
+- **`tests/main/settings.keyboard.test.ts`** — 7 tests. 미설정 default /
+  valid round-trip / non-string drop / 빈 값 drop / 잘못된 root (array /
+  null) drop / 다른 settings 와 coexistence.
+- **`tests/main/ipc.keyboard-shortcuts.test.ts`** — 10 tests. 채널 등록 /
+  빈 default / round-trip / array / null reject / non-string silent drop /
+  빈 string drop / 빈 object reset / 길이 상한 / 다중 write 일관성.
+- **e2e `chat.spec.ts` keyboard tests** — 3 tests. Mod+K focuses 검색
+  input / Mod+, opens settings (mcp) / Esc closes settings.
+
+### Changed
+
+- **`src/main/preload.ts`** — `app:get-keyboard-shortcuts` /
+  `app:set-keyboard-shortcuts` whitelist + `app.getKeyboardShortcuts()` /
+  `app.setKeyboardShortcuts()` 메서드 노출.
+- **`src/main/settings.ts`** — `keyboard_shortcut_overrides` 필드 + read /
+  write validation (key/value 둘 다 non-empty string + 64자 이하).
+- **`src/main/ipc.ts`** — 두 신규 keyboard handler 등록.
+- **`src/renderer/components/settings/SettingsModal.tsx`** — [단축키] 탭의
+  placeholder `KeyboardPanel` 을 `KeyboardSettings` 컴포넌트로 교체. `KEY_PREVIEW`
+  상수와 placeholder 텍스트 제거.
+- **`src/renderer/components/chat/SlashHelpModal.tsx`** — 모달 제목을
+  "슬래시 명령" → "슬래시 명령 & 단축키" 로 확장. 키보드 단축키 표 추가
+  + IPC 로 사용자 override fetch (open 시).
+- **`src/renderer/components/layout/ThreePanelLayout.tsx`** — `sidebarVisible`
+  prop 추가, false 시 grid-cols 의 사이드바 자리를 0px 로 collapse +
+  `aria-hidden`.
+- **`src/renderer/App.tsx`** — `useKeyboardShortcuts` + `useKeyboardOverrides`
+  wiring. `sidebarVisible` state + Mod+B 토글. SHORTCUT_DEFS 순서로
+  modal.close 가 chat.cancel 보다 먼저 dispatch — Escape 의 priority chain
+  (slash help > settings modal > streaming cancel) 을 modal.close handler
+  안에서 단일 화 처리.
+- **`tests/setup.ts`** — `mockStore.keyboardShortcuts` 추가, `app.getKeyboardShortcuts`
+  / `app.setKeyboardShortcuts` mock 노출 + reset.
+- **`tests/renderer/SettingsModal.test.tsx`** — Keyboard panel placeholder
+  expectation 을 KeyboardSettings 의 row 검증으로 교체 (회귀 fix).
+
+### Fixed
+
+- **단축키 default 충돌 해결** — `modal.close` 와 `chat.cancel` 모두 Escape
+  를 default 로 갖지만, SHORTCUT_DEFS 안에서 modal.close 를 먼저 등록해
+  first-match-wins 정책 하에 modal.close 가 항상 dispatch 되도록. modal.close
+  handler 가 priority chain (slash help > settings > streaming cancel) 을
+  단일 화 처리.
+
+### Compatibility
+
+- 기존 v0.9.0 까지의 settings.json 은 `keyboard_shortcut_overrides` 가
+  없는 상태로 그대로 호환 — 모든 단축키가 default 로 동작.
+- preload IPC 미존재 (옛 빌드) 환경에서도 단축키는 default 로 동작 —
+  사용자 지정만 silently no-op.
+
 ## [0.9.0] — 2026-05-03
 
 **Feature release — F (Usage 보강) + E (MCP discovery): 운영 가시성 강화.**
