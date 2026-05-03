@@ -14,6 +14,18 @@
 첫 공식 릴리스 — Phase 1 + Phase 2 완료. 684 vitest + 19 Playwright E2E 통과.
 자세한 내용은 [CHANGELOG.md](./CHANGELOG.md) 참조.
 
+> ⚠ **v0.1.0 은 early adopter release — unsigned build**.
+>
+> 코드서명 인증서 (Win publisher cert / Apple Developer ID) 가 아직 설정 안
+> 되어 있어 **"확인되지 않은 발행자" 경고**가 표시됩니다. 무시하고 설치
+> 가능합니다.
+>
+> - **macOS**: `시스템 환경설정 → 보안 및 개인정보 보호 → "확인 없이 열기"`
+> - **Windows**: `더 많이 → 실행` (SmartScreen 우회)
+>
+> Production-grade signed build 는 v1.0.0 이후 예정. 현재는 Phase 4 / Phase 5
+> 작업 중인 0.x experimental 단계입니다 (SemVer 0.x — breaking change 가능).
+
 ---
 
 ## 🎯 한 줄 요약

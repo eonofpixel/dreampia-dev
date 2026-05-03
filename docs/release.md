@@ -83,13 +83,62 @@ npm version minor   # 0.1.0 → 0.2.0 (기능 추가)
 git push origin main --follow-tags
 ```
 
-### 4. workflow_dispatch (수동 테스트)
+### 4. workflow_dispatch (수동 테스트 — 첫 release 전 권장)
 
-Code signing 환경 검증 시 secrets 만 설정 후:
-- GitHub Actions → Release workflow → Run workflow
-- tag input: `v0.1.0-test` 같은 임시 tag (이미 git tag 로 존재해야 한다 —
-  workflow 가 그 ref 를 checkout 해서 빌드한다)
-- artifacts 다운로드 후 검증 → 이상 없으면 진짜 tag push
+★ **첫 release 전 dry-run 권장**: 진짜 tag push 전 `release.yml` 이 정상
+   동작하는지 검증. unsigned + secrets 없는 환경에서도 빌드 자체는 성공해야
+   함.
+
+```bash
+# 1. dry-run 용 tag (실제 release 와 분리)
+git tag -a v0.1.0-rc1 -m 'Dry-run for v0.1.0'
+git push origin v0.1.0-rc1
+
+# 2. GitHub Actions UI:
+#    Repository → Actions → Release workflow → Run workflow 버튼
+#    Branch: main, tag input: v0.1.0-rc1
+#    → 60분 내 빌드 완료 (3 OS matrix)
+
+# 3. 실패 시:
+#    - artifact 로그 확인
+#    - release.yml 수정 → push → 재실행
+#    - dry-run tag 삭제 가능: git tag -d v0.1.0-rc1 && git push origin :refs/tags/v0.1.0-rc1
+
+# 4. 성공 시:
+#    - 진짜 v0.1.0 tag push
+#    - GitHub Release 자동 발행
+
+# Tip: workflow_dispatch 는 GitHub Release 를 항상 발행하지 않고
+# artifacts 만 14일 보존 (release.yml `if: workflow_dispatch` 분기).
+# 진짜 release 는 push trigger (`tags: v*`) 로만 발행됨.
+```
+
+### 5. v0.1.0 unsigned early adopter release
+
+★ **현재 권장 패턴** — secrets/icons 미준비 상태에서도 release 가능:
+
+```bash
+# 1. (선택) workflow_dispatch dry-run 으로 release.yml 검증
+git tag -a v0.1.0-rc1 -m 'Dry-run for v0.1.0'
+git push origin v0.1.0-rc1
+# → GitHub Actions UI 에서 수동 trigger → 빌드 성공 확인
+
+# 2. 진짜 v0.1.0 tag push
+git tag -a v0.1.0 -m 'Release v0.1.0 — Phase 1+2+3 B1/B2 complete'
+git push origin main
+git push origin v0.1.0
+# → GitHub Actions release.yml 자동 trigger → 60분 내 GitHub Release 발행
+
+# 3. 다운로드 + 사용자 시각 검증 + 피드백 수렴
+```
+
+**v0.1.0 알려진 한계** (README 에도 명시):
+- Unsigned: macOS/Windows 가 "확인되지 않은 발행자" 경고 표시
+- Unbranded: SVG 아이콘 source 만 있고 .icns/.ico/.png 미생성 → 기본 Electron icon
+- Auto-update: 작동 (electron-updater) 하지만 signature mismatch 시 v0.1.1 자동 업데이트 실패 가능
+
+이 모든 한계는 **v1.0.0 진입 전 (Phase 4/5)** 디자인 + 인증서 + signed
+release 로 해결.
 
 ## 자동 업데이트
 
