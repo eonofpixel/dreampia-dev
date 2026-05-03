@@ -4,7 +4,17 @@
 
 ## [0.1.0] — 2026-05-03
 
-첫 공식 릴리스. Phase 1 + Phase 2 완료 (Codex audit GO 판정).
+**첫 unsigned early adopter build (Linux + Windows only).**
+
+> macOS DMG 는 v0.1.1 에서 추가 예정 (publish race condition fix 대기).
+> Phase 1 + Phase 2 + Phase 3 B1/B2 완료. Codex audit GO 판정.
+
+### Distributed Artifacts
+
+- ✅ Linux AppImage (`Dreampia-Dev-0.1.0-x86_64.AppImage`)
+- ✅ Linux Debian (`Dreampia-Dev-0.1.0-amd64.deb`)
+- ✅ Windows NSIS (`Dreampia-Dev-Setup-0.1.0-x64.exe`)
+- ⏳ macOS DMG — v0.1.1 예정 (race condition fix 후)
 
 ### Added
 

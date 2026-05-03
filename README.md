@@ -15,8 +15,19 @@
 production-grade release 가 아닙니다.** 폭넓은 홍보 대상보다 **10-30명의
 초기 피드백 수렴** 을 목표로 합니다.
 
+### 🔽 다운로드
+
+[GitHub Releases v0.1.0](https://github.com/eonofpixel/dreampia-dev/releases/tag/v0.1.0)
+
+| 플랫폼 | 파일 | 상태 |
+|--------|------|------|
+| 🐧 Linux | `Dreampia-Dev-0.1.0-x86_64.AppImage` | ✅ |
+| 🐧 Linux Debian | `Dreampia-Dev-0.1.0-amd64.deb` | ✅ |
+| 🖥 Windows | `Dreampia-Dev-Setup-0.1.0-x64.exe` | ✅ |
+| 🍎 macOS | DMG | ⏳ v0.1.1 (race condition fix 대기) |
+
 진척:
-- Phase 1 + Phase 2 완료. 684 vitest + 19 Playwright E2E 통과.
+- Phase 1 + Phase 2 + Phase 3 B1/B2 완료. 684 vitest + 19 Playwright E2E 통과.
 - 자세한 내용은 [CHANGELOG.md](./CHANGELOG.md) 참조.
 
 > ⚠ **unsigned build — "확인되지 않은 발행자" 경고 표시**.
