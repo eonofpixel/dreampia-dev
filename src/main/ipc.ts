@@ -51,6 +51,7 @@ import type {
   SessionLock,
   SessionMeta,
   SessionStore,
+  TurnSearchResult,
   UsageEvent,
   UsageProvider,
   UsageRangeFilter,
@@ -105,6 +106,16 @@ const ConversationPatchSchema = z
     current_model: z.string().min(1).optional(),
     current_effort: EffortLevelSchema.optional(),
     current_mode: ChatModeSchema.optional(),
+  })
+  .strict();
+
+// v0.7.0 (F-026) — Sidebar 검색 입력. 사용자 input 이라 length / max 모두
+// 강제. 200 자 이상은 의미 없는 query (paste accident) 로 판단해 거절.
+// limit 은 renderer 가 일관된 paging 정책 (max 100) 을 갖도록 강제.
+const SearchTurnsArgsSchema = z
+  .object({
+    q: z.string().min(1).max(200),
+    limit: z.number().int().positive().max(100).optional(),
   })
   .strict();
 
@@ -834,6 +845,21 @@ function registerSessionHandlers(store: SessionStore): void {
           throw new Error(`Cannot update conversation: session ${sessionId} not found`);
         }
         return ok(reloaded);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  // v0.7.0 (F-026) — Sidebar 검색 입력 → BM25 ranked turn matches across all
+  // sessions. Renderer 는 결과를 클릭해 해당 turn 으로 scroll.
+  // q 는 trim+1자 이상, 200자 미만, limit 은 100 미만 으로 Zod 가 강제.
+  ipcMain.handle(
+    'session/search',
+    (_evt, raw: unknown): Result<TurnSearchResult[]> => {
+      try {
+        const { q, limit } = SearchTurnsArgsSchema.parse(raw);
+        return ok(store.searchTurns(q, limit ?? 50));
       } catch (err) {
         return fail(err);
       }

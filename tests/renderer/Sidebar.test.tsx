@@ -125,7 +125,9 @@ describe('Sidebar', () => {
     render(
       <Sidebar sessions={[]} onSelectSession={() => {}} onNewChat={() => {}} />
     );
-    expect(screen.getByText('검색')).toBeInTheDocument();
+    // v0.7.0 (F-026) — `검색` placeholder 였던 nav item 은 SearchSection 으로 교체.
+    // 이제 검색은 input 의 aria-label 로 표현된다 (`메시지 검색`).
+    expect(screen.getByLabelText('메시지 검색')).toBeInTheDocument();
     expect(screen.getByText('플러그인')).toBeInTheDocument();
     expect(screen.getByText('자동화')).toBeInTheDocument();
     expect(screen.getByText('프로젝트')).toBeInTheDocument();

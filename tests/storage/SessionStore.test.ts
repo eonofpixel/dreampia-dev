@@ -67,8 +67,9 @@ describe('SessionStore', () => {
   describe('migrations', () => {
     it('apply on a fresh DB and report schema_version = LATEST', () => {
       expect(store.getSchemaVersion()).toBe(LATEST_SCHEMA_VERSION);
-      // 1 → 2 in SS-5 (002_locks.sql), 2 → 3 in v0.4.0 (003_usage_events.sql).
-      expect(store.getSchemaVersion()).toBe(3);
+      // 1 → 2 in SS-5 (002_locks.sql), 2 → 3 in v0.4.0 (003_usage_events.sql),
+      // 3 → 4 in v0.7.0 (004_fts5_turns.sql for chat search).
+      expect(store.getSchemaVersion()).toBe(4);
     });
 
     it('are idempotent — re-opening the same DB does not reapply', () => {
@@ -77,7 +78,7 @@ describe('SessionStore', () => {
       // verify the constructor itself is idempotent: calling migrate via
       // a second SessionStore on the same path is what real apps do.
       // For :memory: we can only assert the version stays stable.
-      expect(store.getSchemaVersion()).toBe(3);
+      expect(store.getSchemaVersion()).toBe(4);
     });
 
     it('creates session_locks table at v2 (SS-5)', () => {
@@ -683,7 +684,8 @@ describe('SessionStore', () => {
       fileStore = new SessionStore(dbPath);
       const original = loadFixture('02-single-turn.json');
       fileStore.createSession(original);
-      expect(fileStore.getSchemaVersion()).toBe(3);
+      // v0.7.0 (F-026) — schema version bumped to 4 (FTS5 turns search).
+      expect(fileStore.getSchemaVersion()).toBe(LATEST_SCHEMA_VERSION);
       fileStore.close();
 
       // DB file must exist on disk
@@ -691,7 +693,7 @@ describe('SessionStore', () => {
 
       // Reopen and verify session round-trips
       fileStore = new SessionStore(dbPath);
-      expect(fileStore.getSchemaVersion()).toBe(3); // migration is idempotent
+      expect(fileStore.getSchemaVersion()).toBe(LATEST_SCHEMA_VERSION); // migration is idempotent
       const reloaded = fileStore.getSession(original.id);
       expect(reloaded).toEqual(original);
     });

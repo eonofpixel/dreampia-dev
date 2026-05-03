@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ThreePanelLayout } from './components/layout/ThreePanelLayout';
 import { Sidebar } from './components/sidebar/Sidebar';
+import type { SearchResultEntry } from './components/sidebar/SearchSection';
 import { ChatPanel, type CliStatus } from './components/chat/ChatPanel';
 import type { ResolverContext } from './mentions/resolver';
 import { PreviewPanel } from './components/preview/PreviewPanel';
@@ -157,6 +158,15 @@ export function App(): React.JSX.Element {
   const [usageSettingsOpen, setUsageSettingsOpen] = useState(false);
   // v0.5.0 (F-018) — `/help` 슬래시 명령으로 여는 명령어 도움말 모달.
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
+  // v0.7.0 (F-026) — Sidebar 메시지 검색 state. 입력은 즉시 반영, 실제 IPC
+  // 호출은 300ms debounce 후 별도 useEffect 가 트리거. results / error /
+  // loading 은 IPC 응답에 따라 갱신. pendingFocusTurnId 는 사용자가 검색 결과
+  // 를 클릭한 직후 ChatPanel 이 해당 turn 으로 scroll 하도록 보관.
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResultEntry[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [pendingFocusTurnId, setPendingFocusTurnId] = useState<string | null>(null);
   // Phase 3 audit (HIGH): picker auto-launch 가 사용자 취소 시 무한루프 방지.
   // Phase 3 B2: useState + useRef 이중 보호 — useState 는 React deps 에 반영,
   // useRef 는 같은 commit 내 빠른 연속 effect 실행에도 즉시 차단.
@@ -326,6 +336,78 @@ export function App(): React.JSX.Element {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // v0.7.0 (F-026) — Sidebar 검색 입력 → debounced IPC 호출. q 가 빈 문자열일
+  // 땐 즉시 results 를 비우고 loading/error 도 초기화 (사용자가 X 로 입력을
+  // 지웠을 때 stale state 가 남지 않도록). 300ms debounce 는 keystroke 마다
+  // FTS5 query 가 spam 되는 걸 막는다 (slash command popover 와 동일 값).
+  // cancelled flag 로 race 방어 — 두 input 이 빠르게 연속 입력될 때 첫 응답이
+  // 더 늦게 오더라도 두 번째 응답으로 덮어쓰지 않는다.
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length === 0) {
+      setSearchResults([]);
+      setSearchError(null);
+      setSearchLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSearchLoading(true);
+    const timer = setTimeout(() => {
+      const sessApi =
+        typeof window !== 'undefined' ? window.dreampia?.session : undefined;
+      // search method 가 미정 (구버전 preload, 또는 mock 미설정) 이면 silent
+      // fallback — UI 는 빈 결과 + loading=false 로 종료.
+      if (sessApi === undefined || typeof sessApi.search !== 'function') {
+        if (!cancelled) {
+          setSearchResults([]);
+          setSearchError(null);
+          setSearchLoading(false);
+        }
+        return;
+      }
+      void sessApi
+        .search({ q })
+        .then((r) => {
+          if (cancelled) return;
+          if (r.ok) {
+            setSearchResults(r.value);
+            setSearchError(null);
+          } else {
+            setSearchResults([]);
+            setSearchError(String(r.error));
+          }
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          setSearchResults([]);
+          setSearchError(err instanceof Error ? err.message : String(err));
+        })
+        .finally(() => {
+          if (!cancelled) setSearchLoading(false);
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
+  // v0.7.0 (F-026) — 검색 결과 클릭 → 활성 세션 전환 + scroll target 보관.
+  // ChatPanel 이 다음 render cycle 에 pendingFocusTurnId 를 보고 scrollIntoView.
+  const handleSearchResultClick = useCallback(
+    (sessionId: string, turnId: string): void => {
+      setActiveSessionId(sessionId);
+      setPendingFocusTurnId(turnId);
+    },
+    []
+  );
+
+  // ChatPanel 의 onTurnFocused — scroll 끝나면 pendingFocusTurnId 를 비워야
+  // 다음 검색 클릭이 다시 동작.
+  const handleTurnFocused = useCallback((): void => {
+    setPendingFocusTurnId(null);
   }, []);
 
   // Streaming pattern (see useSessionStore for rationale):
@@ -672,6 +754,12 @@ export function App(): React.JSX.Element {
               // v0.4.0 — token / cost 모달 열기.
               setUsageSettingsOpen(true);
             }}
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            searchResults={searchResults}
+            searchLoading={searchLoading}
+            searchError={searchError}
+            onSearchResultClick={handleSearchResultClick}
           />
         }
         chat={
@@ -701,6 +789,8 @@ export function App(): React.JSX.Element {
             {...(mentionResolverContext !== undefined && {
               mentionResolverContext,
             })}
+            pendingFocusTurnId={pendingFocusTurnId}
+            onTurnFocused={handleTurnFocused}
           />
         }
         preview={

@@ -50,9 +50,9 @@ describe('UsageStore', () => {
   // ── Migration ─────────────────────────────────────────────
 
   describe('migration', () => {
-    it('applies migration 003 → schema_version = 3', () => {
+    it('applies migration up to LATEST_SCHEMA_VERSION', () => {
+      // v0.4.0 = 3 (usage_events). v0.7.0 = 4 (turns_fts FTS5).
       expect(store.getSchemaVersion()).toBe(LATEST_SCHEMA_VERSION);
-      expect(store.getSchemaVersion()).toBe(3);
     });
 
     it('creates usage_events table', () => {
@@ -75,10 +75,10 @@ describe('UsageStore', () => {
       expect(names).toContain('idx_usage_events_model');
     });
 
-    it('is idempotent (re-creating SessionStore on same path keeps v3)', () => {
+    it('is idempotent (re-creating SessionStore on same path keeps LATEST)', () => {
       // :memory: 라 같은 경로 재오픈 검증은 어려움 — 동일 process 내 추가 store 만
-      // 검증.  현재 store 의 schema_meta.version 은 변하지 않아야 한다.
-      expect(store.getSchemaVersion()).toBe(3);
+      // 검증. 현재 store 의 schema_meta.version 은 변하지 않아야 한다.
+      expect(store.getSchemaVersion()).toBe(LATEST_SCHEMA_VERSION);
     });
   });
 

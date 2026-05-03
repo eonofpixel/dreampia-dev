@@ -74,6 +74,16 @@ interface MockFileContent {
   line_count: number;
 }
 
+// v0.7.0 (F-026) — Sidebar 검색 결과 형태. SessionStore.TurnSearchResult 와 sync.
+interface MockTurnSearchResult {
+  turn_id: string;
+  session_id: string;
+  role: string;
+  snippet: string;
+  rank: number;
+  timestamp: string;
+}
+
 type BrowserUpdateListener = (state: MockBrowserTabState) => void;
 
 // ── ai/* (P1-4) — mock IPC for IpcStreamingProvider tests ──
@@ -223,6 +233,12 @@ const mockStore = {
   usageDaily: [] as MockDailyUsageRow[],
   usageBySession: new Map<string, MockUsageEvent[]>(),
   usageError: null as string | null,
+
+  // ── session/search (v0.7.0 F-026) ──────────────────────
+  // Tests 가 query 별 결과를 미리 inject. 키는 query 문자열, 값은 결과 배열.
+  // 미설정 query 는 빈 배열 반환. error 가 set 돼 있으면 모든 search 실패.
+  searchResults: new Map<string, MockTurnSearchResult[]>(),
+  searchError: null as string | null,
 };
 
 function emitBrowserUpdate(state: MockBrowserTabState): void {
@@ -317,6 +333,8 @@ beforeEach(() => {
   mockStore.workspacePickNext = undefined;
   mockStore.workspaceFiles = [];
   mockStore.workspaceFileContents.clear();
+  mockStore.searchResults.clear();
+  mockStore.searchError = null;
   mockStore.onboardingCompleted = true;
   mockStore.defaultProvider = 'auto';
   mockStore.defaultPermissionLevel = 'workspace_write';
@@ -346,6 +364,10 @@ beforeEach(() => {
       )?.mockClear?.();
       (
         sess.updateConversation as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
+      // v0.7.0 (F-026) — 검색 IPC mock clear.
+      (
+        sess.search as unknown as { mockClear?: () => void } | undefined
       )?.mockClear?.();
     }
     const appApi = window.dreampia.app;
@@ -632,6 +654,22 @@ if (typeof window !== 'undefined') {
             };
             mockStore.sessions.set(id, next);
             return { ok: true, value: next };
+          }
+        ),
+
+        // v0.7.0 (F-026) — Sidebar 검색. searchResults 가 미리 채워져 있으면
+        // 그 값을 반환, 아니면 빈 배열. searchError 가 set 돼 있으면 실패.
+        search: vi.fn(
+          async (args: {
+            q: string;
+            limit?: number;
+          }): Promise<Result<MockTurnSearchResult[]>> => {
+            if (mockStore.searchError !== null) {
+              return { ok: false, error: mockStore.searchError };
+            }
+            const all = mockStore.searchResults.get(args.q) ?? [];
+            const limit = args.limit ?? 50;
+            return { ok: true, value: all.slice(0, limit) };
           }
         ),
       },

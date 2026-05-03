@@ -60,6 +60,7 @@ import type { PermissionGrant, PermissionState, GrantTarget } from '@/types/perm
 import type { ClaudeMetadata, CodexMetadata, SessionMetadata } from '@/types/session';
 import type { SessionId, WorkspaceId } from '@/types/common';
 import { migrate, getSchemaVersion as getSchemaVersionImpl } from './migrate';
+import { extractTurnText } from './turnText';
 
 // ────────────────────────────────────────────────────────────
 // DB row shapes (internal — not exported)
@@ -243,6 +244,26 @@ export interface SessionListFilter {
 }
 
 /**
+ * Single result row from `searchTurns`. v0.7.0 (F-026 Chat Search).
+ *
+ * `snippet` contains FTS5 `<mark>...</mark>` markup around the matched terms.
+ * Renderer must render it safely (split on `<mark>` / `</mark>`, never via
+ * dangerouslySetInnerHTML) to avoid XSS through user-supplied turn content.
+ *
+ * `rank` is BM25 from FTS5 (lower = more relevant). LIKE fallback path
+ * always returns 0 — caller should rely on the natural ORDER BY rank
+ * the search method already provides and not re-sort.
+ */
+export interface TurnSearchResult {
+  turn_id: string;
+  session_id: string;
+  role: string;
+  snippet: string;
+  rank: number;
+  timestamp: string;
+}
+
+/**
  * Lightweight session metadata returned by `listSessions`. Omits all sub-states
  * (conversation, workspace, terminal, browser, plan, permission) for speed.
  */
@@ -282,6 +303,18 @@ function parseJsonOrNull<T>(s: string | null): T | undefined {
 
 export class SessionStore {
   private readonly db: DatabaseT;
+
+  /**
+   * Whether the FTS5 `turns_fts` virtual table is available.
+   *
+   * v0.7.0 (F-026): set during migrate() — true when migration v4 succeeds,
+   * false when FTS5 is unavailable in the better-sqlite3 binary or when the
+   * defensive try/catch in migrate.ts trapped a CREATE error. When false:
+   *   - appendTurn / clearTurns / deleteSession / insertTurns SKIP the FTS
+   *     sync inserts and deletes (no harm — table doesn't exist).
+   *   - searchTurns falls back to LIKE substring search on `content_json`.
+   */
+  private readonly fts5Enabled: boolean;
 
   // Prepared statements (created lazily on first use, cached for perf)
   private stmts: {
@@ -328,6 +361,15 @@ export class SessionStore {
     this.db.pragma('foreign_keys = ON');
 
     migrate(this.db);
+
+    // v0.7.0 (F-026) — detect whether the FTS5 turns_fts virtual table exists.
+    // Truth source is sqlite_master, not just LATEST_SCHEMA_VERSION, because
+    // migrate() may have skipped the CREATE on FTS5-less builds (graceful
+    // degrade path).
+    const ftsCheck = this.db
+      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'turns_fts'`)
+      .get() as { name: string } | undefined;
+    this.fts5Enabled = ftsCheck !== undefined;
   }
 
   // ────────────────────────────────────────────────────────────
@@ -405,6 +447,10 @@ export class SessionStore {
         reactions_json: jsonOrNull(t.reactions),
       });
 
+      // v0.7.0 (F-026) — sync FTS5 index. Only insert when there's actually
+      // human-readable text to index (skip pure-tool / image / file turns).
+      this.indexTurnFts(sid, t);
+
       // Insert turn-level annotations (if any)
       if (t.annotations && t.annotations.length > 0) {
         for (const a of t.annotations) {
@@ -460,6 +506,8 @@ export class SessionStore {
       // 이므로 OK).
       this.getDeleteAnnotationsBySessionStmt().run(sid);
       this.getDeleteTurnsBySessionStmt().run(sid);
+      // v0.7.0 (F-026) — keep turns_fts in lockstep with turns table.
+      this.deleteTurnsFtsForSession(sid);
       const now = new Date().toISOString();
       // updated_at 은 무조건 새 시각으로 — bump 가 아니라 force.
       this.db.prepare(`UPDATE sessions SET updated_at = ? WHERE id = ?`).run(now, sid);
@@ -559,6 +607,8 @@ export class SessionStore {
       this.getDeleteTerminalPanesBySessionStmt().run(sid);
       this.getDeleteBrowserTabsBySessionStmt().run(sid);
       this.getDeleteTurnsBySessionStmt().run(sid);
+      // v0.7.0 (F-026) — drop FTS5 entries alongside the turns rows.
+      this.deleteTurnsFtsForSession(sid);
       // Orphan worktrees: parent_session_id has no FK constraint, so we must
       // explicitly delete them before removing the session row.
       // (Architect SS-4 finding #2)
@@ -607,6 +657,39 @@ export class SessionStore {
     const rows = this.db.prepare(sql).all(...params) as SessionRow[];
 
     return rows.map((r) => this.rowToMeta(r));
+  }
+
+  /**
+   * v0.7.0 (F-026 Chat Search) — full-text search over the human-readable
+   * portion of all turns across all sessions.
+   *
+   * Strategy:
+   *   - When FTS5 is available, runs `turns_fts MATCH ?` with a phrase query
+   *     (the input is treated as a single string — quotes are escaped, the
+   *     query is wrapped in `"..."`) and BM25-ordered.
+   *   - When FTS5 is unavailable OR the FTS query throws (rare — invalid
+   *     internal token sequences), falls back to LIKE substring search on
+   *     the raw `content_json`. Results are timestamp-DESC ordered.
+   *
+   * `query` is trimmed; empty input returns []. Default `limit` 50, hard
+   * upper bound enforced by the IPC schema (100).
+   *
+   * Snippets contain `<mark>...</mark>` markup (FTS5) or a 80-char window
+   * around the match (LIKE). Renderer must SAFELY render — split on the
+   * markup, never use innerHTML.
+   */
+  searchTurns(query: string, limit = 50): TurnSearchResult[] {
+    const q = query.trim();
+    if (q.length === 0) return [];
+    if (this.fts5Enabled) {
+      try {
+        return this.searchTurnsFTS5(q, limit);
+      } catch {
+        // FTS5 query syntax error (extremely unusual once we phrase-quote)
+        // — fall through to LIKE so the user still gets matches.
+      }
+    }
+    return this.searchTurnsLike(q, limit);
   }
 
   // ────────────────────────────────────────────────────────────
@@ -725,6 +808,8 @@ export class SessionStore {
         edited_json: jsonOrNull(t.edited),
         reactions_json: jsonOrNull(t.reactions),
       });
+      // v0.7.0 (F-026) — sync FTS5 index for each indexable turn.
+      this.indexTurnFts(s.id, t);
     }
   }
 
@@ -1521,5 +1606,104 @@ export class SessionStore {
       this.stmts.deleteSession = this.db.prepare(`DELETE FROM sessions WHERE id = ?`);
     }
     return this.stmts.deleteSession;
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // v0.7.0 (F-026) — FTS5 sync helpers
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * Insert one row into `turns_fts` if the turn has indexable text.
+   *
+   * Called from inside an existing transaction (appendTurn / insertTurns) so
+   * the turns row and the FTS row are committed atomically. No-op when FTS5
+   * is unavailable or extracted text is empty.
+   */
+  private indexTurnFts(sessionId: string, turn: Turn): void {
+    if (!this.fts5Enabled) return;
+    const body = extractTurnText(turn.content);
+    if (body.length === 0) return;
+    this.db
+      .prepare(
+        `INSERT INTO turns_fts(turn_id, session_id, role, body) VALUES (?, ?, ?, ?)`
+      )
+      .run(turn.id, sessionId, turn.role, body);
+  }
+
+  /**
+   * Drop all FTS5 entries for a session. Called from clearTurns +
+   * deleteSession. No-op when FTS5 is unavailable.
+   */
+  private deleteTurnsFtsForSession(sessionId: string): void {
+    if (!this.fts5Enabled) return;
+    this.db.prepare(`DELETE FROM turns_fts WHERE session_id = ?`).run(sessionId);
+  }
+
+  /**
+   * FTS5 search path. Wraps the input as a phrase query (`"..."`) so user
+   * spaces don't accidentally produce boolean AND/OR semantics. Quotes in
+   * the input are doubled per FTS5 escaping rules.
+   *
+   * BM25 rank: lower number = better match. Results joined to `turns` for
+   * the timestamp (used by Sidebar to show relative time).
+   */
+  private searchTurnsFTS5(q: string, limit: number): TurnSearchResult[] {
+    const escaped = q.replace(/"/g, '""');
+    const ftsQuery = `"${escaped}"`;
+    const rows = this.db
+      .prepare(
+        `SELECT
+           f.turn_id  AS turn_id,
+           f.session_id AS session_id,
+           f.role     AS role,
+           snippet(turns_fts, 3, '<mark>', '</mark>', '…', 24) AS snippet,
+           rank       AS rank,
+           t.timestamp AS timestamp
+         FROM turns_fts f
+         INNER JOIN turns t ON t.id = f.turn_id
+         WHERE turns_fts MATCH ?
+         ORDER BY rank
+         LIMIT ?`
+      )
+      .all(ftsQuery, limit) as TurnSearchResult[];
+    return rows;
+  }
+
+  /**
+   * LIKE fallback when FTS5 is unavailable. Searches the raw content_json,
+   * which contains the same human text plus JSON wrapper bytes — false
+   * positives (matching e.g. `"text":` literally) are unlikely for typical
+   * user queries but possible.
+   *
+   * Snippet is built via `substr` around the first match position. timestamp
+   * DESC is the closest analog to BM25 ordering ("most recent first").
+   */
+  private searchTurnsLike(q: string, limit: number): TurnSearchResult[] {
+    const like = `%${q}%`;
+    const rows = this.db
+      .prepare(
+        `SELECT
+           id   AS turn_id,
+           session_id,
+           role,
+           substr(content_json, max(1, instr(content_json, ?) - 20), 80) AS snippet,
+           0    AS rank,
+           timestamp
+         FROM turns
+         WHERE content_json LIKE ?
+         ORDER BY timestamp DESC
+         LIMIT ?`
+      )
+      .all(q, like, limit) as TurnSearchResult[];
+    return rows;
+  }
+
+  /**
+   * Test-only escape hatch — lets a test simulate "FTS5 unavailable" without
+   * a custom build. Marked `@internal`; not exported via storage/index.ts.
+   * @internal
+   */
+  __forceLikeFallbackForTests(): void {
+    (this as unknown as { fts5Enabled: boolean }).fts5Enabled = false;
   }
 }

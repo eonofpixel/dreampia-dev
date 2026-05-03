@@ -256,6 +256,22 @@ interface UsageDailyArgsShape {
   provider?: UsageProviderShape;
 }
 
+// v0.7.0 (F-026) — Sidebar 검색 결과. SessionStore 의 TurnSearchResult 와 sync.
+// snippet 은 `<mark>...</mark>` markup 을 포함할 수 있어 renderer 가 split-and-
+// render 패턴으로 안전하게 렌더링해야 한다 (dangerouslySetInnerHTML 금지).
+interface TurnSearchResultShape {
+  turn_id: string;
+  session_id: string;
+  role: string;
+  snippet: string;
+  rank: number;
+  timestamp: string;
+}
+interface SearchTurnsArgsShape {
+  q: string;
+  limit?: number;
+}
+
 // v0.6.0 (F-019) — @ mention 의 file IPC. main 의 workspace/list-files 와
 // workspace/read-file 이 반환하는 형태와 sync. 본 preload 가 사용하는 다른
 // 인라인 shape 와 동일하게 zod runtime 을 import 하지 않는다.
@@ -306,6 +322,8 @@ const ALLOWED_INVOKE_CHANNELS = [
   // v0.5.0 (F-018) — slash command 들이 호출하는 추가 mutation IPC.
   'session/clear-turns',
   'session/update-conversation',
+  // v0.7.0 (F-026) — Sidebar 검색.
+  'session/search',
   'lock/acquire',
   'lock/release',
   'lock/get',
@@ -526,6 +544,17 @@ const api = {
      */
     updateConversation: (id: SessionId, patch: ConversationPatch): Promise<Result<Session>> =>
       ipcRenderer.invoke('session/update-conversation', id, patch) as Promise<Result<Session>>,
+
+    /**
+     * v0.7.0 (F-026) — full-text search across all sessions' turns.
+     * `q` 는 1~200자, `limit` 미지정 시 50, 100 이하.
+     * 결과의 `snippet` 은 `<mark>` markup 을 포함할 수 있어 renderer 가 split
+     * 패턴으로 안전 렌더링해야 한다 (XSS 방어).
+     */
+    search: (args: SearchTurnsArgsShape): Promise<Result<TurnSearchResultShape[]>> =>
+      ipcRenderer.invoke('session/search', args) as Promise<
+        Result<TurnSearchResultShape[]>
+      >,
   },
 
   /**

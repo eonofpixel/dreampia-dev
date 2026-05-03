@@ -2,6 +2,114 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [0.7.0] — 2026-05-03
+
+**Feature release — F-026 Chat Search (SQLite FTS5).**
+
+Codex (read-only audit) 권고 v0.7.0. v0.5.0 (슬래시 명령) / v0.6.0 (@ 멘션)
+가 입력 UX 를 강화한 뒤, 누적된 대화 데이터를 다시 찾고 재사용할 수 있는
+접근성을 여는 단계. 사용자가 사이드바에서 한 번만 타이핑하면 모든 세션의
+turn 본문이 즉시 BM25 ranking + snippet hilight 으로 검색되며, 결과 클릭
+시 해당 세션이 활성화되고 정확히 그 turn 위치로 스크롤된다. early adopter
+가 세션이 누적된 시점에 즉시 체감하며 v0.6 의 `@session:` 멘션과 시너지.
+
+### Added
+
+- **`src/storage/migrations/004_fts5_turns.sql`** — FTS5 contentless virtual
+  table `turns_fts` (`turn_id` / `session_id` / `role` UNINDEXED + `body`
+  indexed, `unicode61 remove_diacritics 1` tokenizer). Trigger 대신
+  JS-level explicit sync 로 단일 진실의 원천 (`extractTurnText`) 확보. CREATE
+  실패 시 schema_meta 의 `fts5_disabled='1'` 로 graceful degrade — searchTurns
+  가 LIKE fallback 으로 자동 전환.
+- **`src/storage/turnText.ts`** — `extractTurnText(content)` — ContentBlock[]
+  에서 사람-가독 텍스트만 (text + mention.ref.display + embedded_card.title)
+  추출. image / file blocks 는 의도적으로 skip (base64 / URI 는 search noise).
+- **SessionStore 확장** — `searchTurns(q, limit?)` 가 BM25 ranked
+  `TurnSearchResult[]` 반환. `appendTurn` / `insertTurns` / `clearTurns` /
+  `deleteSession` 모두 같은 트랜잭션에서 turns_fts 를 동기화. FTS5
+  unavailable 시 `__forceLikeFallbackForTests` 로 verify 가능한 LIKE 경로.
+- **신규 IPC channel `session/search`** — `{q, limit?}` → `Result<TurnSearchResult[]>`.
+  Zod 가 `q` 를 1~200자 / `limit` 을 1~100 으로 강제. 모든 검증 실패는
+  Result.error 문자열로 변환되어 renderer 에서 alert 표시.
+- **`src/renderer/components/sidebar/SearchSection.tsx`** — Sidebar 검색
+  입력 + 결과 리스트. role="region" + role="listbox" + role="alert" 모두
+  적용. snippet 의 `<mark>...</mark>` 는 React `<mark>` element 로 split-and-
+  render — `dangerouslySetInnerHTML` 절대 미사용 (XSS 방어). 한국어 메시지
+  (`메시지 검색…` / `검색 중...` / `검색 결과 없음` / `검색 중 오류가 발생했습니다`).
+- **Sidebar 활성화** — 이전 placeholder `<SidebarNavItem label="검색">` 자리를
+  실제 SearchSection 으로 교체. SidebarProps 에 `searchQuery` /
+  `onSearchQueryChange` / `searchResults` / `searchLoading` / `searchError` /
+  `onSearchResultClick` 추가 (모두 optional — 미주입 시 quietly disabled).
+- **ChatPanel scroll-to-turn** — `pendingFocusTurnId` / `onTurnFocused` props
+  추가. MessagesArea 의 useEffect 가 매칭되는 `[data-turn-id]` element 를
+  찾아 `scrollIntoView({behavior:'smooth', block:'center'})`, 성공 시
+  `onTurnFocused()` 호출로 부모가 state 를 clear (= 같은 검색 결과를 다시
+  클릭해도 동작). focus 요청이 있는 동안 streaming auto-scroll 은 보류.
+- **TurnDisplay** — `<article>` 에 `data-turn-id={turn.id}` 추가 — scroll
+  target lookup 의 ground truth.
+- **App.tsx wiring** — `searchQuery` / `searchResults` / `searchLoading` /
+  `searchError` / `pendingFocusTurnId` state. 300ms debounced useEffect 가
+  `window.dreampia.session.search()` 호출 (cancelled flag 로 race 방어).
+  결과 클릭 → `setActiveSessionId` + `setPendingFocusTurnId` → ChatPanel
+  scroll. session.search 가 미정 (구버전 preload) 이면 silent fallback.
+- **`tests/storage/turnText.test.ts`** — 11 tests. undefined / 빈 배열 /
+  multi-text join / image-file skip / mention.display / embedded_card.title /
+  Korean / 빈 text skip / 비-array input / 단일 text.
+- **`tests/storage/SessionStore.search.test.ts`** — 13 tests. FTS5 happy path
+  / 빈 query / no match / multiple matches / limit 준수 / Korean / phrase /
+  clearTurns 동기화 / deleteSession 동기화 / createSession bulk index /
+  LIKE fallback (forced).
+- **`tests/main/ipc.session-search.test.ts`** — 8 tests. 채널 등록 / Result
+  wrap / no match → 빈 배열 / Zod 빈 q / Zod max(200) / strict mode unknown
+  field / negative limit / over-100 limit / Korean.
+- **`tests/renderer/Sidebar.search.test.tsx`** — 7 tests. 빈 query → results
+  영역 hidden / 입력 → onChange 호출 / loading state / error state (alert
+  role) / empty state / 결과 click → onSearchResultClick / `<mark>` 안전 렌더.
+- **`tests/renderer/ChatPanel.scroll.test.tsx`** — 4 tests. data-turn-id
+  존재 / pendingFocusTurnId set → scrollIntoView + onTurnFocused 호출 /
+  null pendingFocusTurnId → onTurnFocused 미호출 / non-existent id →
+  onTurnFocused 미호출.
+- **e2e/chat.spec.ts** 에 `sidebar search: type → results → click → scrolls
+  to matching turn` 시나리오 1개 추가 (Mock 응답까지 끝낸 뒤 unique marker
+  검색 → 결과 row → 클릭 → user turn 가시성 확인).
+
+### Changed
+
+- `package.json`: `0.6.0` → `0.7.0` (minor bump for new feature).
+- `src/storage/migrate.ts`: MIGRATIONS 배열에 `version: 4` 추가.
+  `LATEST_SCHEMA_VERSION = 4`. v=4 만 try/catch 로 wrap 해 FTS5 unavailable
+  환경에서도 schema bump 는 진행 (기능 일부 degrade).
+- `src/storage/index.ts` barrel 에 `TurnSearchResult` 타입 export.
+- `src/main/preload.ts` whitelist 에 `'session/search'` 채널 등록 +
+  `session.search()` 메서드 노출 (`<mark>` 마커 포함된 `snippet` 을 안전하게
+  리턴).
+- `src/main/ipc.ts`: `SearchTurnsArgsSchema` zod schema + `session/search`
+  handler 등록. `TurnSearchResult` import.
+- `src/renderer/components/sidebar/Sidebar.tsx`: 기존 `<SidebarNavItem
+  label="검색">` 제거, SearchSection 으로 교체. `Search` lucide icon 은
+  SearchSection 내부에서 사용 (Sidebar 본체에서는 더 이상 import X).
+- `src/renderer/components/chat/ChatPanel.tsx`: ChatPanelProps 에
+  `pendingFocusTurnId` / `onTurnFocused` 추가. MessagesArea 가 컨테이너
+  ref 를 갖도록 변경. TurnDisplay 의 `<article>` 에 `data-turn-id` 추가.
+- `tests/setup.ts`: `mockStore.searchResults` Map + `searchError` 추가,
+  `window.dreampia.session.search` mock 등록 (query 별로 미리 inject 된
+  결과를 반환), 매 테스트 reset.
+- `tests/storage/SessionStore.test.ts`: LATEST_SCHEMA_VERSION 검증을 4 로
+  업데이트 (코멘트도 v0.7.0 / F-026 / 004_fts5_turns.sql 명시).
+
+### Notes
+
+- FTS5 의 unicode61 토크나이저는 한국어를 character-level 로 인덱싱한다 →
+  `안녕` / `안녕하세요` 모두 substring match 가능. 추후 trigram 또는
+  Korean-specific tokenizer (예: 형태소) 추가 검토 가능 (현재는 MVP).
+- snippet markup 은 정확히 `<mark>` / `</mark>` 두 토큰만 split. FTS5 가
+  emit 하는 다른 escape sequence (현재 없음) 는 일반 텍스트로 취급.
+- 검색 입력은 200자 이상이면 Zod 가 reject — paste accident 보호. UI 측
+  에서는 maxLength 를 강제하지 않아 사용자 경험은 입력 → 짧은 alert 으로
+  일관됨.
+- session/search 는 존재하는 모든 세션의 turn 을 검색한다 (workspace 별로
+  나뉘지 않음). multi-workspace 가 도입되면 filter 인자 추가 필요.
+
 ## [0.6.0] — 2026-05-03
 
 **Feature release — @ Mention palette (F-019).**

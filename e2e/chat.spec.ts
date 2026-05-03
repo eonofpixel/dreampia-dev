@@ -138,4 +138,41 @@ test.describe('chat flow (V2)', () => {
     // After cancel, stop button disappears (isStreaming flipped back).
     await expect(stopButton).not.toBeVisible({ timeout: 5_000 });
   });
+
+  // v0.7.0 (F-026) — Sidebar 메시지 검색 end-to-end.
+  test('sidebar search: type → results → click → scrolls to matching turn', async ({
+    window,
+  }) => {
+    // 1) 첫 세션을 만들고 unique 한 marker 텍스트를 user turn 으로 보낸다.
+    await window.getByRole('button', { name: '새 채팅', exact: false }).first().click();
+    const input = window.getByTestId('chat-input');
+    await input.click();
+    const marker = '검색마커유니크';
+    await input.fill(marker);
+    await input.press('Enter');
+
+    // assistant 응답이 끝날 때까지 (= user turn 이 영속화 끝났을 시점) 기다림.
+    const assistantTurn = window.locator('[data-testid="turn-assistant"]');
+    await expect(assistantTurn).toHaveAttribute('data-status', 'completed', {
+      timeout: 15_000,
+    });
+
+    // 2) 검색 입력에 marker 일부를 친다.
+    const searchInput = window.getByTestId('sidebar-search-input');
+    await expect(searchInput).toBeVisible();
+    await searchInput.fill(marker);
+
+    // 3) 결과 영역에 한 row 가 보여야 한다 (debounce 300ms 감안 + IPC).
+    const resultRow = window.getByTestId('sidebar-search-result').first();
+    await expect(resultRow).toBeVisible({ timeout: 10_000 });
+
+    // 4) row 클릭 → 같은 세션이지만 ChatPanel 의 turn 으로 scrollIntoView.
+    //    실제 scroll 측정은 e2e 에서 까다로워 — DOM 에 매칭 element 가 존재하고
+    //    onTurnFocused 가 호출되어 search query 가 그대로 유지되는지 정도로
+    //    smoke 검증.
+    await resultRow.click();
+    await expect(window.getByTestId('turn-user').getByText(marker)).toBeVisible({
+      timeout: 5_000,
+    });
+  });
 });

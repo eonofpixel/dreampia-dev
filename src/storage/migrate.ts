@@ -17,6 +17,7 @@ import type { Database } from 'better-sqlite3';
 import sql001 from './migrations/001_init.sql?raw';
 import sql002 from './migrations/002_locks.sql?raw';
 import sql003 from './migrations/003_usage_events.sql?raw';
+import sql004 from './migrations/004_fts5_turns.sql?raw';
 
 // ────────────────────────────────────────────────────────────
 // Migration registry
@@ -33,6 +34,7 @@ const MIGRATIONS: readonly Migration[] = [
   { version: 1, description: 'initial schema', up: sql001 },
   { version: 2, description: 'session_locks for multi-window leader election', up: sql002 },
   { version: 3, description: 'usage_events for v0.4.0 cost tracking', up: sql003 },
+  { version: 4, description: 'FTS5 full-text search over turn content (v0.7.0 F-026)', up: sql004 },
 ] as const;
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
@@ -102,6 +104,27 @@ export function migrate(db: Database): void {
 
   for (const m of MIGRATIONS) {
     if (m.version <= current) continue;
+
+    // v0.7.0 (F-026): FTS5 가 better-sqlite3 prebuilt 에 거의 항상 들어 있지만,
+    // 일부 환경 (사용자 빌드, 임의 환경) 에서 누락될 가능성을 방어. v=4 만
+    // 특수 케이스로 try/catch — 실패 시 schema_meta 에 'fts5_disabled'=1 표시
+    // 후 schema version 만 bump 한다. SessionStore.searchTurns 가 LIKE
+    // fallback 으로 동작하므로 사용자 기능은 유지.
+    if (m.version === 4) {
+      try {
+        db.transaction(() => {
+          db.exec(m.up);
+          upsertMeta(db, 'version', String(m.version));
+        })();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // FTS5 unavailable — graceful degrade.
+        upsertMeta(db, 'version', String(m.version));
+        upsertMeta(db, 'fts5_disabled', '1');
+        upsertMeta(db, 'fts5_disabled_reason', msg);
+      }
+      continue;
+    }
 
     db.transaction(() => {
       db.exec(m.up);

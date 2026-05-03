@@ -71,6 +71,15 @@ export interface ChatPanelProps {
   mentionSessions?: ReadonlyArray<{ id: string; title: string }>;
   /** v0.6.0 — 멘션 resolve 단계의 IPC / store 의존성. */
   mentionResolverContext?: ResolverContext;
+  /**
+   * v0.7.0 (F-026) — Sidebar 검색 결과 클릭 시 "이 turn 으로 스크롤" 요청.
+   * 활성 session 이 바뀐 직후 부모가 set 하면 MessagesArea 가 해당 turn 의
+   * `[data-turn-id]` element 를 scrollIntoView 한다. 매칭되는 element 가
+   * 발견되어 scroll 이 끝나면 onTurnFocused() 를 호출해 부모가 state 를 clear
+   * 한다 — 그렇지 않으면 같은 검색을 두 번 클릭해도 두 번째 click 이 no-op.
+   */
+  pendingFocusTurnId?: string | null;
+  onTurnFocused?: () => void;
 }
 
 interface MessagesAreaProps {
@@ -83,6 +92,13 @@ interface MessagesAreaProps {
   onPickPrompt?: (prompt: string) => void;
   /** Empty WelcomeMessage 의 헤더에 폴더 이름 표시. */
   workspaceName?: string;
+  /**
+   * v0.7.0 (F-026) — 검색 결과 클릭에서 흘러온 scroll target. 매칭되는
+   * `[data-turn-id]` element 가 있으면 scrollIntoView, 없으면 (turn 이 아직
+   * 로드 안됨) 다음 turns prop change 까지 보류.
+   */
+  pendingFocusTurnId?: string | null;
+  onTurnFocused?: () => void;
 }
 
 export function ChatPanel({
@@ -100,6 +116,8 @@ export function ChatPanel({
   mentionIgnorePatterns,
   mentionSessions,
   mentionResolverContext,
+  pendingFocusTurnId,
+  onTurnFocused,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -123,6 +141,8 @@ export function ChatPanel({
         turns={session.conversation.turns}
         onPickPrompt={onSubmit}
         workspaceName={workspaceName}
+        pendingFocusTurnId={pendingFocusTurnId ?? null}
+        onTurnFocused={onTurnFocused}
       />
       <InputArea
         onSubmit={onSubmit}
@@ -158,8 +178,15 @@ function IpcUnavailableBanner(): React.JSX.Element {
   );
 }
 
-function MessagesArea({ turns, onPickPrompt, workspaceName }: MessagesAreaProps): React.JSX.Element {
+function MessagesArea({
+  turns,
+  onPickPrompt,
+  workspaceName,
+  pendingFocusTurnId,
+  onTurnFocused,
+}: MessagesAreaProps): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const lastTurn = turns[turns.length - 1];
   const lastContentLen =
@@ -167,12 +194,29 @@ function MessagesArea({ turns, onPickPrompt, workspaceName }: MessagesAreaProps)
       return b.type === 'text' ? acc + b.text.length : acc;
     }, 0) ?? 0;
 
+  // v0.7.0 (F-026) — 검색 결과 클릭에서 온 focus 요청. pendingFocusTurnId 가
+  // null 이 아니고 그 id 의 element 가 mount 돼 있으면 scrollIntoView. 매칭되면
+  // onTurnFocused() 로 부모 state 를 clear 해 같은 search 결과를 다시 클릭해도
+  // 동작하도록. 매칭 안되면 (예: turns prop 이 아직 stale) 다음 turns 변경
+  // 까지 보류 — 자동 재시도. focus 요청과 streaming auto-scroll 은 mutually
+  // exclusive: focus 요청이 있으면 bottom 으로 scroll 하지 않는다 (사용자가
+  // 의도한 위치에 머무르도록).
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [turns.length, lastContentLen]);
+    if (pendingFocusTurnId === null || pendingFocusTurnId === undefined) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    const root = containerRef.current;
+    if (root === null) return;
+    const el = root.querySelector(`[data-turn-id="${pendingFocusTurnId}"]`);
+    if (el !== null) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      onTurnFocused?.();
+    }
+  }, [turns.length, lastContentLen, pendingFocusTurnId, onTurnFocused]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-4">
+    <div ref={containerRef} className="flex-1 overflow-y-auto p-4">
       {turns.length === 0 ? (
         // v0.3.0 — 빈 채팅에 진입하면 환영 메시지 + 추천 prompt 표시.
         // workspaceName 미정 시에도 안전한 default 로 fallback.
@@ -429,6 +473,7 @@ function TurnDisplay({ turn, getResult }: TurnDisplayProps): React.JSX.Element |
       className={isUser ? 'flex justify-end' : 'flex justify-start'}
       data-testid={'turn-' + turn.role}
       data-status={turn.status}
+      data-turn-id={turn.id}
     >
       <div
         className={

@@ -9,7 +9,6 @@
 import type { Session } from '@/types';
 import {
   Plus,
-  Search,
   Puzzle,
   Bot,
   Folder,
@@ -18,6 +17,7 @@ import {
   Compass,
   BarChart3,
 } from 'lucide-react';
+import { SearchSection, type SearchResultEntry } from './SearchSection';
 
 export interface SidebarProps {
   sessions: ReadonlyArray<Pick<Session, 'id' | 'title' | 'pinned'>>;
@@ -37,6 +37,21 @@ export interface SidebarProps {
    * App.tsx 가 UsageSettings 모달을 mount.
    */
   onOpenUsage?: () => void;
+
+  // ── v0.7.0 (F-026 Chat Search) ────────────────────────────
+  /**
+   * 검색 입력 컨트롤드 value. App.tsx 가 set + debounce 후 IPC 호출.
+   */
+  searchQuery?: string;
+  onSearchQueryChange?: (next: string) => void;
+  searchResults?: ReadonlyArray<SearchResultEntry>;
+  searchLoading?: boolean;
+  searchError?: string | null;
+  /**
+   * 검색 결과 클릭. 부모는 sessionId 로 active session 전환 + turnId 를
+   * pendingFocus state 로 보관해 ChatPanel 이 scroll 할 수 있게 한다.
+   */
+  onSearchResultClick?: (sessionId: string, turnId: string) => void;
 }
 
 export function Sidebar({
@@ -48,9 +63,29 @@ export function Sidebar({
   onOpenSettings,
   onReopenOnboarding,
   onOpenUsage,
+  searchQuery = '',
+  onSearchQueryChange,
+  searchResults,
+  searchLoading = false,
+  searchError = null,
+  onSearchResultClick,
 }: SidebarProps): React.JSX.Element {
   const pinned = sessions.filter((s) => s.pinned);
   const recent = sessions.filter((s) => !s.pinned);
+
+  // v0.7.0 (F-026) — 검색 결과의 row 가 어느 세션에 속하는지 표시할 수 있도록
+  // sessions prop 으로 즉시 lookup map 구축. SidebarProps 가 이미 받는
+  // sessions 배열을 재사용 — 추가 IPC 없음.
+  const sessionTitleById = new Map<string, string>();
+  for (const s of sessions) {
+    sessionTitleById.set(s.id, s.title);
+  }
+
+  // 검색 콜백이 외부에서 제공되지 않으면 비활성화 (no-op). 이렇게 하면
+  // 기존 caller (테스트 / 미설정) 가 깨지지 않는다.
+  const handleSearchQueryChange = onSearchQueryChange ?? ((_n: string): void => undefined);
+  const handleSearchResultClick =
+    onSearchResultClick ?? ((_s: string, _t: string): void => undefined);
 
   return (
     <aside
@@ -69,9 +104,22 @@ export function Sidebar({
         </button>
       </div>
 
+      {/* v0.7.0 (F-026) — 검색 입력 + 결과 — 이전엔 placeholder nav item 이었던
+          자리를 활성화. 결과 영역은 query 가 비어있으면 hidden. */}
+      <div className="border-b border-border-primary p-2">
+        <SearchSection
+          query={searchQuery}
+          onQueryChange={handleSearchQueryChange}
+          results={searchResults ?? []}
+          loading={searchLoading}
+          error={searchError}
+          onResultClick={handleSearchResultClick}
+          sessionTitleById={sessionTitleById}
+        />
+      </div>
+
       {/* Nav */}
       <nav className="border-b border-border-primary p-2 text-text-secondary">
-        <SidebarNavItem icon={<Search className="h-4 w-4" />} label="검색" shortcut="Ctrl+K" />
         <SidebarNavItem icon={<Puzzle className="h-4 w-4" />} label="플러그인" />
         <SidebarNavItem icon={<Bot className="h-4 w-4" />} label="자동화" />
       </nav>

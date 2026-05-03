@@ -5,7 +5,7 @@
  */
 
 export { SessionStore } from './SessionStore';
-export type { SessionListFilter, SessionMeta } from './SessionStore';
+export type { SessionListFilter, SessionMeta, TurnSearchResult } from './SessionStore';
 export { LATEST_SCHEMA_VERSION } from './migrate';
 export { LeaderElection } from './LeaderElection';
 export type { SessionLock, LeaderElectionOptions } from './LeaderElection';
