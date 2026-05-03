@@ -22,11 +22,15 @@ win:
       arch: [x64]
   artifactName: 'Dreampia-Dev-${version}-${arch}.${ext}'
   publisherName: 'Dreampia'
-  # signing: env vars CSC_LINK + CSC_KEY_PASSWORD
-  # (electron-builder reads these automatically)
+  # signing: env vars WIN_CSC_LINK + WIN_CSC_KEY_PASSWORD (release.yml 에서 매핑).
+  # electron-builder 는 CSC_LINK / CSC_KEY_PASSWORD 를 읽으므로 release.yml
+  # 의 windows job 에서만 그 이름으로 export.
   signingHashAlgorithms: ['sha256']
   signDlls: false
-  verifyUpdateCodeSignature: false  # Phase 2: enable after publisher cert obtained
+  # ★ verifyUpdateCodeSignature: v0.x = false (unsigned 허용),
+  #   v1.0+ EV cert 도입 후 true 로 토글. true 시 electron-updater 가
+  #   업데이트 서명 검증 강제 → 인증서 변경/만료 시 자동 업데이트 실패.
+  verifyUpdateCodeSignature: false
 
 nsis:
   oneClick: false                   # full installer (recommended)
@@ -49,9 +53,12 @@ mac:
   gatekeeperAssess: false             # allow re-signing
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
-  notarize: false                    # set true once Apple ID env vars present
-  # signing: env vars CSC_LINK + CSC_KEY_PASSWORD
-  # notarization: APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID
+  # ★ notarize: v0.x = false (Apple credentials 없을 때).
+  #   v1.0+ Apple Developer Program ($99/년) 가입 후 true.
+  #   true 시 release.yml 의 macos job 이 APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD
+  #   + APPLE_TEAM_ID env 사용해 notarytool 호출.
+  notarize: false
+  # signing: env vars MAC_CSC_LINK + MAC_CSC_KEY_PASSWORD (release.yml 에서 매핑)
 
 dmg:
   sign: false                        # not required (the .app inside is signed)
