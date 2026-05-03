@@ -33,6 +33,32 @@ export type ToolResult = ToolResultRef;
 // ────────────────────────────────────────────────────────────
 
 /**
+ * v0.4.0 — token / cost telemetry payload.
+ *
+ * Translator 가 CLI JSONL 의 usage 필드를 추출해 emit. main 의 runStreamPump
+ * 가 가로채 UsageStore.recordEvent 로 영속한다. session_id 는 main 이 stream
+ * context 에서 채워 넣으므로 이 payload 에는 없다 (translator 가 알 수 없음).
+ *
+ * 일부 필드 (cache_*, reasoning_*) 는 provider 별로 발생 — 미사용 시 0.
+ *
+ * Spec: ROADMAP.md (v0.4.0 Usage/Cost Tracking MVP)
+ */
+export interface UsageEventData {
+  provider: 'claude' | 'codex' | 'mock';
+  model: string;
+  turn_id: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+  reasoning_output_tokens?: number;
+  /** 0 = 가격 정보 없음 (token 만 기록). 그 외엔 USD, 6자리 round. */
+  total_cost_usd: number;
+  /** ISO 8601 UTC. translator 가 채워 넣음. */
+  recorded_at: string;
+}
+
+/**
  * Provider-neutral 스트리밍 이벤트.
  * 어댑터의 parseStreamChunk 와 StreamingProvider.stream 이 이 이벤트를 emit.
  */
@@ -47,6 +73,7 @@ export type StreamEvent =
   | { type: 'tool_call_complete'; tool_call: ToolCall }
   | { type: 'tool_result'; result: ToolResult }
   | { type: 'message_complete'; turn: Turn }
+  | { type: 'usage'; data: UsageEventData }
   | { type: 'error'; error: string };
 
 // ────────────────────────────────────────────────────────────

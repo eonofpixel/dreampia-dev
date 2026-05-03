@@ -16,17 +16,27 @@
  *
  * // Non-JSON lines (log lines from CLI, NOT JSON — JsonlParser correctly skips):
  * 2026-05-02T15:32:41.420188Z ERROR codex_api::endpoint::responses_websocket: failed to connect ...
+ *
+ * v0.4.0 — turn.completed.usage 추출해 `usage` StreamEvent emit. Codex 는
+ * total_cost_usd 를 안 주므로 estimateCostUsd 가 가격 계산. cached_input_tokens
+ * 는 cache_read_input_tokens 로 매핑 (Codex 에 cache_creation 개념 X).
  */
 
 import type { ToolCallId } from '@/types';
-import type { StreamEvent } from '../types';
+import { estimateCostUsd } from '../pricing';
+import type { StreamEvent, UsageEventData } from '../types';
 
 interface TranslateContext {
   turnId: string;
   model: string;
 }
 
-export function translateCodexJsonl(parsed: unknown, _ctx: TranslateContext): StreamEvent[] {
+function num(usage: Record<string, unknown>, key: string): number {
+  const v = usage[key];
+  return typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.round(v)) : 0;
+}
+
+export function translateCodexJsonl(parsed: unknown, ctx: TranslateContext): StreamEvent[] {
   if (typeof parsed !== 'object' || parsed === null) return [];
   const obj = parsed as Record<string, unknown>;
   const evType = typeof obj.type === 'string' ? obj.type : '';
@@ -70,9 +80,36 @@ export function translateCodexJsonl(parsed: unknown, _ctx: TranslateContext): St
     return [];
   }
 
-  // ── turn.completed — emit nothing (CliProvider synthesizes message_complete) ──
+  // ── turn.completed — usage 추출 (v0.4.0). CliProvider 가 message_complete 합성. ──
   if (evType === 'turn.completed') {
-    return [];
+    const usageRaw = obj.usage as Record<string, unknown> | undefined;
+    if (usageRaw === undefined || usageRaw === null) return [];
+
+    const input_tokens = num(usageRaw, 'input_tokens');
+    const output_tokens = num(usageRaw, 'output_tokens');
+    // Codex: cached_input_tokens 가 우리 schema 의 cache_read_input_tokens.
+    const cache_read_input_tokens = num(usageRaw, 'cached_input_tokens');
+    const reasoning_output_tokens = num(usageRaw, 'reasoning_output_tokens');
+
+    const cost = estimateCostUsd(ctx.model, {
+      input_tokens,
+      output_tokens,
+      cache_read_input_tokens,
+    });
+
+    const data: UsageEventData = {
+      provider: 'codex',
+      model: ctx.model,
+      turn_id: ctx.turnId,
+      input_tokens,
+      output_tokens,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens,
+      reasoning_output_tokens,
+      total_cost_usd: cost,
+      recorded_at: new Date().toISOString(),
+    };
+    return [{ type: 'usage', data }];
   }
 
   // ── error — reconnect / network errors ──

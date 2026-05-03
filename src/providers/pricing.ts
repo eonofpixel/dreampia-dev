@@ -1,0 +1,125 @@
+/**
+ * pricing.ts — model → USD cost-per-million-tokens map + estimator.
+ *
+ * Spec: ROADMAP.md (v0.4.0 Usage/Cost Tracking MVP)
+ *
+ * 정책
+ * ────────
+ *  - 가격은 best-effort. 미등록 모델은 cost = 0 으로 fallback (token count 는
+ *    여전히 기록되므로 향후 가격이 추가되면 재계산이 가능하다).
+ *  - 정확한 매칭이 우선이고, 그 다음 prefix 매칭으로 새 release 도 잡는다
+ *    (예: 'claude-3-5-sonnet-20251101' 도 'claude-3-5-sonnet' prefix 로 매칭).
+ *  - cache_creation 은 입력 토큰보다 25% 비싼 경향 (Claude prompt cache write
+ *    1.25x), cache_read 는 90% 저렴 (0.10x) — 둘 다 모델별 override 가능.
+ *  - 가격은 2026-05 기준. 변경 시 이 파일 + 테스트의 fixture 만 갱신.
+ *
+ * Renderer 에서도 import 가능 — Node-only 의존성 X.
+ */
+
+export interface ModelPricing {
+  /** USD per 1M input tokens (non-cached). */
+  input_per_mtok: number;
+  /** USD per 1M output tokens. */
+  output_per_mtok: number;
+  /** USD per 1M cache-creation input tokens. Default: input_per_mtok * 1.25. */
+  cache_write_per_mtok?: number;
+  /** USD per 1M cache-read input tokens. Default: input_per_mtok * 0.10. */
+  cache_read_per_mtok?: number;
+}
+
+export interface UsageInputs {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+}
+
+/**
+ * 2026-05 기준 reference rates (USD / 1M tokens).
+ *
+ * Claude: anthropic.com/pricing.
+ * Codex / OpenAI: openai.com/api/pricing (gpt-5.5 는 published rate 도래 전이라
+ * 보수적 placeholder — 실측 시 수정).
+ *
+ * 키는 정확한 model id. prefix 매칭 fallback 은 lookupPricing 에서.
+ */
+export const MODEL_PRICING: Readonly<Record<string, ModelPricing>> = {
+  // ─── Claude ─────────────────────────────────────────────────
+  'claude-3-5-sonnet-20241022': {
+    input_per_mtok: 3,
+    output_per_mtok: 15,
+    cache_write_per_mtok: 3.75,
+    cache_read_per_mtok: 0.3,
+  },
+  'claude-3-5-sonnet': {
+    input_per_mtok: 3,
+    output_per_mtok: 15,
+    cache_write_per_mtok: 3.75,
+    cache_read_per_mtok: 0.3,
+  },
+  'claude-3-5-haiku': { input_per_mtok: 0.8, output_per_mtok: 4 },
+  'claude-haiku-4-5-20251001': { input_per_mtok: 1, output_per_mtok: 5 },
+  'claude-haiku-4-5': { input_per_mtok: 1, output_per_mtok: 5 },
+  'claude-3-opus': { input_per_mtok: 15, output_per_mtok: 75 },
+  'claude-3-haiku': { input_per_mtok: 0.25, output_per_mtok: 1.25 },
+  'claude-2': { input_per_mtok: 8, output_per_mtok: 24 },
+
+  // ─── Codex / OpenAI ────────────────────────────────────────
+  'gpt-5.5': { input_per_mtok: 5, output_per_mtok: 20 },
+  'gpt-4o': { input_per_mtok: 2.5, output_per_mtok: 10 },
+  'gpt-4o-mini': { input_per_mtok: 0.15, output_per_mtok: 0.6 },
+  o1: { input_per_mtok: 15, output_per_mtok: 60 },
+  'o1-mini': { input_per_mtok: 3, output_per_mtok: 12 },
+  'o3-mini': { input_per_mtok: 1.1, output_per_mtok: 4.4 },
+  o3: { input_per_mtok: 5, output_per_mtok: 20 },
+};
+
+/**
+ * 가격표에서 모델을 찾는다.
+ *
+ * 1) 정확 일치 → 즉시 반환.
+ * 2) prefix 매칭: 등록된 키 중 model 의 prefix 가 되는 가장 긴 key 를 선택
+ *    (e.g. 'claude-3-5-sonnet-20251101' → 'claude-3-5-sonnet').
+ * 3) 못 찾으면 null.
+ */
+export function lookupPricing(model: string): ModelPricing | null {
+  const exact = MODEL_PRICING[model];
+  if (exact !== undefined) return exact;
+
+  let bestKey: string | null = null;
+  for (const key of Object.keys(MODEL_PRICING)) {
+    // prefix 매칭은 model 이 key 로 시작 + key 가 model 보다 짧을 때만 의미.
+    // (반대 방향은 의미 없음 — 정확 매칭은 위에서 처리됨)
+    if (model.startsWith(key) && (bestKey === null || key.length > bestKey.length)) {
+      bestKey = key;
+    }
+  }
+  if (bestKey === null) return null;
+  // bestKey 는 위에서 keys() 순회 중 발견된 값이라 항상 lookup 가능.
+  return MODEL_PRICING[bestKey] ?? null;
+}
+
+/**
+ * Token usage → estimated USD cost.
+ *
+ * 가격이 없는 모델 → 0 반환 (token 만 기록되도록).
+ * 결과는 6자리 소수까지 round (USD 0.000001 cents 의미 없으나 누적 합계 시
+ * floating point drift 줄이기).
+ */
+export function estimateCostUsd(model: string, usage: UsageInputs): number {
+  const pricing = lookupPricing(model);
+  if (pricing === null) return 0;
+
+  const cacheWritePer = pricing.cache_write_per_mtok ?? pricing.input_per_mtok * 1.25;
+  const cacheReadPer = pricing.cache_read_per_mtok ?? pricing.input_per_mtok * 0.1;
+
+  const inputCost = (usage.input_tokens / 1_000_000) * pricing.input_per_mtok;
+  const outputCost = (usage.output_tokens / 1_000_000) * pricing.output_per_mtok;
+  const cacheWriteCost =
+    ((usage.cache_creation_input_tokens ?? 0) / 1_000_000) * cacheWritePer;
+  const cacheReadCost = ((usage.cache_read_input_tokens ?? 0) / 1_000_000) * cacheReadPer;
+
+  const total = inputCost + outputCost + cacheWriteCost + cacheReadCost;
+  // 6자리 round — Math.round 가 float→int 변환에 가장 안전.
+  return Math.round(total * 1_000_000) / 1_000_000;
+}

@@ -99,6 +99,41 @@ interface MockMcpServerState {
   last_log: string[];
 }
 
+// ── usage/* (v0.4.0) — mock IPC for useUsage / UsageSettings tests ──
+type MockUsageProvider = 'claude' | 'codex' | 'mock';
+interface MockUsageEvent {
+  id: string;
+  session_id: string;
+  turn_id: string;
+  provider: MockUsageProvider;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+  reasoning_output_tokens: number;
+  total_cost_usd: number;
+  recorded_at: string;
+  source?: string;
+}
+interface MockUsageSummary {
+  provider: MockUsageProvider;
+  model: string;
+  total_input: number;
+  total_output: number;
+  total_cache_creation: number;
+  total_cache_read: number;
+  total_reasoning: number;
+  total_cost_usd: number;
+  event_count: number;
+}
+interface MockDailyUsageRow {
+  date: string;
+  provider: MockUsageProvider;
+  total_cost_usd: number;
+  total_tokens: number;
+}
+
 const mockStore = {
   sessions: new Map<string, Session>(),
   locks: new Map<string, MockSessionLock>(),
@@ -164,6 +199,14 @@ const mockStore = {
   // mcpAddBehavior 로 add 시 reject 시뮬레이션 가능.
   mcpServers: new Map<string, MockMcpServerState>(),
   mcpAddBehavior: 'success' as 'success' | 'fail',
+
+  // ── usage/* (v0.4.0) ───────────────────────────────────
+  // Tests 가 미리 채워두면 useUsage / UsageSettings 가 그대로 받아 표시.
+  // bySession 은 sessionId 키로 분리 — 같은 session 의 여러 event 도 가능.
+  usageSummary: [] as MockUsageSummary[],
+  usageDaily: [] as MockDailyUsageRow[],
+  usageBySession: new Map<string, MockUsageEvent[]>(),
+  usageError: null as string | null,
 };
 
 function emitBrowserUpdate(state: MockBrowserTabState): void {
@@ -250,6 +293,10 @@ beforeEach(() => {
   mockStore.aiEndListeners.clear();
   mockStore.mcpServers.clear();
   mockStore.mcpAddBehavior = 'success';
+  mockStore.usageSummary = [];
+  mockStore.usageDaily = [];
+  mockStore.usageBySession.clear();
+  mockStore.usageError = null;
   mockStore.workspace = null;
   mockStore.workspacePickNext = undefined;
   mockStore.onboardingCompleted = true;
@@ -306,6 +353,12 @@ beforeEach(() => {
       (mcp['remove'] as unknown as { mockClear?: () => void }).mockClear?.();
       (mcp['restart'] as unknown as { mockClear?: () => void }).mockClear?.();
       (mcp['getLogs'] as unknown as { mockClear?: () => void }).mockClear?.();
+    }
+    const usageNs = (window.dreampia as unknown as { usage?: Record<string, unknown> }).usage;
+    if (usageNs !== undefined) {
+      (usageNs['summary'] as unknown as { mockClear?: () => void }).mockClear?.();
+      (usageNs['daily'] as unknown as { mockClear?: () => void }).mockClear?.();
+      (usageNs['bySession'] as unknown as { mockClear?: () => void }).mockClear?.();
     }
   }
 });
@@ -770,6 +823,52 @@ if (typeof window !== 'undefined') {
             value: server !== undefined ? [...server.last_log] : [],
           };
         }),
+      },
+
+      // v0.4.0 — Usage / cost telemetry (read-only).
+      // mockStore.usageSummary / usageDaily / usageBySession 가 비어 있으면
+      // 빈 배열 반환. usageError 가 set 돼 있으면 모든 query 가 실패.
+      usage: {
+        summary: vi.fn(
+          async (
+            _args?: {
+              from?: string;
+              to?: string;
+              provider?: MockUsageProvider;
+              model?: string;
+              session_id?: string;
+            }
+          ): Promise<Result<MockUsageSummary[]>> => {
+            if (mockStore.usageError !== null) {
+              return { ok: false, error: mockStore.usageError };
+            }
+            return { ok: true, value: [...mockStore.usageSummary] };
+          }
+        ),
+
+        daily: vi.fn(
+          async (_args: {
+            days: number;
+            provider?: MockUsageProvider;
+          }): Promise<Result<MockDailyUsageRow[]>> => {
+            if (mockStore.usageError !== null) {
+              return { ok: false, error: mockStore.usageError };
+            }
+            return { ok: true, value: [...mockStore.usageDaily] };
+          }
+        ),
+
+        bySession: vi.fn(
+          async (sessionId: string): Promise<Result<MockUsageEvent[]>> => {
+            if (mockStore.usageError !== null) {
+              return { ok: false, error: mockStore.usageError };
+            }
+            return {
+              ok: true,
+              value: [...(mockStore.usageBySession.get(sessionId) ?? [])],
+            };
+          }
+        ),
       },
     },
   });

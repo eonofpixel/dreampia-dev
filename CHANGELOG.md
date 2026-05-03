@@ -2,6 +2,107 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [0.4.0] — 2026-05-03
+
+**Feature release — Usage / Cost Tracking MVP.**
+
+Codex (read-only audit) 권고 v0.4.0. v0.3.0 의 onboarding polish 가 "처음 켰을
+때 성공" 단계를 푸는 거였다면, v0.4.0 은 "계속 쓸 수 있느냐 (실사용 신뢰)" 단계
+의 첫 블록이다. 초기 사용자들의 다음 병목 — "얼마나 썼고, 비용이 얼마나 나가나"
+— 를 즉시 답할 수 있어야 v1.0 의 신뢰 단계로 진입한다.
+
+### Added
+
+- **`usage_events` 테이블 (migration 003)** — append-only token / cost
+  telemetry. session_id / turn_id / provider / model / 5종 token 카운터
+  (input / output / cache_creation / cache_read / reasoning) + total_cost_usd
+  + recorded_at + 디버그용 source 필드. 인덱스 4개 (session+recorded /
+  recorded / provider+recorded / model+recorded). FK 는 의도적으로 없음
+  (cross-process import / dangling reference 허용).
+- **`src/providers/pricing.ts`** — 모델 → USD/Mtoken 가격표 + estimateCostUsd
+  함수. Claude (sonnet/haiku/opus) + Codex/OpenAI (gpt-4o/gpt-5.5/o1/o3-mini)
+  포함. 미등록 모델은 cost=0 으로 fallback (token 은 여전히 기록). 정확 매칭
+  우선, 그 다음 prefix 매칭으로 새 release 도 잡음.
+- **StreamEvent `usage` variant** — translator 가 CLI JSONL 의 usage 필드를
+  추출해 emit. main 의 runStreamPump 가 가로채 UsageStore.recordEvent 로 영속.
+  한 turn 에 여러 번 emit 돼도 stream 종료 시 마지막 값 1건만 영속해 누적
+  정확성 보장.
+- **`UsageStore` (`src/storage/UsageStore.ts`)** — append-only persistence
+  layer. recordEvent (write) + getSummary (provider/model 별 합계) +
+  getDailyTotals (날짜별) + getBySession (디버그). UPDATE / DELETE 메서드 X.
+  음수 토큰 / non-finite cost 는 0 으로 clamp.
+- **3개 신규 IPC channel (모두 `usage/*` namespace, read-only)**:
+  - `usage/summary` — `{from?, to?, provider?, model?, session_id?}` →
+    UsageSummary[]. 모든 query Zod 검증.
+  - `usage/daily` — `{days, provider?}` → DailyUsageRow[]. days 1-365 범위.
+  - `usage/by-session` — sessionId 문자열 → UsageEvent[].
+- **`useUsage` hook** — `summary` / `daily` 자동 fetch + preset 전환
+  (today/7d/30d) + manual refresh + lastRefreshedAt 추적. 패턴은 useMcp 와
+  동일.
+- **`UsageSettings` 모달** — Sidebar 의 [사용량] 버튼이 mount. 헤더 + preset
+  탭 + provider/model 별 합계 표 + 일별 추이 표 + 새로고침. 한국어 우선,
+  USD 4-digit / 토큰 ko-KR 로케일 포맷팅. 빈 상태 안내 + IPC 에러 banner.
+- **Sidebar [사용량] 항목** — `BarChart3` 아이콘 + `onOpenUsage` 콜백.
+  미지정 시 항목 자체를 숨김 (다른 nav 항목 패턴 동일).
+- **MockProvider usage emit** — synthetic usage event 도 emit (응답 길이 ÷ 4
+  ≈ token 추정). dev / e2e 도 cost 흐름을 검증할 수 있음.
+
+### Changed
+
+- `package.json`: `0.3.0` → `0.4.0` (minor bump for new feature).
+- `src/storage/migrate.ts` MIGRATIONS 배열에 v3 항목 추가 (LATEST = 3).
+- `src/providers/types.ts` StreamEvent union 확장 + UsageEventData interface
+  export.
+- `src/providers/index.ts` pricing module + UsageEventData 타입 re-export.
+- `src/main/preload.ts` whitelist 에 3개 새 IPC channel + `usage` namespace
+  + UsageEventDataShape (sandbox-safe inline).
+- `src/main/ipc.ts` registerIpcHandlers 8번째 파라미터로 `usage?: UsageStore`
+  추가. AI handler 가 stream pump 안에서 fire-and-forget 으로 usage 기록.
+- `src/main/index.ts` SessionStore 의 동일 connection 으로 UsageStore 인스턴스
+  생성 + registerIpcHandlers 에 전달.
+- `src/renderer/components/sidebar/Sidebar.tsx` `onOpenUsage` prop + 새 nav
+  항목 (testId: `sidebar-open-usage`).
+- `src/renderer/App.tsx` `usageSettingsOpen` state + Sidebar wire-up +
+  `<UsageSettings>` mount.
+
+### Tests
+
+- 새 vitest: 797 → **890 tests pass** (+93 new — translator 회귀 테스트도 포함).
+  - `tests/providers/pricing.test.ts` (15 tests) — lookup / estimate /
+    rounding / cache rate fallback.
+  - `tests/storage/UsageStore.test.ts` (25 tests) — migration 003 + record /
+    summary 필터 / daily totals / append-only 불변.
+  - `tests/providers/cli/translate.test.ts` (+8 tests) — Claude usage from
+    assistant + result; Codex usage from turn.completed.
+  - `tests/main/ipc.usage.test.ts` (15 tests) — 3개 channel Result wrapping +
+    Zod validation + error 직렬화 + UsageStore 미주입 시 channel 미등록.
+  - `tests/renderer/useUsage.test.ts` (8 tests) — hook fetch / preset
+    전환 / error / refresh / rangeFromPreset.
+  - `tests/renderer/UsageSettings.test.tsx` (10 tests) — render /
+    빈 상태 / 합계 표 / 일별 표 / preset 전환 / 새로고침 / cost 포맷팅.
+  - `tests/renderer/Sidebar.test.tsx` (+3 tests) — 사용량 버튼 조건부 렌더 +
+    클릭 → callback.
+- `tests/setup.ts` — `usage` namespace mock 추가 (summary / daily / bySession).
+- typecheck: 0 errors / lint: 0 errors / 기존 e2e 영향 없음.
+
+### Out of scope (별도 issue, v0.5.0+)
+
+- E2E test (현재 manual smoke 로 검증 — `npm run dev` → 채팅 → DB 확인).
+- 차트 (sparkline / bar chart) — 표만으로 v0.4.0 충분 검증.
+- CSV / JSON export — 데이터 소유권 강화는 v0.5.0+.
+- 영어 i18n — 별도 작업으로 분리.
+- 가격 자동 동기화 — 현재 hardcoded, 변경 시 pricing.ts 수정 필요.
+- Live cost streaming — 현재 turn 종료 후 1건만 영속.
+
+### Migration notes
+
+- 기존 SQLite DB 자동 v3 으로 마이그레이션 (idempotent — IF NOT EXISTS).
+- 기존 IPC channel 변경 X — 추가만 발생.
+- 가격이 없는 모델은 cost=0 으로 기록되지만 token 은 정상 누적 — 향후
+  pricing.ts 에 추가하면 재계산은 별도 작업 필요 (당장은 미지원).
+
+[0.4.0]: https://github.com/eonofpixel/dreampia-dev/releases/tag/v0.4.0
+
 ## [0.3.0] — 2026-05-03
 
 **Feature release — Onboarding 5-step wizard polish.**

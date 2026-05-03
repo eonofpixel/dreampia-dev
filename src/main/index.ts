@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { registerIpcHandlers, shutdownAiHandlers } from './ipc';
 import { BrowserManager } from './BrowserManager';
 import { McpManager, createSettingsAdapter } from './mcp';
-import { LeaderElection, SessionStore } from '@/storage';
+import { LeaderElection, SessionStore, UsageStore } from '@/storage';
 import { ShellRunTool, ToolQueue, ToolRegistry } from '@/tools';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -28,6 +28,7 @@ let mainWindow: BrowserWindow | null = null;
 let sessionStore: SessionStore | null = null;
 let browserManager: BrowserManager | null = null;
 let mcpManager: McpManager | null = null;
+let usageStore: UsageStore | null = null;
 
 interface WindowRuntime {
   election: LeaderElection;
@@ -147,6 +148,11 @@ app.whenReady().then(() => {
   const dbPath = path.join(app.getPath('userData'), 'sessions.sqlite');
   sessionStore = new SessionStore(dbPath);
 
+  // v0.4.0 — Usage / Cost telemetry. Same DB connection as SessionStore so
+  // WAL + FK pragmas are shared. UsageStore 는 append-only — 내부에서 자체
+  // mutation 안 하고 stream pump 에서만 recordEvent 호출.
+  usageStore = new UsageStore(sessionStore.getDb());
+
   // Tool Queue: main process owns all tool execution. Renderer/AI streams use
   // IPC only; subprocess-capable tools never cross into the sandboxed renderer.
   const registry = new ToolRegistry();
@@ -192,7 +198,8 @@ app.whenReady().then(() => {
       registry,
       queue,
     },
-    mcpManager
+    mcpManager,
+    usageStore
   );
   mainWindow = createMainWindow();
 
@@ -234,6 +241,9 @@ app.on('before-quit', () => {
     runtime.election.shutdown();
   }
   windowRuntimes.clear();
+  // UsageStore 는 SessionStore 의 DB connection 을 공유하므로 별도 close X.
+  // SessionStore.close() 가 connection 도 닫는다.
+  usageStore = null;
   sessionStore?.close();
   sessionStore = null;
 });

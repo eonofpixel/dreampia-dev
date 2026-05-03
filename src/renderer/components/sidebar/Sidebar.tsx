@@ -7,7 +7,17 @@
  */
 
 import type { Session } from '@/types';
-import { Plus, Search, Puzzle, Bot, Folder, Pin, Settings, Compass } from 'lucide-react';
+import {
+  Plus,
+  Search,
+  Puzzle,
+  Bot,
+  Folder,
+  Pin,
+  Settings,
+  Compass,
+  BarChart3,
+} from 'lucide-react';
 
 export interface SidebarProps {
   sessions: ReadonlyArray<Pick<Session, 'id' | 'title' | 'pinned'>>;
@@ -22,6 +32,11 @@ export interface SidebarProps {
    * App.tsx 가 useOnboarding().reset 을 wire up.
    */
   onReopenOnboarding?: () => void;
+  /**
+   * v0.4.0 — [사용량] 클릭 시 호출. 미지정 시 버튼 자체를 숨김.
+   * App.tsx 가 UsageSettings 모달을 mount.
+   */
+  onOpenUsage?: () => void;
 }
 
 export function Sidebar({
@@ -32,6 +47,7 @@ export function Sidebar({
   onNewChat,
   onOpenSettings,
   onReopenOnboarding,
+  onOpenUsage,
 }: SidebarProps): React.JSX.Element {
   const pinned = sessions.filter((s) => s.pinned);
   const recent = sessions.filter((s) => !s.pinned);
@@ -104,8 +120,16 @@ export function Sidebar({
         )}
       </nav>
 
-      {/* Bottom: 설정 + 온보딩 재진입 (v0.3.0) */}
+      {/* Bottom: 사용량 (v0.4.0) + 설정 + 온보딩 재진입 (v0.3.0) */}
       <div className="border-t border-border-primary p-2">
+        {onOpenUsage !== undefined && (
+          <SidebarNavItem
+            icon={<BarChart3 className="h-4 w-4" />}
+            label="사용량"
+            onClick={onOpenUsage}
+            testId="sidebar-open-usage"
+          />
+        )}
         {onReopenOnboarding !== undefined && (
           <SidebarNavItem
             icon={<Compass className="h-4 w-4" />}

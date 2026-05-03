@@ -16,6 +16,7 @@ import type { Database } from 'better-sqlite3';
 // 이 .sql 을 번들에 안 넣어 production build 에서 ENOENT 발생 (P2-V1 발견).
 import sql001 from './migrations/001_init.sql?raw';
 import sql002 from './migrations/002_locks.sql?raw';
+import sql003 from './migrations/003_usage_events.sql?raw';
 
 // ────────────────────────────────────────────────────────────
 // Migration registry
@@ -31,6 +32,7 @@ interface Migration {
 const MIGRATIONS: readonly Migration[] = [
   { version: 1, description: 'initial schema', up: sql001 },
   { version: 2, description: 'session_locks for multi-window leader election', up: sql002 },
+  { version: 3, description: 'usage_events for v0.4.0 cost tracking', up: sql003 },
 ] as const;
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

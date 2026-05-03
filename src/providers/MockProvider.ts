@@ -17,7 +17,8 @@
 
 import type { Turn, ToolCallId, ToolCallRef } from '@/types';
 import { newTurnId, newToolCallId, nowIso } from '@/types';
-import type { StreamEvent, StreamingProvider } from './types';
+import { estimateCostUsd } from './pricing';
+import type { StreamEvent, StreamingProvider, UsageEventData } from './types';
 
 // ────────────────────────────────────────────────────────────
 // Options
@@ -125,6 +126,27 @@ export class MockProvider implements StreamingProvider {
       ...(toolCalls.length > 0 && { tool_calls: toolCalls }),
       model: input.model,
     };
+
+    // v0.4.0 — synthetic usage event so dev / e2e 가 cost tracking 도 검증.
+    // Token 카운트는 응답 길이 기반 추정 (4 chars ≈ 1 token, OpenAI 권장).
+    const synthOutput = Math.max(1, Math.ceil(responseText.length / 4));
+    const synthInput = Math.max(1, Math.ceil(userText.length / 4));
+    const usageData: UsageEventData = {
+      provider: 'mock',
+      model: input.model,
+      turn_id: turnId,
+      input_tokens: synthInput,
+      output_tokens: synthOutput,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0,
+      reasoning_output_tokens: 0,
+      total_cost_usd: estimateCostUsd(input.model, {
+        input_tokens: synthInput,
+        output_tokens: synthOutput,
+      }),
+      recorded_at: new Date().toISOString(),
+    };
+    yield { type: 'usage', data: usageData };
 
     yield { type: 'message_complete', turn: finalTurn };
   }

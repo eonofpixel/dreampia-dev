@@ -36,16 +36,18 @@ function userTurn(text: string): Turn {
 // ────────────────────────────────────────────────────────────
 
 describe('MockProvider — stream lifecycle', () => {
-  it('emits message_start, text_deltas, message_complete in order', async () => {
+  it('emits message_start, text_deltas, usage, message_complete in order', async () => {
     const provider = new MockProvider({ responseText: 'abc' });
     const events = await collect(provider, [userTurn('hi')]);
 
-    expect(events.length).toBeGreaterThanOrEqual(5); // start + 3 deltas + complete
+    expect(events.length).toBeGreaterThanOrEqual(5); // start + 3 deltas + usage + complete
     expect(events[0]?.type).toBe('message_start');
     expect(events[events.length - 1]?.type).toBe('message_complete');
+    // v0.4.0 — usage event 가 message_complete 직전에 emit.
+    expect(events[events.length - 2]?.type).toBe('usage');
 
-    // text_deltas in middle
-    const middleTypes = events.slice(1, -1).map((e) => e.type);
+    // text_deltas in middle (usage 빼고). slice(1, -2) 로 first/last/usage 제외.
+    const middleTypes = events.slice(1, -2).map((e) => e.type);
     expect(middleTypes.every((t) => t === 'text_delta')).toBe(true);
   });
 

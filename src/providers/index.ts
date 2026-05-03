@@ -29,7 +29,17 @@ export type {
   ToolCall,
   ToolDefinition,
   ToolResult,
+  UsageEventData,
 } from './types';
+
+// v0.4.0 — pricing (pure, sandbox-safe)
+export {
+  MODEL_PRICING,
+  estimateCostUsd,
+  lookupPricing,
+  type ModelPricing,
+  type UsageInputs,
+} from './pricing';
 
 // Adapters (pure — no Node-only deps)
 export { ClaudeAdapter } from './ClaudeAdapter';

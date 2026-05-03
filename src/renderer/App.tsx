@@ -17,6 +17,7 @@ import { ChatPanel, type CliStatus } from './components/chat/ChatPanel';
 import { PreviewPanel } from './components/preview/PreviewPanel';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { McpSettings } from './components/settings/McpSettings';
+import { UsageSettings } from './components/settings/UsageSettings';
 import {
   SessionSchema,
   newSessionId,
@@ -147,6 +148,8 @@ export function App(): React.JSX.Element {
   const [launchWorkspaceLoaded, setLaunchWorkspaceLoaded] = useState(false);
   // v0.2.0 — Issue #5: MCP 서버 설정 모달 표시.
   const [mcpSettingsOpen, setMcpSettingsOpen] = useState(false);
+  // v0.4.0 — Sidebar [사용량] 클릭 시 표시되는 token / cost 모달.
+  const [usageSettingsOpen, setUsageSettingsOpen] = useState(false);
   // Phase 3 audit (HIGH): picker auto-launch 가 사용자 취소 시 무한루프 방지.
   // Phase 3 B2: useState + useRef 이중 보호 — useState 는 React deps 에 반영,
   // useRef 는 같은 commit 내 빠른 연속 effect 실행에도 즉시 차단.
@@ -550,6 +553,10 @@ export function App(): React.JSX.Element {
               // OnboardingWizard 가 다시 mount.
               void resetOnboarding();
             }}
+            onOpenUsage={() => {
+              // v0.4.0 — token / cost 모달 열기.
+              setUsageSettingsOpen(true);
+            }}
           />
         }
         chat={
@@ -581,6 +588,12 @@ export function App(): React.JSX.Element {
         open={mcpSettingsOpen}
         onClose={() => {
           setMcpSettingsOpen(false);
+        }}
+      />
+      <UsageSettings
+        open={usageSettingsOpen}
+        onClose={() => {
+          setUsageSettingsOpen(false);
         }}
       />
     </>

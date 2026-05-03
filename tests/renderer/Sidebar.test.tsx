@@ -174,4 +174,46 @@ describe('Sidebar', () => {
       expect(onReopenOnboarding).toHaveBeenCalledTimes(1);
     });
   });
+
+  // ────────────────────────────────────────────────────────────
+  // v0.4.0 — [사용량] 버튼
+  // ────────────────────────────────────────────────────────────
+
+  describe('Open usage (v0.4.0)', () => {
+    it('hides 사용량 button when onOpenUsage undefined', () => {
+      render(
+        <Sidebar sessions={[]} onSelectSession={() => {}} onNewChat={() => {}} />
+      );
+      expect(screen.queryByTestId('sidebar-open-usage')).not.toBeInTheDocument();
+    });
+
+    it('shows 사용량 button when onOpenUsage provided', () => {
+      render(
+        <Sidebar
+          sessions={[]}
+          onSelectSession={() => {}}
+          onNewChat={() => {}}
+          onOpenUsage={() => {}}
+        />
+      );
+      expect(screen.getByTestId('sidebar-open-usage')).toBeInTheDocument();
+      expect(screen.getByText('사용량')).toBeInTheDocument();
+    });
+
+    it('clicking 사용량 calls onOpenUsage', async () => {
+      const onOpenUsage = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <Sidebar
+          sessions={[]}
+          onSelectSession={() => {}}
+          onNewChat={() => {}}
+          onOpenUsage={onOpenUsage}
+        />
+      );
+
+      await user.click(screen.getByTestId('sidebar-open-usage'));
+      expect(onOpenUsage).toHaveBeenCalledTimes(1);
+    });
+  });
 });

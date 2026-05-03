@@ -42,7 +42,18 @@ import {
   type Turn,
   type TurnId,
 } from '@/types';
-import type { LeaderElection, SessionLock, SessionMeta, SessionStore } from '@/storage';
+import type {
+  DailyUsageRow,
+  LeaderElection,
+  SessionLock,
+  SessionMeta,
+  SessionStore,
+  UsageEvent,
+  UsageProvider,
+  UsageRangeFilter,
+  UsageStore,
+  UsageSummary,
+} from '@/storage';
 import type { StreamEvent, StreamingProvider } from '@/providers';
 import type { ToolCall, ToolQueue, ToolRegistry, ToolResult } from '@/tools';
 import type { McpManager } from './mcp';
@@ -131,6 +142,27 @@ const ToolCallArgsSchema = z
   })
   .strict();
 
+// usage/* — v0.4.0 cost tracking. Renderer 가 보내는 query 는 모두
+// optional + strict 로 검증. provider enum 은 UsageProvider 와 동일.
+const UsageProviderSchema = z.enum(['claude', 'codex', 'mock']);
+
+const UsageSummaryArgsSchema = z
+  .object({
+    from: z.string().min(1).optional(),
+    to: z.string().min(1).optional(),
+    provider: UsageProviderSchema.optional(),
+    model: z.string().min(1).optional(),
+    session_id: z.string().min(1).optional(),
+  })
+  .strict();
+
+const UsageDailyArgsSchema = z
+  .object({
+    days: z.number().int().positive().max(365),
+    provider: UsageProviderSchema.optional(),
+  })
+  .strict();
+
 // ────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────
@@ -205,6 +237,10 @@ function resolveElection(source: LockHandlerSource, event: IpcMainInvokeEvent): 
  *                   handlers are not registered.
  * @param mcp      - Optional McpManager. When omitted, `mcp/*` handlers are
  *                   not registered. Spec: docs/tools/mcp-bridge.md (Issue #5).
+ * @param usage    - Optional UsageStore. When omitted, `usage/*` handlers are
+ *                   not registered. Spec: ROADMAP.md (v0.4.0). Note: `ai`
+ *                   handler config also reads `usage` so stream pump can
+ *                   persist usage events fire-and-forget.
  */
 export function registerIpcHandlers(
   electronApp: App = app,
@@ -213,7 +249,8 @@ export function registerIpcHandlers(
   browser?: BrowserManager,
   ai?: AiHandlerConfig,
   tools?: ToolHandlerConfig,
-  mcp?: McpManager
+  mcp?: McpManager,
+  usage?: UsageStore
 ): void {
   ipcMain.handle('app:get-version', (): AppInfo => {
     return {
@@ -359,9 +396,10 @@ export function registerIpcHandlers(
     if (election) registerLockHandlers(election);
   }
   if (browser) registerBrowserHandlers(browser);
-  if (ai) registerAiHandlers(ai);
+  if (ai) registerAiHandlers(ai, usage);
   if (tools) registerToolHandlers(tools);
   if (mcp) registerMcpHandlers(mcp);
+  if (usage) registerUsageHandlers(usage);
 }
 
 // ────────────────────────────────────────────────────────────
@@ -885,6 +923,58 @@ function registerMcpHandlers(mcp: McpManager): void {
 }
 
 // ────────────────────────────────────────────────────────────
+// usage/* — Token / cost telemetry (v0.4.0)
+//
+// Spec: ROADMAP.md (v0.4.0 Usage/Cost Tracking MVP)
+//
+// 3 read-only handlers:
+//   - usage/summary    — {from?, to?, provider?, model?, session_id?} → UsageSummary[]
+//   - usage/daily      — {days, provider?} → DailyUsageRow[]
+//   - usage/by-session — sessionId 문자열 → UsageEvent[]
+//
+// 모든 handler 는 Result<T> wrap + Zod 검증. Mutation IPC 는 의도적으로 X
+// — append-only (recordEvent 는 stream pump 에서만 호출).
+// ────────────────────────────────────────────────────────────
+
+function registerUsageHandlers(usageStore: UsageStore): void {
+  ipcMain.handle('usage/summary', (_evt, raw: unknown): Result<UsageSummary[]> => {
+    try {
+      const args = UsageSummaryArgsSchema.parse(raw ?? {});
+      const filter: UsageRangeFilter = {};
+      if (args.from !== undefined) filter.from = args.from;
+      if (args.to !== undefined) filter.to = args.to;
+      if (args.provider !== undefined) filter.provider = args.provider;
+      if (args.model !== undefined) filter.model = args.model;
+      if (args.session_id !== undefined) filter.session_id = args.session_id;
+      return ok(usageStore.getSummary(filter));
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('usage/daily', (_evt, raw: unknown): Result<DailyUsageRow[]> => {
+    try {
+      const args = UsageDailyArgsSchema.parse(raw);
+      const provider: UsageProvider | undefined = args.provider;
+      return ok(usageStore.getDailyTotals(args.days, provider));
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('usage/by-session', (_evt, raw: unknown): Result<UsageEvent[]> => {
+    try {
+      if (typeof raw !== 'string' || raw.length === 0) {
+        throw new Error('session_id must be non-empty string');
+      }
+      return ok(usageStore.getBySession(raw));
+    } catch (err) {
+      return fail(err);
+    }
+  });
+}
+
+// ────────────────────────────────────────────────────────────
 // ai/* — Real CLI subprocess streaming (P1-4)
 // ────────────────────────────────────────────────────────────
 
@@ -936,7 +1026,7 @@ export function shutdownAiHandlers(): void {
   activeStreams.clear();
 }
 
-function registerAiHandlers(cfg: AiHandlerConfig): void {
+function registerAiHandlers(cfg: AiHandlerConfig, usage?: UsageStore): void {
   const getDefaultProviderFn = cfg.getDefaultProvider ?? defaultGetDefaultProvider;
   const detectCliFn = cfg.detectCli ?? defaultDetectCli;
 
@@ -982,7 +1072,14 @@ function registerAiHandlers(cfg: AiHandlerConfig): void {
         });
 
         // Stream 은 background 로 실행. Result 는 즉시 반환.
-        void runStreamPump(stream_id, provider, { turns, model, session_id }, controller, cfg);
+        void runStreamPump(
+          stream_id,
+          provider,
+          { turns, model, session_id },
+          controller,
+          cfg,
+          usage
+        );
 
         return ok({ stream_id, source });
       } catch (err) {
@@ -1013,7 +1110,8 @@ async function runStreamPump(
   provider: StreamingProvider,
   input: { turns: Turn[]; model: string; session_id?: string },
   controller: AbortController,
-  cfg: AiHandlerConfig
+  cfg: AiHandlerConfig,
+  usage?: UsageStore
 ): Promise<void> {
   const send = (channel: string, payload: unknown): void => {
     const win = cfg.getMainWindow();
@@ -1031,11 +1129,49 @@ async function runStreamPump(
 
   let terminalEmitted = false;
   let currentTurnId: TurnId | null = null;
+  // v0.4.0 — translator 가 한 turn 동안 usage event 를 여러 번 emit 할 수 있다
+  // (Claude assistant message + result 양쪽). DB 에는 마지막 1건만 영속해야
+  // 누적이 정확. 매 usage 가 도착할 때마다 latest 를 갱신하고 stream 종료
+  // 직전에 한 번만 recordEvent.
+  let latestUsage: { type: 'usage'; data: import('@/providers').UsageEventData } | null = null;
+  const persistLatestUsage = (): void => {
+    if (latestUsage === null || usage === undefined) return;
+    if (input.session_id === undefined || input.session_id.length === 0) return;
+    try {
+      usage.recordEvent({
+        session_id: input.session_id,
+        turn_id: latestUsage.data.turn_id,
+        provider: latestUsage.data.provider,
+        model: latestUsage.data.model,
+        input_tokens: latestUsage.data.input_tokens,
+        output_tokens: latestUsage.data.output_tokens,
+        ...(latestUsage.data.cache_creation_input_tokens !== undefined && {
+          cache_creation_input_tokens: latestUsage.data.cache_creation_input_tokens,
+        }),
+        ...(latestUsage.data.cache_read_input_tokens !== undefined && {
+          cache_read_input_tokens: latestUsage.data.cache_read_input_tokens,
+        }),
+        ...(latestUsage.data.reasoning_output_tokens !== undefined && {
+          reasoning_output_tokens: latestUsage.data.reasoning_output_tokens,
+        }),
+        total_cost_usd: latestUsage.data.total_cost_usd,
+        recorded_at: latestUsage.data.recorded_at,
+      });
+    } catch {
+      // fire-and-forget — usage 기록 실패가 stream 을 깨뜨리면 안 됨
+    }
+    latestUsage = null;
+  };
   try {
     for await (const ev of provider.stream(input)) {
       if (controller.signal.aborted) break;
       if (ev.type === 'message_start') {
         currentTurnId = ev.turn_id as TurnId;
+      }
+      // usage event 는 latest 만 보관 + renderer 로도 forward (UI 가 라이브
+      // 비용 표시할 수 있도록).
+      if (ev.type === 'usage') {
+        latestUsage = ev;
       }
       send('ai/stream-event', { stream_id: streamId, event: ev });
       if (ev.type === 'tool_call_complete') {
@@ -1060,6 +1196,9 @@ async function runStreamPump(
     terminalEmitted = true;
   } finally {
     activeStreams.delete(streamId);
+    // v0.4.0 — stream 종료 시 마지막 usage event 1건 영속.
+    // session_id 가 없는 stream (e.g. detect 단계) 은 자동 skip.
+    persistLatestUsage();
     // Aborted 이고 terminal event 도 못 보냈으면 가짜 error event 발행 (renderer
     // 에서 hang 방지).
     if (!terminalEmitted && controller.signal.aborted) {

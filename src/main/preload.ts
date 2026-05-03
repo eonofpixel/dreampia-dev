@@ -77,6 +77,20 @@ interface CliDetectionShape {
 
 // StreamEvent shape — discriminated union mirrored from @/providers/types.
 // Renderer-side IpcStreamingProvider casts this back to the strict type.
+// v0.4.0 — `usage` variant 추가 (token / cost telemetry).
+interface UsageEventDataShape {
+  provider: 'claude' | 'codex' | 'mock';
+  model: string;
+  turn_id: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+  reasoning_output_tokens?: number;
+  total_cost_usd: number;
+  recorded_at: string;
+}
+
 type StreamEventShape =
   | { type: 'message_start'; turn_id: string; model: string }
   | { type: 'text_delta'; text: string }
@@ -88,6 +102,7 @@ type StreamEventShape =
   | { type: 'tool_call_complete'; tool_call: { id: string; tool_id: string; input?: unknown } }
   | { type: 'tool_result'; result: ToolResultRefShape }
   | { type: 'message_complete'; turn: Turn }
+  | { type: 'usage'; data: UsageEventDataShape }
   | { type: 'error'; error: string };
 
 interface AiStreamEventPayload {
@@ -184,6 +199,58 @@ interface McpServerStateShape {
   last_log: string[];
 }
 
+// v0.4.0 — Usage / cost shapes mirrored from @/storage/UsageStore.
+// Inlined to keep preload free of better-sqlite3 imports.
+type UsageProviderShape = 'claude' | 'codex' | 'mock';
+
+interface UsageEventShape {
+  id: string;
+  session_id: string;
+  turn_id: string;
+  provider: UsageProviderShape;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+  reasoning_output_tokens: number;
+  total_cost_usd: number;
+  recorded_at: string;
+  source?: string;
+}
+
+interface UsageSummaryShape {
+  provider: UsageProviderShape;
+  model: string;
+  total_input: number;
+  total_output: number;
+  total_cache_creation: number;
+  total_cache_read: number;
+  total_reasoning: number;
+  total_cost_usd: number;
+  event_count: number;
+}
+
+interface DailyUsageRowShape {
+  date: string;
+  provider: UsageProviderShape;
+  total_cost_usd: number;
+  total_tokens: number;
+}
+
+interface UsageSummaryArgsShape {
+  from?: string;
+  to?: string;
+  provider?: UsageProviderShape;
+  model?: string;
+  session_id?: string;
+}
+
+interface UsageDailyArgsShape {
+  days: number;
+  provider?: UsageProviderShape;
+}
+
 // Whitelist of IPC channels (security)
 const ALLOWED_INVOKE_CHANNELS = [
   'app:get-version',
@@ -231,6 +298,10 @@ const ALLOWED_INVOKE_CHANNELS = [
   'mcp/remove',
   'mcp/restart',
   'mcp/get-logs',
+  // v0.4.0 — usage / cost telemetry
+  'usage/summary',
+  'usage/daily',
+  'usage/by-session',
 ] as const;
 
 const ALLOWED_RECEIVE_CHANNELS = [
@@ -571,6 +642,28 @@ const api = {
 
     getLogs: (id: string): Promise<Result<string[]>> =>
       ipcRenderer.invoke('mcp/get-logs', id) as Promise<Result<string[]>>,
+  },
+
+  /**
+   * v0.4.0 — Usage / cost telemetry (read-only).
+   *
+   * Spec: ROADMAP.md (v0.4.0 Usage/Cost Tracking MVP)
+   *
+   * 3개 read-only handler. Mutation 은 의도적으로 노출 X — usage 는
+   * stream pump 에서만 영속되는 append-only 기록이다.
+   *   - summary    {from?, to?, provider?, model?, session_id?}
+   *   - daily      {days, provider?}
+   *   - bySession  sessionId
+   */
+  usage: {
+    summary: (args?: UsageSummaryArgsShape): Promise<Result<UsageSummaryShape[]>> =>
+      ipcRenderer.invoke('usage/summary', args ?? {}) as Promise<Result<UsageSummaryShape[]>>,
+
+    daily: (args: UsageDailyArgsShape): Promise<Result<DailyUsageRowShape[]>> =>
+      ipcRenderer.invoke('usage/daily', args) as Promise<Result<DailyUsageRowShape[]>>,
+
+    bySession: (sessionId: string): Promise<Result<UsageEventShape[]>> =>
+      ipcRenderer.invoke('usage/by-session', sessionId) as Promise<Result<UsageEventShape[]>>,
   },
 };
 
