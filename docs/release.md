@@ -208,6 +208,64 @@ dispatch trigger 시 publish job 은 skip 되고 이 job 이 실행:
 - artifact 다운로드 + sanity check (ls -la)
 - GitHub Release 발행 X — Actions 의 artifact zip 으로 14일 보존만
 
+## better-sqlite3 ABI 안정성 (v0.14.0 영구 해결)
+
+`better-sqlite3` 는 native module 이라 컴파일 ABI 가 host 환경 (Node major +
+Electron major) 과 일치해야 한다. v0.14.0 부터 다음 보호장치를 갖춘다:
+
+### 1) 자동 토글 (predev / pretest)
+
+`scripts/ensure-abi.cjs` 가 `npm run dev` / `npm test` 실행 직전 ABI 일치 여부
+를 child process 로 검증, 다르면 `electron-rebuild` (or `npm rebuild`) 자동 실행.
+v0.14.0 부터 `.ensure-abi-state.json` 캐시로 두 번째부터 100~300ms 절약.
+
+### 2) `npm install` 후 자동 native rebuild
+
+`postinstall: electron-builder install-app-deps` 가 의존성 설치 직후 Electron
+ABI 로 native rebuild. 사용자가 따로 명령을 실행할 필요 없음.
+
+### 3) 사용자 자가 진단
+
+```bash
+npm run diagnose
+```
+
+스크립트 (`scripts/dreampia-diagnose.cjs`) 가 Node/Electron 버전, binding 경로
++ 크기 + ABI, 캐시 상태를 표시. `--json` 플래그로 머신-파싱 출력.
+
+앱 안에서는 **Settings → 진단** 탭이 동일 정보를 GUI 로 표시. DB 로드 실패 시
+명확한 fix 명령 (`npm run dev:rebuild`) 안내.
+
+### 4) DB 로드 실패 메시지 rewrap
+
+`SessionStore` constructor 가 `ERR_DLOPEN_FAILED` / `NODE_MODULE_VERSION` /
+`A dynamic link library` 패턴을 가진 native-load 실패를 catch → 사용자 친화적
+한국어 메시지로 rewrap (DB 경로 + 원본 + 권장 명령 3종).
+
+### 5) 부팅 시 무결성 검사
+
+`SessionStore.diagnose()` 가 `PRAGMA quick_check` 결과를 반환. main 부팅 흐름
+이 packaged build 에선 `dialog.showErrorBox` 로 사용자에게 백업 권고 + DB
+경로 표시. 검사 실패해도 hard-stop 하지 않고 사용자가 export/backup 기회 갖도록 진행.
+
+### 6) CI 검증
+
+`release.yml` 의 `Verify native module presence` step 이 `vite build` 직전에
+binding 파일 존재 + 크기 검증. binding 누락이면 build fail.
+
+### 7) Version pin
+
+`better-sqlite3@12.9.0` (caret 제거 — minor 도 자동 안 올라감). ABI 변동 가능
+성 0. minor 업데이트는 의도적 PR 로만.
+
+### 왜 `node:sqlite` / `sql.js` 선택 안 했나
+
+| 후보 | 검토 결과 |
+|------|-----------|
+| `node:sqlite` (Node 22+ 내장) | Electron 33 = Node 20 → 사용 불가 |
+| `sql.js` (WASM) | 동기 사용 시 메모리에 전체 DB 로드, WAL 미지원, 성능 trade-off — 사용자 데이터 늘면 부담 |
+| `better-sqlite3` 유지 | 이미 v0.1.x ~ v0.13.x 모두 안정. ABI 토글 자동화 + 자가 진단으로 사용자 마찰 0. ★ 채택 |
+
 ## 관련
 
 - [electron-builder.yml](../electron-builder.yml) — 패키징 설정

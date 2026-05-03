@@ -35,11 +35,13 @@ import {
   Keyboard,
   Compass,
   Languages,
+  Stethoscope,
 } from 'lucide-react';
 import { McpSettingsPanel } from './McpSettings';
 import { UsageSettingsPanel } from './UsageSettings';
 import { KeyboardSettings } from './KeyboardSettings';
 import { LanguageSettings } from './LanguageSettings';
+import { DiagnoseSettings } from './DiagnoseSettings';
 import { type PermissionLevel } from '@/types';
 import { useT } from '../../i18n';
 import { localizedPermissionLabel } from './permissionLabels';
@@ -52,6 +54,7 @@ export type SettingsTabId =
   | 'theme'
   | 'keyboard'
   | 'language'
+  | 'diagnose'
   | 'onboarding';
 
 export interface SettingsModalProps {
@@ -87,6 +90,13 @@ const TAB_ORDER: ReadonlyArray<TabSpec> = [
   // keyboard 다음에 onboarding 이 있어 사용자 친숙도 (메뉴 순서 변경 최소화) 를
   // 위해 keyboard ↔ onboarding 사이에 삽입.
   { id: 'language', labelKey: 'settings.tab.language', icon: <Languages className="h-4 w-4" /> },
+  // v0.14.0 (A ABI Hardening) — 진단 탭. ABI / DB / 환경 정보 표시. onboarding
+  // 위쪽에 두어 "문제 생기면 여기" 동선이 자연스럽도록.
+  {
+    id: 'diagnose',
+    labelKey: 'settings.tab.diagnose',
+    icon: <Stethoscope className="h-4 w-4" />,
+  },
   { id: 'onboarding', labelKey: 'settings.tab.onboarding', icon: <Compass className="h-4 w-4" /> },
 ];
 
@@ -171,6 +181,7 @@ export function SettingsModal({
             {activeTab === 'theme' && <ThemePanel />}
             {activeTab === 'keyboard' && <KeyboardSettings />}
             {activeTab === 'language' && <LanguageSettings />}
+            {activeTab === 'diagnose' && <DiagnoseSettings />}
             {activeTab === 'onboarding' && (
               <OnboardingPanel onReopenOnboarding={onReopenOnboarding} />
             )}

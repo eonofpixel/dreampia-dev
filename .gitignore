@@ -54,6 +54,11 @@ Thumbs.db
 .eslintcache
 .tsbuildinfo
 
+# v0.14.0 (A ABI Hardening) — ensure-abi.cjs 의 ABI 토글 캐시 (dev / test ABI
+# 일치 검증 결과). machine-specific (binding mtime + Electron major + Node major)
+# 이라 repo 추적 X. 다음 npm run dev / npm test 시 자동 재생성.
+.ensure-abi-state.json
+
 # Captures (analysis 결과 — 별도 보관)
 captures/
 

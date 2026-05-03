@@ -107,6 +107,29 @@ export type AppInfo = {
   nodeVersion: string;
 };
 
+/**
+ * v0.14.0 (A ABI Hardening) — `app:diagnose` 가 반환하는 자가 진단 결과.
+ *
+ * Settings → 진단 탭이 표시. DB 가 로드되지 않았으면 db_loaded=false 만 채워지
+ * 고 나머지 DB 필드는 undefined — renderer 가 "DB 로드 실패" 안내를 띄우는
+ * 분기점.
+ */
+export type AppDiagnoseResult = {
+  platform: NodeJS.Platform;
+  arch: string;
+  node_version: string;
+  electron_version: string;
+  app_version: string;
+  db_loaded: boolean;
+  db_ok?: boolean;
+  schema_version?: number | null;
+  table_count?: number | null;
+  integrity_ok?: boolean | null;
+  wal_mode?: boolean | null;
+  integrity_message?: string;
+  db_error?: string;
+};
+
 // ────────────────────────────────────────────────────────────
 // Validation schemas (renderer 입력은 신뢰 불가)
 // ────────────────────────────────────────────────────────────
@@ -735,6 +758,35 @@ export function registerIpcHandlers(
       const root = process.cwd();
       const name = path.basename(root) || root;
       return ok({ root, name });
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  // v0.14.0 (A ABI Hardening) — 사용자 자가 진단 IPC. Settings 모달의 진단 탭이
+  // 호출. SessionStore 가 없는 환경 (테스트 / pre-init) 에서도 platform / process
+  // 정보는 반환. DB 쪽 정보는 store 가 있을 때만 채움.
+  ipcMain.handle('app:diagnose', (): Result<AppDiagnoseResult> => {
+    try {
+      const out: AppDiagnoseResult = {
+        platform: process.platform,
+        arch: process.arch,
+        node_version: process.versions.node ?? '',
+        electron_version: process.versions.electron ?? '',
+        app_version: electronApp.getVersion(),
+        db_loaded: store !== undefined,
+      };
+      if (store !== undefined) {
+        const diag = store.diagnose();
+        out.db_ok = diag.ok;
+        out.schema_version = diag.schema_version;
+        out.table_count = diag.table_count;
+        out.integrity_ok = diag.integrity_ok;
+        out.wal_mode = diag.wal_mode;
+        if (diag.integrity_message !== undefined) out.integrity_message = diag.integrity_message;
+        if (diag.error !== undefined) out.db_error = diag.error;
+      }
+      return ok(out);
     } catch (err) {
       return fail(err);
     }

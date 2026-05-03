@@ -5,7 +5,7 @@
  * Spec: docs/session/_index.md, docs/performance/electron-tuning.md
  */
 
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, dialog, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -158,7 +158,45 @@ app.whenReady().then(() => {
   //   Linux:   ~/.config/Dreampia-Dev/sessions.sqlite
   // (Electron creates the userData dir automatically on first access.)
   const dbPath = path.join(app.getPath('userData'), 'sessions.sqlite');
-  sessionStore = new SessionStore(dbPath);
+
+  // v0.14.0 (A ABI Hardening) — SessionStore 생성 자체가 native-load 실패로
+  // throw 할 수 있다 (rewrapNativeLoadError 가 사용자 친화적 메시지 첨부).
+  // 사용자가 console 만 보지 않고 dialog 로도 안내받도록 capture → showErrorBox.
+  // 그 후 process.exit 으로 깔끔한 종료 — partial state 로 계속 띄우면 더
+  // confusing 함.
+  try {
+    sessionStore = new SessionStore(dbPath);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[main] SessionStore init failed:', message);
+    if (app.isPackaged) {
+      dialog.showErrorBox('Dreampia-Dev — 데이터베이스 초기화 실패', message);
+    }
+    app.exit(1);
+    return;
+  }
+
+  // v0.14.0 — boot-time integrity check. quick_check 실패 시 사용자에게
+  // 알림 + 백업 권고. 실패해도 계속 진행 (사용자 데이터 손상 위험은 있지만
+  // hard-stop 보다 사용자가 export / backup 기회를 갖는 게 낫다).
+  const diag = sessionStore.diagnose();
+  if (diag.integrity_ok === false) {
+    const detail = diag.integrity_message ?? '(no detail)';
+    console.error('[main] DB integrity check failed:', detail);
+    if (app.isPackaged) {
+      dialog.showErrorBox(
+        'Dreampia-Dev — 데이터베이스 무결성 경고',
+        [
+          'SQLite quick_check 가 통과하지 않았어요. 데이터 손상이 의심됩니다.',
+          '',
+          `세부: ${detail}`,
+          '',
+          'sessions.sqlite 파일을 백업한 뒤 앱을 재시작하세요.',
+          `위치: ${dbPath}`,
+        ].join('\n')
+      );
+    }
+  }
 
   // v0.4.0 — Usage / Cost telemetry. Same DB connection as SessionStore so
   // WAL + FK pragmas are shared. UsageStore 는 append-only — 내부에서 자체

@@ -358,6 +358,24 @@ type CompareEventShape =
     }
   | { type: 'compare_complete'; run_id: string; run: CompareRunShape };
 
+// v0.14.0 (A ABI Hardening) — Settings → 진단 탭 + npm run diagnose 가 사용.
+// SessionStore 가 없는 환경에서도 platform / process 정보는 채워진다.
+interface AppDiagnoseShape {
+  platform: NodeJS.Platform;
+  arch: string;
+  node_version: string;
+  electron_version: string;
+  app_version: string;
+  db_loaded: boolean;
+  db_ok?: boolean;
+  schema_version?: number | null;
+  table_count?: number | null;
+  integrity_ok?: boolean | null;
+  wal_mode?: boolean | null;
+  integrity_message?: string;
+  db_error?: string;
+}
+
 // v0.6.0 (F-019) — @ mention 의 file IPC. main 의 workspace/list-files 와
 // workspace/read-file 이 반환하는 형태와 sync. 본 preload 가 사용하는 다른
 // 인라인 shape 와 동일하게 zod runtime 을 import 하지 않는다.
@@ -404,6 +422,8 @@ const ALLOWED_INVOKE_CHANNELS = [
   // v0.11.0 (B2) — Settings 모달 [언어] 탭. ko / en.
   'app:get-language',
   'app:set-language',
+  // v0.14.0 (A ABI Hardening) — Settings 모달 [진단] 탭이 호출.
+  'app:diagnose',
   'workspace/pick-folder',
   'workspace/get',
   // v0.6.0 (F-019) — @ mention 가 사용하는 file enumeration / read.
@@ -627,6 +647,14 @@ const api = {
 
     setLanguage: (language: 'ko' | 'en'): Promise<Result<void>> =>
       ipcRenderer.invoke('app:set-language', language) as Promise<Result<void>>,
+
+    /**
+     * v0.14.0 (A ABI Hardening) — Settings → 진단 탭이 호출.
+     * 항상 `Result<AppDiagnoseShape>` 반환 (DB 로드 실패해도 platform/version
+     * 정보는 채워짐 → renderer 가 분기 가능).
+     */
+    diagnose: (): Promise<Result<AppDiagnoseShape>> =>
+      ipcRenderer.invoke('app:diagnose') as Promise<Result<AppDiagnoseShape>>,
   },
 
   /**

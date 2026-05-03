@@ -12,6 +12,13 @@
  *     요구 → native module 매번 재컴파일 필요.
  *   - predev / pretest hook 으로 자동 보장 + smart skip 으로 매번 rebuild 회피.
  *
+ * v0.14.0 — A ABI Hardening:
+ *   - state cache (.ensure-abi-state.json) 에 마지막 성공 토글 메타데이터
+ *     기록 → 두 번째 호출은 cache hit 으로 즉시 종료.
+ *   - cache 키: target + Electron major + Node major + better-sqlite3 mtime.
+ *     이 중 하나라도 바뀌면 invalidate 후 재검증.
+ *   - rebuild 실패 시 사용자 친화적 hint 출력 (npm run diagnose 안내).
+ *
  * Windows 주의:
  *   ABI 검증 시 .node binary 를 직접 require() 하면 Windows 가 파일 lock 을
  *   걸어버려서 후속 rebuild 시 EPERM (unlink 불가). → 검증은 child process
@@ -20,7 +27,7 @@
  * Spec: docs/release.md (better-sqlite3 ABI 토글 자동화)
  */
 const { execSync, spawnSync } = require('node:child_process');
-const { existsSync } = require('node:fs');
+const { existsSync, readFileSync, writeFileSync, statSync } = require('node:fs');
 const { join } = require('node:path');
 
 const target = process.argv[2];
@@ -29,15 +36,74 @@ if (!['electron', 'node'].includes(target)) {
   process.exit(2);
 }
 
+const projectRoot = join(__dirname, '..');
+
 const bindingPath = join(
-  __dirname,
-  '..',
+  projectRoot,
   'node_modules',
   'better-sqlite3',
   'build',
   'Release',
   'better_sqlite3.node'
 );
+
+const stateFilePath = join(projectRoot, '.ensure-abi-state.json');
+
+/**
+ * Read major version of Electron from package.json (devDependencies).
+ * better-sqlite3 의 Electron-targeted ABI 는 Electron major 에 강하게 결합돼
+ * 있어서, Electron major 가 달라지면 cache 를 invalidate 해야 한다.
+ */
+function readPackageVersions() {
+  try {
+    const pkg = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8'));
+    const dev = pkg.devDependencies ?? {};
+    const dep = pkg.dependencies ?? {};
+    const electronSpec = dev.electron ?? '';
+    const sqliteSpec = dep['better-sqlite3'] ?? '';
+    return {
+      electronMajor: parseMajor(electronSpec),
+      sqliteSpec, // 캐시 키에만 사용 — semver 변동도 invalidate.
+    };
+  } catch {
+    return { electronMajor: null, sqliteSpec: '' };
+  }
+}
+
+function parseMajor(spec) {
+  // "^33.0.0" / "33.0.0" / "~33.1.2" → 33
+  const m = String(spec).match(/(\d+)/);
+  return m ? Number(m[1]) : null;
+}
+
+function readBindingMtime() {
+  if (!existsSync(bindingPath)) return null;
+  try {
+    return statSync(bindingPath).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+function readStateCache() {
+  if (!existsSync(stateFilePath)) return null;
+  try {
+    const raw = readFileSync(stateFilePath, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    // Corrupt JSON → discard. 다음 성공 시 overwrite.
+    return null;
+  }
+}
+
+function writeStateCache(state) {
+  try {
+    writeFileSync(stateFilePath, JSON.stringify(state, null, 2));
+  } catch (err) {
+    // Cache 쓰기 실패는 fatal 아님 — 다음 호출에서 다시 검증할 뿐.
+    console.warn('[ensure-abi] cache write failed (non-fatal):', err.message);
+  }
+}
 
 /**
  * better-sqlite3 binding 의 ABI 확인 (child process 에서).
@@ -70,11 +136,40 @@ function getCurrentAbi() {
   return 'unknown';
 }
 
+const versions = readPackageVersions();
+const bindingMtime = readBindingMtime();
+const cache = readStateCache();
+
+// Cache hit: 이전 토글이 동일 (target, Electron major, Node major, binding mtime)
+// 으로 성공했으면 ABI 재검증 (child process spawn) 도 생략한다.
+// 약 100-300ms 절약.
+if (
+  cache &&
+  cache.target === target &&
+  cache.electron_major === versions.electronMajor &&
+  cache.node_major === Number(process.versions.node.split('.')[0]) &&
+  cache.sqlite_spec === versions.sqliteSpec &&
+  cache.binding_mtime === bindingMtime &&
+  bindingMtime !== null
+) {
+  console.log(`[ensure-abi] cache hit — already ${target} (skipped verification)`);
+  process.exit(0);
+}
+
 const current = getCurrentAbi();
 console.log(`[ensure-abi] current=${current} target=${target}`);
 
 if (current === target) {
   console.log('[ensure-abi] already matched — skip rebuild');
+  // Cache 갱신: 다음 호출에서 child spawn 도 skip.
+  writeStateCache({
+    target,
+    electron_major: versions.electronMajor,
+    node_major: Number(process.versions.node.split('.')[0]),
+    sqlite_spec: versions.sqliteSpec,
+    binding_mtime: readBindingMtime(),
+    last_verified_at: new Date().toISOString(),
+  });
   process.exit(0);
 }
 
@@ -90,7 +185,23 @@ const cmd =
 try {
   execSync(cmd, { stdio: 'inherit' });
   console.log('[ensure-abi] done');
+  // Rebuild 성공 후 binding mtime 이 바뀌었을 테니 다시 읽어서 cache 갱신.
+  writeStateCache({
+    target,
+    electron_major: versions.electronMajor,
+    node_major: Number(process.versions.node.split('.')[0]),
+    sqlite_spec: versions.sqliteSpec,
+    binding_mtime: readBindingMtime(),
+    last_verified_at: new Date().toISOString(),
+  });
 } catch (err) {
   console.error('[ensure-abi] rebuild failed:', err.message);
+  console.error('');
+  console.error('  진단 가이드:');
+  console.error('    1. npm run diagnose          — 자가 진단 출력');
+  console.error('    2. npm run dev:rebuild       — Electron ABI 수동 rebuild');
+  console.error('    3. npm run test:rebuild      — Node   ABI 수동 rebuild');
+  console.error('    4. node-gyp 가 누락이면 https://github.com/nodejs/node-gyp 참조');
+  console.error('');
   process.exit(1);
 }

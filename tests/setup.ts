@@ -263,6 +263,25 @@ const mockStore = {
   keyboardShortcuts: {} as Record<string, string>,
   // v0.11.0 (B2) — UI locale. 기본값 'ko' — main side 와 동일.
   language: 'ko' as 'ko' | 'en',
+  // v0.14.0 (A ABI Hardening) — Settings → 진단 탭이 호출하는 mock state.
+  // 테스트는 이 객체를 mutate 해 다양한 상태 (DB 미로드, integrity 실패 등)
+  // 를 시뮬레이션. error 가 set 돼 있으면 ok=false 응답.
+  diagnose: {
+    platform: 'linux' as NodeJS.Platform,
+    arch: 'x64',
+    node_version: '22.0.0',
+    electron_version: '33.0.0',
+    app_version: '0.14.0-test',
+    db_loaded: true as boolean,
+    db_ok: true as boolean | undefined,
+    schema_version: 5 as number | null | undefined,
+    table_count: 12 as number | null | undefined,
+    integrity_ok: true as boolean | null | undefined,
+    wal_mode: true as boolean | null | undefined,
+    integrity_message: undefined as string | undefined,
+    db_error: undefined as string | undefined,
+  },
+  diagnoseError: null as string | null,
   permissionCapabilities: {
     read_only: ['LOCAL_READ', 'NETWORK_LOCAL', 'NETWORK_AI', 'SYSTEM_NOTIFICATION'],
     workspace_write: [
@@ -490,6 +509,23 @@ beforeEach(() => {
   mockStore.keyboardShortcuts = {};
   // v0.11.0 (B2) — language 도 매 테스트마다 default 로 reset.
   mockStore.language = 'ko';
+  // v0.14.0 (A ABI Hardening) — 진단 mock 상태 reset.
+  mockStore.diagnose = {
+    platform: 'linux',
+    arch: 'x64',
+    node_version: '22.0.0',
+    electron_version: '33.0.0',
+    app_version: '0.14.0-test',
+    db_loaded: true,
+    db_ok: true,
+    schema_version: 5,
+    table_count: 12,
+    integrity_ok: true,
+    wal_mode: true,
+    integrity_message: undefined,
+    db_error: undefined,
+  };
+  mockStore.diagnoseError = null;
   // i18n module-level locale 도 reset — 이전 테스트가 'en' 으로 전환했더라도
   // 다음 테스트는 'ko' 로 시작 (기존 한국어 assertion 호환).
   setLocale('ko');
@@ -571,6 +607,10 @@ beforeEach(() => {
       )?.mockClear?.();
       (
         appApi.setLanguage as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
+      // v0.14.0 (A ABI Hardening) — diagnose mock clear.
+      (
+        appApi.diagnose as unknown as { mockClear?: () => void } | undefined
       )?.mockClear?.();
     }
     const ai = window.dreampia.ai;
@@ -750,6 +790,30 @@ if (typeof window !== 'undefined') {
             return { ok: true, value: undefined };
           }
         ),
+
+        // v0.14.0 (A ABI Hardening) — Settings → 진단 탭이 호출.
+        diagnose: vi.fn(async (): Promise<
+          Result<{
+            platform: NodeJS.Platform;
+            arch: string;
+            node_version: string;
+            electron_version: string;
+            app_version: string;
+            db_loaded: boolean;
+            db_ok?: boolean;
+            schema_version?: number | null;
+            table_count?: number | null;
+            integrity_ok?: boolean | null;
+            wal_mode?: boolean | null;
+            integrity_message?: string;
+            db_error?: string;
+          }>
+        > => {
+          if (mockStore.diagnoseError !== null) {
+            return { ok: false, error: mockStore.diagnoseError };
+          }
+          return { ok: true, value: { ...mockStore.diagnose } };
+        }),
       },
 
       // Phase 2: workspace picker — main 의 dialog.showOpenDialog 를 mock.

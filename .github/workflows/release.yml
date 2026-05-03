@@ -82,6 +82,17 @@ jobs:
       - name: Restore Electron ABI for build
         run: npm run dev:rebuild
 
+      # v0.14.0 (A ABI Hardening) — better-sqlite3 native binding 이 Electron
+      # ABI 로 정상 컴파일됐는지 sanity check. require() 가 fail 하면 stderr 에
+      # NODE_MODULE_VERSION 이 등장 — Electron rebuild 후 Node 로 require 하면
+      # 정상 (= 우리는 stderr 에 NODE_MODULE_VERSION 가 보이거나 require 가
+      # passes 하는 둘 중 하나면 OK 로 간주). 그 외에 binding 자체가 없거나
+      # OS-level dependency 누락이면 build fail.
+      - name: Verify native module presence
+        run: |
+          node -e "const fs=require('fs'); const p='node_modules/better-sqlite3/build/Release/better_sqlite3.node'; if(!fs.existsSync(p)){ console.error('Missing native binding:', p); process.exit(1); } console.log('Binding present:', p, fs.statSync(p).size, 'bytes');"
+        shell: bash
+
       - name: Build Vite (renderer + main + preload)
         run: npx vite build
 

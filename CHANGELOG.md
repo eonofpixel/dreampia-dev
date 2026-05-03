@@ -2,6 +2,111 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [0.14.0] — 2026-05-03
+
+**Hardening release — A better-sqlite3 ABI 영구 안정화 + 사용자 자가 진단.**
+
+Codex 권고 v0.14.0 (MOST RISKY — v1.0 직전 native module 위험 제거). v0.1.x
+부터 사용해 온 `better-sqlite3` (native module) 의 ABI mismatch 가능성을 영구히
+중화. `node:sqlite` 는 Electron 33 = Node 20 이라 사용 불가, `sql.js` (WASM)
+는 메모리 + WAL 미지원 trade-off 가 사용자 데이터 증가 시 부담 → **better-sqlite3
+유지 + 자동 토글 강화 + 자가 진단 도구** 채택. 이미 v0.1.2 부터 도입된 ABI 자동
+토글 (`scripts/ensure-abi.cjs`) 위에 캐시 / postinstall / 사용자 진단 GUI / 부팅
+무결성 검사 / CI sanity check 다섯 layer 추가. 사용자 마찰 0 + 문제 시 자가 진단.
+
+### Added
+
+- **`scripts/ensure-abi.cjs` 강화** — `.ensure-abi-state.json` 캐시 도입. 캐시
+  키 = (target, Electron major, Node major, better-sqlite3 spec, binding mtime).
+  매칭 시 child process spawn 까지 skip (~50-100ms 절약). rebuild 실패 시 사용
+  자 친화적 진단 가이드 출력 (`npm run diagnose` / `dev:rebuild` / `test:rebuild`
+  / node-gyp). package.json 의 Electron major 변동도 자동 invalidate.
+- **`scripts/dreampia-diagnose.cjs` (신규)** — `npm run diagnose` 로 호출하는
+  사용자 자가 진단 CLI. 검사 항목:
+  - Platform / Arch
+  - Node version (>= 22 검증)
+  - Electron version (devDependencies spec)
+  - better-sqlite3 binding 존재 / 경로 / 크기
+  - Binding ABI ('node' / 'electron' / 'unknown')
+  - Cache 상태
+  
+  `--json` 플래그로 머신-파싱 출력 (CI 친화). 컬러 TTY 자동 감지. exit 0/1.
+- **`src/main/ipc.ts` — `app:diagnose` IPC handler (신규)** — Settings → 진단
+  탭이 호출. SessionStore 가 없는 환경에서도 platform / process 정보 반환,
+  store 가 있으면 schema_version / table_count / integrity_ok / wal_mode 까지
+  채움. 항상 `Result<AppDiagnoseResult>` — 에러도 IPC 경계 안에서 처리.
+- **`src/storage/SessionStore.ts` — `diagnose()` 메서드 (신규)** — Read-only
+  자가 진단. PRAGMA quick_check (integrity) + PRAGMA journal_mode (WAL) +
+  schema_version + table_count. 어떤 검사도 throw 하지 않음 (read-only contract
+  보장). 결과는 `SessionStoreDiagnostic` 으로 export. `rewrapNativeLoadError`
+  helper — `ERR_DLOPEN_FAILED` / `NODE_MODULE_VERSION` / dlopen 패턴 catch
+  → 사용자 친화적 한국어 메시지로 wrap (DB 경로 + 권장 명령 3종).
+- **`src/storage/SessionStore.ts` constructor — native-load guard** — `new
+  Database(...)` 가 throw 할 때 `rewrapNativeLoadError` 로 메시지 보강.
+- **`src/main/index.ts` — boot-time 무결성 검사** — `app.whenReady` 안에서
+  SessionStore 생성 자체를 try/catch (실패 시 `dialog.showErrorBox` + `app.exit`).
+  생성 성공 후 `diagnose()` 호출, `integrity_ok=false` 면 packaged build 에서
+  사용자 dialog 로 백업 권고 (DB 경로 표시) + 계속 진행 (사용자 export 기회 보장).
+- **`src/main/preload.ts` — `app.diagnose()` 메서드 + `app:diagnose` 채널 화이
+  트리스트** — renderer 가 안전하게 호출 가능.
+- **`src/renderer/components/settings/DiagnoseSettings.tsx` (신규)** — Settings
+  모달 [진단] 탭. 환경 (platform, arch, node, electron, app version) + DB
+  (db_loaded, schema_version, table_count, integrity, wal_mode) 두 섹션 표시.
+  Refresh 버튼으로 재검사. DB 로드 실패 / integrity 실패 / IPC 실패 세 가지
+  분기. 명확한 fix 안내 (`npm run diagnose` / `dev:rebuild`). i18n ko/en.
+- **`src/renderer/components/settings/SettingsModal.tsx` — 진단 탭 추가** —
+  사이드바에 Stethoscope 아이콘 + `settings.tab.diagnose` 라벨 (ko: "진단",
+  en: "Diagnose"). `language` 와 `onboarding` 사이에 배치.
+- **`package.json` 변화**:
+  - `version`: 0.13.0 → 0.14.0
+  - `dependencies.better-sqlite3`: `^12.9.0` → `12.9.0` (caret 제거 — 의도 없는
+    minor 업데이트로 ABI 변동 방지).
+  - `scripts.postinstall`: 신규 — `electron-builder install-app-deps` 가 의존성
+    설치 직후 native rebuild 자동 시도. 실패해도 npm install 자체는 success.
+  - `scripts.diagnose`: 신규 — `node scripts/dreampia-diagnose.cjs`.
+- **`.github/workflows/release.yml` — Verify native module presence step (신규)** —
+  vite build 직전 binding 파일 존재 + 크기 검증. 누락이면 build fail (CI 안전망).
+- **i18n keys (ko/en 각 25개)** — `settings.tab.diagnose` + `settings.diagnose.*`
+  (title, description, refresh, loading, section.environment, section.database,
+  field.*, value.*, status.*, error.*, hint.*).
+- **docs/release.md — better-sqlite3 ABI 안정성 섹션 (v0.14.0 영구 해결)** — 7개
+  보호장치 (자동 토글 + postinstall + 자가 진단 + DB 로드 실패 메시지 +
+  부팅 무결성 + CI 검증 + version pin) 정리. `node:sqlite` / `sql.js` 검토 결과
+  표 포함.
+- **README.md — ABI 자동화 안내 + Troubleshooting** — 사용자가 `npm run diagnose`
+  / Settings → 진단 탭 / `dev:rebuild` 명령 셋 발견 가능. v0.14.0 영구 해결
+  명시 + 기존 "ABI 토글 매번 수동" 한계 ~~취소선~~.
+
+### Tests (~22 new specs)
+
+- **`tests/storage/SessionStore.diagnose.test.ts` — 12 spec.** diagnose() 정상
+  반환 / schema_version 일치 / table_count > 0 / 반복 호출 idempotent /
+  integrity_message+error 정상 시 미존재 / wal_mode 타입 검증 +
+  rewrapNativeLoadError ABI 패턴 감지 (ERR_DLOPEN_FAILED, NODE_MODULE_VERSION,
+  non-Error throwable, 일반 에러 통과).
+- **`tests/main/ipc.app-diagnose.test.ts` — 5 spec.** 채널 등록 / store 없을
+  때 platform 만 반환 / store 있을 때 DB 정보 채움 / arch 필드 / Result wrap
+  contract.
+- **`tests/scripts/dreampia-diagnose.test.ts` — 4 spec.** --json 모드 valid
+  JSON / 핵심 check 이름 노출 / Node version 검사 통과 / plain text 출력.
+- **`tests/renderer/DiagnoseSettings.test.tsx` — 6 spec.** 정상 렌더 / 새로
+  고침 버튼 IPC 재호출 / db_loaded=false 분기 / integrity_message 표시 / IPC
+  실패 시 error 블록 / panel testid 안정성.
+- **`tests/setup.ts` — diagnose mock 추가** — `mockStore.diagnose` (정상
+  default) + `mockStore.diagnoseError` (실패 트리거). beforeEach 에서 reset +
+  vi.fn 의 mockClear 등록.
+
+### Why this approach (vs. WASM / node:sqlite)
+
+| 후보 | 결과 |
+|------|------|
+| `node:sqlite` (Node 22+ 내장) | Electron 33 = Node 20 → 사용 불가 |
+| `sql.js` (WASM) | 동기 사용 시 전체 DB 메모리 로드 + WAL 미지원 → 사용자 데이터 늘면 부담 |
+| `better-sqlite3` 유지 + 자동 토글 + 자가 진단 | ★ 채택 — 이미 v0.1.x ~ v0.13.x 안정 작동 |
+
+새 native dep 추가 X, WASM 도입 X, 사용자 마찰 0 (이미 자동 토글) + 문제 시
+자가 진단 도구 + 부팅 시 무결성 + CI sanity check.
+
 ## [0.13.0] — 2026-05-03
 
 **Feature release — J Typed file/session reference blocks: chip 표시 + 백워드 호환.**

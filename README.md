@@ -78,12 +78,17 @@ npm run lint
 npm run build
 ```
 
-> 🤖 **ABI 토글 자동화 (v0.1.2~)**: `npm run dev` / `npm test` / `pretest:e2e` 가
-> better-sqlite3 native module 의 ABI 를 자동으로 보장합니다 (smart skip — 이미
-> 일치하면 ~100ms). 사용자가 수동 rebuild 호출 X.
+> 🤖 **ABI 토글 자동화 (v0.1.2~) + 영구 안정화 (v0.14.0)**: `npm run dev` /
+> `npm test` / `pretest:e2e` 가 better-sqlite3 native module 의 ABI 를 자동
+> 보장합니다 (smart skip + cache → 이미 일치하면 ~50ms). `npm install` 직후
+> `electron-builder install-app-deps` 가 자동 native rebuild. 사용자가 수동
+> rebuild 호출 X.
 >
-> 트러블슈팅 시 수동 강제: `npm run dev:rebuild` (Electron) 또는
-> `npm run test:rebuild` (Node).
+> **트러블슈팅**:
+> - `npm run diagnose` — 환경 / Node-Electron 버전 / binding 상태 출력
+> - 앱 안에서: **Settings → 진단** 탭 (DB 무결성 + 스키마 버전 + WAL 모드)
+> - `npm run dev:rebuild` — Electron ABI 수동 rebuild
+> - `npm run test:rebuild` — Node ABI 수동 rebuild
 
 ### E2E 테스트 (Playwright Electron)
 
@@ -116,7 +121,7 @@ npm test
 
 **알려진 한계:**
 
-- ABI 토글 매번 수동 (V6 영구 해결 후 자동화 예정).
+- ~~ABI 토글 매번 수동 (V6 영구 해결 후 자동화 예정).~~ → v0.14.0 에서 자동화 + 캐시 + 자가진단 도구로 영구 해결.
 - `tool-call.spec.ts` / `permission.spec.ts` 는 dev-only injection 이 필요해
   현재 `.skip` 상태 (P2-B 에서 `src/renderer/devTestHooks.ts` 추가 후 활성화).
 - `browser-view.spec.ts` 는 https://example.com 네트워크 필요.
@@ -183,7 +188,9 @@ Claude CLI v2.1.123 + Codex CLI v0.125.0 출력 캡처 → translate 보정 (V5)
 1. Mock 응답 = "Mock response. You said: ..." (echo).
    진짜 응답은 CLI 인증 (claude /login, codex login) 후 사용 가능.
 
-2. better-sqlite3 dual-ABI 토글 필요 (위 rebuild 명령).
+2. ~~better-sqlite3 dual-ABI 토글 필요 (위 rebuild 명령).~~
+   → v0.14.0 부터 자동 (`predev` / `pretest` hook + cache + `postinstall`).
+   문제 시 `npm run diagnose` 또는 Settings → 진단 탭.
 
 3. CLI translate 의 Codex function_call 매핑은 best-effort.
    실제 tool 호출 응답이 캡처되면 보정 필요.

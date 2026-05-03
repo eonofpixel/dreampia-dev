@@ -297,6 +297,66 @@ function parseJsonOrNull<T>(s: string | null): T | undefined {
   return JSON.parse(s) as T;
 }
 
+/**
+ * v0.14.0 (A ABI Hardening) — native module 로드 실패를 사용자 친화적 메시지
+ * 로 rewrap.
+ *
+ * 패턴:
+ *   - `ERR_DLOPEN_FAILED` — Node 가 .node 파일 로드 자체를 실패 (binding 누락,
+ *     symbol mismatch, OS-level dependency 누락 등).
+ *   - `NODE_MODULE_VERSION` — ABI mismatch (Electron vs Node 컴파일 충돌).
+ *   - 그 외 — original 메시지 그대로 throw.
+ *
+ * 메시지는 사용자가 보는 dialog / console 출력 양쪽에서 그대로 쓰일 수 있도록
+ * 한국어 + 명령어 hint 를 포함한다. 영문은 release.md / README 참조.
+ */
+export function rewrapNativeLoadError(err: unknown, dbPath: string): Error {
+  if (!(err instanceof Error)) {
+    return new Error(`SessionStore 초기화 실패 (${String(err)})`);
+  }
+  const msg = err.message ?? '';
+  const code = (err as { code?: string }).code;
+  const isAbiOrDlopen =
+    code === 'ERR_DLOPEN_FAILED' ||
+    /NODE_MODULE_VERSION/.test(msg) ||
+    /better_sqlite3\.node/.test(msg) ||
+    /A dynamic link library/.test(msg);
+  if (!isAbiOrDlopen) {
+    return err;
+  }
+  const wrapped = new Error(
+    [
+      'SQLite 데이터베이스 모듈 로드 실패 (ABI mismatch 가능성).',
+      `  DB 경로: ${dbPath}`,
+      `  원본 오류: ${msg}`,
+      '',
+      '해결:',
+      '  1) `npm run diagnose`        — 현재 상태 출력',
+      '  2) `npm run dev:rebuild`     — Electron ABI 재컴파일',
+      '  3) `npm install`             — postinstall 자동 rebuild',
+    ].join('\n')
+  );
+  // code 보존 — 호출자가 매칭할 수 있도록.
+  if (code !== undefined) {
+    (wrapped as { code?: string }).code = code;
+  }
+  return wrapped;
+}
+
+/**
+ * v0.14.0 — 진단 결과 shape. SessionStore.diagnose() 가 반환.
+ */
+export interface SessionStoreDiagnostic {
+  ok: boolean;
+  schema_version: number | null;
+  table_count: number | null;
+  integrity_ok: boolean | null;
+  wal_mode: boolean | null;
+  /** quick_check 가 'ok' 아닌 경우 첫 줄 reason. */
+  integrity_message?: string;
+  error?: string;
+}
+
 // ────────────────────────────────────────────────────────────
 // SessionStore
 // ────────────────────────────────────────────────────────────
@@ -350,7 +410,14 @@ export class SessionStore {
   } = {};
 
   constructor(dbPath: string) {
-    this.db = new Database(dbPath);
+    // v0.14.0 (A ABI Hardening) — better-sqlite3 는 native module 이라 ABI 가
+    // 다르거나 binding 자체가 빠지면 `new Database(...)` 가 throw 한다. 사용자
+    // 가 stack trace 로 추정하기 어려우므로 명시적 hint 가 담긴 Error 로 rewrap.
+    try {
+      this.db = new Database(dbPath);
+    } catch (err) {
+      throw rewrapNativeLoadError(err, dbPath);
+    }
 
     // Pragmas BEFORE migrations: WAL must be set on a non-empty DB but
     // foreign_keys etc. are session-level and apply immediately.
@@ -398,6 +465,90 @@ export class SessionStore {
    */
   getDb(): DatabaseT {
     return this.db;
+  }
+
+  /**
+   * v0.14.0 (A ABI Hardening) — 사용자 자가 진단용. Settings → 진단 탭과
+   * `app:diagnose` IPC 가 호출.
+   *
+   * 검사:
+   *   - schema_version (migrate 이후 LATEST 와 비교)
+   *   - 테이블 개수 (sqlite_master)
+   *   - PRAGMA quick_check (integrity)
+   *   - PRAGMA journal_mode (WAL active 여부)
+   *
+   * 어떤 검사도 throw 하지 않는다 — 모든 실패는 `SessionStoreDiagnostic.error`
+   * 또는 individual 필드 null 로 표현한다. 진단 도구 자체가 부수효과를 일으키면
+   * 안 되므로 read-only.
+   */
+  diagnose(): SessionStoreDiagnostic {
+    try {
+      const schema_version = this.getSchemaVersion();
+      const tableRow = this.db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`
+        )
+        .get() as { n: number } | undefined;
+      const table_count = tableRow !== undefined ? tableRow.n : null;
+
+      // PRAGMA quick_check — fast subset of integrity_check. 모든 행이 'ok' 면
+      // 무결성 통과. 첫 행만 검사해 'ok' 여부 판정.
+      let integrity_ok: boolean | null = null;
+      let integrity_message: string | undefined;
+      try {
+        const rows = this.db.pragma('quick_check') as Array<{ quick_check?: string } | string>;
+        const first = rows[0];
+        const value =
+          typeof first === 'string'
+            ? first
+            : first !== undefined && typeof first === 'object'
+              ? (first.quick_check ?? '')
+              : '';
+        integrity_ok = value === 'ok';
+        if (!integrity_ok && value.length > 0) {
+          integrity_message = value;
+        }
+      } catch (err) {
+        integrity_ok = false;
+        integrity_message = err instanceof Error ? err.message : String(err);
+      }
+
+      let wal_mode: boolean | null = null;
+      try {
+        const journalRows = this.db.pragma('journal_mode') as Array<{ journal_mode?: string } | string>;
+        const j = journalRows[0];
+        const journalValue =
+          typeof j === 'string'
+            ? j
+            : j !== undefined && typeof j === 'object'
+              ? (j.journal_mode ?? '')
+              : '';
+        wal_mode = journalValue.toLowerCase() === 'wal';
+      } catch {
+        wal_mode = null;
+      }
+
+      const result: SessionStoreDiagnostic = {
+        ok: integrity_ok === true && wal_mode === true,
+        schema_version,
+        table_count,
+        integrity_ok,
+        wal_mode,
+      };
+      if (integrity_message !== undefined) {
+        result.integrity_message = integrity_message;
+      }
+      return result;
+    } catch (err) {
+      return {
+        ok: false,
+        schema_version: null,
+        table_count: null,
+        integrity_ok: null,
+        wal_mode: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
   }
 
   // ────────────────────────────────────────────────────────────

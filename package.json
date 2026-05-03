@@ -1,6 +1,6 @@
 {
   "name": "dreampia-dev",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Open source desktop AI coding wrapper. Claude Code + OpenAI Codex 통합 GUI.",
   "private": true,
   "type": "module",
@@ -19,6 +19,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
+    "postinstall": "electron-builder install-app-deps || node -e \"console.warn('[postinstall] electron-builder install-app-deps failed; run npm run dev:rebuild manually if needed')\"",
     "predev": "node scripts/ensure-abi.cjs electron",
     "dev": "vite",
     "dev:rebuild": "electron-rebuild -f -w better-sqlite3",
@@ -39,10 +40,11 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:report": "playwright show-report playwright-report",
+    "diagnose": "node scripts/dreampia-diagnose.cjs",
     "icons:generate": "node scripts/generate-icons.cjs"
   },
   "dependencies": {
-    "better-sqlite3": "^12.9.0",
+    "better-sqlite3": "12.9.0",
     "electron-updater": "^6.8.3",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
