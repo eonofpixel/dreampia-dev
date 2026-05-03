@@ -52,6 +52,20 @@ function isThemeChoice(v: unknown): v is ThemeChoice {
   return typeof v === 'string' && (THEME_VALUES as readonly string[]).includes(v);
 }
 
+/**
+ * v0.11.0 (B2) — Settings 모달의 [언어] 탭에서 선택. 'ko' 가 default — 영어는
+ * opt-in. 미지정 시 'ko'. 알 수 없는 값은 silent drop.
+ *
+ * 영문화 범위는 chat / search / usage / settings / error 핵심 화면에 한정
+ * (Codex 권고). 누락된 키는 자동으로 한국어로 fallback.
+ */
+export const LANGUAGE_VALUES = ['ko', 'en'] as const;
+export type LanguageChoice = (typeof LANGUAGE_VALUES)[number];
+
+function isLanguageChoice(v: unknown): v is LanguageChoice {
+  return typeof v === 'string' && (LANGUAGE_VALUES as readonly string[]).includes(v);
+}
+
 export interface AppSettings {
   /** 마지막으로 선택한 작업 폴더 절대 경로. */
   workspace_root?: string;
@@ -104,6 +118,13 @@ export interface AppSettings {
    * IPC 직렬화 안전. 알 수 없는 액션은 silent drop.
    */
   keyboard_shortcut_overrides?: Record<string, string>;
+  /**
+   * v0.11.0 (B2) — Settings 모달 [언어] 탭에서 선택한 UI locale.
+   *   'ko' → 한국어 (default)
+   *   'en' → 영어 (opt-in, chat/search/settings 등 핵심 화면만)
+   * 미설정 시 'ko'. renderer 가 부팅 시 한 번 fetch + locale 적용.
+   */
+  language?: LanguageChoice;
 }
 
 let cached: AppSettings | null = null;
@@ -176,6 +197,10 @@ export function readSettings(): AppSettings {
         obj['usage_alert_threshold'] <= 1
       ) {
         next.usage_alert_threshold = obj['usage_alert_threshold'];
+      }
+      // v0.11.0 (B2) — language. 알 수 없는 값은 silent drop.
+      if (isLanguageChoice(obj['language'])) {
+        next.language = obj['language'];
       }
       // v0.10.0 — keyboard_shortcut_overrides. plain Record<string,string>.
       // string 키 / string 값만 보존, 그 외 (number / object / null) 은 drop.

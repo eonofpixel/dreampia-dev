@@ -12,6 +12,9 @@ import { afterEach, beforeEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import type { Session, Turn } from '../src/types';
 import type { Result, SessionMetaPatch } from '../src/main/types';
+// v0.11.0 (B2) — 매 테스트마다 i18n locale 을 default ('ko') 로 reset.
+// 한 테스트가 'en' 으로 전환해도 다음 테스트의 한국어 assertion 이 깨지지 않도록.
+import { setLocale } from '../src/renderer/i18n';
 
 // ────────────────────────────────────────────────────────────
 // In-memory mock store (shared across all renderer tests)
@@ -212,6 +215,8 @@ const mockStore = {
   theme: 'system' as 'light' | 'dark' | 'system',
   // v0.10.0 — 사용자 지정 단축키 매핑. 비어 있으면 default 사용.
   keyboardShortcuts: {} as Record<string, string>,
+  // v0.11.0 (B2) — UI locale. 기본값 'ko' — main side 와 동일.
+  language: 'ko' as 'ko' | 'en',
   permissionCapabilities: {
     read_only: ['LOCAL_READ', 'NETWORK_LOCAL', 'NETWORK_AI', 'SYSTEM_NOTIFICATION'],
     workspace_write: [
@@ -413,6 +418,11 @@ beforeEach(() => {
   mockStore.theme = 'system';
   // v0.10.0 — keyboard shortcuts overrides 도 reset.
   mockStore.keyboardShortcuts = {};
+  // v0.11.0 (B2) — language 도 매 테스트마다 default 로 reset.
+  mockStore.language = 'ko';
+  // i18n module-level locale 도 reset — 이전 테스트가 'en' 으로 전환했더라도
+  // 다음 테스트는 'ko' 로 시작 (기존 한국어 assertion 호환).
+  setLocale('ko');
   // Phase 3 B2: vi.fn 의 call history 도 매 테스트마다 초기화. 그렇지 않으면
   // `expect(mock).toHaveBeenCalled()` 가 이전 테스트의 잔여 호출 때문에
   // 즉시 true 가 되어 waitFor 가 실제 호출을 기다리지 않는다.
@@ -484,6 +494,13 @@ beforeEach(() => {
       )?.mockClear?.();
       (
         appApi.setKeyboardShortcuts as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
+      // v0.11.0 (B2) — language mock clear.
+      (
+        appApi.getLanguage as unknown as { mockClear?: () => void } | undefined
+      )?.mockClear?.();
+      (
+        appApi.setLanguage as unknown as { mockClear?: () => void } | undefined
       )?.mockClear?.();
     }
     const ai = window.dreampia.ai;
@@ -645,6 +662,21 @@ if (typeof window !== 'undefined') {
         setKeyboardShortcuts: vi.fn(
           async (overrides: Record<string, string>): Promise<Result<void>> => {
             mockStore.keyboardShortcuts = { ...overrides };
+            return { ok: true, value: undefined };
+          }
+        ),
+
+        // v0.11.0 (B2) — UI locale (ko / en). default 'ko'.
+        getLanguage: vi.fn(
+          async (): Promise<Result<'ko' | 'en'>> => ({
+            ok: true,
+            value: mockStore.language,
+          })
+        ),
+
+        setLanguage: vi.fn(
+          async (language: 'ko' | 'en'): Promise<Result<void>> => {
+            mockStore.language = language;
             return { ok: true, value: undefined };
           }
         ),

@@ -26,8 +26,10 @@ import { z } from 'zod';
 import {
   readSettings,
   writeSettings,
+  LANGUAGE_VALUES,
   THEME_VALUES,
   type DefaultProviderChoice,
+  type LanguageChoice,
   type ThemeChoice,
 } from './settings';
 import { LEVEL_CAPABILITIES } from '@/permission';
@@ -565,6 +567,32 @@ export function registerIpcHandlers(
         throw new Error(`theme must be one of: ${THEME_VALUES.join(', ')}`);
       }
       writeSettings({ theme: raw as ThemeChoice });
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  // v0.11.0 (B2) — Settings 모달 [언어] 탭. 'ko' default. 알 수 없는 값은
+  // throw — renderer 가 ok=false 로 받아 silent fallback.
+  ipcMain.handle('app:get-language', (): Result<LanguageChoice> => {
+    try {
+      const settings = readSettings();
+      return ok(settings.language ?? 'ko');
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('app:set-language', (_evt, raw: unknown): Result<void> => {
+    try {
+      if (
+        typeof raw !== 'string' ||
+        !(LANGUAGE_VALUES as readonly string[]).includes(raw)
+      ) {
+        throw new Error(`language must be one of: ${LANGUAGE_VALUES.join(', ')}`);
+      }
+      writeSettings({ language: raw as LanguageChoice });
       return ok(undefined);
     } catch (err) {
       return fail(err);

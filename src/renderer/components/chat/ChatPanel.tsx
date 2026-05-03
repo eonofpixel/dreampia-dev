@@ -19,6 +19,7 @@ import { findToolResult } from './toolDisplayHelpers';
 import { PermissionDropdown } from './PermissionDropdown';
 import type { SlashCommandId } from '../../commands/registry';
 import type { ResolverContext } from '../../mentions/resolver';
+import { useT } from '../../i18n';
 
 /**
  * CLI 감지 상태 — App 이 useEffect 에서 ai/detect-cli 호출 후 설정.
@@ -176,14 +177,15 @@ export function ChatPanel({
  * 도달하지 않는다.
  */
 function IpcUnavailableBanner(): React.JSX.Element {
+  const t = useT();
   return (
     <div
       role="alert"
       data-testid="ipc-unavailable-banner"
       className="border-b border-red-500/30 bg-red-500/10 px-4 py-2 text-xs text-red-300"
     >
-      <strong>⚠ AI 통신 채널이 비어있습니다.</strong> 앱을 재시작하거나 dev tools 에서{' '}
-      <code>window.dreampia</code> 를 확인하세요. (preload script 또는 IPC 문제)
+      <strong>{t('chat.ipc.banner_strong')}</strong> {t('chat.ipc.banner_detail')}{' '}
+      <code>window.dreampia</code> {t('chat.ipc.banner_check')}
     </div>
   );
 }
@@ -195,6 +197,7 @@ function MessagesArea({
   pendingFocusTurnId,
   onTurnFocused,
 }: MessagesAreaProps): React.JSX.Element {
+  const t = useT();
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -231,7 +234,7 @@ function MessagesArea({
         // v0.3.0 — 빈 채팅에 진입하면 환영 메시지 + 추천 prompt 표시.
         // workspaceName 미정 시에도 안전한 default 로 fallback.
         <WelcomeMessage
-          workspaceName={workspaceName ?? '작업 폴더'}
+          workspaceName={workspaceName ?? t('sidebar.workspace.fallback')}
           onPickPrompt={onPickPrompt}
         />
       ) : (
@@ -277,6 +280,7 @@ function InputArea({
   mentionSessions,
   mentionResolverContext,
 }: InputAreaProps): React.JSX.Element {
+  const t = useT();
   return (
     <div>
       {isStreaming && (
@@ -284,10 +288,10 @@ function InputArea({
           <button
             onClick={onCancel}
             className="rounded bg-bg-tertiary px-3 py-1 text-xs text-text-secondary hover:bg-border-primary"
-            aria-label="스트리밍 중지"
+            aria-label={t('chat.streaming.stop_aria')}
             data-testid="stop-button"
           >
-            ■ 중지
+            {t('chat.streaming.stop')}
           </button>
         </div>
       )}
@@ -322,6 +326,7 @@ function ChatHeader({
   onChangePermission?: (next: PermissionLevel) => void;
   permissionDisabled?: boolean;
 }): React.JSX.Element {
+  const t = useT();
   return (
     <div className="flex h-12 items-center justify-between border-b border-border-primary px-4">
       <h1 className="truncate text-sm font-semibold">{session.title}</h1>
@@ -331,8 +336,8 @@ function ChatHeader({
             type="button"
             onClick={onPickWorkspace}
             className="rounded bg-bg-tertiary px-2 py-0.5 hover:bg-border-primary"
-            title={`현재 작업 폴더: ${workspaceName}. 클릭하여 변경.`}
-            aria-label="작업 폴더 변경"
+            title={t('chat.header.workspace_tooltip', { name: workspaceName })}
+            aria-label={t('chat.header.workspace_pick_aria')}
             data-testid="workspace-pick-button"
           >
             📁 {workspaceName}
@@ -351,7 +356,7 @@ function ChatHeader({
           <span className="mx-1">·</span>
           {EFFORT_LABELS_KO[session.conversation.current_effort]}
         </span>
-        <span aria-label="더보기">···</span>
+        <span aria-label={t('chat.header.more')}>···</span>
       </div>
     </div>
   );
@@ -414,6 +419,20 @@ function CliStatusBadge({ status }: { status: CliStatus }): React.JSX.Element | 
  * 추천 prompt 는 wizard 의 FirstChatStep 과 동일한 4개를 사용해 일관성 유지.
  * 클릭 시 즉시 `onPickPrompt(prompt)` 호출 → ChatPanel 의 onSubmit 으로 이어져
  * 사용자가 "추천을 클릭하면 곧바로 대화가 시작" 하는 직관에 맞춘다.
+ *
+ * v0.11.0 (B2) — 추천 prompt 도 i18n. 한국어 default + 영어 opt-in.
+ * 키 사용으로 export 하여 wizard FirstChatStep 과 공유 가능.
+ */
+export const WELCOME_SUGGESTION_KEYS: ReadonlyArray<string> = [
+  'chat.welcome.suggestion.analyze_structure',
+  'chat.welcome.suggestion.review_changes',
+  'chat.welcome.suggestion.pass_tests',
+];
+
+/**
+ * @deprecated v0.11.0 — 한국어 raw string 배열. 새 코드는 WELCOME_SUGGESTION_KEYS
+ * + useT 사용. 본 export 는 backward compat 용으로 유지하되 prompt 가 사용자에게
+ * 보내지는 시점에는 i18n 처리됨.
  */
 export const WELCOME_SUGGESTIONS: ReadonlyArray<string> = [
   '이 프로젝트 구조 분석해줘',
@@ -434,23 +453,29 @@ export function WelcomeMessage({
   workspaceName,
   onPickPrompt,
 }: WelcomeMessageProps): React.JSX.Element {
+  const t = useT();
   return (
     <div className="mx-auto mt-16 max-w-md text-center" data-testid="welcome-message">
       <div className="text-5xl" aria-hidden="true">
         👋
       </div>
-      <h2 className="mt-4 text-xl font-semibold">안녕하세요</h2>
-      <p className="mt-1 text-sm text-text-secondary">{workspaceName} 작업 시작</p>
+      <h2 className="mt-4 text-xl font-semibold">{t('chat.welcome.greeting')}</h2>
+      <p className="mt-1 text-sm text-text-secondary">
+        {t('chat.welcome.start', { name: workspaceName })}
+      </p>
       <div className="mt-6 space-y-2 text-left text-sm">
-        <p className="font-medium text-text-secondary">추천:</p>
-        {WELCOME_SUGGESTIONS.map((prompt) => (
-          <SuggestionChip
-            key={prompt}
-            onClick={onPickPrompt === undefined ? undefined : () => onPickPrompt(prompt)}
-          >
-            {prompt}
-          </SuggestionChip>
-        ))}
+        <p className="font-medium text-text-secondary">{t('chat.welcome.suggestions_label')}</p>
+        {WELCOME_SUGGESTION_KEYS.map((key) => {
+          const prompt = t(key);
+          return (
+            <SuggestionChip
+              key={key}
+              onClick={onPickPrompt === undefined ? undefined : () => onPickPrompt(prompt)}
+            >
+              {prompt}
+            </SuggestionChip>
+          );
+        })}
       </div>
     </div>
   );
@@ -483,6 +508,7 @@ interface TurnDisplayProps {
 }
 
 function TurnDisplay({ turn, getResult }: TurnDisplayProps): React.JSX.Element | null {
+  const t = useT();
   // tool 역할 턴은 렌더링하지 않음 — 결과는 어시스턴트 턴 내 인라인으로 표시
   if (turn.role === 'tool') return null;
 
@@ -511,7 +537,7 @@ function TurnDisplay({ turn, getResult }: TurnDisplayProps): React.JSX.Element |
                 {isStreamingTurn && i === turn.content.length - 1 && (
                   <span
                     className="ml-0.5 inline-block animate-pulse"
-                    aria-label="스트리밍 중"
+                    aria-label={t('chat.streaming.cursor_aria')}
                     data-testid="streaming-cursor"
                   >
                     ▋
@@ -542,10 +568,11 @@ function TurnDisplay({ turn, getResult }: TurnDisplayProps): React.JSX.Element |
 }
 
 function EmptyState(): React.JSX.Element {
+  const t = useT();
   return (
     <div className="flex h-full flex-col items-center justify-center text-text-tertiary">
       <div className="text-5xl">💬</div>
-      <p className="mt-4">사이드바에서 채팅을 선택하거나 새로 만드세요</p>
+      <p className="mt-4">{t('chat.empty.message')}</p>
     </div>
   );
 }

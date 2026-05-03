@@ -15,6 +15,7 @@
  */
 
 import { Search } from 'lucide-react';
+import { useT } from '../../i18n';
 
 export interface SearchResultEntry {
   turn_id: string;
@@ -49,13 +50,14 @@ export function SearchSection({
   onResultClick,
   sessionTitleById,
 }: SearchSectionProps): React.JSX.Element {
+  const t = useT();
   const trimmed = query.trim();
   const showResults = trimmed.length > 0;
 
   return (
     <div className="space-y-1" data-testid="sidebar-search-section">
       <label className="relative block">
-        <span className="sr-only">메시지 검색</span>
+        <span className="sr-only">{t('sidebar.search.aria_label')}</span>
         <Search
           className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary"
           aria-hidden="true"
@@ -68,8 +70,8 @@ export function SearchSection({
           onChange={(e) => {
             onQueryChange(e.target.value);
           }}
-          placeholder="메시지 검색…"
-          aria-label="메시지 검색"
+          placeholder={t('sidebar.search.placeholder')}
+          aria-label={t('sidebar.search.aria_label')}
           data-testid="sidebar-search-input"
           className="w-full rounded-md border border-transparent bg-bg-tertiary py-1.5 pl-8 pr-3 text-xs text-text-primary placeholder:text-text-tertiary focus:border-border-primary focus:outline-none"
         />
@@ -79,12 +81,12 @@ export function SearchSection({
         <div
           className="max-h-64 overflow-y-auto rounded-md border border-border-primary bg-bg-primary"
           role="region"
-          aria-label="검색 결과"
+          aria-label={t('sidebar.search.result_region')}
           data-testid="sidebar-search-results"
         >
           {loading ? (
             <p className="px-3 py-2 text-xs text-text-tertiary" data-testid="sidebar-search-loading">
-              검색 중...
+              {t('sidebar.search.loading')}
             </p>
           ) : error !== null ? (
             <p
@@ -92,14 +94,14 @@ export function SearchSection({
               role="alert"
               data-testid="sidebar-search-error"
             >
-              검색 중 오류가 발생했습니다
+              {t('sidebar.search.error')}
             </p>
           ) : results.length === 0 ? (
             <p
               className="px-3 py-2 text-xs text-text-tertiary"
               data-testid="sidebar-search-empty"
             >
-              검색 결과 없음
+              {t('sidebar.search.no_results')}
             </p>
           ) : (
             <ul className="divide-y divide-border-primary" role="listbox">
@@ -115,10 +117,14 @@ export function SearchSection({
                   >
                     <span className="flex w-full items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-text-tertiary">
                       <span className="truncate">
-                        {sessionTitleById?.get(r.session_id) ?? '대화'}
+                        {sessionTitleById?.get(r.session_id) ?? t('sidebar.search.fallback_session_title')}
                       </span>
                       <span className="shrink-0">
-                        {r.role === 'user' ? '나' : r.role === 'assistant' ? 'AI' : r.role}
+                        {r.role === 'user'
+                          ? t('sidebar.search.role_user')
+                          : r.role === 'assistant'
+                          ? t('sidebar.search.role_assistant')
+                          : r.role}
                       </span>
                     </span>
                     <SnippetText snippet={r.snippet} />

@@ -44,6 +44,7 @@ import { useOnboarding } from './hooks/useOnboarding';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useKeyboardOverrides } from './hooks/useKeyboardOverrides';
 import type { ShortcutAction } from './keyboard/shortcuts';
+import { setLocale, isLocale, useT } from './i18n';
 
 /**
  * Renderer-side mock fallback gate.
@@ -122,6 +123,8 @@ function createDemoSession(
 }
 
 export function App(): React.JSX.Element {
+  // v0.11.0 — locale 변경 시 App 가 직접 사용하는 fallback 문자열도 갱신.
+  const t = useT();
   const {
     state: { sessions, error: storeError },
     create: createSession,
@@ -564,6 +567,29 @@ export function App(): React.JSX.Element {
     };
   }, []);
 
+  // v0.11.0 (B2) — App 부팅 시 settings.language 를 한 번 fetch + setLocale.
+  // 미지정 시 'ko' (default). 사용자가 LanguageSettings 에서 변경하면 거기서
+  // 직접 setLocale + IPC persist 를 호출 — 여기선 boot-time 1회 sync 만.
+  useEffect(() => {
+    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+    if (appApi === undefined || typeof appApi.getLanguage !== 'function') return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await appApi.getLanguage();
+        if (cancelled) return;
+        if (result.ok && isLocale(result.value)) {
+          setLocale(result.value);
+        }
+      } catch {
+        // safe default — 한국어 유지.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // v0.5.0 (F-018) — `/model <name>` 슬래시 명령. KNOWN_MODELS 화이트리스트
   // 검증은 ChatInput 단에서 이미 거치지만 호출자도 방어적으로 체크.
   const handleChangeModel = useCallback(
@@ -645,7 +671,8 @@ export function App(): React.JSX.Element {
   );
   // Sidebar 의 project name — active session 우선, 없으면 default, 둘 다 없으면
   // 사용자가 picker 누르도록 안내 placeholder.
-  const projectName = activeSession?.workspace.name ?? defaultWorkspace?.name ?? '폴더 선택 필요';
+  const projectName =
+    activeSession?.workspace.name ?? defaultWorkspace?.name ?? t('sidebar.workspace.fallback');
 
   // v0.6.0 (F-019) — @ mention 의 file/session 후보 + resolver context.
   // 활성 session 의 workspace.root / ignore_patterns 를 그대로 forward.

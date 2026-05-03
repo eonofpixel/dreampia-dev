@@ -342,6 +342,9 @@ const ALLOWED_INVOKE_CHANNELS = [
   // v0.10.0 — Settings 모달 [단축키] 탭. action → combo 영속.
   'app:get-keyboard-shortcuts',
   'app:set-keyboard-shortcuts',
+  // v0.11.0 (B2) — Settings 모달 [언어] 탭. ko / en.
+  'app:get-language',
+  'app:set-language',
   'workspace/pick-folder',
   'workspace/get',
   // v0.6.0 (F-019) — @ mention 가 사용하는 file enumeration / read.
@@ -548,6 +551,16 @@ const api = {
       ipcRenderer.invoke('app:set-keyboard-shortcuts', overrides) as Promise<
         Result<void>
       >,
+
+    /**
+     * v0.11.0 (B2) — Settings 모달 [언어] 탭. 'ko' default.
+     * 미설정 시 'ko' 가 반환된다. main 의 LANGUAGE_VALUES enum 검증.
+     */
+    getLanguage: (): Promise<Result<'ko' | 'en'>> =>
+      ipcRenderer.invoke('app:get-language') as Promise<Result<'ko' | 'en'>>,
+
+    setLanguage: (language: 'ko' | 'en'): Promise<Result<void>> =>
+      ipcRenderer.invoke('app:set-language', language) as Promise<Result<void>>,
   },
 
   /**

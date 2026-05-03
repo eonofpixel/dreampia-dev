@@ -34,14 +34,15 @@ import {
   Palette,
   Keyboard,
   Compass,
+  Languages,
 } from 'lucide-react';
 import { McpSettingsPanel } from './McpSettings';
 import { UsageSettingsPanel } from './UsageSettings';
 import { KeyboardSettings } from './KeyboardSettings';
-import {
-  PERMISSION_LEVEL_LABELS_KO,
-  type PermissionLevel,
-} from '@/types';
+import { LanguageSettings } from './LanguageSettings';
+import { type PermissionLevel } from '@/types';
+import { useT } from '../../i18n';
+import { localizedPermissionLabel } from './permissionLabels';
 
 export type SettingsTabId =
   | 'mcp'
@@ -50,6 +51,7 @@ export type SettingsTabId =
   | 'permission'
   | 'theme'
   | 'keyboard'
+  | 'language'
   | 'onboarding';
 
 export interface SettingsModalProps {
@@ -67,18 +69,25 @@ export interface SettingsModalProps {
 type DefaultProviderChoice = 'auto' | 'claude' | 'codex' | 'mock';
 type ThemeChoice = 'light' | 'dark' | 'system';
 
-const TAB_ORDER: ReadonlyArray<{
+interface TabSpec {
   id: SettingsTabId;
-  label: string;
+  /** i18n key — t() 로 resolve. */
+  labelKey: string;
   icon: React.ReactNode;
-}> = [
-  { id: 'mcp', label: 'MCP', icon: <Server className="h-4 w-4" /> },
-  { id: 'usage', label: '사용량', icon: <BarChart3 className="h-4 w-4" /> },
-  { id: 'provider', label: 'Provider', icon: <Cpu className="h-4 w-4" /> },
-  { id: 'permission', label: '권한', icon: <ShieldCheck className="h-4 w-4" /> },
-  { id: 'theme', label: '테마', icon: <Palette className="h-4 w-4" /> },
-  { id: 'keyboard', label: '단축키', icon: <Keyboard className="h-4 w-4" /> },
-  { id: 'onboarding', label: '온보딩', icon: <Compass className="h-4 w-4" /> },
+}
+
+const TAB_ORDER: ReadonlyArray<TabSpec> = [
+  { id: 'mcp', labelKey: 'settings.tab.mcp', icon: <Server className="h-4 w-4" /> },
+  { id: 'usage', labelKey: 'settings.tab.usage', icon: <BarChart3 className="h-4 w-4" /> },
+  { id: 'provider', labelKey: 'settings.tab.provider', icon: <Cpu className="h-4 w-4" /> },
+  { id: 'permission', labelKey: 'settings.tab.permission', icon: <ShieldCheck className="h-4 w-4" /> },
+  { id: 'theme', labelKey: 'settings.tab.theme', icon: <Palette className="h-4 w-4" /> },
+  { id: 'keyboard', labelKey: 'settings.tab.keyboard', icon: <Keyboard className="h-4 w-4" /> },
+  // v0.11.0 (B2) — 언어 탭. theme 와 keyboard 사이에 두는 게 자연스럽지만 이미
+  // keyboard 다음에 onboarding 이 있어 사용자 친숙도 (메뉴 순서 변경 최소화) 를
+  // 위해 keyboard ↔ onboarding 사이에 삽입.
+  { id: 'language', labelKey: 'settings.tab.language', icon: <Languages className="h-4 w-4" /> },
+  { id: 'onboarding', labelKey: 'settings.tab.onboarding', icon: <Compass className="h-4 w-4" /> },
 ];
 
 export function SettingsModal({
@@ -87,6 +96,7 @@ export function SettingsModal({
   initialTab = 'mcp',
   onReopenOnboarding,
 }: SettingsModalProps): React.JSX.Element | null {
+  const t = useT();
   const [activeTab, setActiveTab] = useState<SettingsTabId>(initialTab);
 
   // initialTab prop 이 바뀔 때 (예: 슬래시 명령으로 모달이 다시 열림) 동기화.
@@ -103,17 +113,17 @@ export function SettingsModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       role="dialog"
       aria-modal="true"
-      aria-label="설정"
+      aria-label={t('settings.title')}
       data-testid="settings-modal"
     >
       <div className="flex max-h-[90vh] w-[960px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border-primary p-4">
-          <h2 className="text-lg font-semibold">설정</h2>
+          <h2 className="text-lg font-semibold">{t('settings.title')}</h2>
           <button
             onClick={onClose}
             className="rounded-md p-2 hover:bg-bg-tertiary"
-            aria-label="닫기"
+            aria-label={t('settings.close')}
             data-testid="settings-close"
           >
             <X className="h-4 w-4" />
@@ -123,7 +133,7 @@ export function SettingsModal({
         {/* Body — sidebar(left) + content(right) */}
         <div className="flex min-h-[520px] flex-1 overflow-hidden">
           <nav
-            aria-label="설정 카테고리"
+            aria-label={t('settings.aria.categories')}
             className="w-[180px] flex-shrink-0 border-r border-border-primary bg-bg-secondary p-2"
           >
             <ul className="space-y-1">
@@ -141,7 +151,7 @@ export function SettingsModal({
                       aria-current={active ? 'true' : undefined}
                     >
                       <span className="flex-shrink-0">{tab.icon}</span>
-                      <span>{tab.label}</span>
+                      <span>{t(tab.labelKey)}</span>
                     </button>
                   </li>
                 );
@@ -160,6 +170,7 @@ export function SettingsModal({
             {activeTab === 'permission' && <PermissionPanel />}
             {activeTab === 'theme' && <ThemePanel />}
             {activeTab === 'keyboard' && <KeyboardSettings />}
+            {activeTab === 'language' && <LanguageSettings />}
             {activeTab === 'onboarding' && (
               <OnboardingPanel onReopenOnboarding={onReopenOnboarding} />
             )}
@@ -204,6 +215,7 @@ const PROVIDER_OPTIONS: ReadonlyArray<ProviderOption> = [
 ];
 
 function ProviderPanel(): React.JSX.Element {
+  const t = useT();
   const [choice, setChoice] = useState<DefaultProviderChoice>('auto');
   const [loading, setLoading] = useState(true);
 
@@ -243,13 +255,11 @@ function ProviderPanel(): React.JSX.Element {
   return (
     <section className="flex-1 overflow-y-auto p-6" data-testid="settings-provider-panel">
       <header className="mb-4">
-        <h3 className="text-base font-semibold">기본 Provider</h3>
-        <p className="text-xs text-text-secondary">
-          어떤 AI 를 우선 사용할지 선택하세요. 변경 즉시 새 메시지부터 적용됩니다.
-        </p>
+        <h3 className="text-base font-semibold">{t('settings.provider.title')}</h3>
+        <p className="text-xs text-text-secondary">{t('settings.provider.description')}</p>
       </header>
       {loading ? (
-        <p className="text-sm text-text-secondary">불러오는 중...</p>
+        <p className="text-sm text-text-secondary">{t('settings.loading')}</p>
       ) : (
         <ul className="space-y-2">
           {PROVIDER_OPTIONS.map((opt) => {
@@ -293,11 +303,11 @@ function ProviderPanel(): React.JSX.Element {
 // Permission panel — settings.default_permission_level + capability 표시
 // ────────────────────────────────────────────────────────────
 
-const PERMISSION_HINTS: Record<PermissionLevel, string> = {
-  read_only: '파일 읽기만 허용. 쓰기/실행은 매번 사용자 승인',
-  workspace_write: '권장. 작업 폴더 안에서 자유롭게 쓰기/실행',
-  full_access: '폴더 외부 접근 + 외부 업로드 허용. 신중하게 사용',
-  custom: '사용자 grant 로 직접 구성 (v0.13.0 에서 UI 추가 예정)',
+const PERMISSION_HINT_KEY: Record<PermissionLevel, string> = {
+  read_only: 'settings.permission.hint.read_only',
+  workspace_write: 'settings.permission.hint.workspace_write',
+  full_access: 'settings.permission.hint.full_access',
+  custom: 'settings.permission.hint.custom',
 };
 
 const PERMISSION_LEVEL_ORDER: ReadonlyArray<PermissionLevel> = [
@@ -308,6 +318,7 @@ const PERMISSION_LEVEL_ORDER: ReadonlyArray<PermissionLevel> = [
 ];
 
 function PermissionPanel(): React.JSX.Element {
+  const t = useT();
   const [level, setLevel] = useState<PermissionLevel>('workspace_write');
   const [capabilities, setCapabilities] = useState<
     Record<PermissionLevel, string[]> | null
@@ -358,19 +369,17 @@ function PermissionPanel(): React.JSX.Element {
   return (
     <section className="flex-1 overflow-y-auto p-6" data-testid="settings-permission-panel">
       <header className="mb-4">
-        <h3 className="text-base font-semibold">기본 권한</h3>
-        <p className="text-xs text-text-secondary">
-          새로 만드는 세션이 기본으로 가질 권한 레벨입니다. 세션별 권한은 채팅 헤더에서 변경할
-          수 있어요.
-        </p>
+        <h3 className="text-base font-semibold">{t('settings.permission.title')}</h3>
+        <p className="text-xs text-text-secondary">{t('settings.permission.description')}</p>
       </header>
       {loading ? (
-        <p className="text-sm text-text-secondary">불러오는 중...</p>
+        <p className="text-sm text-text-secondary">{t('settings.loading')}</p>
       ) : (
         <>
           <ul className="mb-5 space-y-2">
             {PERMISSION_LEVEL_ORDER.map((opt) => {
               const active = level === opt;
+              const label = localizedPermissionLabel(t, opt);
               return (
                 <li key={opt}>
                   <label
@@ -390,18 +399,18 @@ function PermissionPanel(): React.JSX.Element {
                         void handleChange(opt);
                       }}
                       className="mt-0.5"
-                      aria-label={PERMISSION_LEVEL_LABELS_KO[opt]}
+                      aria-label={label}
                     />
                     <div className="flex-1">
                       <p className="font-medium">
-                        {PERMISSION_LEVEL_LABELS_KO[opt]}
+                        {label}
                         {opt === 'workspace_write' && (
                           <span className="ml-2 rounded bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent">
-                            권장
+                            {t('settings.permission.recommended_badge')}
                           </span>
                         )}
                       </p>
-                      <p className="text-xs text-text-tertiary">{PERMISSION_HINTS[opt]}</p>
+                      <p className="text-xs text-text-tertiary">{t(PERMISSION_HINT_KEY[opt])}</p>
                     </div>
                   </label>
                 </li>
@@ -410,18 +419,20 @@ function PermissionPanel(): React.JSX.Element {
           </ul>
 
           <section
-            aria-label="포함된 권한"
+            aria-label={t('settings.permission.included_aria')}
             className="rounded-md border border-border-primary bg-bg-secondary p-3"
             data-testid="settings-permission-capabilities"
           >
             <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-              {PERMISSION_LEVEL_LABELS_KO[level]} 에 포함된 권한
+              {t('settings.permission.included_heading', {
+                label: localizedPermissionLabel(t, level),
+              })}
             </h4>
             {currentCapabilities.length === 0 ? (
               <p className="text-xs text-text-tertiary">
                 {level === 'custom'
-                  ? '사용자 grant 로 직접 구성됩니다 (v0.13.0 UI 예정).'
-                  : '포함된 권한이 없습니다.'}
+                  ? t('settings.permission.empty_custom')
+                  : t('settings.permission.empty_other')}
               </p>
             ) : (
               <ul className="grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
@@ -446,10 +457,17 @@ function PermissionPanel(): React.JSX.Element {
 // Theme panel — light / dark / system + data-theme 적용
 // ────────────────────────────────────────────────────────────
 
-const THEME_OPTIONS: ReadonlyArray<{ value: ThemeChoice; label: string; hint: string }> = [
-  { value: 'system', label: '시스템', hint: 'OS 의 기본 모드 (라이트/다크) 를 따라가요' },
-  { value: 'light', label: '라이트', hint: '항상 밝은 테마' },
-  { value: 'dark', label: '다크', hint: '항상 어두운 테마' },
+interface ThemeOption {
+  value: ThemeChoice;
+  /** i18n keys — `t()` 로 resolve. */
+  labelKey: string;
+  hintKey: string;
+}
+
+const THEME_OPTIONS: ReadonlyArray<ThemeOption> = [
+  { value: 'system', labelKey: 'settings.theme.system', hintKey: 'settings.theme.system_hint' },
+  { value: 'light', labelKey: 'settings.theme.light', hintKey: 'settings.theme.light_hint' },
+  { value: 'dark', labelKey: 'settings.theme.dark', hintKey: 'settings.theme.dark_hint' },
 ];
 
 /**
@@ -474,6 +492,7 @@ export function applyTheme(choice: ThemeChoice): void {
 }
 
 function ThemePanel(): React.JSX.Element {
+  const t = useT();
   const [choice, setChoice] = useState<ThemeChoice>('system');
   const [loading, setLoading] = useState(true);
 
@@ -517,18 +536,16 @@ function ThemePanel(): React.JSX.Element {
   return (
     <section className="flex-1 overflow-y-auto p-6" data-testid="settings-theme-panel">
       <header className="mb-4">
-        <h3 className="text-base font-semibold">테마</h3>
-        <p className="text-xs text-text-secondary">
-          UI 색상 모드를 선택하세요. 시스템 모드를 사용하면 OS 의 다크/라이트 변경에 자동
-          반응합니다.
-        </p>
+        <h3 className="text-base font-semibold">{t('settings.theme.title')}</h3>
+        <p className="text-xs text-text-secondary">{t('settings.theme.description')}</p>
       </header>
       {loading ? (
-        <p className="text-sm text-text-secondary">불러오는 중...</p>
+        <p className="text-sm text-text-secondary">{t('settings.loading')}</p>
       ) : (
         <ul className="space-y-2">
           {THEME_OPTIONS.map((opt) => {
             const active = choice === opt.value;
+            const label = t(opt.labelKey);
             return (
               <li key={opt.value}>
                 <label
@@ -548,11 +565,11 @@ function ThemePanel(): React.JSX.Element {
                       void handleChange(opt.value);
                     }}
                     className="mt-0.5"
-                    aria-label={opt.label}
+                    aria-label={label}
                   />
                   <div className="flex-1">
-                    <p className="font-medium">{opt.label}</p>
-                    <p className="text-xs text-text-tertiary">{opt.hint}</p>
+                    <p className="font-medium">{label}</p>
+                    <p className="text-xs text-text-tertiary">{t(opt.hintKey)}</p>
                   </div>
                 </label>
               </li>
@@ -580,13 +597,12 @@ interface OnboardingPanelProps {
 }
 
 function OnboardingPanel({ onReopenOnboarding }: OnboardingPanelProps): React.JSX.Element {
+  const t = useT();
   return (
     <section className="flex-1 overflow-y-auto p-6" data-testid="settings-onboarding-panel">
       <header className="mb-4">
-        <h3 className="text-base font-semibold">온보딩</h3>
-        <p className="text-xs text-text-secondary">
-          첫 실행 시 보던 5단계 안내를 다시 진행할 수 있어요. 기존 세션과 설정은 유지됩니다.
-        </p>
+        <h3 className="text-base font-semibold">{t('settings.onboarding.title')}</h3>
+        <p className="text-xs text-text-secondary">{t('settings.onboarding.description')}</p>
       </header>
       <button
         type="button"
@@ -595,7 +611,7 @@ function OnboardingPanel({ onReopenOnboarding }: OnboardingPanelProps): React.JS
         className="rounded-md border border-border-primary bg-bg-secondary px-4 py-2 text-sm hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50"
         data-testid="settings-reopen-onboarding"
       >
-        온보딩 다시 보기
+        {t('settings.onboarding.reopen')}
       </button>
     </section>
   );

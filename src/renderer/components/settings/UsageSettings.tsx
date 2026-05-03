@@ -28,6 +28,7 @@ import {
   type UsageSummaryUI,
 } from '../../hooks/useUsage';
 import { UsageChart } from './UsageChart';
+import { useT } from '../../i18n';
 
 export interface UsageSettingsProps {
   open: boolean;
@@ -46,10 +47,13 @@ const PROVIDER_BADGE_COLORS: Record<UsageProviderUI, string> = {
   mock: 'bg-gray-500/20 text-gray-300',
 };
 
-const PRESET_LABELS: Record<UsageRangePreset, string> = {
-  today: '오늘',
-  '7d': '7일',
-  '30d': '30일',
+/**
+ * v0.11.0 — preset 라벨은 i18n key 로 변환. UI 가 useT 로 resolve.
+ */
+const PRESET_LABEL_KEYS: Record<UsageRangePreset, string> = {
+  today: 'usage.today',
+  '7d': 'usage.7days',
+  '30d': 'usage.30days',
 };
 
 const PRESETS: readonly UsageRangePreset[] = ['today', '7d', '30d'];
@@ -130,6 +134,7 @@ export function UsageSettings({ open, onClose }: UsageSettingsProps): React.JSX.
  * v0.9.0 — CSV 내보내기 + 일별 chart + 비용 한도 / 임계 알림 추가.
  */
 export function UsageSettingsPanel(): React.JSX.Element {
+  const t = useT();
   const {
     summary,
     daily,
@@ -180,7 +185,7 @@ export function UsageSettingsPanel(): React.JSX.Element {
       {/* Preset tabs */}
       <div
         role="radiogroup"
-        aria-label="기간 선택"
+        aria-label={t('usage.cost_limit')}
         className="flex items-center gap-1 border-b border-border-primary p-2"
       >
         {PRESETS.map((p) => (
@@ -194,7 +199,7 @@ export function UsageSettingsPanel(): React.JSX.Element {
             }}
             className="rounded-md px-3 py-1.5 text-sm hover:bg-bg-tertiary data-[active=true]:bg-bg-tertiary data-[active=true]:font-medium"
           >
-            {PRESET_LABELS[p]}
+            {t(PRESET_LABEL_KEYS[p])}
           </button>
         ))}
         {/* v0.9.0 — CSV export. preset 의 range 그대로 export. */}
@@ -206,10 +211,10 @@ export function UsageSettingsPanel(): React.JSX.Element {
             }}
             className="flex items-center gap-1.5 rounded-md border border-border-primary bg-bg-elevated px-2.5 py-1 text-xs hover:bg-bg-tertiary"
             data-testid="usage-export-csv"
-            aria-label="CSV 내보내기"
+            aria-label={t('usage.export_csv')}
           >
             <Download className="h-3 w-3" />
-            CSV 내보내기
+            {t('usage.export_csv')}
           </button>
         </div>
       </div>
@@ -240,7 +245,7 @@ export function UsageSettingsPanel(): React.JSX.Element {
               className="mb-4 grid grid-cols-2 gap-2 rounded-md border border-border-primary bg-bg-secondary p-3 text-sm"
             >
               <div>
-                <div className="text-xs text-text-tertiary">{PRESET_LABELS[preset]} 합계</div>
+                <div className="text-xs text-text-tertiary">{t(PRESET_LABEL_KEYS[preset])}</div>
                 <div className="mt-0.5 text-base font-semibold">{formatCost(totalCost)}</div>
               </div>
               <div>
@@ -307,6 +312,7 @@ const THRESHOLD_OPTIONS = [
 ];
 
 function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JSX.Element {
+  const t = useT();
   const { limits, loading, setLimits } = useUsageLimits();
   const [draftLimit, setDraftLimit] = useState<string>('');
 
@@ -341,34 +347,37 @@ function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JS
   );
 
   // 상태 계산 — '미설정' / '안전' / '경고' / '한도 초과'.
+  // v0.11.0 — 라벨 i18n. 비율 표기는 같은 fmt 유지 (한국어 "{n}% 사용" 의 한
+  // 글자만 바꿔 영어용으로 합칠 수 있도록 단순 base label + 비율 함께 표시).
   const status = useMemo(() => {
     if (limitUsd === undefined) {
-      return { kind: 'unset' as const, label: '한도 미설정', color: 'text-text-tertiary' };
+      return { kind: 'unset' as const, label: t('usage.cost_limit.unset'), color: 'text-text-tertiary' };
     }
     if (limitUsd === 0) {
-      return { kind: 'over' as const, label: '한도 초과', color: 'text-red-400' };
+      return { kind: 'over' as const, label: t('usage.cost_limit.exceeded'), color: 'text-red-400' };
     }
     const ratio = currentMonthCost / limitUsd;
+    const pct = `${(ratio * 100).toFixed(0)}%`;
     if (ratio >= 1) {
       return {
         kind: 'over' as const,
-        label: `한도 초과 (${(ratio * 100).toFixed(0)}% 사용)`,
+        label: `${t('usage.cost_limit.exceeded')} (${pct})`,
         color: 'text-red-400',
       };
     }
     if (ratio >= threshold) {
       return {
         kind: 'warn' as const,
-        label: `경고: ${(ratio * 100).toFixed(0)}% 사용`,
+        label: `${t('usage.cost_limit.warning')} (${pct})`,
         color: 'text-yellow-400',
       };
     }
     return {
       kind: 'safe' as const,
-      label: `안전 (${(ratio * 100).toFixed(0)}% / ${formatCost(limitUsd)})`,
+      label: `${t('usage.cost_limit.safe')} (${pct} / ${formatCost(limitUsd)})`,
       color: 'text-green-400',
     };
-  }, [limitUsd, currentMonthCost, threshold]);
+  }, [limitUsd, currentMonthCost, threshold, t]);
 
   return (
     <section
@@ -378,7 +387,7 @@ function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JS
       <header className="mb-2 flex items-center gap-2">
         <ShieldAlert className="h-4 w-4 text-text-secondary" aria-hidden="true" />
         <h3 className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-          비용 한도
+          {t('usage.cost_limit')}
         </h3>
         <span className={`ml-auto text-xs font-medium ${status.color}`} data-testid="cost-limit-status">
           {status.label}

@@ -282,8 +282,10 @@ describe('WelcomeMessage (v0.3.0)', () => {
 
   it('falls back to safe default when workspaceName undefined', () => {
     render(<ChatPanel session={makeSession([])} onSubmit={() => {}} />);
-    // "작업 폴더" fallback in WelcomeMessage
-    expect(screen.getByText(/작업 폴더 작업 시작/)).toBeInTheDocument();
+    // v0.11.0 — i18n unified the fallback to "폴더 선택 필요" (sidebar 와 동일)
+    // 사용자가 picker 를 누르도록 명확한 안내. 이전 "작업 폴더" 단순 라벨에서
+    // 변경됨.
+    expect(screen.getByText(/폴더 선택 필요 작업 시작/)).toBeInTheDocument();
   });
 });
 

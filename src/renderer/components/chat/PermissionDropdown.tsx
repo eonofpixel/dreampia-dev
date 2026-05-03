@@ -17,10 +17,9 @@
  */
 
 import { ShieldCheck } from 'lucide-react';
-import {
-  PERMISSION_LEVEL_LABELS_KO,
-  type PermissionLevel,
-} from '@/types';
+import { type PermissionLevel } from '@/types';
+import { useT } from '../../i18n';
+import { localizedPermissionLabel } from '../settings/permissionLabels';
 
 export interface PermissionDropdownProps {
   /** 현재 세션의 permission.default_level. 변경 시 새 level 로 onChange 호출. */
@@ -49,14 +48,16 @@ export function PermissionDropdown({
   onChange,
   disabled = false,
 }: PermissionDropdownProps): React.JSX.Element {
+  const t = useT();
+  const currentLabel = localizedPermissionLabel(t, level);
   return (
     <label
       className="flex items-center gap-1 rounded bg-bg-tertiary px-1.5 py-0.5 text-[11px] text-text-secondary hover:bg-border-primary"
-      title={`현재 권한: ${PERMISSION_LEVEL_LABELS_KO[level]}. 클릭하여 변경.`}
+      title={t('permission.dropdown.tooltip', { label: currentLabel })}
       data-testid="permission-dropdown"
     >
       <ShieldCheck className="h-3 w-3" aria-hidden="true" />
-      <span className="sr-only">권한</span>
+      <span className="sr-only">{t('permission.dropdown.label')}</span>
       <select
         value={level}
         disabled={disabled}
@@ -65,12 +66,12 @@ export function PermissionDropdown({
           onChange(next);
         }}
         className="cursor-pointer bg-transparent text-[11px] outline-none disabled:cursor-not-allowed disabled:opacity-50"
-        aria-label="세션 권한 레벨"
+        aria-label={t('permission.dropdown.aria')}
         data-testid="permission-dropdown-select"
       >
         {LEVELS.map((l) => (
           <option key={l} value={l}>
-            {PERMISSION_LEVEL_LABELS_KO[l]}
+            {localizedPermissionLabel(t, l)}
           </option>
         ))}
       </select>

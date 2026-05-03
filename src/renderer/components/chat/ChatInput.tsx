@@ -40,6 +40,7 @@ import {
   type ResolverContext,
 } from '../../mentions/resolver';
 import type { FileEntry } from '@/types/workspace';
+import { useT } from '../../i18n';
 
 export interface ChatInputProps {
   onSubmit: (text: string) => void;
@@ -98,7 +99,7 @@ type MentionSuggestion = SuggestionItem & {
 
 export function ChatInput({
   onSubmit,
-  placeholder = '메시지를 입력하세요',
+  placeholder,
   disabled,
   initialValue,
   commandHandlers,
@@ -107,6 +108,9 @@ export function ChatInput({
   sessions,
   resolverContext,
 }: ChatInputProps): React.JSX.Element {
+  const t = useT();
+  // 사용자가 명시 placeholder 를 넘기지 않으면 locale-aware default.
+  const effectivePlaceholder = placeholder ?? t('chat.input.placeholder');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState(initialValue ?? '');
   const [isComposing, setIsComposing] = useState(false);
@@ -242,7 +246,7 @@ export function ChatInput({
           (s): MentionSuggestion => ({
             id: `session-${s.id}`,
             primary: s.title,
-            secondary: '세션',
+            secondary: t('chat.input.mention.session_label'),
             badge: '@session',
             kind: 'session',
             insert: `@session:${s.id}`,
@@ -270,14 +274,14 @@ export function ChatInput({
     return [
       {
         id: 'helper-session',
-        primary: 'session:',
-        secondary: '세션 첨부',
+        primary: t('chat.input.mention.session_helper_primary'),
+        secondary: t('chat.input.mention.session_helper_secondary'),
         badge: '@',
         kind: 'session',
         insert: '@session:',
       },
     ];
-  }, [activeMention, sessions, fileEntries]);
+  }, [activeMention, sessions, fileEntries, t]);
 
   const mentionOpen = activeMention !== null && mentionSuggestions.length > 0;
 
@@ -551,10 +555,10 @@ export function ChatInput({
           activeIndex={mentionIndex}
           onPick={handlePickMention}
           idPrefix={MENTION_POPOVER_PREFIX}
-          ariaLabel="멘션 후보"
+          ariaLabel={t('chat.input.mention_popover_aria')}
           testid="mention-popover"
           optionTestidPrefix="mention-option"
-          footerHint="↑↓ 탐색 · Enter 선택 · Esc 닫기"
+          footerHint={t('chat.input.mention_footer')}
         />
       )}
       <textarea
@@ -567,11 +571,11 @@ export function ChatInput({
         onCompositionStart={() => setIsComposing(true)}
         onCompositionEnd={() => setIsComposing(false)}
         onKeyDown={handleKeyDown}
-        placeholder={placeholder}
+        placeholder={effectivePlaceholder}
         disabled={disabled}
         rows={3}
         className="w-full resize-none rounded-md border border-border-primary bg-bg-primary px-3 py-2 text-sm leading-relaxed focus:border-border-focus focus:outline-none disabled:opacity-50"
-        aria-label="채팅 입력"
+        aria-label={t('chat.input.aria_label')}
         data-testid="chat-input"
         // listbox a11y: textarea 가 controller 역할. combobox role 은
         // aria-controls / aria-expanded 가 항상 정의돼 있어야 한다.
@@ -586,22 +590,26 @@ export function ChatInput({
 
       <div className="mt-2 flex items-center justify-between text-xs text-text-tertiary">
         <span>
-          <kbd className="rounded bg-bg-tertiary px-1 py-0.5">Enter</kbd> 전송
+          <kbd className="rounded bg-bg-tertiary px-1 py-0.5">Enter</kbd>{' '}
+          {t('chat.input.hint.enter_send')}
           <span className="mx-2">·</span>
-          <kbd className="rounded bg-bg-tertiary px-1 py-0.5">Shift+Enter</kbd> 줄바꿈
+          <kbd className="rounded bg-bg-tertiary px-1 py-0.5">Shift+Enter</kbd>{' '}
+          {t('chat.input.hint.shift_enter_newline')}
           <span className="mx-2">·</span>
-          <kbd className="rounded bg-bg-tertiary px-1 py-0.5">/</kbd> 명령어
+          <kbd className="rounded bg-bg-tertiary px-1 py-0.5">/</kbd>{' '}
+          {t('chat.input.hint.slash_commands')}
           <span className="mx-2">·</span>
-          <kbd className="rounded bg-bg-tertiary px-1 py-0.5">@</kbd> 멘션
+          <kbd className="rounded bg-bg-tertiary px-1 py-0.5">@</kbd>{' '}
+          {t('chat.input.hint.at_mention')}
         </span>
 
         <button
           onClick={submit}
           disabled={disabled || !value.trim()}
           className="rounded bg-accent px-3 py-1 font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-          aria-label="전송"
+          aria-label={t('chat.input.send')}
         >
-          전송
+          {t('chat.input.send')}
         </button>
       </div>
     </div>

@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { SearchSection, type SearchResultEntry } from './SearchSection';
 import { useMcp } from '../../hooks/useMcp';
+import { useT } from '../../i18n';
 
 export interface SidebarProps {
   sessions: ReadonlyArray<Pick<Session, 'id' | 'title' | 'pinned'>>;
@@ -64,7 +65,7 @@ export interface SidebarProps {
 export function Sidebar({
   sessions,
   activeSessionId,
-  projectName = 'workspace',
+  projectName,
   onSelectSession,
   onNewChat,
   onOpenSettings,
@@ -78,8 +79,12 @@ export function Sidebar({
   searchError = null,
   onSearchResultClick,
 }: SidebarProps): React.JSX.Element {
+  const t = useT();
   const pinned = sessions.filter((s) => s.pinned);
   const recent = sessions.filter((s) => !s.pinned);
+  // v0.11.0 — projectName 미지정 시 locale-aware fallback. 한국어 default 는
+  // 기존과 동일하게 "workspace" placeholder 가 아니라 의미 있는 라벨.
+  const displayProjectName = projectName ?? 'workspace';
 
   // v0.7.0 (F-026) — 검색 결과의 row 가 어느 세션에 속하는지 표시할 수 있도록
   // sessions prop 으로 즉시 lookup map 구축. SidebarProps 가 이미 받는
@@ -98,17 +103,17 @@ export function Sidebar({
   return (
     <aside
       className="flex h-full w-[286px] flex-col border-r border-border-primary bg-bg-secondary text-sm"
-      aria-label="사이드바"
+      aria-label={t('sidebar.aria_label')}
     >
       {/* Top action: 새 채팅 */}
       <div className="border-b border-border-primary p-2">
         <button
           onClick={onNewChat}
           className="flex w-full items-center gap-2 rounded-md px-3 py-2 font-medium hover:bg-bg-tertiary"
-          aria-label="새 채팅"
+          aria-label={t('sidebar.new_chat')}
         >
           <Plus className="h-4 w-4" />
-          <span>새 채팅</span>
+          <span>{t('sidebar.new_chat')}</span>
         </button>
       </div>
 
@@ -128,22 +133,22 @@ export function Sidebar({
 
       {/* Nav */}
       <nav className="border-b border-border-primary p-2 text-text-secondary">
-        <SidebarNavItem icon={<Puzzle className="h-4 w-4" />} label="플러그인" />
-        <SidebarNavItem icon={<Bot className="h-4 w-4" />} label="자동화" />
+        <SidebarNavItem icon={<Puzzle className="h-4 w-4" />} label={t('sidebar.nav.plugins')} />
+        <SidebarNavItem icon={<Bot className="h-4 w-4" />} label={t('sidebar.nav.automation')} />
       </nav>
 
       {/* Projects (placeholder) */}
       <section className="border-b border-border-primary p-2">
-        <SectionHeader>프로젝트</SectionHeader>
-        <SidebarNavItem icon={<Folder className="h-4 w-4" />} label={projectName} />
+        <SectionHeader>{t('sidebar.section.projects')}</SectionHeader>
+        <SidebarNavItem icon={<Folder className="h-4 w-4" />} label={displayProjectName} />
       </section>
 
       {/* Chats */}
-      <nav className="flex-1 overflow-y-auto p-2" aria-label="채팅 목록">
-        <SectionHeader>채팅</SectionHeader>
+      <nav className="flex-1 overflow-y-auto p-2" aria-label={t('sidebar.chats.aria_label')}>
+        <SectionHeader>{t('sidebar.section.chats')}</SectionHeader>
 
         {sessions.length === 0 ? (
-          <p className="px-3 py-2 text-xs text-text-tertiary">아직 채팅이 없어요.</p>
+          <p className="px-3 py-2 text-xs text-text-tertiary">{t('sidebar.chats.empty')}</p>
         ) : (
           <>
             {pinned.length > 0 && (
@@ -182,7 +187,7 @@ export function Sidebar({
         {onOpenUsage !== undefined && (
           <SidebarNavItem
             icon={<BarChart3 className="h-4 w-4" />}
-            label="사용량"
+            label={t('sidebar.usage')}
             onClick={onOpenUsage}
             testId="sidebar-open-usage"
           />
@@ -190,14 +195,14 @@ export function Sidebar({
         {onReopenOnboarding !== undefined && (
           <SidebarNavItem
             icon={<Compass className="h-4 w-4" />}
-            label="온보딩 다시 보기"
+            label={t('sidebar.onboarding_reopen')}
             onClick={onReopenOnboarding}
             testId="sidebar-reopen-onboarding"
           />
         )}
         <SidebarNavItem
           icon={<Settings className="h-4 w-4" />}
-          label="설정"
+          label={t('sidebar.settings')}
           shortcut="Ctrl+,"
           onClick={onOpenSettings}
         />
@@ -220,13 +225,14 @@ export function Sidebar({
 // ────────────────────────────────────────────────────────────
 
 function McpStatusIndicator({ onOpen }: { onOpen: () => void }): React.JSX.Element {
+  const t = useT();
   const { servers, loading } = useMcp();
 
   let dotColor = 'bg-gray-500';
-  let label = '0 서버';
+  let label = t('sidebar.mcp.zero_servers');
   if (loading) {
     dotColor = 'bg-gray-400';
-    label = '...';
+    label = t('sidebar.mcp.loading');
   } else if (servers.length > 0) {
     let readyCount = 0;
     let errorCount = 0;
@@ -238,23 +244,26 @@ function McpStatusIndicator({ onOpen }: { onOpen: () => void }): React.JSX.Eleme
     }
     if (errorCount > 0) {
       dotColor = 'bg-red-500';
-      label = `${servers.length} (${errorCount} 오류)`;
+      label = t('sidebar.mcp.error_count', { n: servers.length, e: errorCount });
     } else if (connectingCount > 0) {
       dotColor = 'bg-yellow-500';
-      label = `${servers.length} (${connectingCount} 연결 중)`;
+      label = t('sidebar.mcp.connecting_count', { n: servers.length, c: connectingCount });
     } else if (readyCount === servers.length) {
       dotColor = 'bg-green-500';
-      label = `${servers.length} 준비`;
+      label = t('sidebar.mcp.ready_count', { n: servers.length });
     } else {
       dotColor = 'bg-gray-500';
-      label = `${servers.length} 서버`;
+      label = t('sidebar.mcp.servers_count', { n: servers.length });
     }
   }
 
   const tooltip =
     servers.length === 0
-      ? 'MCP 서버 없음 — 클릭해 추가'
-      : `MCP: ${servers.length} 서버 (${servers.map((s) => `${s.config.id}: ${s.status}`).join(', ')})`;
+      ? t('sidebar.mcp.tooltip_zero')
+      : t('sidebar.mcp.tooltip_with', {
+          n: servers.length,
+          list: servers.map((s) => `${s.config.id}: ${s.status}`).join(', '),
+        });
 
   return (
     <button
@@ -268,7 +277,7 @@ function McpStatusIndicator({ onOpen }: { onOpen: () => void }): React.JSX.Eleme
       <span className="flex-shrink-0">
         <Server className="h-4 w-4" />
       </span>
-      <span className="flex-1 truncate">MCP</span>
+      <span className="flex-1 truncate">{t('sidebar.mcp.label')}</span>
       <span className="flex flex-shrink-0 items-center gap-1.5 text-xs text-text-tertiary">
         <span
           className={`inline-block h-2 w-2 rounded-full ${dotColor}`}

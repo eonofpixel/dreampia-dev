@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import type { CliInfoShape } from '../chat/ChatPanel';
 import { PERMISSION_LEVEL_LABELS_KO, type PermissionLevel } from '@/types';
+import { useT } from '../../i18n';
 
 /**
  * v0.3.0 — wizard step 3 의 provider selector 옵션.
@@ -153,6 +154,7 @@ export function OnboardingWizard({
   onSkip,
   onOpenMcpSettings,
 }: OnboardingWizardProps): React.JSX.Element {
+  const t = useT();
   // 0..4 — Step 1 = index 0, Step 5 = index 4.
   const [step, setStep] = useState(0);
   const [cliStatus, setCliStatus] = useState<CliDetection | null>(null);
@@ -421,9 +423,9 @@ export function OnboardingWizard({
             disabled={step === 0}
             className="rounded-md px-3 py-1.5 text-sm text-text-secondary hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-30"
             data-testid="onboarding-prev"
-            aria-label="이전 단계"
+            aria-label={t('onboarding.prev')}
           >
-            ← 이전
+            {t('onboarding.prev')}
           </button>
 
           <div className="flex items-center gap-3">
@@ -432,9 +434,9 @@ export function OnboardingWizard({
               onClick={handleSkip}
               className="text-xs text-text-tertiary hover:text-text-primary"
               data-testid="onboarding-skip"
-              aria-label="건너뛰기"
+              aria-label={t('onboarding.skip')}
             >
-              건너뛰기
+              {t('onboarding.skip')}
             </button>
 
             {step < TOTAL_STEPS - 1 && (
@@ -443,9 +445,9 @@ export function OnboardingWizard({
                 onClick={goNext}
                 className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover"
                 data-testid="onboarding-next"
-                aria-label="다음 단계"
+                aria-label={t('onboarding.next')}
               >
-                다음 →
+                {t('onboarding.next')}
               </button>
             )}
           </div>
@@ -460,13 +462,14 @@ export function OnboardingWizard({
 // ────────────────────────────────────────────────────────────
 
 function WelcomeStep({ onNext }: { onNext: () => void }): React.JSX.Element {
+  const t = useT();
   return (
     <section className="text-center" data-testid="onboarding-step-welcome">
       <div className="text-5xl" aria-hidden="true">
         👋
       </div>
       <h1 id="onboarding-title" className="mt-4 text-xl font-semibold text-text-primary">
-        Dreampia-Dev 에 오신 걸 환영합니다
+        {t('onboarding.welcome.title')}
       </h1>
       <p className="mt-2 text-sm leading-relaxed text-text-secondary">
         Claude Code 와 OpenAI Codex 를 한 번에 사용하는
@@ -479,7 +482,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }): React.JSX.Element {
         className="mt-6 rounded-md bg-accent px-6 py-2 text-sm font-medium text-white hover:bg-accent-hover"
         data-testid="onboarding-start"
       >
-        시작하기 →
+        {t('onboarding.welcome.start')}
       </button>
     </section>
   );

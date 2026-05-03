@@ -2,6 +2,92 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [0.11.0] — 2026-05-03
+
+**Feature release — B2 영문 i18n: 핵심 화면 영어 opt-in.**
+
+Codex 권고 v0.11.0. 한국어 default 를 그대로 유지하면서, 사용자가 Settings →
+[언어] 탭에서 'English' 를 선택하면 chat / search / usage / settings / error
+핵심 화면이 즉시 영문으로 전환된다. 외부 라이브러리 (react-intl / i18next)
+도입 없이 ~7KB 의 vendor-free 자체 구현 (`src/renderer/i18n/`) 으로 처리해
+bundle bloat 0. 누락된 키는 자동으로 한국어 fallback 되어 점진적 영문화에
+안전. locale 변경 시 페이지 reload 불필요 — `useT` 훅이 subscriber pattern 으로
+모든 mounted 컴포넌트를 reactive 하게 re-render 한다.
+
+### Added
+
+- **`src/renderer/i18n/index.ts`** — vendor-free i18n runtime. `setLocale` /
+  `getLocale` / `subscribeLocale` / `t` / `useT` / `isLocale` 제공. 모든 메시지는
+  build-time 에 JSON 으로 inline (Vite 가 처리). lookup 순서: 현재 locale →
+  default ('ko') → key string 자체. `{name}` 형태 placeholder 보간 지원.
+- **`src/renderer/i18n/messages.ko.json`** + **`messages.en.json`** — 사이드바 /
+  검색 / 채팅 입력 / 채팅 환영 / 설정 / 권한 / 사용량 / 온보딩 welcome / IPC
+  banner 등 ~110 key 분량의 메시지. JSON 양쪽 모두 동일 키 set 을 갖는다.
+- **`src/renderer/components/settings/LanguageSettings.tsx`** — Settings 모달
+  [언어] 탭. 한국어 / English 라디오 그룹. 변경 즉시 module-level
+  `setLocale` 호출 + IPC `app:set-language` 로 영속. 변경 후 패널 헤더 자체가
+  영문으로 전환되는 것을 확인할 수 있도록 reactive.
+- **`src/renderer/components/settings/permissionLabels.ts`** — locale-aware
+  PermissionLevel 라벨 resolver. 기존 `PERMISSION_LEVEL_LABELS_KO` (한국어 전용)
+  를 보완해 ko/en 양쪽 모두 처리. 호출 패턴: `localizedPermissionLabel(t, level)`.
+- **`AppSettings.language` 필드** — `'ko' | 'en'` 영속. 알 수 없는 값은 silent
+  drop (corrupt-tolerant 패턴 유지). 미지정 시 'ko' fallback.
+- **신규 IPC channel `app:get-language` / `app:set-language`** — main 의 enum
+  검증 후 `settings.json` 에 영속. preload 의 whitelist 에도 추가.
+- **App.tsx boot-time locale init** — 부팅 시 `app:get-language` 한 번 fetch
+  후 `setLocale` 호출. 사용자가 LanguageSettings 에서 변경하면 거기서도 직접
+  `setLocale` + IPC persist.
+- **`SettingsModal` 의 [언어] 탭** — 단축키 ↔ 온보딩 사이에 신규 탭 (Languages
+  icon). 기존 testid 호환 (`settings-tab-language` / `settings-panel-language`).
+- **`tests/renderer/i18n/index.test.ts`** — 13 spec. `t` 의 fallback / 보간 /
+  타입가드 / subscriber notification / 동일 locale 호출 시 no-op 까지 검증.
+- **`tests/renderer/LanguageSettings.test.tsx`** — 6 spec. 라디오 변경 시
+  IPC + setLocale + reactive re-render 모두 검증.
+- **`tests/renderer/i18n/i18n.smoke.test.tsx`** — 6 spec. Sidebar / ChatInput
+  이 locale 변경 시 한국어 ↔ 영어 라벨로 즉시 flip 되는지 smoke.
+
+### Changed
+
+- **`Sidebar.tsx` + `SearchSection.tsx`** — 모든 표시 라벨 (새 채팅 / 플러그인 /
+  자동화 / 프로젝트 / 채팅 / 사용량 / 설정 / 온보딩 다시 보기 / 검색 placeholder
+  등) 을 `useT` 로 변환. MCP status indicator 의 동적 라벨 ("3 준비" / "5 (2 오류)")
+  도 i18n 키 + 보간으로 처리.
+- **`ChatInput.tsx`** — placeholder / aria-label / 전송 버튼 / 키보드 힌트 라인
+  (Enter 전송 · Shift+Enter 줄바꿈 · / 명령어 · @ 멘션) 영문화. 호출자가 명시
+  placeholder prop 을 넘기면 그것이 우선 (override 가능).
+- **`ChatPanel.tsx`** — IPC banner / WelcomeMessage (👋 안녕하세요 + 추천 prompt
+  3개) / EmptyState / ChatHeader workspace 변경 버튼 / streaming cursor / 중지
+  버튼 / 더보기 aria-label 모두 영문화. 추천 prompt 는 `WELCOME_SUGGESTION_KEYS`
+  로 i18n 키 배열 export — caller 가 `t(key)` 로 resolve. 기존 `WELCOME_SUGGESTIONS`
+  (raw 한국어 배열) 는 backward compat 용으로 deprecated 상태로 유지.
+- **`SettingsModal.tsx`** — 7개 탭 라벨 + 모달 제목 + 닫기 버튼 + Provider /
+  Permission / Theme / Onboarding 패널의 헤더 / 설명 / "불러오는 중..." / 권장
+  뱃지 / "포함된 권한" 헤딩 등 모든 visible 문자열 영문화. tab 정의가
+  `{id, labelKey, icon}` 으로 변경되어 t() 로 라벨 resolve.
+- **`UsageSettings.tsx`** — 기간 preset (오늘 / 7일 / 30일) / CSV 내보내기 버튼 /
+  비용 한도 헤더 / 한도 상태 (미설정 / 안전 / 경고 / 한도 초과) 영문화. 차트
+  / 일별 표 / detail row 같은 secondary 영역은 한국어 유지 (점진적 확장 예정).
+- **`PermissionDropdown.tsx`** — 4개 preset 라벨 + 툴팁 + aria-label 모두 영문/
+  한국어 토글. `PERMISSION_LEVEL_LABELS_KO` 를 직접 사용하지 않고
+  `localizedPermissionLabel(t, level)` helper 로 resolve.
+- **`OnboardingWizard.tsx`** — Step 1 (Welcome) 의 제목 + [시작하기] 버튼 +
+  footer nav 버튼 (이전 / 다음 / 건너뛰기) 영문화. Step 2~5 와 detail 안내는
+  v0.11.1 에 추가 예정 (Codex 권고: chat/search/settings 핵심 화면 우선).
+- **`tests/setup.ts`** — `__mockStore.language` (default 'ko') + 매 테스트마다
+  `setLocale('ko')` reset. `getLanguage` / `setLanguage` mock 도 추가.
+
+### Notes
+
+- 외부 i18n 라이브러리 (react-intl / i18next / format-message 등) 는 도입하지
+  않는다. ~7KB 의 자체 구현이 충분하며, ko/en 두 locale 만 지원하는 현 시점에
+  `IntlMessageFormat` 의 plural / select / 시간/숫자 format 같은 기능까지는
+  필요 없다. 추후 ja / zh 추가가 결정되면 재평가.
+- 영문화 범위는 사용자가 가장 자주 보는 chat / search / settings / usage 핵심
+  화면에 한정. detail 안내 (provider hint 의 일부 / onboarding step 2~5 / MCP
+  설정 form 본문 등) 는 기존 한국어 그대로 — 점진적으로 확장한다.
+- CHANGELOG / README / 코드 주석은 한국어 톤 유지 — 본 변경은 제품 UI 코드만
+  i18n 처리.
+
 ## [0.10.0] — 2026-05-03
 
 **Feature release — G (F-025 키보드 단축키): power-user UX 완성.**
