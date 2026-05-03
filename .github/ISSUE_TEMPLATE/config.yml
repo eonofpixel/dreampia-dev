@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discussions
+    url: https://github.com/eonofpixel/dreampia-dev/discussions
+    about: 질문, 잡담, 사용 후기는 Discussions 활용
+  - name: 📚 Documentation
+    url: https://github.com/eonofpixel/dreampia-dev/tree/main/docs
+    about: 위키 (181 spec docs) — 개발 / contract 참고

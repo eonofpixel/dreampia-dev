@@ -62,3 +62,7 @@ captures/
 *.sqlite-shm
 *.sqlite-wal
 sessions.sqlite*
+
+# OMC orchestration artifacts (Claude Code multi-agent runtime — not part of repo)
+.omc/
+.omx/
