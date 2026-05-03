@@ -49,7 +49,12 @@ mac:
       arch: [x64, arm64]
   category: public.app-category.developer-tools
   artifactName: 'Dreampia-Dev-${version}-${arch}.${ext}'
-  hardenedRuntime: true              # required for notarization
+  # ★ identity: null → CSC_LINK 없을 때 unsigned build 강제 (v0.x 패턴).
+  #   v1.0+ Apple Developer ID 매입 후 identity 항목 제거 + notarize: true.
+  #   현재는 unsigned 라 hardenedRuntime / entitlements 모두 무의미하지만
+  #   v1.0+ 로 가는 path 명시 위해 그대로 유지.
+  identity: null
+  hardenedRuntime: true              # required for notarization (v1.0+)
   gatekeeperAssess: false             # allow re-signing
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
@@ -73,6 +78,8 @@ linux:
       arch: [x64]
   category: Development
   artifactName: 'Dreampia-Dev-${version}-${arch}.${ext}'
+  # deb 패키지 maintainer 필수 (없으면 fpm 빌드 에러).
+  maintainer: 'Dreampia <low@eonofpixel.com>'
   desktop:
     Name: Dreampia-Dev
     Comment: AI coding desktop wrapper

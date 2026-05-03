@@ -6,7 +6,10 @@
   "type": "module",
   "main": "dist/main/index.js",
   "license": "Apache-2.0",
-  "author": "Dreampia",
+  "author": {
+    "name": "Dreampia",
+    "email": "low@eonofpixel.com"
+  },
   "homepage": "https://github.com/eonofpixel/dreampia-dev",
   "repository": {
     "type": "git",
