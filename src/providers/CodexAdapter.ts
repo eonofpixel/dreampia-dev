@@ -126,7 +126,12 @@ export class CodexAdapter implements ProviderAdapter {
    */
   private toUserContent(blocks: ContentBlock[]): unknown {
     const allText = blocks.every(
-      (b) => b.type === 'text' || b.type === 'mention' || b.type === 'embedded_card'
+      (b) =>
+        b.type === 'text' ||
+        b.type === 'mention' ||
+        b.type === 'embedded_card' ||
+        b.type === 'file_reference' ||
+        b.type === 'session_reference'
     );
 
     if (allText) {
@@ -150,6 +155,12 @@ export class CodexAdapter implements ProviderAdapter {
         return `[이미지: ${block.alt ?? block.mime}]`;
       case 'file':
         return `[파일: ${block.name} (${block.mime})]`;
+      case 'file_reference':
+        // v0.13.0 — typed file_reference. fenced code 로 직렬화.
+        return CodexAdapter.formatFileReferenceText(block);
+      case 'session_reference':
+        // v0.13.0 — typed session_reference. quote block 으로 직렬화.
+        return CodexAdapter.formatSessionReferenceText(block);
     }
   }
 
@@ -157,6 +168,12 @@ export class CodexAdapter implements ProviderAdapter {
     if (block.type === 'mention') return `@${block.ref.display}`;
     if (block.type === 'embedded_card') {
       return `[${block.card.title}](${block.card.url ?? ''})`;
+    }
+    if (block.type === 'file_reference') {
+      return CodexAdapter.formatFileReferenceText(block);
+    }
+    if (block.type === 'session_reference') {
+      return CodexAdapter.formatSessionReferenceText(block);
     }
     return '';
   }
@@ -182,7 +199,49 @@ export class CodexAdapter implements ProviderAdapter {
           type: 'text',
           text: `[${block.card.title}](${block.card.url ?? ''})`,
         };
+      case 'file_reference':
+        return { type: 'text', text: CodexAdapter.formatFileReferenceText(block) };
+      case 'session_reference':
+        return {
+          type: 'text',
+          text: CodexAdapter.formatSessionReferenceText(block),
+        };
     }
+  }
+
+  /**
+   * v0.13.0 — file_reference block 을 fenced code 형식의 plain text 로 직렬화.
+   * Adapter (Codex) + CliProvider (Claude/Codex CLI) 가 동일한 형식을 사용해
+   * 사용자 의도가 일관되게 model 에 전달되도록 한다.
+   */
+  static formatFileReferenceText(block: {
+    path: string;
+    snippet: string;
+    line_count: number;
+    truncated: boolean;
+    language?: string;
+  }): string {
+    const lang = block.language ?? '';
+    const trunc = block.truncated ? ', truncated' : '';
+    const header = `[파일] ${block.path} (line 1-${block.line_count}${trunc})`;
+    return `${header}\n\`\`\`${lang}\n${block.snippet}\n\`\`\``;
+  }
+
+  /**
+   * v0.13.0 — session_reference block 을 quote 형식의 plain text 로 직렬화.
+   */
+  static formatSessionReferenceText(block: {
+    session_id: string;
+    title: string;
+    context_text: string;
+    turn_count: number;
+  }): string {
+    const header = `[세션] ${block.title || block.session_id} (${block.turn_count}턴)`;
+    const body = block.context_text
+      .split('\n')
+      .map((l) => `> ${l}`)
+      .join('\n');
+    return `${header}\n${body}`;
   }
 
   private toOpenAIFunctionCall(call: ToolCall): Record<string, unknown> {

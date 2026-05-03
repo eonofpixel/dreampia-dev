@@ -2,6 +2,132 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [0.13.0] — 2026-05-03
+
+**Feature release — J Typed file/session reference blocks: chip 표시 + 백워드 호환.**
+
+Codex 권고 v0.13.0 (HIGH RISK — schema migration). v0.6.0 의 `@` 멘션은 plain-text
+prepend (`--- 컨텍스트 ---`) 방식이었는데, v0.13.0 부터는 `Turn.content` 의 `file_reference`
+/ `session_reference` 를 typed block 으로 승격해 UI 가 chip 으로 표현하고, provider
+가 정해진 fenced/quote 형식으로 재구성한다. **마이그레이션은 ADDITIVE 만** — 기존
+TextBlock / MentionBlock / EmbeddedCardBlock 은 변경 X, 기존 v0.6 ~ v0.12 plain-text
+멘션 turn 들은 그대로 read/round-trip 된다 (백워드 호환). 새 mention 부터 typed block
+사용. v0.6 plain-text "--- 컨텍스트 ---" 섹션은 deprecated 되지만 caller (App.tsx) 가
+`onSubmitBlocks` 콜백을 wire 하지 않은 환경 (e.g. legacy 통합 테스트) 에서는 fallback.
+
+### Added
+
+- **`src/types/conversation.ts`** — `FileReferenceBlockSchema` /
+  `SessionReferenceBlockSchema` 두 신규 variant 가 `ContentBlockSchema` discriminated
+  union 에 추가. file_reference 는 `path` (min 1) / `snippet` / `line_count`
+  (nonneg int) / `truncated` 필수 + optional `language`. session_reference 는
+  `session_id` (min 1) / `title` / `context_text` / `turn_count` (nonneg int) 필수.
+  기존 variant 는 그대로 두어 backward compat.
+- **`src/renderer/mentions/resolver.ts` — `resolveMentionsToTypedBlocks(resolved)`** —
+  ResolvedMention[] 을 typed `ContentBlock[]` 으로 직렬화. file → file_reference,
+  session → session_reference, error → inline `text` block (사용자에게 보이는
+  "[오류]" 메시지). `stripMentionTokens(text, mentions)` 가 사용자 텍스트에서
+  멘션 토큰 (`@<value>`) 을 제거하면서 양옆 공백을 정규화 (인접 공백 한 칸
+  흡수). resolveSession 이 `session_title` + `session_turn_count` 를 함께 캡처
+  하도록 ResolvedMention 확장 (additive 필드 — 기존 caller 는 영향 X).
+- **`src/renderer/components/chat/FileReferenceChip.tsx`** — 신규 component.
+  Collapsed: ChevronRight + FileText icon + path + line count + (optional)
+  truncated badge. Expanded: snippet 의 `<pre>` 영역 (whitespace-pre-wrap +
+  break-all + max-h-64 overflow-auto). `inverse` prop 으로 user-turn 흰 배경 /
+  assistant-turn 회색 배경 두 색상 모드 분기. `data-language` attribute 로
+  expanded 영역에 lang 힌트 노출.
+- **`src/renderer/components/chat/SessionReferenceChip.tsx`** — 신규 component.
+  Collapsed: ChevronRight + MessageCircle icon + title (없으면 sessionId
+  fallback) + turn count. Expanded: context_text `<pre>` 영역. 별도 ExternalLink
+  버튼 — `onPick` 미지정 시 disabled, 지정 시 클릭하면 부모로 sessionId 위임.
+- **`src/renderer/components/chat/ChatPanel.tsx` — 새 props `onSubmitBlocks` /
+  `onPickSession`** — TurnDisplay 가 `file_reference` / `session_reference` block
+  을 만나면 chip 컴포넌트로 렌더. 마지막 text block index 를 미리 계산해 streaming
+  cursor 가 chip 자리에 잘못 붙지 않도록 보호.
+- **`src/renderer/components/chat/ChatInput.tsx` — `onSubmitBlocks?` prop** —
+  지정되면 멘션 submit 시 (text, blocks) 형태로 호출 (text 는 멘션 토큰
+  strip, blocks 는 file_reference / session_reference / 실패시 text(error)).
+  미지정 시 v0.6 plain-text 경로 (onSubmit) 로 fallback — 기존 통합 테스트와의
+  호환성.
+- **`src/renderer/App.tsx` — `handleSubmitMessage(text, extraBlocks?)`** — 두 번째
+  optional 인자가 typed block 배열. text 가 비면 `[text]` block 자체를 skip 해서
+  user turn 을 chip-only 로 만든다. ChatPanel 에 `onSubmitBlocks` 와
+  `onPickSession` (sidebar 의 sessions 안에 있을 때만 setActiveSessionId) 두
+  콜백 wiring.
+- **`src/providers/cli/CliProvider.ts` — `static renderTurnAsPrompt(turn)`** — user
+  turn 의 ContentBlock[] 을 CLI prompt arg 로 직렬화. file_reference →
+  `[파일] {path} (line 1-{n}[truncated])\n\`\`\`{lang}\n{snippet}\n\`\`\``,
+  session_reference → `[세션] {title} ({n}턴)\n> {context_text 줄별}`. text /
+  mention / image / file / embedded_card 도 동일 helper 에서 처리. 기존 stream
+  메서드의 prompt 빌딩이 이 helper 를 사용하도록 변경 — 모든 turn 에 대해
+  결정성 있는 직렬화 단일 출처.
+- **`src/providers/ClaudeAdapter.ts` / `src/providers/CodexAdapter.ts`** —
+  toClaudeContent / blockToText / fallbackBlockToText / toOpenAIContentPart 가
+  새 두 variant 처리. 두 adapter 모두 동일한 fenced/quote 형식 반환 — CLI 와
+  HTTP 양쪽 경로에서 model 이 일관된 prompt 를 받는다. CodexAdapter 는 static
+  helper `formatFileReferenceText` / `formatSessionReferenceText` 로 직렬화 통합.
+- **`src/storage/turnText.ts`** — `extractTurnText` 가 file_reference 의 path +
+  snippet, session_reference 의 title + context_text 를 FTS5 인덱싱 대상에 포함
+  (검색 결과에 chip 의 metadata 가 노출되도록).
+- **i18n keys (ko/en 각 8개)** — `chat.file_reference.aria_label` /
+  `.line_count` / `.truncated` / `.expand` / `.collapse` /
+  `chat.session_reference.aria_label` / `.turn_count` / `.open_aria` / `.empty`.
+
+### Tests (51 new specs)
+
+- **`tests/types/conversation.typed-blocks.test.ts` — 16 spec.** ContentBlockSchema
+  parses 신규 variants, optional language round-trip, empty path / negative
+  line_count / non-boolean truncated reject, session_reference 빈 turn_count=0
+  허용 / empty session_id reject, legacy text/mention/embedded_card 변경 없이
+  parse, 알 수 없는 type reject (forward-compat 의도적 strict), Turn.content 에
+  text + file_reference + session_reference 혼합 OK, 기존 plain-text "--- 컨텍스트
+  ---" 단일 text block turn 도 round-trip.
+- **`tests/renderer/mentions/resolver.typed.test.ts` — 10 spec.** empty input,
+  file → file_reference 변환, session → session_reference (title +
+  turn_count 캡처), error → inline text, mixed kind 순서 보존, resolveMentions
+  end-to-end 로 session title 검증, stripMentionTokens (no mentions / single /
+  trailing / multiple / 입력 순서 무관).
+- **`tests/renderer/FileReferenceChip.test.tsx` — 6 spec.** path/line count
+  collapsed, truncated badge 분기, expand/collapse toggle, inverse 클래스 적용,
+  data-language attribute.
+- **`tests/renderer/SessionReferenceChip.test.tsx` — 5 spec.** title +
+  turn count, sessionId fallback, expand context_text, onPick 미지정 → disabled,
+  onPick callback 호출.
+- **`tests/providers/cli/CliProvider.blocks.test.ts` — 7 spec.** text-only,
+  file_reference fenced code (header + 코드 블록, truncated 분기, language
+  hint), session_reference quote block + sessionId fallback, mixed 순서 보존.
+- **`tests/storage/SessionStore.legacy-blocks.test.ts` — 4 spec.** v0.6
+  plain-text turn round-trip 그대로, v0.13 file_reference round-trip,
+  session_reference round-trip, mixed turn round-trip — DB 마이그레이션 X 로도
+  새 schema 가 동작.
+- **`tests/renderer/ChatInput.typed-blocks.test.tsx` — 3 spec.**
+  onSubmitBlocks 호출 시 text 가 strip 되고 blocks 에 file_reference 포함,
+  미지정 시 v0.6 plain-text fallback, mention 없으면 typed 경로 활성이어도
+  onSubmit(text) 사용.
+
+### Migration / Compatibility
+
+- **DB 스키마 변경 없음.** SessionStore 는 turn content_json 을 그대로 들고
+  있고, 새 variant 는 ContentBlockSchema 의 추가 분기일 뿐. 기존 row 는
+  parse 시 그대로 통과.
+- **Legacy mention turn 들은 plain-text 형태로 보존된다** — UI 도 단일 text
+  block 그대로 렌더 (chip X). 새로 입력하는 mention 부터 typed block.
+- **TurnSchema strict mode 유지** — 알 수 없는 block type 은 reject. forward
+  compat 보다는 안전성 우선.
+- **Rollback path:** package.json 을 0.12.0 으로 되돌리고 ChatInput 의
+  `onSubmitBlocks` 미주입 상태로 두면 v0.6 plain-text 경로만 활성. SessionStore
+  의 round-trip 은 file_reference / session_reference block 도 보존하지만 UI
+  는 그것을 무시 (모르는 type 으로 처리). 단, schema 자체에는 신규 variant 가
+  남으므로 0.12 client 가 이미 0.13 형식의 turn 을 본다면 strict parse 로
+  거부될 수 있다 — full rollback 시 typed-block turn 을 가진 row 는 제거
+  필요.
+
+### Verification
+
+- `npm run typecheck` — 0 errors
+- `npm run lint` — 0 errors / warnings
+- `npm test` — **1394 passed** (1343 baseline + 51 new)
+
 ## [0.12.0] — 2026-05-03
 
 **Feature release — I Cross-AI Verify/Compare MVP: Claude vs Codex 동일 prompt 동시 비교.**

@@ -12,8 +12,16 @@
 
 import { useEffect, useRef } from 'react';
 import { ChatInput } from './ChatInput';
-import type { PermissionLevel, Session, Turn, ToolResultRef } from '@/types';
+import type {
+  ContentBlock,
+  PermissionLevel,
+  Session,
+  Turn,
+  ToolResultRef,
+} from '@/types';
 import { EFFORT_LABELS_KO } from '@/types';
+import { FileReferenceChip } from './FileReferenceChip';
+import { SessionReferenceChip } from './SessionReferenceChip';
 import { ToolCallCard } from './ToolCallCard';
 import { findToolResult } from './toolDisplayHelpers';
 import { PermissionDropdown } from './PermissionDropdown';
@@ -74,6 +82,18 @@ export interface ChatPanelProps {
   /** v0.6.0 — 멘션 resolve 단계의 IPC / store 의존성. */
   mentionResolverContext?: ResolverContext;
   /**
+   * v0.13.0 (J) — typed block 경로 callback. 멘션이 있을 때 ChatInput 가
+   * `(text, blocks)` 를 전달한다. 미지정 시 v0.6 plain-text 경로 유지.
+   * App.tsx 가 활성 session 의 turns 에 user turn 을 push 할 때 이 blocks
+   * 배열을 그대로 합성해 schema-typed `Turn.content` 를 만든다.
+   */
+  onSubmitBlocks?: (text: string, blocks: ContentBlock[]) => void;
+  /**
+   * v0.13.0 (J) — `session_reference` chip 클릭 시 그 세션으로 전환할 때
+   * 사용. 미지정 시 chip 은 표시되지만 click 은 no-op.
+   */
+  onPickSession?: (sessionId: string) => void;
+  /**
    * v0.7.0 (F-026) — Sidebar 검색 결과 클릭 시 "이 turn 으로 스크롤" 요청.
    * 활성 session 이 바뀐 직후 부모가 set 하면 MessagesArea 가 해당 turn 의
    * `[data-turn-id]` element 를 scrollIntoView 한다. 매칭되는 element 가
@@ -107,6 +127,8 @@ interface MessagesAreaProps {
    */
   pendingFocusTurnId?: string | null;
   onTurnFocused?: () => void;
+  /** v0.13.0 — session_reference chip click handler (forwarded from ChatPanel). */
+  onPickSession?: (sessionId: string) => void;
 }
 
 export function ChatPanel({
@@ -127,6 +149,8 @@ export function ChatPanel({
   pendingFocusTurnId,
   onTurnFocused,
   onChangePermission,
+  onSubmitBlocks,
+  onPickSession,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -154,6 +178,7 @@ export function ChatPanel({
         workspaceName={workspaceName}
         pendingFocusTurnId={pendingFocusTurnId ?? null}
         onTurnFocused={onTurnFocused}
+        onPickSession={onPickSession}
       />
       <InputArea
         onSubmit={onSubmit}
@@ -166,6 +191,7 @@ export function ChatPanel({
         mentionIgnorePatterns={mentionIgnorePatterns}
         mentionSessions={mentionSessions}
         mentionResolverContext={mentionResolverContext}
+        onSubmitBlocks={onSubmitBlocks}
       />
     </main>
   );
@@ -196,6 +222,7 @@ function MessagesArea({
   workspaceName,
   pendingFocusTurnId,
   onTurnFocused,
+  onPickSession,
 }: MessagesAreaProps): React.JSX.Element {
   const t = useT();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -246,6 +273,7 @@ function MessagesArea({
               getResult={(callId: string): ToolResultRef | undefined =>
                 findToolResult(turns, index, callId)
               }
+              onPickSession={onPickSession}
             />
           ))}
         </div>
@@ -266,6 +294,8 @@ interface InputAreaProps {
   mentionIgnorePatterns?: ReadonlyArray<string>;
   mentionSessions?: ReadonlyArray<{ id: string; title: string }>;
   mentionResolverContext?: ResolverContext;
+  /** v0.13.0 — typed-block submit callback (forwarded from ChatPanel). */
+  onSubmitBlocks?: (text: string, blocks: ContentBlock[]) => void;
 }
 
 function InputArea({
@@ -279,6 +309,7 @@ function InputArea({
   mentionIgnorePatterns,
   mentionSessions,
   mentionResolverContext,
+  onSubmitBlocks,
 }: InputAreaProps): React.JSX.Element {
   const t = useT();
   return (
@@ -306,6 +337,7 @@ function InputArea({
         {...(mentionResolverContext !== undefined && {
           resolverContext: mentionResolverContext,
         })}
+        {...(onSubmitBlocks !== undefined && { onSubmitBlocks })}
       />
     </div>
   );
@@ -505,15 +537,36 @@ function SuggestionChip({
 interface TurnDisplayProps {
   turn: Turn;
   getResult: (callId: string) => ToolResultRef | undefined;
+  /**
+   * v0.13.0 — `session_reference` chip 클릭 시 부모에게 위임. 미지정 시
+   * chip 은 표시되지만 click 은 disabled.
+   */
+  onPickSession?: (sessionId: string) => void;
 }
 
-function TurnDisplay({ turn, getResult }: TurnDisplayProps): React.JSX.Element | null {
+function TurnDisplay({
+  turn,
+  getResult,
+  onPickSession,
+}: TurnDisplayProps): React.JSX.Element | null {
   const t = useT();
   // tool 역할 턴은 렌더링하지 않음 — 결과는 어시스턴트 턴 내 인라인으로 표시
   if (turn.role === 'tool') return null;
 
   const isUser = turn.role === 'user';
   const isStreamingTurn = turn.status === 'streaming';
+
+  // v0.13.0 — typed block 렌더링 시점에 "마지막 text block 의 streaming
+  // cursor" 위치를 찾기 위해 마지막 text block 의 array index 를 미리 계산.
+  // 단순히 `i === turn.content.length - 1` 만으로는 chip block 이 마지막
+  // 자리에 와있는 user turn 에서 cursor 가 잘못된 자리에 붙는다.
+  let lastTextBlockIndex = -1;
+  for (let k = turn.content.length - 1; k >= 0; k -= 1) {
+    if (turn.content[k]?.type === 'text') {
+      lastTextBlockIndex = k;
+      break;
+    }
+  }
 
   return (
     <article
@@ -534,7 +587,7 @@ function TurnDisplay({ turn, getResult }: TurnDisplayProps): React.JSX.Element |
             return (
               <p key={i}>
                 {block.text}
-                {isStreamingTurn && i === turn.content.length - 1 && (
+                {isStreamingTurn && i === lastTextBlockIndex && (
                   <span
                     className="ml-0.5 inline-block animate-pulse"
                     aria-label={t('chat.streaming.cursor_aria')}
@@ -551,6 +604,36 @@ function TurnDisplay({ turn, getResult }: TurnDisplayProps): React.JSX.Element |
               <p key={i} className="text-xs italic opacity-70">
                 [임베디드 카드: {block.card.title}]
               </p>
+            );
+          }
+          if (block.type === 'file_reference') {
+            // v0.13.0 (J) — typed file mention as chip.
+            return (
+              <FileReferenceChip
+                key={i}
+                path={block.path}
+                snippet={block.snippet}
+                lineCount={block.line_count}
+                truncated={block.truncated}
+                {...(block.language !== undefined && { language: block.language })}
+                inverse={isUser}
+              />
+            );
+          }
+          if (block.type === 'session_reference') {
+            // v0.13.0 (J) — typed session mention as chip.
+            return (
+              <SessionReferenceChip
+                key={i}
+                sessionId={block.session_id}
+                title={block.title}
+                contextText={block.context_text}
+                turnCount={block.turn_count}
+                inverse={isUser}
+                {...(onPickSession !== undefined && {
+                  onPick: () => onPickSession(block.session_id),
+                })}
+              />
             );
           }
           return null;

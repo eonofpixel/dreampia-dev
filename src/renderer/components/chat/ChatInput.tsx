@@ -36,9 +36,12 @@ import {
 import { findActiveMention, findAllMentions, type MentionMatch } from '../../mentions/parser';
 import {
   resolveMentions,
+  resolveMentionsToTypedBlocks,
+  stripMentionTokens,
   formatMentionsAsContext,
   type ResolverContext,
 } from '../../mentions/resolver';
+import type { ContentBlock } from '@/types';
 import type { FileEntry } from '@/types/workspace';
 import { useT } from '../../i18n';
 
@@ -80,6 +83,17 @@ export interface ChatInputProps {
    * 단계가 skip 되어 사용자 입력은 raw 그대로 onSubmit 에 전달된다.
    */
   resolverContext?: ResolverContext;
+  /**
+   * v0.13.0 (J) — typed `ContentBlock[]` 으로 멘션을 제출할 때 사용하는 새
+   * callback. 지정되면 `resolverContext` 가 함께 있을 때 typed block 경로로
+   * 처리되고 (text + file_reference / session_reference blocks 분리 전달),
+   * 미지정 시 v0.6 plain-text "--- 컨텍스트 ---" 경로로 fallback (`onSubmit`).
+   *
+   * 이 prop 은 추가형 (additive) — 기존 caller 의 `onSubmit(text)` 기반 통합
+   * 테스트 / 외부 호출은 그대로 동작한다. App.tsx 가 새 경로를 활성화하기
+   * 위해 제공한다.
+   */
+  onSubmitBlocks?: (text: string, blocks: ContentBlock[]) => void;
 }
 
 const SLASH_POPOVER_PREFIX = 'slash-command';
@@ -107,6 +121,7 @@ export function ChatInput({
   ignorePatterns,
   sessions,
   resolverContext,
+  onSubmitBlocks,
 }: ChatInputProps): React.JSX.Element {
   const t = useT();
   // 사용자가 명시 placeholder 를 넘기지 않으면 locale-aware default.
@@ -407,8 +422,17 @@ export function ChatInput({
     void (async () => {
       try {
         const resolved = await resolveMentions(mentions, resolverContext);
-        const augmented = formatMentionsAsContext(text, resolved);
-        onSubmit(augmented);
+        // v0.13.0 (J) — typed block 경로가 활성화돼 있으면 멘션은 별도 chip
+        // block 으로 분리해 caller 에게 전달. 활성화 X 면 v0.6 plain-text 경로
+        // 로 fallback — 외부에서 onSubmit 만 wire 한 통합/UI 테스트와의 호환성.
+        if (onSubmitBlocks !== undefined) {
+          const stripped = stripMentionTokens(text, mentions);
+          const blocks = resolveMentionsToTypedBlocks(resolved);
+          onSubmitBlocks(stripped, blocks);
+        } else {
+          const augmented = formatMentionsAsContext(text, resolved);
+          onSubmit(augmented);
+        }
       } catch {
         // resolve 단계가 통째로 실패해도 사용자 메시지는 보존 — raw 전송.
         onSubmit(text);

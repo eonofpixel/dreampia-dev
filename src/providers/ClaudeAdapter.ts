@@ -122,6 +122,24 @@ export class ClaudeAdapter implements ProviderAdapter {
         const url = block.card.url ?? '';
         return { type: 'text', text: `[${block.card.title}](${url})` };
       }
+      case 'file_reference': {
+        // v0.13.0 — typed file reference. Claude 에는 fenced code block 으로 전달.
+        // header 는 path + line range 정보, body 는 snippet.
+        const lang = block.language ?? '';
+        const trunc = block.truncated ? ', truncated' : '';
+        const header = `[파일] ${block.path} (line 1-${block.line_count}${trunc})`;
+        const fenced = '```' + lang + '\n' + block.snippet + '\n```';
+        return { type: 'text', text: `${header}\n${fenced}` };
+      }
+      case 'session_reference': {
+        // v0.13.0 — typed session reference. Claude 에는 quote block + meta 로 전달.
+        const header = `[세션] ${block.title || block.session_id} (${block.turn_count}턴)`;
+        const body = block.context_text
+          .split('\n')
+          .map((l) => `> ${l}`)
+          .join('\n');
+        return { type: 'text', text: `${header}\n${body}` };
+      }
     }
   }
 

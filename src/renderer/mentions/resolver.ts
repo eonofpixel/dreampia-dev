@@ -12,7 +12,7 @@
  * Spec: docs/ux/patterns/F-019-mention-palette.md
  */
 
-import type { Session } from '@/types';
+import type { ContentBlock, Session } from '@/types';
 import type { FileContent } from '@/types/workspace';
 import type { Result } from '@/main/types';
 import type { MentionMatch } from './parser';
@@ -34,6 +34,14 @@ export interface ResolvedMention {
   // session
   session_id?: string;
   context_text?: string;
+  /**
+   * v0.13.0 — fetch 시점의 session.title snapshot. typed
+   * `session_reference` block 의 chip 표시용. context_text 만으로는 어떤
+   * 세션을 가리키는지 사용자에게 보여주기 어려워 함께 캡처.
+   */
+  session_title?: string;
+  /** v0.13.0 — fetch 시점의 turn 수. chip footer 표시용. */
+  session_turn_count?: number;
   // error
   error?: string;
 }
@@ -125,6 +133,9 @@ async function resolveSession(
     kind: 'session',
     session_id: session.id,
     context_text,
+    // v0.13.0 — typed block 생성 시 chip 에 표시할 metadata.
+    session_title: session.title,
+    session_turn_count: session.conversation.turns.length,
   };
 }
 
@@ -205,4 +216,84 @@ export function formatMentionsAsContext(
     }
   }
   return lines.join('\n');
+}
+
+/**
+ * v0.13.0 — Resolved mentions 를 typed `ContentBlock[]` 으로 직렬화한다.
+ *
+ * v0.6.0 의 `formatMentionsAsContext` 가 plain-text 단일 string 을 반환하던
+ * 것과 달리, 이 helper 는 mention 별로 별도 block 을 생성한다. 결과:
+ *   - `file` mention → `file_reference` block (path + snippet + line_count + truncated)
+ *   - `session` mention → `session_reference` block (session_id + title + context_text)
+ *   - `error` mention → `text` block (사용자에게 읽히는 inline 오류 메시지)
+ *
+ * Caller (ChatInput) 는 strip 된 사용자 텍스트를 첫 `text` block 으로,
+ * 이 helper 의 결과를 그 뒤에 append 한다. 결과가 빈 배열이면 caller 가
+ * mention 없는 평범한 single-text turn 으로 처리.
+ *
+ * Spec: docs/session/conversation.md (typed reference blocks)
+ */
+export function resolveMentionsToTypedBlocks(
+  resolved: ReadonlyArray<ResolvedMention>
+): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
+  for (const r of resolved) {
+    if (r.kind === 'file') {
+      blocks.push({
+        type: 'file_reference',
+        path: r.path ?? r.match.value,
+        snippet: r.snippet ?? '',
+        line_count: r.line_count ?? 0,
+        truncated: r.truncated ?? false,
+      });
+    } else if (r.kind === 'session') {
+      blocks.push({
+        type: 'session_reference',
+        session_id: r.session_id ?? r.match.value,
+        title: r.session_title ?? '',
+        context_text: r.context_text ?? '',
+        turn_count: r.session_turn_count ?? 0,
+      });
+    } else {
+      // 오류는 사용자에게 보이도록 text block 으로 inline 표시.
+      // submit 자체를 막지 않고 turn 안에 명시적 흔적을 남긴다.
+      blocks.push({
+        type: 'text',
+        text: `[오류] @${r.match.query} → ${r.error ?? '알 수 없는 오류'}`,
+      });
+    }
+  }
+  return blocks;
+}
+
+/**
+ * v0.13.0 — 사용자 텍스트에서 멘션 토큰 (`@<value>`) 을 제거한다. typed
+ * block 시대의 user turn 은 첫 text block 에 "사용자가 의도한 메시지" 만
+ * 두고, 멘션 자체는 별도 chip block 으로 분리된다.
+ *
+ * 멘션 위치는 parser 가 이미 `start`/`end` 로 알고 있으므로 우측에서부터
+ * 잘라내며 (인덱스 안정성) 양옆 공백 정규화. 빈 입력이거나 멘션이 없으면
+ * 입력 그대로 반환.
+ */
+export function stripMentionTokens(
+  text: string,
+  mentions: ReadonlyArray<MentionMatch>
+): string {
+  if (mentions.length === 0) return text;
+  // 우측에서부터 잘라내면 앞쪽 인덱스가 손상되지 않는다.
+  const sorted = [...mentions].sort((a, b) => b.start - a.start);
+  let out = text;
+  for (const m of sorted) {
+    const before = out.slice(0, m.start);
+    const after = out.slice(m.end);
+    // 인접 공백 흡수 — `"a @x b"` → `"a b"` (양 옆 공백이 모두 있을 때 한 칸으로).
+    const beforeTrim = before.replace(/\s+$/, '');
+    const afterTrim = after.replace(/^\s+/, '');
+    if (beforeTrim.length > 0 && afterTrim.length > 0) {
+      out = `${beforeTrim} ${afterTrim}`;
+    } else {
+      out = `${beforeTrim}${afterTrim}`;
+    }
+  }
+  return out.trim();
 }

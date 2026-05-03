@@ -30,6 +30,7 @@ import {
   workspaceIdFor,
   partitionIdFor,
   nowIso,
+  type ContentBlock,
   type PermissionLevel,
   type Session,
   type SessionId,
@@ -620,18 +621,32 @@ export function App(): React.JSX.Element {
   );
 
   const handleSubmitMessage = useCallback(
-    async (text: string): Promise<void> => {
+    async (text: string, extraBlocks?: ContentBlock[]): Promise<void> => {
       if (activeSession === null || isStreaming) return;
       // Phase 3 audit (HIGH) — production 에서 IPC bridge 누락 시 fail-closed.
       // ChatPanel 이 이미 banner 와 input disable 로 표시 중이지만 방어적으로 가드.
       if (provider === null) return;
+
+      // v0.13.0 (J) — typed block 경로:
+      //   text 가 비어있으면 (사용자가 멘션만 입력) text block 자체를 skip
+      //   해서 user turn 을 chip 한 줄짜리로 만든다. text 가 있으면 [text, ...
+      //   blocks] 순서로 합친다 (사용자가 의도한 메시지가 먼저, 첨부가 뒤).
+      const blocks: ContentBlock[] = [];
+      if (text.length > 0) {
+        blocks.push({ type: 'text', text });
+      }
+      if (extraBlocks !== undefined && extraBlocks.length > 0) {
+        blocks.push(...extraBlocks);
+      }
+      // 둘 다 비어있으면 (이론적으로 불가, ChatInput 가 trim 후 호출) — 안전 가드.
+      if (blocks.length === 0) return;
 
       const userTurn: Turn = {
         id: newTurnId(),
         role: 'user',
         timestamp: nowIso(),
         status: 'completed',
-        content: [{ type: 'text', text }],
+        content: blocks,
       };
 
       // 1) Optimistic local push so the UI is responsive.
@@ -1042,6 +1057,21 @@ export function App(): React.JSX.Element {
             onSubmit={(text) => {
               setPendingPrompt(undefined);
               void handleSubmitMessage(text);
+            }}
+            onSubmitBlocks={(text, blocks) => {
+              // v0.13.0 (J) — ChatInput 가 typed block 경로로 호출. text 는
+              // 멘션 토큰이 strip 된 사용자 메시지, blocks 는 file_reference /
+              // session_reference / (실패한) text(error) 블록들.
+              setPendingPrompt(undefined);
+              void handleSubmitMessage(text, blocks);
+            }}
+            onPickSession={(id) => {
+              // v0.13.0 (J) — session_reference chip 의 "open" 클릭. 그 세션
+              // 으로 active 를 전환. 세션이 sidebar 의 sessions 목록에 있으면
+              // 자연스럽게 로드되고, 없으면 (archived/deleted) 무시.
+              if (sessions.some((s) => s.id === id)) {
+                setActiveSessionId(id);
+              }
             }}
             isStreaming={isStreaming}
             onCancel={cancelStream}

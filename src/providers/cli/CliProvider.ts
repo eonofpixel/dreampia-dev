@@ -100,13 +100,10 @@ export class CliProvider implements StreamingProvider {
     yield { type: 'message_start', turn_id: turnId, model: input.model };
 
     // 마지막 user turn 텍스트를 positional arg 로 전달.
+    // v0.13.0 (J) — typed `file_reference` / `session_reference` block 도
+    // CLI 가 이해할 수 있는 plain-text 형식으로 펼쳐 prompt 에 포함시킨다.
     const lastUserTurn = [...input.turns].reverse().find((t) => t.role === 'user');
-    const userText = lastUserTurn
-      ? lastUserTurn.content
-          .filter((b) => b.type === 'text')
-          .map((b) => (b as { type: 'text'; text: string }).text)
-          .join('\n')
-      : '';
+    const userText = lastUserTurn ? CliProvider.renderTurnAsPrompt(lastUserTurn) : '';
 
     const args = this.buildArgs({ model: input.model, prompt: userText });
 
@@ -326,6 +323,53 @@ export class CliProvider implements StreamingProvider {
     }
     args.push(input.prompt); // positional prompt arg (must be last)
     return args;
+  }
+
+  /**
+   * v0.13.0 (J) — user turn 의 ContentBlock[] 을 CLI prompt arg 로 직렬화.
+   *
+   * 규칙:
+   *   - `text` → 그대로
+   *   - `file_reference` → "[파일] {path} (line 1-{n}[truncated])\n```{lang}\n{snippet}\n```"
+   *   - `session_reference` → "[세션] {title} ({n}턴)\n> {context_text 줄줄이}"
+   *   - `mention` → "@{display}"
+   *   - 기타 (image / file / embedded_card) → 짧은 placeholder
+   *
+   * Provider 가 보는 prompt 가 결정성 있도록 모든 turn 에 대해 이 한 곳에서만
+   * 직렬화된다. UI chip 와 model-side prompt 는 동일한 의도를 다른 표현으로
+   * 보여주는 것이므로, 사용자가 chip 를 펼쳐 본 코드와 model 이 받은 prompt
+   * 가 일치한다.
+   */
+  static renderTurnAsPrompt(turn: Turn): string {
+    const parts: string[] = [];
+    for (const block of turn.content) {
+      if (block.type === 'text') {
+        parts.push(block.text);
+      } else if (block.type === 'file_reference') {
+        const lang = block.language ?? '';
+        const trunc = block.truncated ? ', truncated' : '';
+        const header = `[파일] ${block.path} (line 1-${block.line_count}${trunc})`;
+        parts.push(`${header}\n\`\`\`${lang}\n${block.snippet}\n\`\`\``);
+      } else if (block.type === 'session_reference') {
+        const title = block.title.length > 0 ? block.title : block.session_id;
+        const header = `[세션] ${title} (${block.turn_count}턴)`;
+        const body = block.context_text
+          .split('\n')
+          .map((l) => `> ${l}`)
+          .join('\n');
+        parts.push(`${header}\n${body}`);
+      } else if (block.type === 'mention') {
+        parts.push(`@${block.ref.display}`);
+      } else if (block.type === 'embedded_card') {
+        parts.push(`[${block.card.title}](${block.card.url ?? ''})`);
+      } else if (block.type === 'image') {
+        // CLI 는 stdin/이미지 직접 X — 사용자에게 잠재적 의도를 알리는 placeholder.
+        parts.push(`[이미지: ${block.alt ?? block.mime}]`);
+      } else if (block.type === 'file') {
+        parts.push(`[파일: ${block.name} (${block.mime})]`);
+      }
+    }
+    return parts.join('\n');
   }
 
   /**

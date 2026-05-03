@@ -62,15 +62,61 @@ const EmbeddedCardBlockSchema = z.object({
   card: EmbeddedCardSchema,
 });
 
+// ────────────────────────────────────────────────────────────
+// v0.13.0 (J) — Typed file/session reference blocks.
+//
+// Background: v0.6.0 (F-019) 의 `@` 멘션은 plain-text prepend (`--- 컨텍스트 ---`
+// 섹션) 으로 처리되었다. v0.13.0 부터는 typed block 으로 승격해 UI 가 chip
+// 으로 표현하고, provider 가 정해진 형식으로 재구성한다.
+//
+// 마이그레이션 전략 — ADDITIVE ONLY:
+//   - 기존 TextBlock / MentionBlock / EmbeddedCardBlock 등은 변경 X
+//   - 새 mention 부터 file_reference / session_reference block 사용
+//   - 기존 plain-text "--- 컨텍스트 ---" 데이터는 read-time 호환 (별도 처리 X
+//     — text block 그대로 렌더). DB 스키마 변경 없음.
+//
+// Spec: docs/session/conversation.md (typed reference blocks)
+// ────────────────────────────────────────────────────────────
+
+const FileReferenceBlockSchema = z.object({
+  type: z.literal('file_reference'),
+  /** Workspace-relative 경로 (resolver 가 채움). */
+  path: z.string().min(1),
+  /** 파일 내용 발췌. read-file IPC 의 max_bytes 캡 적용된 값. */
+  snippet: z.string(),
+  /** 발췌 line 수. truncated 와 함께 chip 의 footer 표시. */
+  line_count: z.number().int().nonnegative(),
+  /** 발췌가 잘렸는지 여부. */
+  truncated: z.boolean(),
+  /** Optional — syntax highlighting hint (e.g. 'ts', 'md', 'py'). */
+  language: z.string().optional(),
+});
+
+const SessionReferenceBlockSchema = z.object({
+  type: z.literal('session_reference'),
+  /** 첨부된 세션 id. chip 클릭 시 그 세션으로 전환. */
+  session_id: z.string().min(1),
+  /** 표시용 제목 — resolver 가 fetch 시점의 session.title snapshot. */
+  title: z.string(),
+  /** 마지막 N (=5) 턴을 직렬화한 컨텍스트 텍스트. */
+  context_text: z.string(),
+  /** 첨부 시점의 turn 수 — chip footer 정보. */
+  turn_count: z.number().int().nonnegative(),
+});
+
 export const ContentBlockSchema = z.discriminatedUnion('type', [
   TextBlockSchema,
   ImageBlockSchema,
   FileBlockSchema,
   MentionBlockSchema,
   EmbeddedCardBlockSchema,
+  FileReferenceBlockSchema,
+  SessionReferenceBlockSchema,
 ]);
 
 export type ContentBlock = z.infer<typeof ContentBlockSchema>;
+export type FileReferenceBlock = z.infer<typeof FileReferenceBlockSchema>;
+export type SessionReferenceBlock = z.infer<typeof SessionReferenceBlockSchema>;
 export type MentionRef = z.infer<typeof MentionRefSchema>;
 export type EmbeddedCard = z.infer<typeof EmbeddedCardSchema>;
 
