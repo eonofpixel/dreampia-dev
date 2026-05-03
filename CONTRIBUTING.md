@@ -7,7 +7,7 @@
 ## 시작하기
 
 ```bash
-git clone https://github.com/dreampia-org/dreampia-dev.git
+git clone https://github.com/eonofpixel/dreampia-dev.git
 cd dreampia-dev
 npm install
 npm run dev

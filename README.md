@@ -3,7 +3,7 @@
 > **Open source AI coding desktop wrapper. Codex의 단순함 + Claude의 멀티탭 사이드바.**
 > **두 AI를 한 번 셋업으로 사용. 한국어 우선, Windows-first.**
 
-[![CI](https://github.com/dreampia-org/dreampia-dev/actions/workflows/ci.yml/badge.svg)](https://github.com/dreampia-org/dreampia-dev/actions/workflows/ci.yml)
+[![CI](https://github.com/eonofpixel/dreampia-dev/actions/workflows/ci.yml/badge.svg)](https://github.com/eonofpixel/dreampia-dev/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/version-0.1.0-brightgreen.svg)](./CHANGELOG.md)
 

@@ -81,6 +81,6 @@ linux:
 # === Auto-updater ===
 publish:
   provider: github
-  owner: dreampia-org
+  owner: eonofpixel
   repo: dreampia-dev
   releaseType: release   # not 'draft' — direct publish on tag

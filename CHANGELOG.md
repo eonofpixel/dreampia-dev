@@ -60,4 +60,4 @@
 - better-sqlite3 (Node ABI ↔ Electron ABI 토글)
 - ESLint 9 flat config + Vitest + Playwright
 
-[0.1.0]: https://github.com/dreampia-org/dreampia-dev/releases/tag/v0.1.0
+[0.1.0]: https://github.com/eonofpixel/dreampia-dev/releases/tag/v0.1.0
