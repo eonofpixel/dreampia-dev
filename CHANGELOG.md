@@ -2,6 +2,28 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.0.2] — 2026-05-04
+
+**Patch — v1.0.1 잔여 type stub 회수.**
+
+v1.0.1 commit 에 사용자가 거부한 v1.1.0 (Image/PDF mention) type stub
+(`src/types/mediaConstants.ts` + `src/types/conversation.ts` 의 ImageReference/
+PdfReference Schema) 이 실수로 포함됨. 사용자 의도 ("앱 직접 검증" 만, v1.1
+개발 보류) 존중하여 두 변경 모두 revert.
+
+### Reverted
+
+- `src/types/mediaConstants.ts` (삭제)
+- `src/types/conversation.ts` 의 `ALLOWED_IMAGE_MIME_VALUES`,
+  `ImageReferenceBlockSchema`, `PdfReferenceBlockSchema`, ContentBlockSchema
+  union 새 entry 모두 제거
+
+### Verified
+
+- `npm run typecheck` / `lint` — 0 errors
+- `npm test` — 1430 vitest pass / 28 e2e pass (이전 그대로)
+- behavior 변경 없음 (해당 schema 들이 아직 어디서도 사용되지 않았음)
+
 ## [1.0.1] — 2026-05-04
 
 **Patch — Smoke test outdated 수정 (실제 앱 검증 후 발견).**

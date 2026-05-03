@@ -104,66 +104,6 @@ const SessionReferenceBlockSchema = z.object({
   turn_count: z.number().int().nonnegative(),
 });
 
-// ────────────────────────────────────────────────────────────
-// v1.1.0 — Image / PDF mention extension (Codex post-v1.0 권고).
-//
-// 디자인:
-//   - file_reference / session_reference 와 동일한 typed-block 패턴
-//   - image_reference: local file 만, base64 data URL inline (영구 저장 X 권장)
-//   - pdf_reference : 텍스트 추출 결과만 (OCR 없음, 페이지 cap)
-//   - 양쪽 모두 size / mime / page_count 등 기준선 표시 정보 포함
-//
-// Provider mapping (provider adapter 가 처리):
-//   - vision-capable model (claude-3-5-sonnet, gpt-4o, ...) → image content block
-//   - non-vision model → "[이미지: path]" placeholder text fallback
-//   - PDF 는 어느 모델이든 text fallback (직접 PDF 입력 X)
-//
-// Spec: docs/session/conversation.md (v1.1.0 image/pdf reference blocks)
-// ────────────────────────────────────────────────────────────
-
-/**
- * v1.1.0 — Image MIME 화이트리스트.
- *
- * IPC handler 의 magic-byte detector 와 동기화된 4개. 실수로 SVG (XSS 위험)
- * 또는 BMP/TIFF (브라우저 렌더 보장 X) 가 흘러들어가지 않도록 명시적 enum.
- */
-export const ALLOWED_IMAGE_MIME_VALUES = [
-  'image/png',
-  'image/jpeg',
-  'image/gif',
-  'image/webp',
-] as const;
-
-const ImageReferenceBlockSchema = z.object({
-  type: z.literal('image_reference'),
-  /** Workspace-relative 경로 (resolver 가 채움). chip 표시 + provider fallback 용. */
-  path: z.string().min(1),
-  /** base64-encoded data URL: "data:image/png;base64,...". inline 표시 + API 전송용. */
-  data_url: z.string().min(1),
-  /** Magic-byte 로 판정된 mime. enum 으로 vision-capable provider 가 곧장 사용. */
-  mime: z.enum(ALLOWED_IMAGE_MIME_VALUES),
-  /** 원본 파일 byte 수 — chip footer 표시 + 한도 검증 evidence. */
-  size_bytes: z.number().int().positive(),
-  /** Optional decoded width (pixels). */
-  width: z.number().int().positive().optional(),
-  /** Optional decoded height (pixels). */
-  height: z.number().int().positive().optional(),
-}).strict();
-
-const PdfReferenceBlockSchema = z.object({
-  type: z.literal('pdf_reference'),
-  /** Workspace-relative 경로. */
-  path: z.string().min(1),
-  /** 추출된 텍스트 (page cap + byte cap 적용된 결과). */
-  text: z.string(),
-  /** 원본 PDF 의 총 페이지 수 (pdf-parse 로 측정). */
-  page_count: z.number().int().positive(),
-  /** 실제로 텍스트로 추출된 페이지 수 (보통 min(page_count, MAX_PDF_PAGES)). */
-  pages_extracted: z.number().int().positive(),
-  /** page cap 또는 byte cap 으로 인해 잘렸으면 true. chip 에 표시. */
-  truncated: z.boolean(),
-}).strict();
-
 export const ContentBlockSchema = z.discriminatedUnion('type', [
   TextBlockSchema,
   ImageBlockSchema,
@@ -172,18 +112,13 @@ export const ContentBlockSchema = z.discriminatedUnion('type', [
   EmbeddedCardBlockSchema,
   FileReferenceBlockSchema,
   SessionReferenceBlockSchema,
-  ImageReferenceBlockSchema,
-  PdfReferenceBlockSchema,
 ]);
 
 export type ContentBlock = z.infer<typeof ContentBlockSchema>;
 export type FileReferenceBlock = z.infer<typeof FileReferenceBlockSchema>;
 export type SessionReferenceBlock = z.infer<typeof SessionReferenceBlockSchema>;
-export type ImageReferenceBlock = z.infer<typeof ImageReferenceBlockSchema>;
-export type PdfReferenceBlock = z.infer<typeof PdfReferenceBlockSchema>;
 export type MentionRef = z.infer<typeof MentionRefSchema>;
 export type EmbeddedCard = z.infer<typeof EmbeddedCardSchema>;
-export type AllowedImageMime = (typeof ALLOWED_IMAGE_MIME_VALUES)[number];
 
 // ────────────────────────────────────────────────────────────
 // Annotation (DOM Inspector / 주석 모드)
