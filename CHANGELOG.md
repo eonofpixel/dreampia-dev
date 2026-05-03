@@ -2,6 +2,51 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [0.1.2] — 2026-05-03
+
+**Hardening release — dev DX (ABI 자동 토글) + branded icons.**
+
+### Added
+
+- `scripts/ensure-abi.cjs`: better-sqlite3 native binding 의 현재 ABI
+  검증 + 필요 시 자동 rebuild. Smart skip (이미 일치하면 ~100ms).
+- `scripts/generate-icons.cjs`: SVG → PNG (1024×1024) + ICO (multi-size)
+  cross-platform 생성 (`@resvg/resvg-js` + `png-to-ico`). macOS ICNS 는
+  electron-builder 가 PNG 로부터 자동 변환.
+- `build/icon.png` (180 KB) — Linux + macOS source.
+- `build/icon.ico` (370 KB) — Windows multi-size (16/32/48/64/128/256).
+- `package.json` scripts: `predev` / `pretest` (자동 ABI 토글) +
+  `icons:generate` (SVG 변경 시 manual 재생성).
+- `electron-builder.yml`: `win.icon` / `mac.icon` / `linux.icon` 명시
+  (이전엔 default Electron icon fallback).
+
+### Changed
+
+- **Dev DX**: 사용자가 더 이상 `npm run dev:rebuild` / `test:rebuild` 수동
+  호출 안 함. `npm run dev` / `npm test` / `npm run pretest:e2e` 가
+  자동으로 ABI 보장 (smart skip — 이미 맞으면 50ms 추가만).
+- ESLint config: `scripts/**/*.cjs` 용 CJS globals 블록 추가
+  (`__dirname` / `require` / `module` 인식).
+
+### Distributed Artifacts
+
+v0.1.1 와 동일 5 OS — 모든 빌드에 새 branded icon 포함:
+
+- ✅ Linux AppImage (`Dreampia-Dev-0.1.2-x86_64.AppImage`)
+- ✅ Linux Debian (`Dreampia-Dev-0.1.2-amd64.deb`)
+- ✅ Windows NSIS (`Dreampia-Dev-Setup-0.1.2-x64.exe`) — branded icon
+- ✅ macOS Intel (`Dreampia-Dev-0.1.2-x64.dmg`) — branded icon
+- ✅ macOS Apple Silicon (`Dreampia-Dev-0.1.2-arm64.dmg`) — branded icon
+
+### Internals
+
+- 새 dep: `@resvg/resvg-js@^2.6.2` (Rust-based SVG 렌더러), `png-to-ico@^3.0.1`
+  (둘 다 devDependencies)
+- ensure-abi.cjs 의 Windows EPERM 회피: child process 에서 `require(binding)`
+  검증 후 즉시 종료 (parent 의 lock 해제)
+
+[0.1.2]: https://github.com/eonofpixel/dreampia-dev/releases/tag/v0.1.2
+
 ## [0.1.1] — 2026-05-03
 
 **Hardening release — macOS DMG 추가 + 운영 장치.**

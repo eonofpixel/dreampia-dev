@@ -85,4 +85,21 @@ export default [
       'react-hooks/rules-of-hooks': 'off',
     },
   },
+  {
+    // Build-time CJS scripts (scripts/*.cjs) — Node CommonJS globals only.
+    // No TypeScript / React rules, but enforce Node-aware global recognition.
+    files: ['scripts/**/*.cjs'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'commonjs',
+      globals: {
+        ...sharedGlobals,
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        require: 'readonly',
+        module: 'readonly',
+        exports: 'readonly',
+      },
+    },
+  },
 ];

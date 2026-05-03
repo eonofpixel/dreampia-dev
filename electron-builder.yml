@@ -15,8 +15,17 @@ asar: true
 asarUnpack:
   - 'node_modules/better-sqlite3/**'
 
+# === Icons ===
+# Source-of-truth: build/icon.svg
+# Generation: scripts/generate-icons.cjs (npm run icons:generate)
+#   - build/icon.png  (1024×1024) — Linux + macOS source
+#   - build/icon.ico  — Windows installer (multi-size: 16/32/48/64/128/256)
+# macOS ICNS: electron-builder 가 build/icon.png 로부터 자동 변환
+# (별도 .icns commit 불필요 — local 에선 icon.png + icon.ico 만 commit).
+
 # === Windows ===
 win:
+  icon: build/icon.ico
   target:
     - target: nsis
       arch: [x64]
@@ -42,6 +51,7 @@ nsis:
 
 # === macOS ===
 mac:
+  icon: build/icon.png   # electron-builder 가 PNG 1024 → ICNS 자동 변환
   target:
     - target: dmg
       arch: [x64, arm64]   # universal — both Intel + Apple Silicon
@@ -71,6 +81,7 @@ dmg:
 
 # === Linux ===
 linux:
+  icon: build/icon.png
   target:
     - target: AppImage
       arch: [x64]

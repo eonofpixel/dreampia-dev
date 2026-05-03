@@ -6,52 +6,40 @@
 
 | 파일 | 용도 | 상태 |
 |------|------|------|
-| `entitlements.mac.plist` | macOS hardened runtime entitlements | ✅ 완료 |
-| `icon.svg` | 아이콘 source-of-truth | ✅ placeholder |
-| `icon.icns` | macOS 앱 아이콘 (1024×1024 multi-resolution) | ⏳ 미생성 |
-| `icon.ico` | Windows 설치 프로그램 아이콘 | ⏳ 미생성 |
-| `icon.png` | Linux .desktop 아이콘 (512×512) | ⏳ 미생성 |
-| `background.png` | DMG 배경 (선택) | ⏳ 미생성 |
+| `entitlements.mac.plist` | macOS hardened runtime entitlements | 완료 |
+| `icon.svg` | 아이콘 source-of-truth | 완료 |
+| `icon.png` | Linux .desktop + macOS source (1024×1024) | 자동 생성 |
+| `icon.ico` | Windows installer 아이콘 (multi-size) | 자동 생성 |
+| `icon.icns` | macOS 앱 아이콘 (electron-builder 자동 변환) | 빌드 시 생성 |
+| `background.png` | DMG 배경 (선택) | 미생성 |
 
-## 아이콘 생성 (release 전)
+## 아이콘 생성
 
-`icon.svg` 가 source. 다른 포맷은 다음 명령으로 생성:
-
-### macOS (.icns)
+`icon.svg` 가 source-of-truth. PNG + ICO 는 cross-platform Node script 로 생성:
 
 ```bash
-# 1. SVG → 1024 PNG
-rsvg-convert -w 1024 -h 1024 icon.svg -o icon-1024.png
-
-# 2. PNG → ICNS (iconutil은 macOS 내장)
-mkdir icon.iconset
-sips -z 16 16     icon-1024.png --out icon.iconset/icon_16x16.png
-sips -z 32 32     icon-1024.png --out icon.iconset/icon_16x16@2x.png
-sips -z 32 32     icon-1024.png --out icon.iconset/icon_32x32.png
-sips -z 64 64     icon-1024.png --out icon.iconset/icon_32x32@2x.png
-sips -z 128 128   icon-1024.png --out icon.iconset/icon_128x128.png
-sips -z 256 256   icon-1024.png --out icon.iconset/icon_128x128@2x.png
-sips -z 256 256   icon-1024.png --out icon.iconset/icon_256x256.png
-sips -z 512 512   icon-1024.png --out icon.iconset/icon_256x256@2x.png
-sips -z 512 512   icon-1024.png --out icon.iconset/icon_512x512.png
-cp icon-1024.png  icon.iconset/icon_512x512@2x.png
-iconutil -c icns icon.iconset -o icon.icns
+npm run icons:generate
+# 또는 직접
+node scripts/generate-icons.cjs
 ```
 
-### Windows (.ico)
+이 명령은 다음을 생성:
+- `build/icon.png` — 1024×1024 (Linux + macOS source)
+- `build/icon.ico` — multi-size (16/32/48/64/128/256, Windows installer)
 
-```bash
-# ImageMagick
-magick convert icon.svg -define icon:auto-resize=256,128,64,48,32,16 icon.ico
-```
+`icon.icns` (macOS) 는 별도 생성 불필요 — electron-builder 가 빌드 시 `build/icon.png`
+로부터 자동 변환. 따라서 macOS-only 도구 (iconutil, sips) 없이도 모든 OS 에서
+완전한 platform 아이콘 생성 가능.
 
-### Linux (.png 512×512)
+## 워크플로우
 
-```bash
-rsvg-convert -w 512 -h 512 icon.svg -o icon.png
-```
+1. SVG 디자인 수정 (`build/icon.svg`)
+2. `npm run icons:generate` 실행
+3. 생성된 `icon.png` + `icon.ico` 를 commit
+4. CI/local 빌드 시 electron-builder 가 platform 별 적절한 파일 사용
 
-## 임시 fallback
+## 의존성
 
-위 파일 미생성 시 electron-builder 가 기본 Electron 아이콘 사용.
-release 자체는 가능하지만 unbranded (Phase 4 디자이너 작업 대기).
+`scripts/generate-icons.cjs` 는 다음 npm 패키지 사용:
+- `@resvg/resvg-js` — SVG 렌더링 (cross-platform, native bindings 포함)
+- `png-to-ico` — Multi-size ICO 컨테이너 빌드
