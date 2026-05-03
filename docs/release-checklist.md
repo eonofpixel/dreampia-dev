@@ -1,20 +1,22 @@
 ---
-title: Release Checklist (v0.1.1 Runbook)
+title: Release Checklist (v0.1.2+ Runbook)
 parent: ./release.md
 status: stable
-last_updated: 2026-05-02
+last_updated: 2026-05-03
 ---
 
-# v0.1.1 Release Runbook
+# v0.1.2+ Release Runbook
 
-> v0.1.0 hardening 후 v0.1.1 부터 적용되는 step-by-step 가이드.
+> 정착된 v0.1.x release 흐름 — 사용자가 따라할 수 있는 step-by-step.
 >
-> **변경점 (v0.1.0 → v0.1.1)**: release.yml 이 2-stage 파이프라인으로 재작성됨
-> (Issue #1: macOS DMG race condition fix). build matrix 가 artifact 만 만들고
-> 별도 publish job 이 atomic 으로 GitHub Release 생성.
+> **현재 상태 (v0.1.2 이후)**:
+> - GitHub repo + remote 설정 완료
+> - release.yml 2-stage 파이프라인 (build matrix `--publish never` →
+>   atomic publish job, Issue #1 race fix)
+> - ABI 자동 토글 (predev/pretest hook)
+> - Branded icons (build/icon.svg → PNG/ICO 자동 생성)
 >
-> 이 체크리스트는 첫 OSS Electron 앱을 release 해본 적 없는 사용자도
-> 따라할 수 있게 작성됐습니다.
+> **다음 release 시 필요한 단계만 남음**: version bump → tag push → 자동 publish.
 
 ---
 

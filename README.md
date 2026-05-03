@@ -5,29 +5,35 @@
 
 [![CI](https://github.com/eonofpixel/dreampia-dev/actions/workflows/ci.yml/badge.svg)](https://github.com/eonofpixel/dreampia-dev/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Version](https://img.shields.io/badge/version-0.1.0-brightgreen.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.1.2-brightgreen.svg)](./CHANGELOG.md)
 
 ---
 
-## 🧪 v0.1.0 — Unsigned Early Adopter Build (2026-05-03)
+## 🧪 v0.1.2 — Unsigned Early Adopter Build (2026-05-03)
 
-**v0.1.0 은 early adopter / experimental build 입니다 — 일반 사용자용
+**v0.1.2 는 early adopter / experimental build 입니다 — 일반 사용자용
 production-grade release 가 아닙니다.** 폭넓은 홍보 대상보다 **10-30명의
 초기 피드백 수렴** 을 목표로 합니다.
 
-### 🔽 다운로드
+### 🔽 다운로드 (최신: v0.1.2)
 
-[GitHub Releases v0.1.0](https://github.com/eonofpixel/dreampia-dev/releases/tag/v0.1.0)
+[GitHub Releases](https://github.com/eonofpixel/dreampia-dev/releases/latest)
 
-| 플랫폼 | 파일 | 상태 |
-|--------|------|------|
-| 🐧 Linux | `Dreampia-Dev-0.1.0-x86_64.AppImage` | ✅ |
-| 🐧 Linux Debian | `Dreampia-Dev-0.1.0-amd64.deb` | ✅ |
-| 🖥 Windows | `Dreampia-Dev-Setup-0.1.0-x64.exe` | ✅ |
-| 🍎 macOS | DMG | ⏳ v0.1.1 (race condition fix 대기) |
+| 플랫폼 | 파일 |
+|--------|------|
+| 🖥 Windows | `Dreampia-Dev-Setup-0.1.2-x64.exe` |
+| 🍎 macOS Intel | `Dreampia-Dev-0.1.2-x64.dmg` |
+| 🍎 macOS Apple Silicon | `Dreampia-Dev-0.1.2-arm64.dmg` |
+| 🐧 Linux AppImage | `Dreampia-Dev-0.1.2-x86_64.AppImage` |
+| 🐧 Linux Debian | `Dreampia-Dev-0.1.2-amd64.deb` |
+
+v0.1.0 / v0.1.1 사용자는 자동 업데이트 (`electron-updater`).
 
 진척:
-- Phase 1 + Phase 2 + Phase 3 B1/B2 완료. 684 vitest + 19 Playwright E2E 통과.
+- Phase 1 + 2 + 3 완료. 684 vitest + 19 Playwright E2E 통과.
+- **v0.1.0** Linux+Win unsigned early adopter
+- **v0.1.1** macOS DMG race fix (Issue #1)
+- **v0.1.2** ABI 자동 토글 + branded icons
 - 자세한 내용은 [CHANGELOG.md](./CHANGELOG.md) 참조.
 
 > ⚠ **unsigned build — "확인되지 않은 발행자" 경고 표시**.
@@ -56,17 +62,15 @@ production-grade release 가 아닙니다.** 폭넓은 홍보 대상보다 **10-
 # 의존성 설치
 npm install
 
-# === 환경 토글 (better-sqlite3 native ABI) ===
-# Electron 실행 전:  Electron ABI 로 native module 컴파일
-npm run dev:rebuild
-
-# 개발 모드 (Electron 창 자동 열림)
+# 개발 모드 (Electron 창 자동 열림 — ABI 자동 토글)
 npm run dev
 
-# === 테스트 / 빌드 ===
-# 테스트 실행 전:    Node ABI 로 native module 복원 (dev:rebuild 후 토글 필요)
-npm run test:rebuild
+# 테스트 (ABI 자동 토글)
 npm test
+
+# E2E (Playwright Electron)
+npm run pretest:e2e   # vite build + ABI 자동
+npm run test:e2e
 
 # 타입 체크 / 린트 / 빌드
 npm run typecheck
@@ -74,10 +78,12 @@ npm run lint
 npm run build
 ```
 
-> ⚠ **better-sqlite3 ABI 토글**: Electron 33 의 V8 ABI (NODE_MODULE_VERSION 130) 와
-> Node 22 의 ABI (127) 가 다릅니다. native module 은 환경마다 재컴파일 필요.
-> dev ↔ test 전환 시 위 rebuild 명령을 호출하세요. 영구 해결 (sql.js WASM 또는
-> node:sqlite 마이그레이션) 은 P2-V6 으로 추적 중.
+> 🤖 **ABI 토글 자동화 (v0.1.2~)**: `npm run dev` / `npm test` / `pretest:e2e` 가
+> better-sqlite3 native module 의 ABI 를 자동으로 보장합니다 (smart skip — 이미
+> 일치하면 ~100ms). 사용자가 수동 rebuild 호출 X.
+>
+> 트러블슈팅 시 수동 강제: `npm run dev:rebuild` (Electron) 또는
+> `npm run test:rebuild` (Node).
 
 ### E2E 테스트 (Playwright Electron)
 
