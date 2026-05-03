@@ -114,9 +114,7 @@ export class LeaderElection {
    */
   acquireLeadership(sessionId: SessionId): boolean {
     const now = new Date().toISOString();
-    const expiry = new Date(
-      Date.now() - this.ttl_seconds * 1000
-    ).toISOString();
+    const expiry = new Date(Date.now() - this.ttl_seconds * 1000).toISOString();
 
     const tx = this.db.transaction(() => {
       const existing = this.db
@@ -127,9 +125,7 @@ export class LeaderElection {
         // Same window already owns? Refresh heartbeat and return true.
         if (existing.leader_window_id === this.window_id) {
           this.db
-            .prepare(
-              `UPDATE session_locks SET heartbeat_at = ? WHERE session_id = ?`
-            )
+            .prepare(`UPDATE session_locks SET heartbeat_at = ? WHERE session_id = ?`)
             .run(now, sessionId);
           return 'refreshed' as const;
         }
@@ -145,14 +141,7 @@ export class LeaderElection {
                      ttl_seconds = ?
                WHERE session_id = ?`
             )
-            .run(
-              this.window_id,
-              process.pid,
-              now,
-              now,
-              this.ttl_seconds,
-              sessionId
-            );
+            .run(this.window_id, process.pid, now, now, this.ttl_seconds, sessionId);
           return 'takeover' as const;
         }
         // Fresh lock by another window — cannot acquire.
@@ -166,14 +155,7 @@ export class LeaderElection {
              (session_id, leader_window_id, leader_pid, acquired_at, heartbeat_at, ttl_seconds)
            VALUES (?, ?, ?, ?, ?, ?)`
         )
-        .run(
-          sessionId,
-          this.window_id,
-          process.pid,
-          now,
-          now,
-          this.ttl_seconds
-        );
+        .run(sessionId, this.window_id, process.pid, now, now, this.ttl_seconds);
       return 'created' as const;
     });
 
@@ -195,9 +177,7 @@ export class LeaderElection {
   releaseLeadership(sessionId: SessionId): void {
     this.stopHeartbeat(sessionId);
     this.db
-      .prepare(
-        `DELETE FROM session_locks WHERE session_id = ? AND leader_window_id = ?`
-      )
+      .prepare(`DELETE FROM session_locks WHERE session_id = ? AND leader_window_id = ?`)
       .run(sessionId, this.window_id);
   }
 
@@ -246,9 +226,7 @@ export class LeaderElection {
       clearInterval(handle);
       try {
         this.db
-          .prepare(
-            `DELETE FROM session_locks WHERE session_id = ? AND leader_window_id = ?`
-          )
+          .prepare(`DELETE FROM session_locks WHERE session_id = ? AND leader_window_id = ?`)
           .run(sessionId, this.window_id);
       } catch {
         // DB may be closed; ignore.

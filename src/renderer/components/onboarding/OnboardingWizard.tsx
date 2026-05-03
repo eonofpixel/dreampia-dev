@@ -55,10 +55,7 @@ const RECOMMENDED_PROMPTS: ReadonlyArray<string> = [
   '새 기능 구현 가이드',
 ];
 
-export function OnboardingWizard({
-  onComplete,
-  onSkip,
-}: OnboardingWizardProps): React.JSX.Element {
+export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps): React.JSX.Element {
   // 0..4 — Step 1 = index 0, Step 5 = index 4.
   const [step, setStep] = useState(0);
   const [cliStatus, setCliStatus] = useState<CliDetection | null>(null);
@@ -190,9 +187,7 @@ export function OnboardingWizard({
           {Array.from({ length: TOTAL_STEPS }, (_, i) => (
             <div
               key={i}
-              className={`h-1 flex-1 rounded ${
-                i <= step ? 'bg-accent' : 'bg-bg-tertiary'
-              }`}
+              className={`h-1 flex-1 rounded ${i <= step ? 'bg-accent' : 'bg-bg-tertiary'}`}
             />
           ))}
         </div>
@@ -200,9 +195,7 @@ export function OnboardingWizard({
         {/* Step content */}
         <div className="min-h-[220px]">
           {step === 0 && <WelcomeStep onNext={goNext} />}
-          {step === 1 && (
-            <CliDetectionStep cliStatus={cliStatus} detecting={cliDetecting} />
-          )}
+          {step === 1 && <CliDetectionStep cliStatus={cliStatus} detecting={cliDetecting} />}
           {step === 2 && <AuthGuideStep cliStatus={cliStatus} />}
           {step === 3 && (
             <WorkspaceStep
@@ -272,10 +265,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }): React.JSX.Element {
       <div className="text-5xl" aria-hidden="true">
         👋
       </div>
-      <h1
-        id="onboarding-title"
-        className="mt-4 text-xl font-semibold text-text-primary"
-      >
+      <h1 id="onboarding-title" className="mt-4 text-xl font-semibold text-text-primary">
         Dreampia-Dev 에 오신 걸 환영합니다
       </h1>
       <p className="mt-2 text-sm leading-relaxed text-text-secondary">
@@ -330,8 +320,8 @@ function CliDetectionStep({
           />
           {cliStatus.claude === null && cliStatus.codex === null && (
             <p className="mt-3 text-xs text-text-tertiary">
-              CLI 가 설치되어 있지 않으면 Mock provider 로 진행합니다.
-              나중에 설정에서 다시 감지할 수 있습니다.
+              CLI 가 설치되어 있지 않으면 Mock provider 로 진행합니다. 나중에 설정에서 다시 감지할
+              수 있습니다.
             </p>
           )}
         </div>
@@ -384,11 +374,7 @@ function CliRow({
 // Step 3 — 인증 안내
 // ────────────────────────────────────────────────────────────
 
-function AuthGuideStep({
-  cliStatus,
-}: {
-  cliStatus: CliDetection | null;
-}): React.JSX.Element {
+function AuthGuideStep({ cliStatus }: { cliStatus: CliDetection | null }): React.JSX.Element {
   const claudeDetected = cliStatus?.claude !== undefined && cliStatus?.claude !== null;
   const codexDetected = cliStatus?.codex !== undefined && cliStatus?.codex !== null;
   const noneDetected = !claudeDetected && !codexDetected;
@@ -401,19 +387,15 @@ function AuthGuideStep({
       </header>
       {noneDetected ? (
         <div className="space-y-2 text-sm">
-          <p className="text-text-secondary">
-            설치된 CLI 가 없어 Mock provider 로 진행됩니다.
-          </p>
+          <p className="text-text-secondary">설치된 CLI 가 없어 Mock provider 로 진행됩니다.</p>
           <p className="text-xs text-text-tertiary">
-            실제 AI 응답을 받으려면 이전 단계의 설치 명령을 실행한 뒤 앱을 다시
-            실행해 주세요.
+            실제 AI 응답을 받으려면 이전 단계의 설치 명령을 실행한 뒤 앱을 다시 실행해 주세요.
           </p>
         </div>
       ) : (
         <div className="space-y-3 text-sm">
           <p className="text-text-secondary">
-            아래 명령으로 각 CLI 에 로그인해 주세요. 이미 로그인되어 있다면 건너뛰어도
-            됩니다.
+            아래 명령으로 각 CLI 에 로그인해 주세요. 이미 로그인되어 있다면 건너뛰어도 됩니다.
           </p>
           {claudeDetected && (
             <AuthRow
@@ -423,11 +405,7 @@ function AuthGuideStep({
             />
           )}
           {codexDetected && (
-            <AuthRow
-              name="Codex CLI"
-              command="codex login"
-              hint="OpenAI 계정으로 로그인하세요."
-            />
+            <AuthRow name="Codex CLI" command="codex login" hint="OpenAI 계정으로 로그인하세요." />
           )}
         </div>
       )}
@@ -527,9 +505,7 @@ function FirstChatStep({
     <section data-testid="onboarding-step-firstchat">
       <header className="mb-3 flex items-center gap-2">
         <Sparkles className="h-5 w-5 text-accent" aria-hidden="true" />
-        <h2 className="text-base font-semibold text-text-primary">
-          Dreampia-Dev 사용 준비 완료
-        </h2>
+        <h2 className="text-base font-semibold text-text-primary">Dreampia-Dev 사용 준비 완료</h2>
       </header>
       <p className="mb-4 text-sm text-text-secondary">
         {workspaceName !== null

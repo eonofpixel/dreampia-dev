@@ -56,16 +56,8 @@ import type { Workspace, WorkTree, GitState, FileRef } from '@/types/workspace';
 import type { TerminalPane, TerminalState } from '@/types/terminal';
 import type { BrowserState, BrowserTab } from '@/types/browser';
 import type { PlanItem, PlanState } from '@/types/plan';
-import type {
-  PermissionGrant,
-  PermissionState,
-  GrantTarget,
-} from '@/types/permission';
-import type {
-  ClaudeMetadata,
-  CodexMetadata,
-  SessionMetadata,
-} from '@/types/session';
+import type { PermissionGrant, PermissionState, GrantTarget } from '@/types/permission';
+import type { ClaudeMetadata, CodexMetadata, SessionMetadata } from '@/types/session';
 import type { SessionId, WorkspaceId } from '@/types/common';
 import { migrate, getSchemaVersion as getSchemaVersionImpl } from './migrate';
 
@@ -391,9 +383,7 @@ export class SessionStore {
 
   appendTurn(sessionId: SessionId, turn: Turn): void {
     const tx = this.db.transaction((sid: string, t: Turn) => {
-      const exists = this.getSessionExistsStmt().get(sid) as
-        | { id: string }
-        | undefined;
+      const exists = this.getSessionExistsStmt().get(sid) as { id: string } | undefined;
       if (!exists) {
         throw new Error(`Cannot append turn: session ${sid} not found`);
       }
@@ -773,10 +763,7 @@ export class SessionStore {
       );
     }
 
-    const insertRecursive = (
-      arr: PlanItem[],
-      parentId: string | null
-    ): void => {
+    const insertRecursive = (arr: PlanItem[], parentId: string | null): void => {
       for (let i = 0; i < arr.length; i += 1) {
         const item = arr[i]!;
         this.stmts.insertPlanItem!.run({
@@ -830,13 +817,9 @@ export class SessionStore {
 
   private assembleSession(row: SessionRow): unknown {
     const meta = this.parseMetadata(row.metadata_json);
-    const wsRow = this.getSelectWorkspaceStmt().get(row.workspace_id) as
-      | WorkspaceRow
-      | undefined;
+    const wsRow = this.getSelectWorkspaceStmt().get(row.workspace_id) as WorkspaceRow | undefined;
     if (!wsRow) {
-      throw new Error(
-        `Workspace ${row.workspace_id} missing for session ${row.id}`
-      );
+      throw new Error(`Workspace ${row.workspace_id} missing for session ${row.id}`);
     }
 
     const worktrees = this.loadWorktrees(row.workspace_id);
@@ -930,8 +913,7 @@ export class SessionStore {
         ...(s.permission.last_denied !== undefined && {
           last_denied: s.permission.last_denied,
         }),
-        temporarily_blocked_capabilities:
-          s.permission.temporarily_blocked_capabilities,
+        temporarily_blocked_capabilities: s.permission.temporarily_blocked_capabilities,
       },
     };
 
@@ -1000,10 +982,7 @@ export class SessionStore {
     return ws as Workspace;
   }
 
-  private loadConversation(
-    sessionId: string,
-    extra: MetadataExtra['conversation']
-  ): Conversation {
+  private loadConversation(sessionId: string, extra: MetadataExtra['conversation']): Conversation {
     if (!this.stmts.selectTurnsBySession) {
       this.stmts.selectTurnsBySession = this.db.prepare(
         `SELECT * FROM turns WHERE session_id = ? ORDER BY seq ASC`
@@ -1050,10 +1029,7 @@ export class SessionStore {
     return conv as Conversation;
   }
 
-  private loadAnnotationsForTurn(
-    sessionId: string,
-    turnId: string
-  ): Annotation[] {
+  private loadAnnotationsForTurn(sessionId: string, turnId: string): Annotation[] {
     if (!this.stmts.selectAnnotationsBySessionTurn) {
       this.stmts.selectAnnotationsBySessionTurn = this.db.prepare(
         `SELECT * FROM annotations WHERE session_id = ? AND turn_id = ? ORDER BY created_at ASC`
@@ -1095,9 +1071,7 @@ export class SessionStore {
         `SELECT * FROM permission_grants WHERE session_id = ? ORDER BY id ASC`
       );
     }
-    const rows = this.stmts.selectGrantsBySession.all(
-      sessionId
-    ) as PermissionGrantRow[];
+    const rows = this.stmts.selectGrantsBySession.all(sessionId) as PermissionGrantRow[];
 
     return rows.map((r) => {
       const wrap = JSON.parse(r.target_json) as {
@@ -1141,9 +1115,7 @@ export class SessionStore {
         `SELECT * FROM browser_tabs WHERE session_id = ?`
       );
     }
-    const rows = this.stmts.selectBrowserTabsBySession.all(
-      sessionId
-    ) as BrowserTabRow[];
+    const rows = this.stmts.selectBrowserTabsBySession.all(sessionId) as BrowserTabRow[];
 
     return rows.map((r) => {
       const wrap = JSON.parse(r.history_json) as {
@@ -1164,20 +1136,14 @@ export class SessionStore {
         spawned_by: r.spawned_by,
       };
       if (r.favicon_uri !== null) tab['favicon_uri'] = r.favicon_uri;
-      if (r.spawning_turn_id !== null)
-        tab['spawning_turn_id'] = r.spawning_turn_id;
-      if (r.last_screenshot_uri !== null)
-        tab['last_screenshot_uri'] = r.last_screenshot_uri;
-      if (r.last_dom_dump_uri !== null)
-        tab['last_dom_dump_uri'] = r.last_dom_dump_uri;
+      if (r.spawning_turn_id !== null) tab['spawning_turn_id'] = r.spawning_turn_id;
+      if (r.last_screenshot_uri !== null) tab['last_screenshot_uri'] = r.last_screenshot_uri;
+      if (r.last_dom_dump_uri !== null) tab['last_dom_dump_uri'] = r.last_dom_dump_uri;
       return tab as BrowserTab;
     });
   }
 
-  private buildBrowserState(
-    tabs: BrowserTab[],
-    extra: MetadataExtra['browser']
-  ): BrowserState {
+  private buildBrowserState(tabs: BrowserTab[], extra: MetadataExtra['browser']): BrowserState {
     const bs: Record<string, unknown> = {
       tabs,
       panel_visible: extra.panel_visible,
@@ -1196,9 +1162,7 @@ export class SessionStore {
         `SELECT * FROM terminal_panes WHERE session_id = ?`
       );
     }
-    const rows = this.stmts.selectTerminalPanesBySession.all(
-      sessionId
-    ) as TerminalPaneRow[];
+    const rows = this.stmts.selectTerminalPanesBySession.all(sessionId) as TerminalPaneRow[];
 
     return rows.map((r) => {
       const wrap = JSON.parse(r.input_history_json ?? '{}') as {
@@ -1246,9 +1210,7 @@ export class SessionStore {
         `SELECT * FROM plan_items WHERE session_id = ? ORDER BY parent_id IS NULL DESC, parent_id ASC, seq ASC`
       );
     }
-    const rows = this.stmts.selectPlanItemsBySession.all(
-      sessionId
-    ) as PlanItemRow[];
+    const rows = this.stmts.selectPlanItemsBySession.all(sessionId) as PlanItemRow[];
 
     if (rows.length === 0) return [];
 
@@ -1273,9 +1235,7 @@ export class SessionStore {
           text: r.text,
           status: r.status,
           related_turns:
-            r.related_turns_json !== null
-              ? (JSON.parse(r.related_turns_json) as string[])
-              : [],
+            r.related_turns_json !== null ? (JSON.parse(r.related_turns_json) as string[]) : [],
         };
         const subs = buildSubtree(r.id);
         if (subs.length > 0) item['sub_items'] = subs;
@@ -1287,10 +1247,7 @@ export class SessionStore {
     return buildSubtree(null);
   }
 
-  private buildPlanState(
-    items: PlanItem[],
-    extra: MetadataExtra['plan']
-  ): PlanState {
+  private buildPlanState(items: PlanItem[], extra: MetadataExtra['plan']): PlanState {
     const ps: Record<string, unknown> = {
       active: extra.active,
       browser_tool_enabled: extra.browser_tool_enabled,
@@ -1350,27 +1307,21 @@ export class SessionStore {
 
   private getSelectSessionStmt(): Statement {
     if (!this.stmts.selectSession) {
-      this.stmts.selectSession = this.db.prepare(
-        `SELECT * FROM sessions WHERE id = ?`
-      );
+      this.stmts.selectSession = this.db.prepare(`SELECT * FROM sessions WHERE id = ?`);
     }
     return this.stmts.selectSession;
   }
 
   private getSelectWorkspaceStmt(): Statement {
     if (!this.stmts.selectWorkspace) {
-      this.stmts.selectWorkspace = this.db.prepare(
-        `SELECT * FROM workspaces WHERE id = ?`
-      );
+      this.stmts.selectWorkspace = this.db.prepare(`SELECT * FROM workspaces WHERE id = ?`);
     }
     return this.stmts.selectWorkspace;
   }
 
   private getSessionExistsStmt(): Statement {
     if (!this.stmts.sessionExists) {
-      this.stmts.sessionExists = this.db.prepare(
-        `SELECT id FROM sessions WHERE id = ?`
-      );
+      this.stmts.sessionExists = this.db.prepare(`SELECT id FROM sessions WHERE id = ?`);
     }
     return this.stmts.sessionExists;
   }
@@ -1428,7 +1379,9 @@ export class SessionStore {
    * (Architect SS-4 finding #1)
    */
   private deletePlanItemsForSession(sessionId: string): void {
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       WITH RECURSIVE descendants(id) AS (
         SELECT id FROM plan_items WHERE session_id = ? AND parent_id IS NULL
         UNION ALL
@@ -1436,7 +1389,9 @@ export class SessionStore {
         INNER JOIN descendants d ON p.parent_id = d.id
       )
       DELETE FROM plan_items WHERE id IN (SELECT id FROM descendants)
-    `).run(sessionId);
+    `
+      )
+      .run(sessionId);
   }
 
   private getDeleteTerminalScrollbackBySessionStmt(): Statement {
@@ -1469,9 +1424,7 @@ export class SessionStore {
 
   private getDeleteTurnsBySessionStmt(): Statement {
     if (!this.stmts.deleteTurnsBySession) {
-      this.stmts.deleteTurnsBySession = this.db.prepare(
-        `DELETE FROM turns WHERE session_id = ?`
-      );
+      this.stmts.deleteTurnsBySession = this.db.prepare(`DELETE FROM turns WHERE session_id = ?`);
     }
     return this.stmts.deleteTurnsBySession;
   }
@@ -1487,9 +1440,7 @@ export class SessionStore {
 
   private getDeleteSessionStmt(): Statement {
     if (!this.stmts.deleteSession) {
-      this.stmts.deleteSession = this.db.prepare(
-        `DELETE FROM sessions WHERE id = ?`
-      );
+      this.stmts.deleteSession = this.db.prepare(`DELETE FROM sessions WHERE id = ?`);
     }
     return this.stmts.deleteSession;
   }

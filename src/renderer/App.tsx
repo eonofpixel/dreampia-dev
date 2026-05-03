@@ -215,8 +215,7 @@ export function App(): React.JSX.Element {
   // wizard 표시 중에는 auto picker 비활성화 (이중 dialog 방지). wizard 완료
   // 후 (onboardingCompleted=true) 까지 보류.
   const workspaceResolved = launchWorkspaceLoaded && !pickedWorkspaceLoading;
-  const showOnboarding =
-    !onboardingLoading && onboardingCompleted === false;
+  const showOnboarding = !onboardingLoading && onboardingCompleted === false;
   useEffect(() => {
     if (!workspaceResolved) return;
     if (defaultWorkspace !== null) return;
@@ -226,13 +225,7 @@ export function App(): React.JSX.Element {
     workspacePickAttemptedRef.current = true;
     setWorkspacePickAttempted(true);
     void pickWorkspace();
-  }, [
-    workspaceResolved,
-    defaultWorkspace,
-    workspacePickAttempted,
-    pickWorkspace,
-    showOnboarding,
-  ]);
+  }, [workspaceResolved, defaultWorkspace, workspacePickAttempted, pickWorkspace, showOnboarding]);
 
   // P1-4: IpcStreamingProvider 가 main 의 ai/start-stream 으로 위임.
   // window.dreampia.ai 가 없는 환경 (preload script 로딩 실패 / legacy build)
@@ -409,16 +402,14 @@ export function App(): React.JSX.Element {
   );
   // Sidebar 의 project name — active session 우선, 없으면 default, 둘 다 없으면
   // 사용자가 picker 누르도록 안내 placeholder.
-  const projectName =
-    activeSession?.workspace.name ?? defaultWorkspace?.name ?? '폴더 선택 필요';
+  const projectName = activeSession?.workspace.name ?? defaultWorkspace?.name ?? '폴더 선택 필요';
 
   // Phase 3 audit fix #4 — ChatHeader 가 표시할 workspace name.
   // 우선순위: active session 의 workspace.name (실제 메시지가 향하는 폴더) >
   //          defaultWorkspace.name (새 채팅이 만들어질 폴더).
   // 이전엔 항상 defaultWorkspace.name 만 보여서 session.workspace 와 drift 가
   // 났다 (사용자가 picker 로 폴더 바꿔도 기존 session 에는 반영 X).
-  const chatHeaderWorkspaceName =
-    activeSession?.workspace.name ?? defaultWorkspace?.name;
+  const chatHeaderWorkspaceName = activeSession?.workspace.name ?? defaultWorkspace?.name;
 
   // Phase 3 B2: Wizard 완료 시 호출 — settings 영속 + 옵션으로 첫 채팅 생성.
   // firstPrompt 가 있으면 새 세션 + ChatInput 자동 채움 (auto-submit X).
@@ -430,10 +421,7 @@ export function App(): React.JSX.Element {
       // 둘 다 null 이면 새 세션 생성 X (process.cwd() 우연 매칭 방지).
       const refreshedDefault = defaultWorkspace;
       if (refreshedDefault === null) return;
-      const newSession = createDemoSession(
-        `새 채팅 ${sessions.length + 1}`,
-        refreshedDefault
-      );
+      const newSession = createDemoSession(`새 채팅 ${sessions.length + 1}`, refreshedDefault);
       const created = await createSession(newSession);
       if (created !== null) {
         setActiveSessionId(created.id);
@@ -458,10 +446,7 @@ export function App(): React.JSX.Element {
   return (
     <>
       {showOnboarding && (
-        <OnboardingWizard
-          onComplete={handleOnboardingComplete}
-          onSkip={handleOnboardingSkip}
-        />
+        <OnboardingWizard onComplete={handleOnboardingComplete} onSkip={handleOnboardingSkip} />
       )}
       <ThreePanelLayout
         sidebar={

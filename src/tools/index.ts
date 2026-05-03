@@ -57,8 +57,4 @@ export { createContext } from './Context';
 export { ToolQueue, type ToolQueueOptions } from './Queue';
 
 // ── Built-in tools ──
-export {
-  ShellRunTool,
-  type ShellRunInput,
-  type ShellRunOutput,
-} from './builtin/shellRun';
+export { ShellRunTool, type ShellRunInput, type ShellRunOutput } from './builtin/shellRun';

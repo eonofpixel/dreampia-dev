@@ -12,7 +12,14 @@
  * include absolute paths) into the renderer.
  */
 
-import { app, dialog, ipcMain, type App, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
+import {
+  app,
+  dialog,
+  ipcMain,
+  type App,
+  type BrowserWindow,
+  type IpcMainInvokeEvent,
+} from 'electron';
 import path from 'node:path';
 import { z } from 'zod';
 import { readSettings, writeSettings } from './settings';
@@ -159,10 +166,7 @@ function isLockHandlerConfig(source: LockHandlerSource): source is LockHandlerCo
   return 'getElection' in source;
 }
 
-function resolveElection(
-  source: LockHandlerSource,
-  event: IpcMainInvokeEvent
-): LeaderElection {
+function resolveElection(source: LockHandlerSource, event: IpcMainInvokeEvent): LeaderElection {
   if (!isLockHandlerConfig(source)) return source;
   const election = source.getElection(event);
   if (election === null) {
@@ -251,10 +255,7 @@ export function registerIpcHandlers(
       // 가 picker 로 명시 선택해야 새 채팅을 만들 수 있도록 강제. 이 함수는
       // null 만 반환하고, renderer 가 null 을 보고 onboarding/picker 를 띄운다.
       const settings = readSettings();
-      if (
-        typeof settings.workspace_root === 'string' &&
-        settings.workspace_root.length > 0
-      ) {
+      if (typeof settings.workspace_root === 'string' && settings.workspace_root.length > 0) {
         const root = settings.workspace_root;
         const name =
           typeof settings.workspace_name === 'string' && settings.workspace_name.length > 0
@@ -316,25 +317,22 @@ function registerWorkspaceHandlers(): void {
     }
   );
 
-  ipcMain.handle(
-    'workspace/get',
-    (): Result<{ path: string; name: string } | null> => {
-      try {
-        const settings = readSettings();
-        if (
-          typeof settings.workspace_root === 'string' &&
-          settings.workspace_root.length > 0 &&
-          typeof settings.workspace_name === 'string' &&
-          settings.workspace_name.length > 0
-        ) {
-          return ok({ path: settings.workspace_root, name: settings.workspace_name });
-        }
-        return ok(null);
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('workspace/get', (): Result<{ path: string; name: string } | null> => {
+    try {
+      const settings = readSettings();
+      if (
+        typeof settings.workspace_root === 'string' &&
+        settings.workspace_root.length > 0 &&
+        typeof settings.workspace_name === 'string' &&
+        settings.workspace_name.length > 0
+      ) {
+        return ok({ path: settings.workspace_root, name: settings.workspace_name });
       }
+      return ok(null);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 }
 
 // ────────────────────────────────────────────────────────────
@@ -444,21 +442,18 @@ function registerLockHandlers(electionSource: LockHandlerSource): void {
     }
   );
 
-  ipcMain.handle(
-    'lock/release',
-    (evt: IpcMainInvokeEvent, sessionId: unknown): Result<void> => {
-      try {
-        if (typeof sessionId !== 'string') {
-          throw new Error('session id must be string');
-        }
-        const election = resolveElection(electionSource, evt);
-        election.releaseLeadership(sessionId as SessionId);
-        return ok(undefined);
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('lock/release', (evt: IpcMainInvokeEvent, sessionId: unknown): Result<void> => {
+    try {
+      if (typeof sessionId !== 'string') {
+        throw new Error('session id must be string');
       }
+      const election = resolveElection(electionSource, evt);
+      election.releaseLeadership(sessionId as SessionId);
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
   ipcMain.handle(
     'lock/get',
@@ -647,25 +642,30 @@ function registerToolHandlers(tools: ToolHandlerConfig): void {
   // ── tool/* — Tool Queue IPC bridge ─────────────────────────
   // Spec: docs/tools/queue.md
 
-  ipcMain.handle('tool/list', (): Result<Array<{
-    id: string;
-    version: string;
-    source: string;
-    name: string;
-  }>> => {
-    try {
-      return ok(
-        tools.registry.list().map((tool) => ({
-          id: tool.id,
-          version: tool.version,
-          source: tool.source,
-          name: tool.display.name,
-        }))
-      );
-    } catch (err) {
-      return fail(err);
+  ipcMain.handle(
+    'tool/list',
+    (): Result<
+      Array<{
+        id: string;
+        version: string;
+        source: string;
+        name: string;
+      }>
+    > => {
+      try {
+        return ok(
+          tools.registry.list().map((tool) => ({
+            id: tool.id,
+            version: tool.version,
+            source: tool.source,
+            name: tool.display.name,
+          }))
+        );
+      } catch (err) {
+        return fail(err);
+      }
     }
-  });
+  );
 
   ipcMain.handle('tool/execute', async (_evt, raw: unknown): Promise<Result<ToolResult>> => {
     try {
@@ -718,22 +718,25 @@ function registerToolHandlers(tools: ToolHandlerConfig): void {
     }
   });
 
-  ipcMain.handle('tool/stats', (): Result<{
-    active: number;
-    pending: number;
-    by_session: Record<string, number>;
-  }> => {
-    try {
-      const stats = tools.queue.getStats();
-      return ok({
-        active: stats.active,
-        pending: stats.pending,
-        by_session: Object.fromEntries(stats.by_session.entries()),
-      });
-    } catch (err) {
-      return fail(err);
+  ipcMain.handle(
+    'tool/stats',
+    (): Result<{
+      active: number;
+      pending: number;
+      by_session: Record<string, number>;
+    }> => {
+      try {
+        const stats = tools.queue.getStats();
+        return ok({
+          active: stats.active,
+          pending: stats.pending,
+          by_session: Object.fromEntries(stats.by_session.entries()),
+        });
+      } catch (err) {
+        return fail(err);
+      }
     }
-  });
+  );
 }
 
 // ────────────────────────────────────────────────────────────
@@ -824,13 +827,7 @@ function registerAiHandlers(cfg: AiHandlerConfig): void {
         });
 
         // Stream 은 background 로 실행. Result 는 즉시 반환.
-        void runStreamPump(
-          stream_id,
-          provider,
-          { turns, model, session_id },
-          controller,
-          cfg
-        );
+        void runStreamPump(stream_id, provider, { turns, model, session_id }, controller, cfg);
 
         return ok({ stream_id, source });
       } catch (err) {

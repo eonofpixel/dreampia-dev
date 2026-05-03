@@ -12,12 +12,7 @@
  */
 
 import type { ExecutionContext, LogEntry, LogLevel } from './types';
-import type {
-  SessionId,
-  TurnId,
-  ToolCallId,
-  AbsolutePath,
-} from '@/types';
+import type { SessionId, TurnId, ToolCallId, AbsolutePath } from '@/types';
 
 interface CreateContextArgs {
   session_id: SessionId;

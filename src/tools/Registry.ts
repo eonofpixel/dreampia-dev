@@ -23,9 +23,7 @@ export class ToolRegistry {
    */
   register(tool: Tool): void {
     if (!tool.id.includes('.')) {
-      throw new Error(
-        `Tool id must contain a dot (category.action): got '${tool.id}'`
-      );
+      throw new Error(`Tool id must contain a dot (category.action): got '${tool.id}'`);
     }
     if (this.tools.has(tool.id)) {
       throw new Error(`Tool already registered: ${tool.id}`);

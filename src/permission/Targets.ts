@@ -58,10 +58,7 @@ function normalizePath(p: string): string {
  * - url → exact match
  * - domain → '*.example.com' wildcard 지원
  */
-export function matchesTarget(
-  grantTarget: GrantTarget,
-  resolvedTarget: ResolvedTarget
-): boolean {
+export function matchesTarget(grantTarget: GrantTarget, resolvedTarget: ResolvedTarget): boolean {
   // global 은 모든 것 매칭
   if (grantTarget.kind === 'global') {
     return true;
@@ -82,10 +79,7 @@ export function matchesTarget(
   }
 }
 
-function matchesPath(
-  grant: Extract<GrantTarget, { kind: 'path' }>,
-  target: string
-): boolean {
+function matchesPath(grant: Extract<GrantTarget, { kind: 'path' }>, target: string): boolean {
   const grantPath = normalizePath(grant.path);
   const targetPath = normalizePath(target);
 

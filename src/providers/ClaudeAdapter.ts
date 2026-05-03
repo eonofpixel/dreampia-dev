@@ -197,8 +197,7 @@ export class ClaudeAdapter implements ProviderAdapter {
       // thinking/other blocks: 무시 (P1+ 에서 metadata.thinking 으로 보존)
     }
 
-    const model =
-      typeof response.model === 'string' ? response.model : 'claude-unknown';
+    const model = typeof response.model === 'string' ? response.model : 'claude-unknown';
 
     const new_turn: Turn = {
       id: newTurnId(),
@@ -214,13 +213,12 @@ export class ClaudeAdapter implements ProviderAdapter {
   }
 
   fromProviderToolResult(result: ProviderToolResult): ToolResult {
-    const callId = (typeof result.tool_use_id === 'string'
-      ? result.tool_use_id
-      : 'unknown') as ToolCallId;
+    const callId = (
+      typeof result.tool_use_id === 'string' ? result.tool_use_id : 'unknown'
+    ) as ToolCallId;
     const isError = result.is_error === true;
     const content = result.content;
-    const duration_ms =
-      typeof result.duration_ms === 'number' ? result.duration_ms : 0;
+    const duration_ms = typeof result.duration_ms === 'number' ? result.duration_ms : 0;
 
     if (!isError) {
       return {

@@ -242,9 +242,7 @@ export class ToolQueue {
             exec.log.push({
               level: 'error',
               timestamp: new Date().toISOString(),
-              message: `tool.cancel() failed: ${
-                err instanceof Error ? err.message : String(err)
-              }`,
+              message: `tool.cancel() failed: ${err instanceof Error ? err.message : String(err)}`,
             });
           });
         }
@@ -293,11 +291,7 @@ export class ToolQueue {
   // 내부 — Permission
   // ──────────────────────────────────────────────────────────
 
-  private checkPermissions(
-    tool: Tool,
-    input: unknown,
-    session: Session
-  ): ToolError | null {
+  private checkPermissions(tool: Tool, input: unknown, session: Session): ToolError | null {
     const caps = tool.required_capabilities(input);
 
     for (const cap of caps) {
@@ -322,22 +316,14 @@ export class ToolQueue {
         }
       }
 
-      const decision = isAllowed(
-        cap,
-        resolved,
-        session,
-        session.workspace.root
-      );
+      const decision = isAllowed(cap, resolved, session, session.workspace.root);
 
       if (decision.allowed) continue;
 
       // ── warn-action override (Queue-level) ──
       // dangerous_pattern + action='warn' 은 정보 제공만 — 차단 X.
       // log 기록은 ctx.log 에서 — 여기선 그냥 통과시킴.
-      if (
-        decision.reason === 'dangerous_pattern' &&
-        decision.action === 'warn'
-      ) {
+      if (decision.reason === 'dangerous_pattern' && decision.action === 'warn') {
         // continue — 다음 capability 체크
         continue;
       }
@@ -349,10 +335,7 @@ export class ToolQueue {
     return null;
   }
 
-  private decisionToError(
-    capability: Capability,
-    decision: GrantDecision
-  ): ToolError {
+  private decisionToError(capability: Capability, decision: GrantDecision): ToolError {
     const hint = decision.hint;
 
     switch (decision.reason) {
@@ -369,9 +352,7 @@ export class ToolQueue {
           capability,
           reason: decision.reason,
           ...(hint !== undefined && { hint }),
-          details: decision.deny_grant
-            ? { deny_grant_id: decision.deny_grant.id }
-            : {},
+          details: decision.deny_grant ? { deny_grant_id: decision.deny_grant.id } : {},
         });
 
       case 'plan_mode_active':
@@ -542,8 +523,7 @@ export class ToolQueue {
     this.active.set(call.id, exec);
 
     // Timeout 설정
-    const timeoutMs =
-      call.timeout_ms ?? tool.timeout_ms ?? this.opts.default_timeout_ms;
+    const timeoutMs = call.timeout_ms ?? tool.timeout_ms ?? this.opts.default_timeout_ms;
     const timeoutHandle = setTimeout(() => {
       abortController.abort('timeout');
     }, timeoutMs);
@@ -622,9 +602,7 @@ export class ToolQueue {
       return buildFailedResult({
         call,
         status: 'cancelled',
-        error: abortedError(
-          err instanceof AbortError ? err.reason : 'aborted'
-        ),
+        error: abortedError(err instanceof AbortError ? err.reason : 'aborted'),
         started_at: startedAt,
         log: truncatedLog,
       });

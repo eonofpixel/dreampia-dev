@@ -303,12 +303,11 @@ export class CodexAdapter implements ProviderAdapter {
   }
 
   fromProviderToolResult(result: ProviderToolResult): ToolResult {
-    const callId = (typeof result.tool_call_id === 'string'
-      ? result.tool_call_id
-      : 'unknown') as ToolCallId;
+    const callId = (
+      typeof result.tool_call_id === 'string' ? result.tool_call_id : 'unknown'
+    ) as ToolCallId;
     const content = result.content;
-    const duration_ms =
-      typeof result.duration_ms === 'number' ? result.duration_ms : 0;
+    const duration_ms = typeof result.duration_ms === 'number' ? result.duration_ms : 0;
 
     // OpenAI 는 success/error 명시 X — content 가 string 이면 success 로 가정
     return {

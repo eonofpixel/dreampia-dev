@@ -5,12 +5,7 @@
  */
 
 import { z } from 'zod';
-import {
-  PaneIdSchema,
-  TurnIdSchema,
-  AbsolutePathSchema,
-  UriSchema,
-} from './common';
+import { PaneIdSchema, TurnIdSchema, AbsolutePathSchema, UriSchema } from './common';
 
 // ────────────────────────────────────────────────────────────
 // Shell type

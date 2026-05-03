@@ -16,11 +16,7 @@
 import { app } from 'electron';
 import type { PermissionLevel } from '@/types';
 import { CliProvider } from './cli/CliProvider';
-import {
-  detectCli,
-  type CliDetectionResult,
-  type CliInfo,
-} from './cli/detect';
+import { detectCli, type CliDetectionResult, type CliInfo } from './cli/detect';
 import { translateClaudeJsonl } from './cli/translateClaudeJsonl';
 import { translateCodexJsonl } from './cli/translateCodexJsonl';
 import { MockProvider } from './MockProvider';
@@ -67,12 +63,8 @@ export async function getDefaultProvider(
   const lower = model.toLowerCase();
 
   // model prefix 분류 (routing.ts 의 MODEL_PREFIXES 와 맞춤)
-  const claudeFamily = ['claude-', 'sonnet-', 'opus-', 'haiku-'].some((p) =>
-    lower.startsWith(p)
-  );
-  const codexFamily = ['gpt-', 'o1-', 'o3-', 'codex-'].some((p) =>
-    lower.startsWith(p)
-  );
+  const claudeFamily = ['claude-', 'sonnet-', 'opus-', 'haiku-'].some((p) => lower.startsWith(p));
+  const codexFamily = ['gpt-', 'o1-', 'o3-', 'codex-'].some((p) => lower.startsWith(p));
 
   if (claudeFamily && detected.claude !== null) {
     return {

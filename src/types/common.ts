@@ -55,28 +55,42 @@ export type Base64 = string;
 // ────────────────────────────────────────────────────────────
 
 /** UUIDv7 pattern: time-ordered UUID. */
-const UUIDV7_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUIDV7_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const SessionIdSchema = z
   .string()
   .regex(UUIDV7_REGEX, 'Must be UUIDv7')
   .transform((v) => v as SessionId);
 
-export const TurnIdSchema = z.string().min(1).transform((v) => v as TurnId);
+export const TurnIdSchema = z
+  .string()
+  .min(1)
+  .transform((v) => v as TurnId);
 
-export const ToolCallIdSchema = z.string().min(1).transform((v) => v as ToolCallId);
+export const ToolCallIdSchema = z
+  .string()
+  .min(1)
+  .transform((v) => v as ToolCallId);
 
 export const WorkspaceIdSchema = z
   .string()
   .min(1)
   .transform((v) => v as WorkspaceId);
 
-export const WorkTreeIdSchema = z.string().min(1).transform((v) => v as WorkTreeId);
+export const WorkTreeIdSchema = z
+  .string()
+  .min(1)
+  .transform((v) => v as WorkTreeId);
 
-export const PaneIdSchema = z.string().min(1).transform((v) => v as PaneId);
+export const PaneIdSchema = z
+  .string()
+  .min(1)
+  .transform((v) => v as PaneId);
 
-export const TabIdSchema = z.string().min(1).transform((v) => v as TabId);
+export const TabIdSchema = z
+  .string()
+  .min(1)
+  .transform((v) => v as TabId);
 
 export const ISO8601Schema = z.string().datetime({ offset: true });
 

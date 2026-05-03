@@ -167,8 +167,7 @@ export const ShellRunTool: Tool<ShellRunInput, ShellRunOutput> = {
     name: 'Shell 실행',
     icon: '⌨',
     summary: (input) => input.cmd.slice(0, 80),
-    summary_result: (output) =>
-      `exit ${output.exit_code} (${output.duration_ms}ms)`,
+    summary_result: (output) => `exit ${output.exit_code} (${output.duration_ms}ms)`,
   },
 
   timeout_ms: 30_000,

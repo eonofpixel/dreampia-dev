@@ -106,9 +106,7 @@ const INITIAL_STATE: UseLeaderElectionState = {
   error: null,
 };
 
-export function useLeaderElection(
-  sessionId: SessionId | null
-): UseLeaderElectionReturn {
+export function useLeaderElection(sessionId: SessionId | null): UseLeaderElectionReturn {
   const [state, setState] = useState<UseLeaderElectionState>(INITIAL_STATE);
 
   const mountedRef = useRef(true);
@@ -120,9 +118,7 @@ export function useLeaderElection(
   }, []);
 
   const safeSet = useCallback(
-    (
-      updater: (s: UseLeaderElectionState) => UseLeaderElectionState
-    ): void => {
+    (updater: (s: UseLeaderElectionState) => UseLeaderElectionState): void => {
       if (!mountedRef.current) return;
       setState(updater);
     },
@@ -136,10 +132,7 @@ export function useLeaderElection(
       return;
     }
     safeSet((s) => ({ ...s, loading: true, error: null }));
-    const [getRes, isLeaderRes] = await Promise.all([
-      api.get(sessionId),
-      api.isLeader(sessionId),
-    ]);
+    const [getRes, isLeaderRes] = await Promise.all([api.get(sessionId), api.isLeader(sessionId)]);
     if (!getRes.ok) {
       safeSet((s) => ({ ...s, loading: false, error: getRes.error }));
       return;

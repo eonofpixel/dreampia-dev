@@ -240,9 +240,7 @@ const api = {
      * Spec: docs/ia/onboarding.md
      */
     getOnboardingStatus: (): Promise<Result<{ completed: boolean }>> =>
-      ipcRenderer.invoke('app:get-onboarding-status') as Promise<
-        Result<{ completed: boolean }>
-      >,
+      ipcRenderer.invoke('app:get-onboarding-status') as Promise<Result<{ completed: boolean }>>,
 
     /**
      * Phase 3 B2: 사용자가 wizard 끝냈을 때 또는 건너뛰기 클릭 시 호출.
@@ -265,9 +263,7 @@ const api = {
       >,
 
     get: (): Promise<Result<{ path: string; name: string } | null>> =>
-      ipcRenderer.invoke('workspace/get') as Promise<
-        Result<{ path: string; name: string } | null>
-      >,
+      ipcRenderer.invoke('workspace/get') as Promise<Result<{ path: string; name: string } | null>>,
   },
 
   /**
@@ -438,7 +434,9 @@ const api = {
    * receives only serializable call/result objects.
    */
   tool: {
-    list: (): Promise<Result<Array<{ id: string; version: string; source: string; name: string }>>> =>
+    list: (): Promise<
+      Result<Array<{ id: string; version: string; source: string; name: string }>>
+    > =>
       ipcRenderer.invoke('tool/list') as Promise<
         Result<Array<{ id: string; version: string; source: string; name: string }>>
       >,

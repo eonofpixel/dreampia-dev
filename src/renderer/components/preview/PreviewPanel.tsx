@@ -27,22 +27,8 @@
  *   - Fullscreen overlay layout
  */
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import {
-  ArrowLeft,
-  ArrowRight,
-  RotateCw,
-  Plus,
-  Maximize2,
-  X,
-} from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, ArrowRight, RotateCw, Plus, Maximize2, X } from 'lucide-react';
 import type { BrowserState, SessionId } from '@/types';
 import { useBrowser, type BrowserTabUI } from '../../hooks/useBrowser';
 
@@ -53,10 +39,7 @@ export interface PreviewPanelProps {
   browser: BrowserState | null;
 }
 
-export function PreviewPanel({
-  sessionId,
-  browser,
-}: PreviewPanelProps): React.JSX.Element {
+export function PreviewPanel({ sessionId, browser }: PreviewPanelProps): React.JSX.Element {
   const {
     tabs,
     activeTabId,
@@ -396,11 +379,7 @@ function BrowserPaneAnchor({
 // Empty / Active state
 // ────────────────────────────────────────────────────────────
 
-function EmptyPreview({
-  onOpenDemo,
-}: {
-  onOpenDemo: () => void;
-}): React.JSX.Element {
+function EmptyPreview({ onOpenDemo }: { onOpenDemo: () => void }): React.JSX.Element {
   return (
     <div className="text-center">
       <div className="text-5xl">🌐</div>

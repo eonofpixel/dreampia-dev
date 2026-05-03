@@ -15,13 +15,7 @@
 export { CliProvider } from './CliProvider';
 export type { CliProviderOptions, CliTranslate } from './CliProvider';
 export { JsonlParser } from './jsonlParser';
-export {
-  detectCli,
-  detectOne,
-  expandHome,
-  execLine,
-  getVersion,
-} from './detect';
+export { detectCli, detectOne, expandHome, execLine, getVersion } from './detect';
 export type { CliInfo, CliDetectionResult } from './detect';
 export { translateClaudeJsonl } from './translateClaudeJsonl';
 export { translateCodexJsonl } from './translateCodexJsonl';

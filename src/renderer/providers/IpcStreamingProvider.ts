@@ -105,9 +105,7 @@ export class IpcStreamingProvider implements StreamingProvider {
           ? input.config['workspace_root']
           : undefined;
       const sessionId =
-        typeof input.config?.['session_id'] === 'string'
-          ? input.config['session_id']
-          : undefined;
+        typeof input.config?.['session_id'] === 'string' ? input.config['session_id'] : undefined;
       // permission_level: session.permission.default_level 을 IPC 까지 명시적 forward.
       // PermissionLevel enum 값만 통과 — 그 외는 undefined 로 떨어져 main 에서 default 적용.
       // Spec: docs/permission/provider-mapping.md

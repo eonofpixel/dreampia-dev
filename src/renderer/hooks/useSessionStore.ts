@@ -121,9 +121,7 @@ export function useSessionStore(): UseSessionStoreApi {
     }
 
     safeSetState((s) => ({ ...s, loading: true, error: null }));
-    const result = (await window.dreampia.session.list()) as Result<
-      SessionMeta[]
-    >;
+    const result = (await window.dreampia.session.list()) as Result<SessionMeta[]>;
 
     if (result.ok) {
       safeSetState(() => ({
@@ -159,13 +157,16 @@ export function useSessionStore(): UseSessionStoreApi {
     [refresh, safeSetState]
   );
 
-  const get = useCallback(async (id: SessionId): Promise<Session | null> => {
-    if (!hasSessionApi()) return null;
-    const result = await window.dreampia.session.get(id);
-    if (result.ok) return result.value;
-    safeSetState((s) => ({ ...s, error: result.error }));
-    return null;
-  }, [safeSetState]);
+  const get = useCallback(
+    async (id: SessionId): Promise<Session | null> => {
+      if (!hasSessionApi()) return null;
+      const result = await window.dreampia.session.get(id);
+      if (result.ok) return result.value;
+      safeSetState((s) => ({ ...s, error: result.error }));
+      return null;
+    },
+    [safeSetState]
+  );
 
   const appendTurn = useCallback(
     async (id: SessionId, turn: Turn): Promise<boolean> => {

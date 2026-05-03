@@ -27,13 +27,11 @@ export interface CliInfoShape {
   path: string;
   version: string | null;
 }
-export type CliStatus =
-  | null
-  | {
-      source: 'auto' | 'mock';
-      claude: CliInfoShape | null;
-      codex: CliInfoShape | null;
-    };
+export type CliStatus = null | {
+  source: 'auto' | 'mock';
+  claude: CliInfoShape | null;
+  codex: CliInfoShape | null;
+};
 
 export interface ChatPanelProps {
   session: Session | null;
@@ -110,9 +108,8 @@ function IpcUnavailableBanner(): React.JSX.Element {
       data-testid="ipc-unavailable-banner"
       className="border-b border-red-500/30 bg-red-500/10 px-4 py-2 text-xs text-red-300"
     >
-      <strong>⚠ AI 통신 채널이 비어있습니다.</strong>{' '}
-      앱을 재시작하거나 dev tools 에서 <code>window.dreampia</code> 를 확인하세요.
-      (preload script 또는 IPC 문제)
+      <strong>⚠ AI 통신 채널이 비어있습니다.</strong> 앱을 재시작하거나 dev tools 에서{' '}
+      <code>window.dreampia</code> 를 확인하세요. (preload script 또는 IPC 문제)
     </div>
   );
 }
@@ -125,9 +122,10 @@ function MessagesArea({ turns }: MessagesAreaProps): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const lastTurn = turns[turns.length - 1];
-  const lastContentLen = lastTurn?.content.reduce((acc, b) => {
-    return b.type === 'text' ? acc + b.text.length : acc;
-  }, 0) ?? 0;
+  const lastContentLen =
+    lastTurn?.content.reduce((acc, b) => {
+      return b.type === 'text' ? acc + b.text.length : acc;
+    }, 0) ?? 0;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -320,7 +318,7 @@ function TurnDisplay({ turn, getResult }: TurnDisplayProps): React.JSX.Element |
   return (
     <article
       className={isUser ? 'flex justify-end' : 'flex justify-start'}
-      data-testid={"turn-" + turn.role}
+      data-testid={'turn-' + turn.role}
       data-status={turn.status}
     >
       <div
@@ -359,11 +357,7 @@ function TurnDisplay({ turn, getResult }: TurnDisplayProps): React.JSX.Element |
         {turn.tool_calls && turn.tool_calls.length > 0 && (
           <div className="mt-2 space-y-1">
             {turn.tool_calls.map((tc) => (
-              <ToolCallCard
-                key={tc.id}
-                call={tc}
-                result={getResult(tc.id)}
-              />
+              <ToolCallCard key={tc.id} call={tc} result={getResult(tc.id)} />
             ))}
           </div>
         )}

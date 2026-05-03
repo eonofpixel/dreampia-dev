@@ -45,16 +45,14 @@ export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
  */
 function readCurrentVersion(db: Database): number {
   const row = db
-    .prepare(
-      `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta'`
-    )
+    .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta'`)
     .get() as { name: string } | undefined;
 
   if (!row) return 0;
 
-  const meta = db
-    .prepare(`SELECT value FROM schema_meta WHERE key = ?`)
-    .get('version') as { value: string } | undefined;
+  const meta = db.prepare(`SELECT value FROM schema_meta WHERE key = ?`).get('version') as
+    | { value: string }
+    | undefined;
 
   return meta ? parseInt(meta.value, 10) : 0;
 }
@@ -69,9 +67,9 @@ function upsertMeta(db: Database, key: string, value: string): void {
 
 /** Read meta value or undefined. */
 function readMeta(db: Database, key: string): string | undefined {
-  const row = db
-    .prepare(`SELECT value FROM schema_meta WHERE key = ?`)
-    .get(key) as { value: string } | undefined;
+  const row = db.prepare(`SELECT value FROM schema_meta WHERE key = ?`).get(key) as
+    | { value: string }
+    | undefined;
   return row?.value;
 }
 

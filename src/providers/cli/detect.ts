@@ -60,10 +60,7 @@ export async function detectCli(): Promise<CliDetectionResult> {
  *
  * 비용은 disk stat 몇 번 + 최대 2번의 subprocess (where/which + --version).
  */
-export async function detectOne(
-  binaryName: string,
-  knownPaths: string[]
-): Promise<CliInfo | null> {
+export async function detectOne(binaryName: string, knownPaths: string[]): Promise<CliInfo | null> {
   // 1. 알려진 경로 우선 — 절대경로 stat 만으로 빠름
   for (const raw of knownPaths) {
     const path = expandHome(raw);
@@ -109,11 +106,7 @@ export function expandHome(p: string): string {
  *
  * shell:false — 인젝션 방지. 인자는 array 로만 전달.
  */
-export function execLine(
-  cmd: string,
-  args: string[],
-  timeoutMs = 2000
-): Promise<string | null> {
+export function execLine(cmd: string, args: string[], timeoutMs = 2000): Promise<string | null> {
   return new Promise((resolve) => {
     let resolved = false;
     const finish = (val: string | null): void => {

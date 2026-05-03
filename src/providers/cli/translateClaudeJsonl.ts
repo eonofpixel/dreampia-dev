@@ -28,10 +28,7 @@ interface TranslateContext {
   model: string;
 }
 
-export function translateClaudeJsonl(
-  parsed: unknown,
-  _ctx: TranslateContext
-): StreamEvent[] {
+export function translateClaudeJsonl(parsed: unknown, _ctx: TranslateContext): StreamEvent[] {
   if (typeof parsed !== 'object' || parsed === null) return [];
   const obj = parsed as Record<string, unknown>;
   const evType = typeof obj.type === 'string' ? obj.type : '';
@@ -79,8 +76,7 @@ export function translateClaudeJsonl(
   if (evType === 'result') {
     const isError = obj.is_error === true;
     if (isError) {
-      const resultText =
-        typeof obj.result === 'string' ? obj.result : 'unknown error';
+      const resultText = typeof obj.result === 'string' ? obj.result : 'unknown error';
       return [{ type: 'error', error: resultText }];
     }
     return [];

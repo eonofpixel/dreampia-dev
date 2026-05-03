@@ -26,10 +26,7 @@ interface TranslateContext {
   model: string;
 }
 
-export function translateCodexJsonl(
-  parsed: unknown,
-  _ctx: TranslateContext
-): StreamEvent[] {
+export function translateCodexJsonl(parsed: unknown, _ctx: TranslateContext): StreamEvent[] {
   if (typeof parsed !== 'object' || parsed === null) return [];
   const obj = parsed as Record<string, unknown>;
   const evType = typeof obj.type === 'string' ? obj.type : '';
@@ -80,8 +77,7 @@ export function translateCodexJsonl(
 
   // ── error — reconnect / network errors ──
   if (evType === 'error') {
-    const message =
-      typeof obj.message === 'string' ? obj.message : 'unknown error';
+    const message = typeof obj.message === 'string' ? obj.message : 'unknown error';
     return [{ type: 'error', error: message }];
   }
 

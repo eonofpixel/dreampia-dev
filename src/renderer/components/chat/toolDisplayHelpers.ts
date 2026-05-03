@@ -15,7 +15,7 @@ import type { Turn, ToolResultRef } from '@/types';
 export function findToolResult(
   turns: ReadonlyArray<Turn>,
   fromIndex: number,
-  callId: string,
+  callId: string
 ): ToolResultRef | undefined {
   for (let i = fromIndex + 1; i < turns.length; i++) {
     const t = turns[i];

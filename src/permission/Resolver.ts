@@ -252,10 +252,5 @@ export function isAllowed(
   }
 
   // ── 5. Default level ──
-  return defaultLevelDecides(
-    capability,
-    target,
-    session.permission.default_level,
-    workspaceRoot
-  );
+  return defaultLevelDecides(capability, target, session.permission.default_level, workspaceRoot);
 }

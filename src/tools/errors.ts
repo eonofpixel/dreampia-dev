@@ -11,13 +11,7 @@
  * Tool 작성자가 직접 ToolError 만들 일 거의 없음 — Queue 가 처리.
  */
 
-import type {
-  ToolCall,
-  ToolError,
-  ToolResult,
-  ToolResultStatus,
-  LogEntry,
-} from './types';
+import type { ToolCall, ToolError, ToolResult, ToolResultStatus, LogEntry } from './types';
 
 // ────────────────────────────────────────────────────────────
 // 표준 에러 코드 (확장 가능 string union)
@@ -84,9 +78,10 @@ export function buildFailedResult(args: FailedResultArgs): ToolResult {
   const completedIso = args.completed_at ?? startedIso;
   const startedMs = Date.parse(startedIso);
   const completedMs = Date.parse(completedIso);
-  const duration = Number.isFinite(startedMs) && Number.isFinite(completedMs)
-    ? Math.max(0, completedMs - startedMs)
-    : 0;
+  const duration =
+    Number.isFinite(startedMs) && Number.isFinite(completedMs)
+      ? Math.max(0, completedMs - startedMs)
+      : 0;
 
   return {
     call_id: args.call.id,
@@ -111,9 +106,10 @@ export function buildSuccessResult(args: {
   const completedIso = nowIso();
   const startedMs = Date.parse(args.started_at);
   const completedMs = Date.parse(completedIso);
-  const duration = Number.isFinite(startedMs) && Number.isFinite(completedMs)
-    ? Math.max(0, completedMs - startedMs)
-    : 0;
+  const duration =
+    Number.isFinite(startedMs) && Number.isFinite(completedMs)
+      ? Math.max(0, completedMs - startedMs)
+      : 0;
 
   return {
     call_id: args.call.id,
