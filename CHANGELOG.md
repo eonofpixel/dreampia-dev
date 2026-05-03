@@ -2,6 +2,43 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [0.1.3] — 2026-05-03
+
+**Hardening release — Codex 권고 v0.1.3 Early adopter hardening (3 issues).**
+
+Patch release. 새 기능 X. release pipeline 신뢰도 + 첫 사용자 onboarding 자동화.
+
+### Added
+
+- **Issue #2**: `scripts/extract-release-notes.cjs` — CHANGELOG.md 의
+  버전 섹션을 자동 추출하여 GitHub Release notes 로 사용. release.yml
+  publish job 이 더 이상 'Auto-generated' 메모만 쓰지 않고, 이 변경
+  로그가 release 페이지에 그대로 표시됨.
+- **Issue #3**: release.yml 의 publish job 에 `Verify asset completeness`
+  step 추가. 8개 필수 artifact (Win exe + macOS x64/arm64 dmg + Linux
+  AppImage/.deb + 3 latest*.yml) 누락 시 publish 차단 + `::error::` 주석.
+  v0.1.0 macOS 누락 같은 partial release 재발 방지.
+- **Issue #4**: `.github/ISSUE_TEMPLATE/smoke-matrix.md` 신규.
+  10-30명 초기 사용자가 같은 형식으로 결과 보고 → v0.1.x patch
+  우선순위 결정 빠름. 6 단계 체크리스트 (설치 → Onboarding →
+  첫 채팅 → Tool → BrowserView → 자동 업데이트).
+
+### Tests
+
+- 새 vitest 3개 (extract-release-notes): 684 → 687 tests pass.
+
+### Distributed Artifacts
+
+v0.1.2 와 동일 5 OS — release pipeline 변경 외 source 영향 X.
+
+- ✅ Linux AppImage (`Dreampia-Dev-0.1.3-x86_64.AppImage`)
+- ✅ Linux Debian (`Dreampia-Dev-0.1.3-amd64.deb`)
+- ✅ Windows NSIS (`Dreampia-Dev-Setup-0.1.3-x64.exe`)
+- ✅ macOS Intel (`Dreampia-Dev-0.1.3-x64.dmg`)
+- ✅ macOS Apple Silicon (`Dreampia-Dev-0.1.3-arm64.dmg`)
+
+[0.1.3]: https://github.com/eonofpixel/dreampia-dev/releases/tag/v0.1.3
+
 ## [0.1.2] — 2026-05-03
 
 **Hardening release — dev DX (ABI 자동 토글) + branded icons.**
