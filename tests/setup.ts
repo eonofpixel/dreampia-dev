@@ -78,6 +78,27 @@ type MockStreamEndPayload = { stream_id: string };
 type AiStreamEventListener = (payload: MockStreamEventPayload) => void;
 type AiStreamEndListener = (payload: MockStreamEndPayload) => void;
 
+// ── mcp/* (v0.2.0 Issue #5) — mock IPC for useMcp / McpSettings tests ──
+interface MockMcpServerConfig {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  cwd?: string;
+  enabled: boolean;
+  added_at: string;
+}
+type MockMcpStatus = 'disconnected' | 'connecting' | 'ready' | 'error' | 'disabled';
+interface MockMcpServerState {
+  config: MockMcpServerConfig;
+  status: MockMcpStatus;
+  pid?: number;
+  tools: Array<{ name: string; description?: string; input_schema?: Record<string, unknown> }>;
+  last_error?: string;
+  last_log: string[];
+}
+
 const mockStore = {
   sessions: new Map<string, Session>(),
   locks: new Map<string, MockSessionLock>(),
@@ -129,6 +150,12 @@ const mockStore = {
   aiStoppedStreams: new Set<string>(),
   aiEventListeners: new Set<AiStreamEventListener>(),
   aiEndListeners: new Set<AiStreamEndListener>(),
+
+  // ── mcp/* (v0.2.0 Issue #5) ───────────────────────────
+  // 등록된 MCP 서버 목록 (in-memory). Tests 가 mcpServers 를 미리 채우거나
+  // mcpAddBehavior 로 add 시 reject 시뮬레이션 가능.
+  mcpServers: new Map<string, MockMcpServerState>(),
+  mcpAddBehavior: 'success' as 'success' | 'fail',
 };
 
 function emitBrowserUpdate(state: MockBrowserTabState): void {
@@ -213,6 +240,8 @@ beforeEach(() => {
   mockStore.aiStoppedStreams.clear();
   mockStore.aiEventListeners.clear();
   mockStore.aiEndListeners.clear();
+  mockStore.mcpServers.clear();
+  mockStore.mcpAddBehavior = 'success';
   mockStore.workspace = null;
   mockStore.workspacePickNext = undefined;
   mockStore.onboardingCompleted = true;
@@ -245,6 +274,14 @@ beforeEach(() => {
       (ai.detectCli as unknown as { mockClear?: () => void }).mockClear?.();
       (ai.startStream as unknown as { mockClear?: () => void }).mockClear?.();
       (ai.stopStream as unknown as { mockClear?: () => void }).mockClear?.();
+    }
+    const mcp = (window.dreampia as unknown as { mcp?: Record<string, unknown> }).mcp;
+    if (mcp !== undefined) {
+      (mcp['list'] as unknown as { mockClear?: () => void }).mockClear?.();
+      (mcp['add'] as unknown as { mockClear?: () => void }).mockClear?.();
+      (mcp['remove'] as unknown as { mockClear?: () => void }).mockClear?.();
+      (mcp['restart'] as unknown as { mockClear?: () => void }).mockClear?.();
+      (mcp['getLogs'] as unknown as { mockClear?: () => void }).mockClear?.();
     }
   }
 });
@@ -619,6 +656,52 @@ if (typeof window !== 'undefined') {
           mockStore.aiEndListeners.add(listener);
           return () => {
             mockStore.aiEndListeners.delete(listener);
+          };
+        }),
+      },
+
+      // v0.2.0 — MCP Bridge (Issue #5). In-memory mock of McpManager.
+      mcp: {
+        list: vi.fn(
+          async (): Promise<Result<MockMcpServerState[]>> => ({
+            ok: true,
+            value: Array.from(mockStore.mcpServers.values()),
+          })
+        ),
+
+        add: vi.fn(async (config: MockMcpServerConfig): Promise<Result<void>> => {
+          if (mockStore.mcpAddBehavior === 'fail') {
+            return { ok: false, error: 'mock add failure' };
+          }
+          mockStore.mcpServers.set(config.id, {
+            config,
+            status: config.enabled ? 'ready' : 'disabled',
+            tools: [],
+            last_log: [],
+          });
+          return { ok: true, value: undefined };
+        }),
+
+        remove: vi.fn(async (id: string): Promise<Result<void>> => {
+          mockStore.mcpServers.delete(id);
+          return { ok: true, value: undefined };
+        }),
+
+        restart: vi.fn(async (id: string): Promise<Result<void>> => {
+          const server = mockStore.mcpServers.get(id);
+          if (server === undefined) {
+            return { ok: false, error: `not found: ${id}` };
+          }
+          server.status = 'ready';
+          mockStore.mcpServers.set(id, server);
+          return { ok: true, value: undefined };
+        }),
+
+        getLogs: vi.fn(async (id: string): Promise<Result<string[]>> => {
+          const server = mockStore.mcpServers.get(id);
+          return {
+            ok: true,
+            value: server !== undefined ? [...server.last_log] : [],
           };
         }),
       },

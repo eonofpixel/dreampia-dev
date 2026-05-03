@@ -16,6 +16,7 @@ import { Sidebar } from './components/sidebar/Sidebar';
 import { ChatPanel, type CliStatus } from './components/chat/ChatPanel';
 import { PreviewPanel } from './components/preview/PreviewPanel';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
+import { McpSettings } from './components/settings/McpSettings';
 import {
   SessionSchema,
   newSessionId,
@@ -132,6 +133,8 @@ export function App(): React.JSX.Element {
   // null 이 반환되므로 nullable. dev/e2e 에선 process.cwd() 가 들어옴.
   const [launchWorkspace, setLaunchWorkspace] = useState<WorkspaceInfo | null>(null);
   const [launchWorkspaceLoaded, setLaunchWorkspaceLoaded] = useState(false);
+  // v0.2.0 — Issue #5: MCP 서버 설정 모달 표시.
+  const [mcpSettingsOpen, setMcpSettingsOpen] = useState(false);
   // Phase 3 audit (HIGH): picker auto-launch 가 사용자 취소 시 무한루프 방지.
   // Phase 3 B2: useState + useRef 이중 보호 — useState 는 React deps 에 반영,
   // useRef 는 같은 commit 내 빠른 연속 effect 실행에도 즉시 차단.
@@ -458,6 +461,9 @@ export function App(): React.JSX.Element {
             onNewChat={() => {
               void handleNewChat();
             }}
+            onOpenSettings={() => {
+              setMcpSettingsOpen(true);
+            }}
           />
         }
         chat={
@@ -484,6 +490,12 @@ export function App(): React.JSX.Element {
             browser={activeSession?.browser ?? null}
           />
         }
+      />
+      <McpSettings
+        open={mcpSettingsOpen}
+        onClose={() => {
+          setMcpSettingsOpen(false);
+        }}
       />
     </>
   );

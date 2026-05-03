@@ -24,10 +24,12 @@ import path from 'node:path';
 import { z } from 'zod';
 import { readSettings, writeSettings } from './settings';
 import {
+  McpServerConfigSchema,
   PermissionLevelSchema,
   SessionSchema,
   TurnSchema,
   newTurnId,
+  type McpServerState,
   type PermissionLevel,
   type Session,
   type SessionId,
@@ -39,6 +41,7 @@ import {
 import type { LeaderElection, SessionLock, SessionMeta, SessionStore } from '@/storage';
 import type { StreamEvent, StreamingProvider } from '@/providers';
 import type { ToolCall, ToolQueue, ToolRegistry, ToolResult } from '@/tools';
+import type { McpManager } from './mcp';
 // CLI / auto 는 Node-only — main 에서만 import. providers barrel 은
 // renderer 와 공유되므로 여기서 직접 명시적 경로로 가져온다.
 import {
@@ -196,6 +199,8 @@ function resolveElection(source: LockHandlerSource, event: IpcMainInvokeEvent): 
  *                   are not registered. Spec: docs/session/cross-ai-sync.md
  * @param tools    - Optional Tool Queue config. When omitted, `tool/*`
  *                   handlers are not registered.
+ * @param mcp      - Optional McpManager. When omitted, `mcp/*` handlers are
+ *                   not registered. Spec: docs/tools/mcp-bridge.md (Issue #5).
  */
 export function registerIpcHandlers(
   electronApp: App = app,
@@ -203,7 +208,8 @@ export function registerIpcHandlers(
   election?: LockHandlerSource,
   browser?: BrowserManager,
   ai?: AiHandlerConfig,
-  tools?: ToolHandlerConfig
+  tools?: ToolHandlerConfig,
+  mcp?: McpManager
 ): void {
   ipcMain.handle('app:get-version', (): AppInfo => {
     return {
@@ -286,6 +292,7 @@ export function registerIpcHandlers(
   if (browser) registerBrowserHandlers(browser);
   if (ai) registerAiHandlers(ai);
   if (tools) registerToolHandlers(tools);
+  if (mcp) registerMcpHandlers(mcp);
 }
 
 // ────────────────────────────────────────────────────────────
@@ -737,6 +744,75 @@ function registerToolHandlers(tools: ToolHandlerConfig): void {
       }
     }
   );
+}
+
+// ────────────────────────────────────────────────────────────
+// mcp/* — MCP Bridge (Issue #5, v0.2.0)
+//
+// Spec: docs/tools/mcp-bridge.md
+//
+// 5 handlers:
+//   - mcp/list       — listServers()
+//   - mcp/add        — config validate + addServer
+//   - mcp/remove     — removeServer(id)
+//   - mcp/restart    — restartServer(id)
+//   - mcp/get-logs   — getServerLogs(id)
+// ────────────────────────────────────────────────────────────
+
+function registerMcpHandlers(mcp: McpManager): void {
+  ipcMain.handle('mcp/list', (): Result<McpServerState[]> => {
+    try {
+      return ok(mcp.listServers());
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('mcp/add', async (_evt, raw: unknown): Promise<Result<void>> => {
+    try {
+      // Renderer 의 input 은 신뢰 X — Zod 가 검증 + 기본값 채움 (args/env/enabled).
+      const config = McpServerConfigSchema.parse(raw);
+      await mcp.addServer(config);
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('mcp/remove', async (_evt, id: unknown): Promise<Result<void>> => {
+    try {
+      if (typeof id !== 'string' || id.length === 0) {
+        throw new Error('id must be non-empty string');
+      }
+      await mcp.removeServer(id);
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('mcp/restart', async (_evt, id: unknown): Promise<Result<void>> => {
+    try {
+      if (typeof id !== 'string' || id.length === 0) {
+        throw new Error('id must be non-empty string');
+      }
+      await mcp.restartServer(id);
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('mcp/get-logs', (_evt, id: unknown): Result<string[]> => {
+    try {
+      if (typeof id !== 'string' || id.length === 0) {
+        throw new Error('id must be non-empty string');
+      }
+      return ok(mcp.getServerLogs(id));
+    } catch (err) {
+      return fail(err);
+    }
+  });
 }
 
 // ────────────────────────────────────────────────────────────

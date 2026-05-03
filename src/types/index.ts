@@ -18,6 +18,7 @@ export * from './terminal';
 export * from './browser';
 export * from './plan';
 export * from './permission';
+export * from './mcp';
 
 // Top-level
 export * from './session';

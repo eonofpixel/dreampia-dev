@@ -147,6 +147,43 @@ interface ToolResultShape {
   }>;
 }
 
+// v0.2.0 — MCP Bridge shapes (Issue #5). Inlined here so preload doesn't
+// transitively pull in @/types runtime (zod) — sandbox 안전. main 의
+// McpServerConfigSchema 가 IPC 경계에서 검증을 담당하므로 preload 는
+// shape 만 표현해도 충분.
+interface McpServerConfigShape {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  cwd?: string;
+  enabled: boolean;
+  added_at: string;
+}
+
+type McpServerStatusShape =
+  | 'disconnected'
+  | 'connecting'
+  | 'ready'
+  | 'error'
+  | 'disabled';
+
+interface McpToolInfoShape {
+  name: string;
+  description?: string;
+  input_schema?: Record<string, unknown>;
+}
+
+interface McpServerStateShape {
+  config: McpServerConfigShape;
+  status: McpServerStatusShape;
+  pid?: number;
+  tools: McpToolInfoShape[];
+  last_error?: string;
+  last_log: string[];
+}
+
 // Whitelist of IPC channels (security)
 const ALLOWED_INVOKE_CHANNELS = [
   'app:get-version',
@@ -184,6 +221,11 @@ const ALLOWED_INVOKE_CHANNELS = [
   'tool/cancel-call',
   'tool/cancel-turn',
   'tool/stats',
+  'mcp/list',
+  'mcp/add',
+  'mcp/remove',
+  'mcp/restart',
+  'mcp/get-logs',
 ] as const;
 
 const ALLOWED_RECEIVE_CHANNELS = [
@@ -456,6 +498,32 @@ const api = {
       ipcRenderer.invoke('tool/stats') as Promise<
         Result<{ active: number; pending: number; by_session: Record<string, number> }>
       >,
+  },
+
+  /**
+   * v0.2.0 — MCP Bridge (Issue #5).
+   *
+   * Spec: docs/tools/mcp-bridge.md
+   *
+   * Renderer 에서 MCP 서버를 등록 / 해제 / 재시작 + 상태 조회.
+   * 각 MCP 서버의 tools/list 결과는 ToolRegistry 에 자동 등록되어
+   * `tool/*` API 로도 호출 가능 (id: 'mcp.{server_id}.{tool_name}').
+   */
+  mcp: {
+    list: (): Promise<Result<McpServerStateShape[]>> =>
+      ipcRenderer.invoke('mcp/list') as Promise<Result<McpServerStateShape[]>>,
+
+    add: (config: McpServerConfigShape): Promise<Result<void>> =>
+      ipcRenderer.invoke('mcp/add', config) as Promise<Result<void>>,
+
+    remove: (id: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('mcp/remove', id) as Promise<Result<void>>,
+
+    restart: (id: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('mcp/restart', id) as Promise<Result<void>>,
+
+    getLogs: (id: string): Promise<Result<string[]>> =>
+      ipcRenderer.invoke('mcp/get-logs', id) as Promise<Result<string[]>>,
   },
 };
 

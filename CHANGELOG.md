@@ -2,6 +2,85 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [0.2.0] — 2026-05-02
+
+**Feature release — MCP Bridge MVP (Issue #5).**
+
+`Model Context Protocol` 서버를 stdio 로 spawn 하고, 그 서버의 도구를 Dreampia
+의 `ToolQueue` 가 자체 도구처럼 호출할 수 있는 첫 번째 통합. v0.1.x 의 모든
+hardening 기반 위에 v0.2 의 핵심 신기능을 추가.
+
+### Added
+
+- **`src/main/mcp/McpClient.ts`** — 단일 MCP 서버용 stdio JSON-RPC 2.0 클라이언트.
+  - `initialize` → `notifications/initialized` → `tools/list` handshake
+  - `tools/call` (요청 단위 30s timeout)
+  - `shutdown` notification + SIGTERM (1s grace) → SIGKILL fallback
+  - non-JSON line silent skip (Codex MCP parser 버그 회피)
+  - stderr / non-JSON stdout 을 ring buffer (50줄) 로 보관 → 사용자 진단용
+  - exit listener 가 pending request 들을 모두 reject (hang 방지)
+- **`src/main/mcp/McpManager.ts`** — 다중 MCP 서버 라이프사이클 + ToolRegistry 통합.
+  - `addServer` / `removeServer` / `restartServer` / `loadFromSettings`
+  - 서버 1개의 `tools/list` 결과를 `mcp.{server_id}.{tool_name}` 형식으로
+    `ToolRegistry` 에 등록 (mcp-bridge.md INV-2 적용)
+  - 모든 wrapper Tool 은 `required_capabilities = ['NETWORK_MCP']` +
+    `permission_target = { kind:'global', value: server_id }` 반환 → 사용자가
+    서버 단위로 grant 부여 가능 (Resolver 통합)
+  - `tools-updated` 이벤트마다 registry 재동기화 (unregister → register)
+- **`src/types/mcp.ts`** — `McpServerConfig` (Zod), `McpServerStatus`,
+  `McpToolInfo`, `McpServerState`, JSON-RPC envelope 타입.
+- **`src/main/settings.ts`** — `mcp_servers` 영속 (Zod 검증, 손상 항목 silent drop).
+- **IPC handlers (5)**: `mcp/list`, `mcp/add`, `mcp/remove`, `mcp/restart`,
+  `mcp/get-logs`. 모두 `Result<T>` wrapping + Zod validation.
+- **`src/renderer/hooks/useMcp.ts`** — IPC bridge React hook (refresh / add /
+  remove / restart / getLogs + loading + error state).
+- **`src/renderer/components/settings/McpSettings.tsx`** — 설정 모달.
+  - 서버 목록 (status badge / 도구 개수 / pid / last_error)
+  - 추가 폼 (id / name / command / args / env / cwd / enabled)
+  - [재시작] / [제거] / [로그 보기] 버튼 + 로그 modal
+- **Sidebar**: `[설정]` 클릭 시 `McpSettings` modal 열림 (`onOpenSettings` prop).
+
+### Changed
+
+- `package.json`: `0.1.3` → `0.2.0` (minor bump for new feature).
+- `src/main/preload.ts`: 5 MCP IPC channel + `mcp` namespace 노출 (sandbox-safe
+  inline shape).
+- `src/main/index.ts`: 부팅 시 `McpManager.loadFromSettings()` 자동 호출 +
+  `app.before-quit` 시 모든 child process 정리.
+
+### Tests
+
+- `tests/main/mcp/McpClient.test.ts` (12 tests) — handshake / non-JSON skip /
+  stderr / timeout / abort / exit cleanup.
+- `tests/main/mcp/McpManager.test.ts` (12 tests) — settings 영속 / Tool 등록 /
+  remove / restart / disabled skip / failed start / shutdown.
+- `tests/main/ipc.mcp.test.ts` (15 tests) — 5 IPC channel 의 Result wrapping +
+  Zod 검증 + 에러 직렬화.
+- `tests/renderer/useMcp.test.ts` (7 tests) — refresh / add / remove / restart /
+  getLogs hook 동작.
+- `tests/renderer/McpSettings.test.tsx` (12 tests) — modal smoke + form submit /
+  validation / 로그 보기.
+- 합계: 687 → **745 tests pass** (+58 new).
+- typecheck: 0 errors / lint: 0 errors / e2e 영향 없음.
+
+### Out of scope (별도 issue)
+
+- HTTP/SSE transport (stdio 만 지원)
+- OAuth 흐름
+- Resources / Prompts (tools 만)
+- Sampling 통합
+- MCP server 자동 discovery (수동 add only)
+- 설치 안내 wizard (Phase 4)
+- JSON Schema → Zod 변환 (P2 — input_schema 는 현재 `z.unknown()`)
+
+### Migration notes
+
+- 신기능 only — 기존 워크스페이스 / 세션 / 권한 grant 호환.
+- `settings.json` 에 `mcp_servers` 필드가 없는 경우 빈 배열로 자동 채움.
+- 손상된 mcp_servers entry 는 다음 write 시 자동 제거 (graceful degradation).
+
+[0.2.0]: https://github.com/eonofpixel/dreampia-dev/releases/tag/v0.2.0
+
 ## [0.1.3] — 2026-05-03
 
 **Hardening release — Codex 권고 v0.1.3 Early adopter hardening (3 issues).**

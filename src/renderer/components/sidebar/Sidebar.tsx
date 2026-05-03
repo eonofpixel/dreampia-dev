@@ -15,6 +15,8 @@ export interface SidebarProps {
   projectName?: string;
   onSelectSession: (sessionId: string) => void;
   onNewChat: () => void;
+  /** v0.2.0 — 설정 항목 클릭 시 호출. 미지정 시 버튼 placeholder 동작. */
+  onOpenSettings?: () => void;
 }
 
 export function Sidebar({
@@ -23,6 +25,7 @@ export function Sidebar({
   projectName = 'workspace',
   onSelectSession,
   onNewChat,
+  onOpenSettings,
 }: SidebarProps): React.JSX.Element {
   const pinned = sessions.filter((s) => s.pinned);
   const recent = sessions.filter((s) => !s.pinned);
@@ -97,7 +100,12 @@ export function Sidebar({
 
       {/* Bottom: 설정 */}
       <div className="border-t border-border-primary p-2">
-        <SidebarNavItem icon={<Settings className="h-4 w-4" />} label="설정" shortcut="Ctrl+," />
+        <SidebarNavItem
+          icon={<Settings className="h-4 w-4" />}
+          label="설정"
+          shortcut="Ctrl+,"
+          onClick={onOpenSettings}
+        />
       </div>
     </aside>
   );

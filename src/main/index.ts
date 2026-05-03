@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { registerIpcHandlers, shutdownAiHandlers } from './ipc';
 import { BrowserManager } from './BrowserManager';
+import { McpManager, createSettingsAdapter } from './mcp';
 import { LeaderElection, SessionStore } from '@/storage';
 import { ShellRunTool, ToolQueue, ToolRegistry } from '@/tools';
 
@@ -26,6 +27,7 @@ app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
 let mainWindow: BrowserWindow | null = null;
 let sessionStore: SessionStore | null = null;
 let browserManager: BrowserManager | null = null;
+let mcpManager: McpManager | null = null;
 
 interface WindowRuntime {
   election: LeaderElection;
@@ -165,6 +167,13 @@ app.whenReady().then(() => {
     },
   });
 
+  // v0.2.0 — MCP Bridge MVP (Issue #5).
+  // McpManager 가 settings.json 의 mcp_servers 를 읽어 stdio MCP 서버를 spawn,
+  // tools/list 결과를 ToolRegistry 에 'mcp.{server_id}.{tool_name}' 으로 등록.
+  // Spec: docs/tools/mcp-bridge.md
+  mcpManager = new McpManager(registry, { settings: createSettingsAdapter() });
+  void mcpManager.loadFromSettings();
+
   // P1-4: AI handlers (ai/detect-cli, ai/start-stream, ai/stop-stream).
   // Renderer 가 stream-event/end 를 받으려면 mainWindow getter 필요.
   // Spec: docs/session/cross-ai-sync.md
@@ -182,7 +191,8 @@ app.whenReady().then(() => {
     {
       registry,
       queue,
-    }
+    },
+    mcpManager
   );
   mainWindow = createMainWindow();
 
@@ -213,6 +223,11 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   // 활성 AI streams 먼저 abort — subprocess leak 방지.
   shutdownAiHandlers();
+  // MCP children 도 stop. fire-and-forget — quit 흐름은 sync 한정.
+  if (mcpManager !== null) {
+    void mcpManager.shutdown();
+    mcpManager = null;
+  }
   browserManager?.shutdown();
   browserManager = null;
   for (const runtime of windowRuntimes.values()) {
