@@ -36,12 +36,14 @@ import {
   Compass,
   Languages,
   Stethoscope,
+  Info,
 } from 'lucide-react';
 import { McpSettingsPanel } from './McpSettings';
 import { UsageSettingsPanel } from './UsageSettings';
 import { KeyboardSettings } from './KeyboardSettings';
 import { LanguageSettings } from './LanguageSettings';
 import { DiagnoseSettings } from './DiagnoseSettings';
+import { AboutPanel } from './AboutPanel';
 import { type PermissionLevel } from '@/types';
 import { useT } from '../../i18n';
 import { localizedPermissionLabel } from './permissionLabels';
@@ -55,6 +57,7 @@ export type SettingsTabId =
   | 'keyboard'
   | 'language'
   | 'diagnose'
+  | 'about'
   | 'onboarding';
 
 export interface SettingsModalProps {
@@ -97,6 +100,10 @@ const TAB_ORDER: ReadonlyArray<TabSpec> = [
     labelKey: 'settings.tab.diagnose',
     icon: <Stethoscope className="h-4 w-4" />,
   },
+  // v1.0.0 — 정보 (About) 탭. 앱 이름 / 버전 / 라이선스 / 코드 서명 status /
+  // 자동 업데이트 status. diagnose ↔ onboarding 사이에 두어 "정체성 확인 → 설정
+  // 처음부터 다시" 동선.
+  { id: 'about', labelKey: 'settings.tab.about', icon: <Info className="h-4 w-4" /> },
   { id: 'onboarding', labelKey: 'settings.tab.onboarding', icon: <Compass className="h-4 w-4" /> },
 ];
 
@@ -182,6 +189,7 @@ export function SettingsModal({
             {activeTab === 'keyboard' && <KeyboardSettings />}
             {activeTab === 'language' && <LanguageSettings />}
             {activeTab === 'diagnose' && <DiagnoseSettings />}
+            {activeTab === 'about' && <AboutPanel />}
             {activeTab === 'onboarding' && (
               <OnboardingPanel onReopenOnboarding={onReopenOnboarding} />
             )}

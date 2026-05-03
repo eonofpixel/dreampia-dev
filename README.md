@@ -5,48 +5,63 @@
 
 [![CI](https://github.com/eonofpixel/dreampia-dev/actions/workflows/ci.yml/badge.svg)](https://github.com/eonofpixel/dreampia-dev/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Version](https://img.shields.io/badge/version-0.1.2-brightgreen.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.0-brightgreen.svg)](./CHANGELOG.md)
 
 ---
 
-## 🧪 v0.1.2 — Unsigned Early Adopter Build (2026-05-03)
+## v1.0.0 — Production Release (2026-05-03)
 
-**v0.1.2 는 early adopter / experimental build 입니다 — 일반 사용자용
-production-grade release 가 아닙니다.** 폭넓은 홍보 대상보다 **10-30명의
-초기 피드백 수렴** 을 목표로 합니다.
+**Dreampia-Dev v1.0.0 — feature complete, production-ready 한국어 우선 오픈소스
+AI 코딩 데스크톱.** v0.1.0 부터 v0.14.0 까지 14개 minor release 누적 위에 빌드
+된 안정 버전입니다. 일반 사용자 대상 배포 가능.
 
-### 🔽 다운로드 (최신: v0.1.2)
+> **단 unsigned build** — 코드 서명 인증서 매입 전까지 SmartScreen / Gatekeeper
+> 경고가 표시됩니다. 인증서 등록 후 (v1.0.1+) 자동으로 signed release 활성화.
+> 자세한 가이드: [docs/code-signing.md](./docs/code-signing.md)
+
+### 다운로드 (최신: v1.0.0)
 
 [GitHub Releases](https://github.com/eonofpixel/dreampia-dev/releases/latest)
 
 | 플랫폼 | 파일 |
 |--------|------|
-| 🖥 Windows | `Dreampia-Dev-Setup-0.1.2-x64.exe` |
-| 🍎 macOS Intel | `Dreampia-Dev-0.1.2-x64.dmg` |
-| 🍎 macOS Apple Silicon | `Dreampia-Dev-0.1.2-arm64.dmg` |
-| 🐧 Linux AppImage | `Dreampia-Dev-0.1.2-x86_64.AppImage` |
-| 🐧 Linux Debian | `Dreampia-Dev-0.1.2-amd64.deb` |
+| Windows | `Dreampia-Dev-Setup-1.0.0-x64.exe` |
+| macOS Intel | `Dreampia-Dev-1.0.0-x64.dmg` |
+| macOS Apple Silicon | `Dreampia-Dev-1.0.0-arm64.dmg` |
+| Linux AppImage | `Dreampia-Dev-1.0.0-x86_64.AppImage` |
+| Linux Debian | `Dreampia-Dev-1.0.0-amd64.deb` |
 
-v0.1.0 / v0.1.1 사용자는 자동 업데이트 (`electron-updater`).
+v0.x 사용자는 자동 업데이트 (`electron-updater`). v1.0.0 → v1.0.1 (signed)
+전환 시 한 번만 manual install 필요할 수 있음.
 
-진척:
-- Phase 1 + 2 + 3 완료. 684 vitest + 19 Playwright E2E 통과.
-- **v0.1.0** Linux+Win unsigned early adopter
-- **v0.1.1** macOS DMG race fix (Issue #1)
-- **v0.1.2** ABI 자동 토글 + branded icons
-- 자세한 내용은 [CHANGELOG.md](./CHANGELOG.md) 참조.
+### v1.0.0 핵심 가치
 
-> ⚠ **unsigned build — "확인되지 않은 발행자" 경고 표시**.
->
-> 코드서명 인증서 (Win publisher cert / Apple Developer ID) 가 아직 설정 안
-> 되어 있어 **"확인되지 않은 발행자" 경고**가 표시됩니다. 무시하고 설치
-> 가능합니다.
->
+- 한국어 우선 + 영어 i18n (v0.11.0)
+- 슬래시 명령 7종 + 사용자 지정 단축키 (v0.5.0 + v0.10.0)
+- @ 멘션 typed file references — chip 표시 + FTS5 검색 인덱싱 (v0.6.0 + v0.13.0)
+- Cross-AI Compare — Claude vs Codex 동시 실행 + diff (v0.12.0)
+- FTS5 채팅 검색 (v0.7.0)
+- Usage 추적 + 비용 한도 + CSV 내보내기 (v0.4.0 + v0.9.0)
+- MCP Bridge + 자동 discovery (v0.2.0 + v0.9.0)
+- 4-tier sandbox 권한 모델 + 30+ capability (v0.1.0)
+- 자가 진단 도구 + ABI 영구 안정화 (v0.14.0)
+
+### Phase 진척
+
+```
+Phase 1 — Foundation (v0.1.0 ~ v0.1.2)             COMPLETE
+Phase 2 — MCP + Onboarding (v0.2.0 ~ v0.3.0)       COMPLETE
+Phase 3 — Features (v0.4.0 ~ v0.7.0)               COMPLETE
+Phase 4 — Polish (v0.8.0 ~ v0.14.0)                COMPLETE
+Phase 5 — Code Signing (v1.0.1+)                   AWAITING USER ACTION
+```
+
+> **v1.0.0 unsigned build 우회**:
 > - **macOS**: `시스템 환경설정 → 보안 및 개인정보 보호 → "확인 없이 열기"`
 > - **Windows**: `더 많이 → 실행` (SmartScreen 우회)
+> - **Linux**: AppImage / deb 모두 표준 코드 서명 없음 (정상)
 >
-> Production-grade signed build 는 v1.0.0 이후 예정. 현재는 Phase 4 / Phase 5
-> 작업 중인 0.x experimental 단계입니다 (SemVer 0.x — breaking change 가능).
+> 인증서 매입 후 secrets 등록은 [docs/code-signing.md](./docs/code-signing.md) 참조.
 
 ---
 
@@ -137,60 +152,67 @@ npm      >= 10.0
 OS       Windows 10+ / macOS 12+ / Linux (Ubuntu 22+)
 ```
 
-### 진행 상황
+### 진행 상황 (v1.0.0)
 
 ```
-✅ Day 1-7: scaffold + UI 토대 + IPC + IME-safe 입력
+✅ Phase 1 — Foundation (v0.1.0 ~ v0.1.2)
    Electron 33 + Vite 6 + React 18 + TypeScript 5.6 strict
-   Tailwind 3.4 + Pretendard (한국어 우선)
-   3-패널 layout + ChatInput (compositionStart/End 안전)
-   181 spec docs (session/permission/tools/ux/design/...)
+   SQLite (better-sqlite3 + WAL + FTS5) — 5 migrations
+   Multi-window leader election (heartbeat + TTL)
+   Provider Adapter (Claude/Codex/Mock streaming)
+   Tool Queue + 30+ capability + 4-tier sandbox
+   BrowserView + partition isolation
+   v0.1.0 Linux+Win unsigned early adopter
+   v0.1.1 macOS DMG race fix (Issue #1)
+   v0.1.2 ABI 자동 토글 + branded icons
 
-✅ Phase 1 P0: 백엔드 토대
-   ✓ PM-3 Permission resolver (5단계 우선순위) + PM-9 위험 패턴   6a687a3
-   ✓ SS-4 SessionStore (better-sqlite3 + WAL + 마이그레이션)        62e2722
-   ✓ SS-6 Provider Adapter (Claude/Codex/Mock streaming)           3b2c832
-   ✓ TO-4 Tool Queue + shell.run + permission 통합                 33978d0
-   ✓ ChatPanel streaming (▋ 펄싱 + char-by-char + auto-scroll)     8557c17
+✅ Phase 2 — MCP + Onboarding (v0.2.0 ~ v0.3.0)
+   v0.2.0 MCP Bridge MVP (stdio JSON-RPC)
+   v0.3.0 Onboarding 5-step wizard
 
-✅ Phase 1 P1: production 와이어업
-   ✓ P1-1 Sidebar branded SessionId fix                            168727c
-   ✓ P1-2 SessionStore main process IPC 통합                       d4bb7f0
-   ✓ P1-3 Tool result inline display (ToolCallCard)                efc084e
-   ✓ P1-6 SS-5 Multi-window leader election (heartbeat + TTL)      bd16169
-   ✓ P1-5 BrowserView (WebContentsView + partition isolation)      4e77430
-   ✓ P1-4 real CLI subprocess (Claude/Codex spawn + JSONL)         49f2a4a
+✅ Phase 3 — Features (v0.4.0 ~ v0.7.0)
+   v0.4.0 Usage/Cost Tracking
+   v0.5.0 Slash commands (7 명령 + IME-safe)
+   v0.6.0 @ 멘션 (file + session)
+   v0.7.0 Chat Search (FTS5)
 
-✅ Phase 2 V1+V5: 검증 phase
-   ✓ V1 production build 가능 + Electron 실행 검증 (3 build 버그)   7bf1911
-   ✓ V5 real CLI JSONL 형식 보정 (P1-4 추측 → 검증된 형식)          5369f66
+✅ Phase 4 — Polish (v0.8.0 ~ v0.14.0)
+   v0.8.0 Settings & Permissions (7 tabs)
+   v0.9.0 Usage CSV/charts/limits + MCP discovery
+   v0.10.0 Keyboard shortcuts (Cmd+K/U/, etc)
+   v0.11.0 English i18n
+   v0.12.0 Cross-AI Verify/Compare
+   v0.13.0 Typed file references
+   v0.14.0 ABI hardening + 자가 진단
 
-⏳ Phase 2 진행 중 (수동 검증 권장):
-   ⏳ V2 E2E 첫 채팅 흐름 — npm run dev 후 사용자 직접 클릭 검증
-   ⏳ V3 Tool call 실제 실행 — 사용자 직접 prompt 입력 검증
-   ⏳ V4 BrowserView example.com 로드 — 사용자 직접 URL 입력 검증
-   ⏳ V6 ABI 토글 영구 해결 (sql.js WASM 또는 node:sqlite migration)
+⏳ Phase 5 — Code Signing (v1.0.1+) — 사용자 액션 대기
+   ⏳ Win EV Code Signing Cert ($300-400/년) 매입 + secrets 등록
+   ⏳ Apple Developer Program ($99/년) 가입 + secrets 등록
+   ⏳ secrets 등록 후 다음 tag push 부터 자동 활성화
+   세부: docs/code-signing.md
 ```
 
-### 검증 현황
+### 검증 현황 (v1.0.0)
 
 ```
-684 tests pass (vitest, mocked I/O)
-0 typecheck errors
-production build 성공 (vite + electron-builder)
-Electron 창 실제 부팅 확인 (V1 commit 에서 검증)
-Claude CLI v2.1.123 + Codex CLI v0.125.0 출력 캡처 → translate 보정 (V5)
+1421+ tests pass (vitest, mocked I/O)
+28+ Playwright E2E (실제 Electron 부팅)
+0 typecheck errors / 0 lint errors
+5 SQLite migrations applied
+9 IPC namespace (settings/auth/session/llm/tool/browser/mcp/usage/compare)
+production build 성공 (vite + electron-builder, 13 artifacts)
+Code-signing 인프라 검증 (secrets 등록 시 즉시 활성화)
 ```
 
-### 알려진 한계
+### v1.0.0 알려진 제한
 
 ```
-1. Mock 응답 = "Mock response. You said: ..." (echo).
+1. Unsigned build — SmartScreen / Gatekeeper 경고 표시.
+   → v1.0.1 부터 cert 등록 후 해결 (사용자 액션 대기).
+   세부: docs/code-signing.md
+
+2. Mock 응답 = "Mock response. You said: ..." (echo).
    진짜 응답은 CLI 인증 (claude /login, codex login) 후 사용 가능.
-
-2. ~~better-sqlite3 dual-ABI 토글 필요 (위 rebuild 명령).~~
-   → v0.14.0 부터 자동 (`predev` / `pretest` hook + cache + `postinstall`).
-   문제 시 `npm run diagnose` 또는 Settings → 진단 탭.
 
 3. CLI translate 의 Codex function_call 매핑은 best-effort.
    실제 tool 호출 응답이 캡처되면 보정 필요.
@@ -202,12 +224,12 @@ Claude CLI v2.1.123 + Codex CLI v0.125.0 출력 캡처 → translate 보정 (V5)
    단위 테스트. 진짜 두 Electron 윈도우는 검증 안 됨.
 ```
 
-🚀 다음 후보 (Phase 2 + Phase 3):
-  - V2-V4 수동 시각 검증 (사용자 환경에서 npm run dev:rebuild && npm run dev)
-  - V6 sql.js WASM 또는 node:sqlite 마이그레이션 (dual-ABI 영구 해결)
-  - DOM Inspector / Annotation 모드 (BrowserView P2 기능)
-  - Onboarding 5-step UI (CLI 감지 + 설치 안내 → first-chat)
-  - Plugin / MCP Bridge / Skill Loader (TO-8/9/10)
+다음 후보 (v1.0.1+):
+  - 코드 서명 인증서 등록 (Win EV cert + Apple Dev ID) → signed release
+  - 다국어 확장 (일본어, 중국어 — i18n 인프라 v0.11.0 에 이미 준비)
+  - Plugin Loader (현재는 MCP Bridge 만)
+  - DOM Inspector / Annotation 모드 (BrowserView P2)
+  - Linux 코드 서명 (sigstore / GPG)
 
 핵심 spec: [docs/session/_index.md](./docs/session/_index.md), [CODEX_SELF_ADVICE.md](./CODEX_SELF_ADVICE.md).
 
@@ -421,36 +443,29 @@ GitHub Releases 채널 폴링. 자세한 절차 (secrets, 아이콘, 버전 bump
 
 ---
 
-## ⚖️ 라이선스 / 법적
+## 라이선스 / 법적
 
 - **라이선스**: [Apache 2.0](./LICENSE) (확정)
 - **subprocess 호출만** → 두 회사 라이선스 위반 X
-- **EV cert (signing)**: v1.0.0 진입 시 도입 예정. v0.x 는 unsigned.
+- **코드 서명**: v1.0.0 unsigned (인프라 준비 완료). v1.0.1+ 부터 signed
+  ([docs/code-signing.md](./docs/code-signing.md))
 - **사용자 자체 API 키 / CLI 인증 사용** — 토큰 저장 X
 
 ---
 
-## ❓ 다음 단계 (사용자 결정)
+## v1.0 발표 자료
 
-### 분석 완료 (라운드 1~5)
-- ✅ 정적 분석 (codex-spec.md 4,002줄, claude-spec.md 2,372줄)
-- ✅ 라이브 UX 탐색 (28 패턴, 169 캡처)
-- ✅ 디스크 forensics (MSIX, plugin.json, IPC schema 등)
-- ✅ Codex 자체 조언 받음
-- ✅ 3개 핵심 contract 작성 (2,885줄)
+v1.0.0 release 후 OSS community 에 공유:
 
-### 현재 시점에서 결정할 것
+- [docs/announcement/hackernews.md](./docs/announcement/hackernews.md) — Show HN 포스트 초안
+- [docs/announcement/reddit.md](./docs/announcement/reddit.md) — r/programming + r/MachineLearning
+- [docs/announcement/producthunt.md](./docs/announcement/producthunt.md) — Product Hunt 등록
+- [docs/announcement/discord-launch.md](./docs/announcement/discord-launch.md) — Discord / 한국 OSS 커뮤니티
 
-1. **GitHub repo 생성** (`<username>/dreampia-dev` 또는 `dreampia-org/dev`)
-2. **라이선스 선택** (Apache 2.0 vs MIT)
-3. **Phase 1 시작 시점**
-4. **Dreampia 기존 프로젝트와의 통합 수준**
-5. **첫 작업 선택지**:
-   - **A. Contract 검토** — Critic agent 에게 SESSION_STATE/PERMISSION/TOOL contract 비판적 검토 요청
-   - **B. 5개 영역 추가 spec** — Codex 가 권한 5개 중 남은 2개 (플러그인 생명주기, 관찰 가능성 UX)
-   - **C. UI/UX 5개 spec** — 1500+ 줄 분량 별도 산출
-   - **D. Phase 1 구현 시작** — 스캐폴드 + SS-1~5 구현
-   - **E. asar 추출** (Codex 비추천이지만 reference 용도)
+기여 / 피드백:
+- GitHub: https://github.com/eonofpixel/dreampia-dev
+- Issue / Discussion 환영
+- Apache 2.0 license
 
 ---
 

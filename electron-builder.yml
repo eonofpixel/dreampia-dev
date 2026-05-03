@@ -23,6 +23,23 @@ asarUnpack:
 # macOS ICNS: electron-builder 가 build/icon.png 로부터 자동 변환
 # (별도 .icns commit 불필요 — local 에선 icon.png + icon.ico 만 commit).
 
+# === Code Signing — v1.0.0 인증서 활성화 가이드 ===
+# v0.1.0 ~ v1.0.0: secrets 미설정 → unsigned silent skip (빌드 자체는 성공).
+# v1.0.1+: 사용자가 secrets 등록 후 다음 tag push 부터 자동 활성화.
+#
+# Required GitHub Secrets (release.yml 에서 환경 변수로 export):
+#   Windows:
+#     WIN_CSC_LINK              .pfx 인증서 base64 (한 줄, 줄바꿈 X)
+#     WIN_CSC_KEY_PASSWORD       인증서 export password
+#   macOS:
+#     MAC_CSC_LINK              .p12 인증서 base64
+#     MAC_CSC_KEY_PASSWORD       .p12 export password
+#     APPLE_ID                   Apple Developer 계정 이메일
+#     APPLE_APP_SPECIFIC_PASSWORD app-specific password (xxxx-xxxx-xxxx-xxxx)
+#     APPLE_TEAM_ID              10자리 Team ID
+#
+# 자세한 가이드: docs/code-signing.md
+
 # === Windows ===
 win:
   icon: build/icon.ico
@@ -31,14 +48,15 @@ win:
       arch: [x64]
   artifactName: 'Dreampia-Dev-${version}-${arch}.${ext}'
   publisherName: 'Dreampia'
-  # signing: env vars WIN_CSC_LINK + WIN_CSC_KEY_PASSWORD (release.yml 에서 매핑).
-  # electron-builder 는 CSC_LINK / CSC_KEY_PASSWORD 를 읽으므로 release.yml
-  # 의 windows job 에서만 그 이름으로 export.
+  # release.yml 의 windows job 에서 WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD 를
+  # CSC_LINK / CSC_KEY_PASSWORD 로 export → electron-builder 자동 감지.
+  # secrets 미설정 시 SignTool 호출 자체를 skip (silent unsigned build).
   signingHashAlgorithms: ['sha256']
   signDlls: false
-  # ★ verifyUpdateCodeSignature: v0.x = false (unsigned 허용),
-  #   v1.0+ EV cert 도입 후 true 로 토글. true 시 electron-updater 가
-  #   업데이트 서명 검증 강제 → 인증서 변경/만료 시 자동 업데이트 실패.
+  # ★ verifyUpdateCodeSignature: v0.x ~ v1.0.0 = false (unsigned 허용).
+  #   v1.0.1+ EV cert 안정화 후 true 로 토글 권장. true 시 electron-updater
+  #   가 업데이트 서명 검증 강제 → 인증서 변경/만료 시 자동 업데이트 실패.
+  #   첫 signed release (v1.0.1) 부터 1주일 안정화 후 true 권장.
   verifyUpdateCodeSignature: false
 
 nsis:
@@ -59,21 +77,22 @@ mac:
       arch: [x64, arm64]
   category: public.app-category.developer-tools
   artifactName: 'Dreampia-Dev-${version}-${arch}.${ext}'
-  # ★ identity: null → CSC_LINK 없을 때 unsigned build 강제 (v0.x 패턴).
-  #   v1.0+ Apple Developer ID 매입 후 identity 항목 제거 + notarize: true.
-  #   현재는 unsigned 라 hardenedRuntime / entitlements 모두 무의미하지만
-  #   v1.0+ 로 가는 path 명시 위해 그대로 유지.
+  # ★ identity: null → CSC_LINK 없을 때 unsigned build 강제 (v0.x ~ v1.0.0).
+  #   v1.0.1+ Apple Developer ID 매입 후 이 항목 제거 (또는 실제 Common Name
+  #   "Developer ID Application: <Name> (<TEAM_ID>)" 로 변경) + notarize: true.
+  #   현재는 unsigned 라 hardenedRuntime / entitlements 가 작동하지 않지만
+  #   v1.0.1+ 로 가는 path 명시 위해 그대로 유지 — 코드 변경 없이 secrets 등록
+  #   만으로 활성화되는 구조.
   identity: null
-  hardenedRuntime: true              # required for notarization (v1.0+)
+  hardenedRuntime: true              # required for notarization (v1.0.1+)
   gatekeeperAssess: false             # allow re-signing
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
-  # ★ notarize: v0.x = false (Apple credentials 없을 때).
-  #   v1.0+ Apple Developer Program ($99/년) 가입 후 true.
+  # ★ notarize: v0.x ~ v1.0.0 = false (Apple credentials 없을 때).
+  #   v1.0.1+ Apple Developer Program ($99/년) 가입 후 true.
   #   true 시 release.yml 의 macos job 이 APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD
-  #   + APPLE_TEAM_ID env 사용해 notarytool 호출.
+  #   + APPLE_TEAM_ID env 사용해 notarytool 호출 (5-15분 대기 + stapling).
   notarize: false
-  # signing: env vars MAC_CSC_LINK + MAC_CSC_KEY_PASSWORD (release.yml 에서 매핑)
 
 dmg:
   sign: false                        # not required (the .app inside is signed)
@@ -95,6 +114,8 @@ linux:
     Name: Dreampia-Dev
     Comment: AI coding desktop wrapper
     Categories: Development;IDE;
+  # Linux 에는 표준 코드 서명이 없음 (AppImage / deb 모두 unsigned 가 기본).
+  # GPG 서명은 별도 단계 — v1.x 에선 도입 안 함. sigstore 도 검토 가능.
 
 # === Auto-updater channel meta ===
 # release.yml 의 publish job 이 GitHub Release 생성 + asset upload 를 담당.

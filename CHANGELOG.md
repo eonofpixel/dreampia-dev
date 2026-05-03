@@ -2,6 +2,121 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.0.0] — 2026-05-03
+
+**Production Release — feature complete, production-ready 한국어 우선
+오픈소스 AI 코딩 데스크톱.**
+
+v0.1.0 부터 v0.14.0 까지 14개 minor release 누적 위에 빌드 된 안정 버전입니다.
+일반 사용자 대상 배포 가능. Codex 자체 조언으로 v1.0 정의 = "코드 서명, clean
+install/upgrade smoke, packaged app 검증, 릴리스 노트/발표까지 묶는 최종 인증서
+릴리스" — 인증서 매입은 사용자 액션 (Phase 5) 으로 분리하고 v1.0.0 자체는
+**unsigned production release** 로 발행. 인증서 등록 후 v1.0.1 부터 자동 활성화.
+
+### 핵심 가치 (v0.1.0 → v1.0.0 누적)
+
+#### Phase 1 — Foundation (v0.1.0 ~ v0.1.2)
+
+- Electron 33 + Vite 6 + React 18 + TypeScript 5.6 strict
+- SQLite (better-sqlite3 + WAL + FTS5) — 5 migrations
+- Multi-window leader election (heartbeat + TTL)
+- Provider Adapter (Claude/Codex/Mock streaming)
+- Tool Queue + 30+ capability + 4-tier sandbox
+- BrowserView + partition isolation
+- v0.1.0 — Linux+Win unsigned early adopter
+- v0.1.1 — macOS DMG race condition fix (2-stage publish, Issue #1)
+- v0.1.2 — ABI 자동 토글 (`predev`/`pretest` hook) + branded icons (SVG → PNG/ICO)
+
+#### Phase 2 — MCP + Onboarding (v0.2.0 ~ v0.3.0)
+
+- v0.2.0 — MCP Bridge MVP (stdio JSON-RPC, ready/disabled/error status)
+- v0.3.0 — Onboarding 5-step wizard (welcome / CLI / auth / workspace / first-chat)
+
+#### Phase 3 — Core Features (v0.4.0 ~ v0.7.0)
+
+- v0.4.0 — Usage / Cost Tracking (Claude/Codex/Mock provider 분리)
+- v0.5.0 — Slash commands (7 명령 + IME-safe + Cmd+K 팔레트)
+- v0.6.0 — `@` 멘션 (file + session reference)
+- v0.7.0 — Chat Search (FTS5 인덱싱)
+
+#### Phase 4 — Polish (v0.8.0 ~ v0.14.0)
+
+- v0.8.0 — Settings & Permissions (7 tabs: MCP / 사용량 / Provider / 권한 / 테마 / 단축키 / 온보딩)
+- v0.9.0 — Usage CSV 내보내기 + 차트 + 비용 한도 + MCP 자동 discovery
+- v0.10.0 — 사용자 지정 키보드 단축키 (Cmd+K/U/, etc)
+- v0.11.0 — English i18n (vendor-free `t()` runtime)
+- v0.12.0 — Cross-AI Verify/Compare (Claude vs Codex 동시 실행 + diff)
+- v0.13.0 — Typed file/session reference blocks (chip 표시 + 백워드 호환)
+- v0.14.0 — better-sqlite3 ABI 영구 안정화 + 자가 진단 도구 (`npm run diagnose`)
+
+### v1.0.0 신규 추가 사항
+
+- **Settings → 정보 (About) 탭** (`AboutPanel.tsx`) — 앱 이름 / 버전 / 라이선스 /
+  GitHub repo / 코드 서명 status / 자동 업데이트 status. v1.0 사용자가 한 곳에서
+  앱 정체성 + signing 상태 확인 가능. i18n ko/en 완전 지원.
+- **`docs/code-signing.md`** — Win EV cert + Apple Dev ID 매입부터 GitHub Secrets
+  등록까지 한국어 종합 가이드. 비용, 단계별 명령어, 검증 체크리스트, 트러블슈팅
+  포함. 사용자가 인증서 매입 후 secrets 만 등록하면 다음 tag push 부터 자동 활성화.
+- **`.github/ISSUE_TEMPLATE/smoke-matrix.md` v1.0 강화** — 17 단계 (다운로드 →
+  설치 → 첫 실행 → onboarding → 첫 채팅 → 종료/재시작 → 자동 업데이트 → 단축키 →
+  슬래시 → 멘션 → compare → 검색 → usage → MCP → BrowserView → i18n → 진단 →
+  about → 위험 차단). 사용자 환경 정보 + 발견 이슈 자유 기재 영역.
+- **발표 자료 4종** — `docs/announcement/{hackernews,reddit,producthunt,discord-launch}.md`.
+  Hacker News (Show HN, 150자 영문), Reddit (r/programming + r/MachineLearning,
+  영문/한국 OSS), Product Hunt (영문 + 사진 placeholder), Discord (한국 OSS
+  커뮤니티). 각 플랫폼 톤 + 글자수 제약 준수.
+- **`electron-builder.yml` 주석 강화** — secrets 미설정 시 unsigned silent skip,
+  v1.0+ 인증서 활성화 시 토글할 항목 (identity, notarize, verifyUpdateCodeSignature)
+  명확화. Win publisherName + macOS hardened runtime 표기 강화.
+- **README v1.0 production banner** — "v0.1.2 Unsigned Early Adopter" → "v1.0.0
+  Production Release" 변경. Phase 진척 5단계로 재구성 (Phase 1~4 ✅ 완료, Phase 5
+  사용자 액션 대기). 발표 자료 4종 link 섹션 추가.
+- **`package.json`** — version 0.14.0 → **1.0.0** ⭐
+- **i18n keys (ko/en 각 12개)** — `settings.tab.about` + `settings.about.*` (title,
+  description, app_name, version, license, repository, signing.signed/unsigned,
+  auto_update.enabled/disabled, build_date 등).
+
+### Tests (~9 new specs)
+
+- **`tests/renderer/AboutPanel.test.tsx` — 9 spec.** 정상 렌더 / 앱 이름 +
+  버전 표시 / 라이선스 표시 / GitHub repo link present / 코드 서명 status default
+  (unsigned) 표시 / 자동 업데이트 status / 한국어 → 영어 i18n 토글 / panel testid
+  안정성 / 빌드 일자 항목 존재.
+
+### Migration / Compatibility
+
+- **DB 스키마 변경 없음.** 5 migrations 그대로 (v0.14.0 와 동일).
+- **Settings 탭 추가** — 'about' 탭이 'diagnose' 와 'onboarding' 사이에 삽입.
+  기존 사용자의 활성 탭 영향 X.
+- **package.json version pin** — `better-sqlite3@12.9.0` (v0.14.0 부터 caret
+  제거 유지) — ABI 변동 0.
+- **Rollback path:** package.json 0.14.0 으로 되돌리고 AboutPanel import 제거.
+  i18n key fallback 으로 안전 (모르는 key 는 key 자체 표시).
+
+### v1.0.0 검증
+
+- `npm run typecheck` — 0 errors
+- `npm run lint` — 0 errors / warnings
+- `npm test` — **1430 passed** (1421 baseline + 9 new)
+- 5 SQLite migrations applied
+- 9 IPC namespace (settings/auth/session/llm/tool/browser/mcp/usage/compare)
+- 8 IPC handlers (workspace/list-files/read-file 등)
+- production build 성공 (vite + electron-builder, 13 artifacts)
+- Code-signing 인프라 검증 (secrets 등록 시 즉시 활성화)
+
+### v1.0.0 알려진 제한
+
+- **Unsigned**: cert 매입 전까지 SmartScreen / Gatekeeper 경고 (v1.0.1 에서 해결)
+- **자동 업데이트**: 작동하지만 v1.0 → v1.0.1 (signed) 전환 시 한 번 manual install
+  필요할 수 있음 (signature mismatch 우회용)
+
+### 기여 / 발표
+
+- GitHub: https://github.com/eonofpixel/dreampia-dev
+- Issue / Discussion 환영
+- Apache 2.0 license
+- 발표 자료: `docs/announcement/`
+
 ## [0.14.0] — 2026-05-03
 
 **Hardening release — A better-sqlite3 ABI 영구 안정화 + 사용자 자가 진단.**
