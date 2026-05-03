@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v0.1.0-test). Will be checked out — must already exist as a git tag.'
+        description: 'Release tag (e.g. v0.1.1-rc1). Will be checked out — must already exist as a git tag.'
         required: true
         type: string
 
@@ -21,8 +21,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Build + Release (${{ matrix.os }})
+  # ─────────────────────────────────────────────────────────────────────────
+  # Stage 1: build per OS, artifact upload only — no GitHub Release creation.
+  # 각 OS 가 자기 platform 의 installer/dmg/AppImage 만 빌드해서 artifact 로
+  # 올린다. GitHub Release 생성 + asset upload 는 다음 publish job 이 일괄
+  # 처리 (race condition 회피 — 이전 패턴은 3 OS 가 동시에 release create 시도해
+  # 두번째 OS 부터 422 already_exists 에러로 macOS DMG 누락됐다).
+  # ─────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
 
@@ -79,46 +86,137 @@ jobs:
         run: npx vite build
 
       # === Per-platform packaging + signing ===
-      # Win/macOS code-signing secrets are platform-specific so both flows can
-      # coexist (이전엔 CSC_LINK / CSC_KEY_PASSWORD 가 공유돼서 한쪽만 가능).
-      # 또한 각 OS 가 자기 타겟만 빌드 (--win/--mac/--linux) — universal 빌드보다
-      # 빠르고, electron-builder 가 OS 별 native dep 를 자동 처리한다.
+      # ★ KEY CHANGE vs. v0.1.0: --publish never (build artifacts only).
+      #   Win/macOS code-signing secrets 는 platform 별로 분리 (공유 X) —
+      #   이전 패턴 그대로. 각 OS 가 release/ 디렉토리에 자기 artifact 만
+      #   생성한 뒤 actions/upload-artifact 로 다음 stage 에 전달.
 
-      - name: Package + Publish (electron-builder, Windows)
+      - name: Package (Windows, no publish)
         if: matrix.os == 'windows-latest'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-        run: npx electron-builder --win --publish always
+        run: npx electron-builder --win --publish never
 
-      - name: Package + Publish (electron-builder, macOS)
+      - name: Package (macOS, no publish)
         if: matrix.os == 'macos-latest'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npx electron-builder --mac --publish always
+        run: npx electron-builder --mac --publish never
 
-      - name: Package + Publish (electron-builder, Linux)
+      - name: Package (Linux, no publish)
         if: matrix.os == 'ubuntu-latest'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --linux --publish always
+        run: npx electron-builder --linux --publish never
 
-      - name: Upload artifacts (manual workflow_dispatch only)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Upload artifacts (per OS)
         uses: actions/upload-artifact@v4
         with:
           name: dreampia-dev-${{ matrix.os }}
           path: |
             release/*.exe
+            release/*.exe.blockmap
             release/*.dmg
+            release/*.dmg.blockmap
             release/*.AppImage
             release/*.deb
             release/*.zip
-            release/*.yml
-          retention-days: 14
+            release/latest*.yml
+          retention-days: 7
+          if-no-files-found: warn
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Stage 2 (push): collect all OS artifacts → single atomic GitHub Release.
+  # publish job 이 끝까지 한 번에 처리하므로 422 already_exists race 없음.
+  # ─────────────────────────────────────────────────────────────────────────
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts/
+          # 각 OS artifact 가 별도 dir 로 다운로드됨:
+          # release-artifacts/dreampia-dev-windows-latest/...
+          # release-artifacts/dreampia-dev-macos-latest/...
+          # release-artifacts/dreampia-dev-ubuntu-latest/...
+
+      - name: Flatten artifacts into single dir
+        run: |
+          mkdir -p release-final
+          find release-artifacts/ -type f \( \
+            -name '*.exe' -o \
+            -name '*.exe.blockmap' -o \
+            -name '*.dmg' -o \
+            -name '*.dmg.blockmap' -o \
+            -name '*.AppImage' -o \
+            -name '*.deb' -o \
+            -name '*.zip' -o \
+            -name 'latest*.yml' \
+          \) -exec cp {} release-final/ \;
+          echo '── release-final/ contents ──'
+          ls -la release-final/
+        shell: bash
+
+      - name: Extract tag name + version
+        id: tag
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "name=${TAG}" >> "$GITHUB_OUTPUT"
+          # version 추출 (v0.1.0 → 0.1.0)
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Create GitHub Release + upload all artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 이미 release 가 있으면 add-on (re-run 안전), 없으면 새로 생성.
+          # --clobber 로 동일 파일명 덮어쓰기 — partial upload 후 재시도 시 멱등성 보장.
+          if gh release view "${{ steps.tag.outputs.name }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release ${{ steps.tag.outputs.name }} already exists — uploading additional artifacts."
+            gh release upload "${{ steps.tag.outputs.name }}" release-final/* \
+              --repo "${{ github.repository }}" \
+              --clobber
+          else
+            echo "Creating new release ${{ steps.tag.outputs.name }}."
+            gh release create "${{ steps.tag.outputs.name }}" release-final/* \
+              --repo "${{ github.repository }}" \
+              --title "${{ steps.tag.outputs.version }}" \
+              --notes "Auto-generated by release.yml. Edit notes via 'gh release edit ${{ steps.tag.outputs.name }}'."
+          fi
+        shell: bash
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Stage 2b (workflow_dispatch): artifacts only, no GitHub Release.
+  # 진짜 release 발행은 push trigger 만 — dispatch 는 dry-run 검증용.
+  # 14일 보존 후 자동 삭제.
+  # ─────────────────────────────────────────────────────────────────────────
+  artifact-only:
+    name: Upload artifacts (manual dispatch)
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 5
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts/
+
+      - name: List artifacts (sanity check)
+        run: |
+          find release-artifacts/ -type f -exec ls -la {} \;
+          echo '── workflow_dispatch artifacts available in this run for 14 days. ──'
+        shell: bash

@@ -85,9 +85,15 @@ linux:
     Comment: AI coding desktop wrapper
     Categories: Development;IDE;
 
-# === Auto-updater ===
+# === Auto-updater channel meta ===
+# release.yml 의 publish job 이 GitHub Release 생성 + asset upload 를 담당.
+# electron-builder 의 publish 는 latest.yml / latest-mac.yml / latest-linux.yml
+# 형식 결정에만 사용 (실제 업로드는 build artifact 로 → publish job 의 gh CLI).
+# v0.1.0 의 race condition (3 OS 동시 release create → 422) 회피용.
+#
+# provider/owner/repo: electron-updater 가 update channel 식별에 사용 → 유지.
+# releaseType: 의미 없음 (release.yml 의 gh CLI 가 직접 결정) — 제거.
 publish:
   provider: github
   owner: eonofpixel
   repo: dreampia-dev
-  releaseType: release   # not 'draft' — direct publish on tag

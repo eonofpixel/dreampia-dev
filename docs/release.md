@@ -2,14 +2,20 @@
 title: Release Process
 parent: ../README.md
 status: stable
-last_updated: 2026-05-03
+last_updated: 2026-05-02
 ---
 
 # Release 프로세스
 
 ## 한 줄 요약
 
-`v0.1.0` 같은 git tag push → GitHub Actions 자동 빌드 (Win/macOS/Linux) → GitHub Release 발행.
+`v0.1.1` 같은 git tag push → GitHub Actions 2-stage 파이프라인:
+1. **Stage 1 (build matrix)**: 3 OS 가 병렬로 artifact 만 빌드 (`--publish never`)
+2. **Stage 2 (publish job)**: 모든 artifact 를 한 곳에 모아 GitHub Release 단일 atomic 생성
+
+> **v0.1.0 의 race condition 수정** (Issue #1): 이전엔 3 OS 가 동시에 release
+> create 시도 → 두번째부터 422 already_exists 에러 → macOS DMG 누락. 이제는
+> publish job 만 release 를 만들어 race 없음.
 
 ## 첫 release 전 체크리스트 (v0.1.0)
 
@@ -83,35 +89,42 @@ npm version minor   # 0.1.0 → 0.2.0 (기능 추가)
 git push origin main --follow-tags
 ```
 
-### 4. workflow_dispatch (수동 테스트 — 첫 release 전 권장)
+### 4. workflow_dispatch (수동 테스트 — release 발행 X, artifact 만)
 
-★ **첫 release 전 dry-run 권장**: 진짜 tag push 전 `release.yml` 이 정상
-   동작하는지 검증. unsigned + secrets 없는 환경에서도 빌드 자체는 성공해야
-   함.
+★ **dry-run 검증 전용**: 진짜 tag push 전 `release.yml` 이 정상
+   동작하는지 검증. **GitHub Release 는 발행되지 않음** — Actions 의 artifact
+   탭에서 zip 으로만 다운로드 가능. 14일 후 자동 삭제.
 
 ```bash
 # 1. dry-run 용 tag (실제 release 와 분리)
-git tag -a v0.1.0-rc1 -m 'Dry-run for v0.1.0'
-git push origin v0.1.0-rc1
+git tag -a v0.1.1-rc1 -m 'Dry-run for v0.1.1'
+git push origin v0.1.1-rc1
 
 # 2. GitHub Actions UI:
 #    Repository → Actions → Release workflow → Run workflow 버튼
-#    Branch: main, tag input: v0.1.0-rc1
+#    Branch: main, tag input: v0.1.1-rc1
 #    → 60분 내 빌드 완료 (3 OS matrix)
+#    → publish job 은 skip (workflow_dispatch 면 artifact-only job 만 실행)
 
-# 3. 실패 시:
-#    - artifact 로그 확인
+# 3. artifact 확인:
+#    Actions UI → 해당 workflow run → Artifacts 섹션 (페이지 하단)
+#    dreampia-dev-windows-latest.zip / dreampia-dev-macos-latest.zip /
+#    dreampia-dev-ubuntu-latest.zip 다운로드 → 로컬에서 sanity check.
+
+# 4. 실패 시:
+#    - 빌드 로그 확인
 #    - release.yml 수정 → push → 재실행
-#    - dry-run tag 삭제 가능: git tag -d v0.1.0-rc1 && git push origin :refs/tags/v0.1.0-rc1
+#    - dry-run tag 삭제 가능: git tag -d v0.1.1-rc1 && git push origin :refs/tags/v0.1.1-rc1
 
-# 4. 성공 시:
-#    - 진짜 v0.1.0 tag push
+# 5. 성공 시:
+#    - 진짜 v0.1.1 tag push (push trigger → publish job 까지 실행)
 #    - GitHub Release 자동 발행
-
-# Tip: workflow_dispatch 는 GitHub Release 를 항상 발행하지 않고
-# artifacts 만 14일 보존 (release.yml `if: workflow_dispatch` 분기).
-# 진짜 release 는 push trigger (`tags: v*`) 로만 발행됨.
 ```
+
+> ★ **v0.1.0 와의 차이**: 이전엔 `tags: v*` 패턴이라 `v0.1.0-rc1` 도
+> push 시 자동 release 발행됐다. 이제 dispatch trigger 는 publish job 자체를
+> skip 하므로 rc tag 도 안전하게 push 가능 (단 push trigger 는 여전히 모든
+> `v*` 에 동작 — rc tag 자동 release 회피하려면 부록 참고).
 
 ### 5. v0.1.0 unsigned early adopter release
 
@@ -165,6 +178,35 @@ dev/e2e 환경 (`app.isPackaged === false`) 에선 early return 이라 영향 X.
 - 빌드 시간 단축 (한 OS 가 3-OS universal 빌드 안함)
 - electron-builder 가 OS-native dep 만 처리하면 됨
 - code-signing secret 누설 면 축소 (Win 잡엔 mac secret 미주입)
+
+## 2-stage publish 파이프라인
+
+`release.yml` 은 push 시 두 stage 로 직렬화된다:
+
+### Stage 1 — `build` (matrix, parallel)
+
+3 OS (windows-latest / macos-latest / ubuntu-latest) 가 병렬로:
+1. checkout + node + deps + native rebuild
+2. typecheck / lint / unit test
+3. `npx vite build`
+4. `npx electron-builder --<platform> --publish never` ← **artifact 만 생성, release 발행 X**
+5. `actions/upload-artifact@v4` 로 release/ dir 의 installer/dmg/AppImage/blockmap/latest*.yml 업로드
+
+### Stage 2 — `publish` (push trigger 만, atomic)
+
+`needs: build` 로 모든 OS 가 완료된 뒤 단일 ubuntu-latest 러너에서 실행:
+1. `actions/download-artifact@v4` 로 모든 OS artifact 다운로드 (각 OS 별 dir)
+2. flatten step 으로 `release-final/` 단일 dir 에 모음
+3. `gh release view` 로 기존 release 존재 여부 확인:
+   - 있으면 `gh release upload --clobber` (re-run 안전, 동일 파일 덮어쓰기)
+   - 없으면 `gh release create` 로 새로 생성하면서 모든 asset 한 번에 업로드
+4. → 422 race 없음 (단일 job 이 atomic 처리)
+
+### Stage 2b — `artifact-only` (workflow_dispatch 만)
+
+dispatch trigger 시 publish job 은 skip 되고 이 job 이 실행:
+- artifact 다운로드 + sanity check (ls -la)
+- GitHub Release 발행 X — Actions 의 artifact zip 으로 14일 보존만
 
 ## 관련
 
