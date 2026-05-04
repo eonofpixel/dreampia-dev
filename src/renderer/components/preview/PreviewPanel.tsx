@@ -178,6 +178,7 @@ function PreviewTabs({
         onClick={onNewTab}
         className="px-3 py-1.5 text-text-tertiary hover:bg-bg-tertiary"
         aria-label="새 탭"
+        data-testid="preview-new-tab"
       >
         <Plus className="h-3.5 w-3.5" />
       </button>
@@ -238,6 +239,7 @@ function BrowserControls({
         disabled={disabled || !activeTab?.can_go_back}
         className="rounded p-1.5 text-text-tertiary hover:bg-bg-tertiary disabled:opacity-30"
         aria-label="뒤로"
+        data-testid="preview-back"
       >
         <ArrowLeft className="h-4 w-4" />
       </button>
@@ -247,6 +249,7 @@ function BrowserControls({
         disabled={disabled || !activeTab?.can_go_forward}
         className="rounded p-1.5 text-text-tertiary hover:bg-bg-tertiary disabled:opacity-30"
         aria-label="앞으로"
+        data-testid="preview-forward"
       >
         <ArrowRight className="h-4 w-4" />
       </button>
@@ -256,6 +259,7 @@ function BrowserControls({
         disabled={disabled}
         className="rounded p-1.5 text-text-tertiary hover:bg-bg-tertiary disabled:opacity-30"
         aria-label="새로고침"
+        data-testid="preview-reload"
       >
         <RotateCw className="h-4 w-4" />
       </button>
@@ -389,6 +393,7 @@ function EmptyPreview({ onOpenDemo }: { onOpenDemo: () => void }): React.JSX.Ele
         type="button"
         onClick={onOpenDemo}
         className="mt-4 rounded-md border border-border-primary bg-bg-secondary px-3 py-1 text-xs text-text-primary hover:bg-bg-tertiary"
+        data-testid="preview-open-demo"
       >
         예시 URL 열기
       </button>

@@ -735,6 +735,10 @@ export function App(): React.JSX.Element {
     };
   }, [mentionWorkspaceRoot, getSession]);
 
+  // v1.0.6 — drift detection: ChatHeader 가 "이 세션이 처음 만들어진 폴더" 와
+  // "지금 작업 폴더" 가 다를 때 ⚠ badge 표시할 수 있도록 두 값 모두 전달.
+  const sessionWorkspaceName = activeSession?.workspace.name;
+
   // v1.0.5 — ChatHeader 의 workspace 라벨도 현재 작업 폴더 (defaultWorkspace) 만.
   // 사용자 입장에서 "현재 작업 폴더" 는 단일 컨셉 → sidebar/ChatHeader 모두 같은
   // 라벨 표시. 사용자가 폴더 변경 시 즉시 두 위치 갱신. session.workspace 는
@@ -1092,6 +1096,7 @@ export function App(): React.JSX.Element {
             onCancel={cancelStream}
             cliStatus={cliStatus}
             workspaceName={chatHeaderWorkspaceName}
+            {...(sessionWorkspaceName !== undefined && { sessionWorkspaceName })}
             onPickWorkspace={() => {
               void pickWorkspace();
             }}

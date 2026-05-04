@@ -117,6 +117,7 @@ export function Sidebar({
           onClick={onNewChat}
           className="flex w-full items-center gap-2 rounded-md px-3 py-2 font-medium hover:bg-bg-tertiary"
           aria-label={t('sidebar.new_chat')}
+          data-testid="sidebar-new-chat"
         >
           <Plus className="h-4 w-4" />
           <span>{t('sidebar.new_chat')}</span>
@@ -229,6 +230,7 @@ export function Sidebar({
           label={t('sidebar.settings')}
           shortcut="Ctrl+,"
           onClick={onOpenSettings}
+          testId="sidebar-open-settings"
         />
       </div>
     </aside>

@@ -53,6 +53,11 @@ export interface ChatPanelProps {
   cliStatus?: CliStatus;
   /** 현재 작업 폴더 이름 — header 의 [폴더 변경] 버튼 옆에 표시. */
   workspaceName?: string;
+  /**
+   * v1.0.6 — drift detection. 이 세션이 처음 만들어진 폴더의 이름.
+   * `workspaceName` (현재 작업 폴더) 와 다르면 ChatHeader 가 ⚠ badge 표시.
+   */
+  sessionWorkspaceName?: string;
   /** [폴더 변경] 클릭 시 main 의 dialog.showOpenDialog 호출. */
   onPickWorkspace?: () => void;
   /**
@@ -138,6 +143,7 @@ export function ChatPanel({
   onCancel,
   cliStatus = null,
   workspaceName,
+  sessionWorkspaceName,
   onPickWorkspace,
   ipcUnavailable = false,
   initialInputValue,
@@ -167,6 +173,7 @@ export function ChatPanel({
         session={session}
         cliStatus={cliStatus}
         workspaceName={workspaceName}
+        sessionWorkspaceName={sessionWorkspaceName}
         onPickWorkspace={onPickWorkspace}
         onChangePermission={onChangePermission}
         permissionDisabled={ipcUnavailable}
@@ -347,6 +354,7 @@ function ChatHeader({
   session,
   cliStatus,
   workspaceName,
+  sessionWorkspaceName,
   onPickWorkspace,
   onChangePermission,
   permissionDisabled = false,
@@ -354,15 +362,34 @@ function ChatHeader({
   session: Session;
   cliStatus: CliStatus;
   workspaceName?: string;
+  sessionWorkspaceName?: string;
   onPickWorkspace?: () => void;
   onChangePermission?: (next: PermissionLevel) => void;
   permissionDisabled?: boolean;
 }): React.JSX.Element {
   const t = useT();
+  // v1.0.6 — drift detection: 이 세션이 만들어진 폴더 이름과 현재 작업 폴더 이름이
+  // 다르면 사용자에게 시각적으로 알린다. 옛 turn 의 파일 참조가 더 이상 유효하지
+  // 않을 가능성을 의미한다 (DB 자체는 안전 — 삭제 X).
+  const driftDetected =
+    sessionWorkspaceName !== undefined &&
+    workspaceName !== undefined &&
+    sessionWorkspaceName !== workspaceName;
+
   return (
     <div className="flex h-12 items-center justify-between border-b border-border-primary px-4">
       <h1 className="truncate text-sm font-semibold">{session.title}</h1>
       <div className="flex items-center gap-3 text-xs text-text-tertiary">
+        {driftDetected && (
+          <span
+            className="rounded bg-yellow-900/30 px-2 py-0.5 text-[10px] text-yellow-400"
+            title={t('chat.header.drift_tooltip', { name: sessionWorkspaceName })}
+            aria-label={t('chat.header.drift_aria', { name: sessionWorkspaceName })}
+            data-testid="workspace-drift-badge"
+          >
+            ⚠ {t('chat.header.drift_label')}
+          </span>
+        )}
         {workspaceName !== undefined && onPickWorkspace !== undefined && (
           <button
             type="button"
