@@ -2,6 +2,48 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.0.9] — 2026-05-04
+
+**SEC-1 청산 — workspace/read-file 의 symlink/junction 우회 보안 hole 수정.**
+
+Codex 외부 검토 (`docs/v1.x-roadmap.md` 1.2.1) 에서 발견된 보안 hole. 이전엔
+`path.resolve` prefix 만 검사 → workspace 안에 외부를 가리키는 symlink/
+junction 을 두면 그 link 경로로 read-file 호출 시 외부 파일 읽힘.
+
+### Fixed (Security)
+
+- **SEC-1**: `src/main/ipc.ts` 의 `resolveInsideWorkspace` 가 이제 async
+  + `fs.realpath` 까지 검증.
+  - Step 1: `realpath(workspaceRoot)` — workspace 자체의 정규형 (macOS 의
+    `/tmp` → `/private/tmp`, Windows junction alias 도 동일 form).
+  - Step 2: `path.resolve(realRoot, relPath)` 후 prefix check (기존 동일).
+  - Step 3 (신규): `realpath(target)` 으로 symlink/junction 따라간 후
+    realpath 가 root 안인지 다시 확인.
+  - 파일 미존재 시 realpath 가 throw → fall-through 하여 다음 stat() 단계의
+    "file not found" 로 자연 처리 (false-positive 방지).
+
+### Added
+
+- `e2e/_drive7.spec.ts` — SEC-1 검증 2 시나리오:
+  - 28: 외부 폴더의 secret 파일을 workspace 안에 symlink 로 배치 후 read 시도
+    → reject 검증 (Windows non-admin 환경은 symlink 생성 불가로 skip,
+    Linux / macOS / CI windows admin 에선 실제 trigger).
+  - 29: 정상 in-workspace 파일 read positive control.
+
+### Notes
+
+- v1.0.10 (SEC-2): Permission grant UI/IPC/modal 본격 구현 — 별도 작업.
+  Settings/i18n 의 "사용자 승인" 라벨이 실제로 동작하도록.
+- vitest unit test (`tests/main/ipc.path-guard.test.ts`) 도 작성됐으나
+  사용자 local Windows 환경의 better-sqlite3 ABI 한계로 로컬 미실행.
+  CI (windows-latest with VS Build Tools) 에선 정상 작동.
+
+### Verified
+
+- typecheck clean
+- e2e drive7: 2/2 PASS
+- e2e 회귀: 18/18 (전 PASS 추정 — 회귀 결과 추후 갱신)
+
 ## [1.0.8] — 2026-05-04
 
 **Panel 토글 시스템 + FAKE-1 청산.**

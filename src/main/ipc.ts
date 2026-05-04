@@ -406,21 +406,52 @@ function isIgnored(relPath: string, compiledPatterns: ReadonlyArray<RegExp>): bo
 /**
  * `workspace_root` 안쪽의 파일에만 접근 허용. `..` 또는 절대경로 입력으로
  * workspace 바깥 (`/etc/passwd`, `C:\Windows\System32\...`) 으로 빠지는
- * traversal 공격 방어. 반환은 정규화된 절대경로.
+ * traversal 공격 + symlink/junction 으로 우회하는 공격 방어. 반환은 정규화
+ * 된 절대경로 (symlink 가 있으면 realpath).
+ *
+ * v1.0.9 (SEC-1): 이전 버전은 `path.resolve` prefix 만 검사 → workspace
+ * 안에 외부를 가리키는 symlink/junction 을 두고 그 link 경로로 read-file 을
+ * 호출하면 외부 파일 읽기 가능. realpath 까지 확인해 link target 도 검증.
  *
  * Throws "path traversal" 메시지의 Error 가 발생하면 호출 측 try/catch 가
  * `Result<never>` 의 fail 로 변환한다 (renderer 는 string 만 받음).
  */
-function resolveInsideWorkspace(workspaceRoot: string, relPath: string): string {
-  const root = path.resolve(workspaceRoot);
-  const target = path.resolve(root, relPath);
-  // root 와 정확히 같거나, root 의 separator 로 시작해야 안쪽.
-  // Windows / POSIX 모두 path.sep 이 적절히 사용된다.
+async function resolveInsideWorkspace(
+  workspaceRoot: string,
+  relPath: string
+): Promise<string> {
+  // Step 1: workspace root 자체의 realpath (예: macOS 의 /tmp → /private/tmp,
+  // Windows junction `C:\Dev\분석` 의 8.3 short path / junction alias 등도
+  // 동일한 normalized form 으로 만든다).
+  const root = await fsp.realpath(path.resolve(workspaceRoot)).catch(() => {
+    return path.resolve(workspaceRoot);
+  });
   const sep = path.sep;
+
+  // Step 2: target path 계산. relPath 가 `..` 으로 시작하거나 절대경로면
+  // path.resolve 가 그대로 반영 → 다음 prefix check 에서 걸러짐.
+  const target = path.resolve(root, relPath);
   if (target !== root && !target.startsWith(root + sep)) {
     throw new Error('path traversal: rel_path resolves outside workspace_root');
   }
-  return target;
+
+  // Step 3: target 의 realpath. symlink/junction 을 따라가서 진짜 file 위치
+  // 를 알아낸 뒤 다시 prefix check. 파일이 존재하지 않으면 realpath 가 throw
+  // → 이 경우 보안 위험 X (다음 stat() 에서 "file not found" 로 자연스럽게
+  // 처리됨), target 그대로 반환.
+  let realTarget: string;
+  try {
+    realTarget = await fsp.realpath(target);
+  } catch {
+    return target;
+  }
+
+  if (realTarget !== root && !realTarget.startsWith(root + sep)) {
+    throw new Error(
+      'path traversal: symlink/junction target resolves outside workspace_root'
+    );
+  }
+  return realTarget;
 }
 
 /** Buffer 가 binary 파일인지 단순 휴리스틱: NUL byte 존재 여부. */
@@ -935,7 +966,7 @@ function registerWorkspaceHandlers(): void {
   ipcMain.handle('workspace/read-file', async (_evt, raw: unknown): Promise<Result<FileContent>> => {
     try {
       const args = ReadFileArgsSchema.parse(raw);
-      const abs = resolveInsideWorkspace(args.workspace_root, args.rel_path);
+      const abs = await resolveInsideWorkspace(args.workspace_root, args.rel_path);
       const stat = await fsp.stat(abs).catch(() => null);
       if (stat === null) {
         throw new Error('file not found');
