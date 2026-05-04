@@ -273,7 +273,28 @@ app.whenReady().then(() => {
   // McpManager 가 settings.json 의 mcp_servers 를 읽어 stdio MCP 서버를 spawn,
   // tools/list 결과를 ToolRegistry 에 'mcp.{server_id}.{tool_name}' 으로 등록.
   // Spec: docs/tools/mcp-bridge.md
-  mcpManager = new McpManager(registry, { settings: createSettingsAdapter() });
+  // v1.0.13 (FAKE-5): schema 변환 결과 audit_log 자동 기록. Codex 권고:
+  // "조용한 validation fail 은 디버깅 비용이 크다."
+  mcpManager = new McpManager(registry, {
+    settings: createSettingsAdapter(),
+    schemaAuditSink: (event) => {
+      auditLogStore?.recordEvent({
+        timestamp: event.timestamp,
+        session_id: 'mcp-server',
+        event: event.event,
+        capability: 'NETWORK_MCP',
+        target_json: JSON.stringify({
+          server_id: event.server_id,
+          tool_name: event.tool_name,
+          warnings: event.warnings,
+        }),
+        decision_reason:
+          event.event === 'mcp.input_schema_converted' ? 'converted' : 'unconverted',
+        outcome: event.warnings.length > 0 ? 'partial' : 'ok',
+        ...(event.warnings.length > 0 && { error: event.warnings.join('; ') }),
+      });
+    },
+  });
   void mcpManager.loadFromSettings();
 
   // P1-4: AI handlers (ai/detect-cli, ai/start-stream, ai/stop-stream).
@@ -403,15 +424,44 @@ app.on('before-quit', () => {
   sessionStore = null;
 });
 
-// Prevent multiple instances
+// v1.0.13 (FAKE-4) — Single-instance + 사용자 친화 UX (Codex 권고).
+//
+// 이전 (v1.0.12 까지): 두 번째 instance 가 silent app.quit() — 사용자 입장
+// 에서 "더블클릭 했는데 아무 일도 없음". 첫 instance 는 단순 focus.
+//
+// 개선:
+//  1. 두 번째 instance — `setImmediate` 로 OS event loop 한 tick 내 quit
+//     (electron 권고). 첫 instance 의 'second-instance' 핸들러가 dialog 와
+//     focus 처리 — 두 번째 process 는 dialog 띄우지 않음 (첫 인스턴스가
+//     이미 띄움).
+//  2. 첫 instance — 'second-instance' 시점에 기존 창 focus + 명시적 dialog
+//     ("이미 실행 중. 이 창을 forward 합니다") 로 사용자 인지.
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
+  // 두 번째 instance — 즉시 종료. 첫 instance 가 dialog 처리.
   app.quit();
 } else {
   app.on('second-instance', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
+      // packaged build 에서만 modal — dev/e2e 는 자동화 흐름 깨면 안 됨.
+      if (app.isPackaged) {
+        dialog
+          .showMessageBox(mainWindow, {
+            type: 'info',
+            title: 'Dreampia-Dev — 이미 실행 중',
+            message: '앱이 이미 실행 중이에요',
+            detail:
+              '두 번째 인스턴스를 띄우려고 시도했지만 single-instance lock 으로 차단됐습니다. 이 창이 활성 인스턴스입니다.',
+            buttons: ['확인'],
+            defaultId: 0,
+          })
+          .catch((err: unknown) => {
+            // 사용자가 dialog 를 닫는 것은 정상 — 로깅만.
+            console.warn('[second-instance dialog] failed:', err);
+          });
+      }
     }
   });
 }

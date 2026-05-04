@@ -35,8 +35,9 @@ import {
 } from './ChatInputSuggestionPopover';
 import { findActiveMention, findAllMentions, type MentionMatch } from '../../mentions/parser';
 import {
-  resolveMentions,
+  resolveMentionsRich,
   resolveMentionsToTypedBlocks,
+  type MentionLimitsApplied,
   stripMentionTokens,
   formatMentionsAsContext,
   type ResolverContext,
@@ -421,7 +422,14 @@ export function ChatInput({
     setCursorPos(0);
     void (async () => {
       try {
-        const resolved = await resolveMentions(mentions, resolverContext);
+        // v1.0.13 (MENT-1): resolveMentionsRich 가 limits 정보 같이 반환.
+        const { resolved, limits } = await resolveMentionsRich(
+          mentions,
+          resolverContext
+        );
+        // 초과 시 사용자에게 "N개 / X KB 제외됨" 안내 (Codex 추가 권고).
+        const summary = summarizeMentionLimits(limits);
+        setMentionExclusion(summary);
         // v0.13.0 (J) — typed block 경로가 활성화돼 있으면 멘션은 별도 chip
         // block 으로 분리해 caller 에게 전달. 활성화 X 면 v0.6 plain-text 경로
         // 로 fallback — 외부에서 onSubmit 만 wire 한 통합/UI 테스트와의 호환성.
@@ -439,6 +447,15 @@ export function ChatInput({
       }
     })();
   };
+
+  // v1.0.13 (MENT-1): 초과 mention 안내 메시지. null 이면 banner 미표시.
+  const [mentionExclusion, setMentionExclusion] = useState<string | null>(null);
+  // 5초 후 자동 dismiss — banner 가 영구 표시되면 사용자 무시 위험.
+  useEffect(() => {
+    if (mentionExclusion === null) return undefined;
+    const timer = setTimeout(() => setMentionExclusion(null), 5000);
+    return () => clearTimeout(timer);
+  }, [mentionExclusion]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
     // ★ IME composition 중 모든 키 무시 (한글 자모 결합 보호).
@@ -585,6 +602,15 @@ export function ChatInput({
           footerHint={t('chat.input.mention_footer')}
         />
       )}
+      {mentionExclusion !== null && (
+        <div
+          className="mb-1 rounded border border-yellow-700/40 bg-yellow-900/20 px-2 py-1 text-[11px] text-yellow-300"
+          role="status"
+          data-testid="chat-input-mention-exclusion"
+        >
+          {mentionExclusion}
+        </div>
+      )}
       <textarea
         ref={textareaRef}
         value={value}
@@ -638,4 +664,26 @@ export function ChatInput({
       </div>
     </div>
   );
+}
+
+/**
+ * v1.0.13 (MENT-1): mention rate-limit 결과 → 사용자-노출 메시지.
+ *
+ * 한 가지 이상 dropped 면 "N개 / X KB 제외됨" string. 0 dropped 면 null
+ * (banner 미표시).
+ */
+function summarizeMentionLimits(limits: MentionLimitsApplied): string | null {
+  const parts: string[] = [];
+  if (limits.dropped_over_count > 0) {
+    parts.push(`${limits.dropped_over_count}개 (개수 한도 초과)`);
+  }
+  if (limits.dropped_duplicate > 0) {
+    parts.push(`${limits.dropped_duplicate}개 (중복)`);
+  }
+  if (limits.dropped_over_bytes > 0) {
+    parts.push(`${limits.dropped_over_bytes}개 (용량 한도 초과)`);
+  }
+  if (parts.length === 0) return null;
+  const kb = Math.round(limits.cumulative_bytes / 1024);
+  return `⚠ 멘션 제외됨 — ${parts.join(', ')}. 누적 ${kb} KB 사용.`;
 }

@@ -68,16 +68,87 @@ const FILE_SNIPPET_MAX_BYTES = 8192;
 const SESSION_CONTEXT_TURN_LIMIT = 5;
 const SESSION_CONTEXT_CHAR_LIMIT = 2000;
 
+// ────────────────────────────────────────────────────────────
+// v1.0.13 (MENT-1): mention rate-limit
+//
+// Spec: docs/v1.x-roadmap.md (MENT-1), Codex 외부 검토 (codex-question-4).
+//
+// 한도:
+//  - 총 50개 (turn 한 건당). 그 이상은 mention 자체가 의도일 가능성 낮음 +
+//    AI context window 부담.
+//  - dedupe: 같은 path/session 의 중복 mention 은 첫 1건만.
+//  - cumulative 200KB: file mention 의 snippet 합계가 200KB 초과 시 truncate.
+//
+// 초과 시 caller (ChatInput / submitBlocks) 가 사용자에게 "N개 / X KB 제외됨"
+// 안내. dropMention 결과를 result 에 별도 키로 노출 — UI 가 toast / banner.
+// ────────────────────────────────────────────────────────────
+
+export const MENTION_MAX_COUNT = 50;
+export const MENTION_CUMULATIVE_BYTES = 200 * 1024;
+
+export interface MentionLimitsApplied {
+  /** 총 한도 초과로 잘린 mention 개수. 0 이면 정상. */
+  dropped_over_count: number;
+  /** dedupe 으로 제거된 중복 mention 개수. */
+  dropped_duplicate: number;
+  /** cumulative byte 한도 초과로 snippet 가 비워진 file mention 개수. */
+  dropped_over_bytes: number;
+  /** 적용된 누적 byte (실제로 흐른 값). */
+  cumulative_bytes: number;
+}
+
+export interface ResolveMentionsResult {
+  resolved: ResolvedMention[];
+  limits: MentionLimitsApplied;
+}
+
 /**
  * 모든 멘션을 병렬 resolve. 한 멘션이 throw 하더라도 ResolvedMention.kind='error'
  * 로 catch 되어 다른 멘션 처리에는 영향이 없다.
+ *
+ * v1.0.13 (MENT-1): 결과에 limits 포함 — UI 가 사용자에게 "N개 / X KB 제외됨"
+ * 안내. 기존 caller 호환을 위해 별도 thin wrapper 도 export (resolveMentionsRich).
  */
 export async function resolveMentions(
   mentions: ReadonlyArray<MentionMatch>,
   ctx: ResolverContext
 ): Promise<ResolvedMention[]> {
-  if (mentions.length === 0) return [];
-  const tasks = mentions.map(async (match): Promise<ResolvedMention> => {
+  return (await resolveMentionsRich(mentions, ctx)).resolved;
+}
+
+export async function resolveMentionsRich(
+  mentions: ReadonlyArray<MentionMatch>,
+  ctx: ResolverContext
+): Promise<ResolveMentionsResult> {
+  const limits: MentionLimitsApplied = {
+    dropped_over_count: 0,
+    dropped_duplicate: 0,
+    dropped_over_bytes: 0,
+    cumulative_bytes: 0,
+  };
+  if (mentions.length === 0) {
+    return { resolved: [], limits };
+  }
+
+  // dedupe (kind + value) — 첫 occurrence 만 유지, 같은 mention 다중 입력
+  // 시 두 번째 이후 dropped_duplicate 증가.
+  const seen = new Set<string>();
+  const dedupedInputs: MentionMatch[] = [];
+  for (const m of mentions) {
+    const key = `${m.kind}::${m.value}`;
+    if (seen.has(key)) {
+      limits.dropped_duplicate += 1;
+      continue;
+    }
+    seen.add(key);
+    dedupedInputs.push(m);
+  }
+
+  // count limit — 50개 초과는 그냥 잘라냄.
+  const limitedInputs = dedupedInputs.slice(0, MENTION_MAX_COUNT);
+  limits.dropped_over_count = Math.max(0, dedupedInputs.length - MENTION_MAX_COUNT);
+
+  const tasks = limitedInputs.map(async (match): Promise<ResolvedMention> => {
     try {
       if (match.kind === 'file') return await resolveFile(match, ctx);
       if (match.kind === 'session') return await resolveSession(match, ctx);
@@ -88,7 +159,42 @@ export async function resolveMentions(
       return { match, kind: 'error', error: message };
     }
   });
-  return Promise.all(tasks);
+
+  const resolvedRaw = await Promise.all(tasks);
+
+  // cumulative byte limit — file mention 의 snippet 누적이 200KB 초과 시
+  // 그 시점 이후의 file mention 은 snippet 비우고 placeholder error 로 변경.
+  const resolved: ResolvedMention[] = [];
+  for (const r of resolvedRaw) {
+    if (r.kind !== 'file') {
+      resolved.push(r);
+      continue;
+    }
+    const snippetBytes = byteLength(r.snippet ?? '');
+    if (limits.cumulative_bytes + snippetBytes > MENTION_CUMULATIVE_BYTES) {
+      limits.dropped_over_bytes += 1;
+      resolved.push({
+        match: r.match,
+        kind: 'error',
+        error: `cumulative byte 한도 (${MENTION_CUMULATIVE_BYTES} bytes) 초과로 제외됨`,
+      });
+      continue;
+    }
+    limits.cumulative_bytes += snippetBytes;
+    resolved.push(r);
+  }
+
+  return { resolved, limits };
+}
+
+function byteLength(text: string): number {
+  // Browser-safe — TextEncoder 가 renderer / Node 모두에 있음.
+  if (typeof TextEncoder !== 'undefined') {
+    return new TextEncoder().encode(text).length;
+  }
+  // Fallback (테스트 환경 typed array missing) — UTF-8 추정 (각 char 가
+  // 평균 1.5 byte).
+  return Math.ceil(text.length * 1.5);
 }
 
 async function resolveFile(

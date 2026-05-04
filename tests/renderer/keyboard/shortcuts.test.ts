@@ -47,6 +47,7 @@ describe('SHORTCUT_DEFS', () => {
         'chat.new',
         'help.open',
         'modal.close',
+        'preview.toggle',
         'search.focus',
         'settings.open',
         'sidebar.toggle',

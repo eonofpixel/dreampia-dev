@@ -821,10 +821,15 @@ export function App(): React.JSX.Element {
         }
         compareHook.reset();
         setCompareModalOpen(true);
+        // v1.0.13 (WS-1): defaultWorkspace 우선, 그 다음 session.workspace.root.
+        // v1.0.5 의 workspace drift fix 누락 부분 청산 — 사용자가 /project
+        // 로 폴더 변경 후 /compare 했을 때 옛 폴더로 가던 회귀 방지.
+        const compareWorkspaceRoot =
+          defaultWorkspace?.root ?? activeSession.workspace.root;
         void compareHook.start({
           prompt: arg,
           session_id: activeSession.id,
-          workspace_root: activeSession.workspace.root,
+          workspace_root: compareWorkspaceRoot,
           permission_level: activeSession.permission.default_level,
           // MVP defaults: Claude Sonnet + GPT-5.5. 두 prefix 가 model-prefix
           // routing 으로 각각 Claude / Codex CLI 로 향한다.
@@ -833,7 +838,15 @@ export function App(): React.JSX.Element {
         });
       },
     }),
-    [activeSession, handleClearTurns, handleNewChat, handleChangeModel, resetOnboarding, compareHook]
+    [
+      activeSession,
+      handleClearTurns,
+      handleNewChat,
+      handleChangeModel,
+      resetOnboarding,
+      compareHook,
+      defaultWorkspace?.root,
+    ]
   );
 
   // v0.12.0 (I) — 응답 채택. 사용자가 "이 응답 채택" 클릭 시 active session 에
@@ -1084,6 +1097,18 @@ export function App(): React.JSX.Element {
               // v1.0.5 — [프로젝트] 폴더 항목 클릭 시 workspace 변경 picker.
               // 사용자가 다른 폴더 선택하면 settings.workspace_root 영속 + 재계산.
               void pickWorkspace();
+            }}
+            onOpenCompare={() => {
+              // v1.0.13 (FAKE-2): [비교] 항목 클릭 — Compare modal 열기.
+              // prompt 는 modal 의 (현재 시점 빈) 상태에서 시작 — 사용자가
+              // 슬래시 명령으로 prompt 입력 권장. activeSession 없으면 새 채팅
+              // 만들고 modal 열어 사용자에게 polite hint.
+              if (activeSession === null) {
+                setSlashHelpOpen(true);
+                return;
+              }
+              compareHook.reset();
+              setCompareModalOpen(true);
             }}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}

@@ -487,6 +487,37 @@ function fail(err: unknown): { ok: false; error: string } {
   return { ok: false, error: toErrorMessage(err) };
 }
 
+/**
+ * v1.0.13 (META-4): 사용자가 workspace 로 선택한 폴더가 Electron userData
+ * 폴더와 충돌하는지 검사. Codex 권고 (a): 정확 일치 + parent + child 모두
+ * 차단 — SQLite WAL/journal/sessions.sqlite 파일 노출 위험.
+ *
+ * @returns 차단 사유 (사용자 메시지) 또는 null (안전).
+ */
+function checkUserDataConflict(picked: string, userDataDir: string): string | null {
+  // realpath 까지는 무겁고 Windows path 비교는 case-insensitive — 일단
+  // path.resolve + 소문자 비교로 충분 (대부분의 케이스 커버).
+  const resolvedPicked = path.resolve(picked);
+  const resolvedUd = path.resolve(userDataDir);
+  // Windows 는 case-insensitive — toLowerCase 후 비교. POSIX 도 그대로
+  // 동작 (실제 운영에서 사용자가 대소문자 차이로 우회 시도 X).
+  const a = process.platform === 'win32' ? resolvedPicked.toLowerCase() : resolvedPicked;
+  const b = process.platform === 'win32' ? resolvedUd.toLowerCase() : resolvedUd;
+
+  if (a === b) {
+    return `선택한 폴더 "${picked}" 가 앱 데이터 폴더 "${userDataDir}" 와 정확히 같아요. SQLite WAL/journal 파일이 작업 폴더에 노출되면 위험합니다. 다른 폴더를 선택해주세요.`;
+  }
+  // picked 가 userData 안 (자식)
+  if (a.startsWith(`${b}${path.sep}`) || a.startsWith(`${b}/`)) {
+    return `선택한 폴더 "${picked}" 가 앱 데이터 폴더 "${userDataDir}" 안에 있어요. SQLite 파일이 같은 트리에 있으면 사용자 실수로 손상 가능. 다른 위치의 폴더를 선택해주세요.`;
+  }
+  // picked 가 userData 의 부모
+  if (b.startsWith(`${a}${path.sep}`) || b.startsWith(`${a}/`)) {
+    return `선택한 폴더 "${picked}" 가 앱 데이터 폴더 "${userDataDir}" 의 상위 폴더에요. SQLite 파일이 작업 폴더 안에 노출됩니다. 더 깊은 곳의 폴더를 선택해주세요.`;
+  }
+  return null;
+}
+
 export interface LockHandlerConfig {
   /**
    * Resolve the LeaderElection instance for the BrowserWindow that invoked
@@ -839,7 +870,7 @@ export function registerIpcHandlers(
     }
   });
 
-  registerWorkspaceHandlers();
+  registerWorkspaceHandlers(electronApp);
 
   if (store) {
     registerSessionHandlers(store);
@@ -858,7 +889,7 @@ export function registerIpcHandlers(
 // workspace/* — folder picker + persistence
 // ────────────────────────────────────────────────────────────
 
-function registerWorkspaceHandlers(): void {
+function registerWorkspaceHandlers(electronApp: App): void {
   ipcMain.handle(
     'workspace/pick-folder',
     async (
@@ -881,6 +912,27 @@ function registerWorkspaceHandlers(): void {
         const picked = result.filePaths[0];
         if (picked === undefined || picked.length === 0) {
           return ok(null);
+        }
+        // v1.0.13 (META-4): userData = workspace (또는 포함 관계) 차단.
+        // SQLite WAL/journal/sessions.sqlite 파일이 사용자가 보는 workspace
+        // 안에 노출되면 사용자가 실수로 commit / 삭제 / 동기화 가능. 정확
+        // 일치 + parent + child 모두 차단 (Codex (a) picking).
+        const userDataDir = electronApp.getPath('userData');
+        const conflict = checkUserDataConflict(picked, userDataDir);
+        if (conflict !== null) {
+          // 차단 modal 은 renderer 가 띄우지만, IPC 레벨에서 거부 + 명확한
+          // error code 로 보내 사용자가 picker 다시 띄울 수 있게.
+          if (win !== null) {
+            await dialog.showMessageBox(win, {
+              type: 'warning',
+              title: 'Dreampia-Dev — 작업 폴더 선택 차단',
+              message: '선택한 폴더가 앱 데이터 폴더와 겹쳐요',
+              detail: conflict,
+              buttons: ['확인'],
+              defaultId: 0,
+            });
+          }
+          return { ok: false, error: `WORKSPACE_CONFLICT: ${conflict}` };
         }
         const name = path.basename(picked) || picked;
         writeSettings({ workspace_root: picked, workspace_name: name });

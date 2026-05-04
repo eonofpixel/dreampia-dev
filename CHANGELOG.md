@@ -2,6 +2,120 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.0.13] — 2026-05-05
+
+**P0 종료 슬롯 — FAKE 정리 + 입력/메타.**
+
+`docs/v1.x-roadmap.md` 의 P0 마지막 묶음 (1.2.2 / 1.2.4 / 1.2.5 / 1.2.8).
+Codex 외부 검토 (`codex-question-4.md`, 2026-05-05) 의 picking 그대로 반영.
+v1.0.7~1.0.13 으로 P0 종료 — Codex 결론: "추가로 보이는 P0 는 없다."
+
+### Fixed (Workspace drift)
+
+- **WS-1**: `/compare` slash 가 v1.0.5 의 workspace drift fix 누락이었음.
+  - `App.tsx:809`: `activeSession.workspace.root` 사용 → `defaultWorkspace?.root ?? activeSession.workspace.root` 로 통일.
+  - 사용자가 [프로젝트] 폴더 변경 후 `/compare` 했을 때 옛 폴더로 가던 회귀 청산.
+
+### Added (FAKE 정리)
+
+- **FAKE-2 (Compare 활성화)** — Codex picking: 활성화 (deferred banner X).
+  - 사이드바 [비교 (Cross-AI)] 항목 추가 (`GitCompareArrows` icon).
+  - testid `sidebar-open-compare`. 클릭 → CompareModal mount.
+  - i18n ko/en `sidebar.nav.compare`.
+  - 백엔드 (v0.12.0) 가 이미 있어 정직 wire — Codex 권고 ("백엔드 있으면 deferred 보단 정직 wire").
+
+- **FAKE-3** — v1.0.7 에서 이미 청산 (ChatHeader ··· 장식 제거 — 회귀 0).
+
+- **FAKE-4 (single-instance UX)** — Codex picking (a): production 연결 + 기존 창 focus + dialog.
+  - 두 번째 instance 시도 시 packaged build 에서 modal 표시: "이미 실행 중. 이 창이 활성 인스턴스입니다."
+  - 첫 instance 의 mainWindow focus + minimize 해제 (기존 동작 유지).
+  - dev/e2e 에선 modal 미표시 (자동화 흐름 보호).
+  - LeaderElection stale lock recovery 테스트는 이미 v0.x 부터 `tests/storage/LeaderElection.test.ts:117` 에 존재 — 회귀 0.
+
+- **FAKE-5 (MCP input_schema)** — Codex picking (b): 중간 변환.
+  - 새 `src/main/mcp/jsonSchemaToZod.ts` — top-level `type=object` + `required[]` + 기본 type (string/number/integer/boolean/array/object) 변환.
+  - nested 는 `z.record(z.unknown())` (full JSON Schema 변환은 P1 명시 이관).
+  - `additionalProperties: false` → strict mode, default 는 passthrough (MCP 가 추가 필드 보낼 수 있어 관대).
+  - 변환 결과 audit_log 영속 — Codex 추가 권고 ("조용한 validation fail 은 디버깅 비용 큼"):
+    - `mcp.input_schema_converted` (정상 변환)
+    - `mcp.input_schema_unconverted` (z.unknown fallback)
+    - capability=NETWORK_MCP, target_json 에 server_id / tool_name / warnings.
+
+### Added (Mention rate-limit)
+
+- **MENT-1** — Codex picking: 50 + dedupe + 200KB.
+  - `MENTION_MAX_COUNT = 50`, `MENTION_CUMULATIVE_BYTES = 200 * 1024`.
+  - 새 `resolveMentionsRich()` — `{ resolved, limits: MentionLimitsApplied }` 반환.
+  - 기존 `resolveMentions()` 는 호환 유지 (limits drop).
+  - dedupe: `kind::value` 기준, 첫 occurrence 만 유지.
+  - 초과 시 사용자 노출 banner — Codex 추가 권고 ("N개/X KB 제외됨 표시 필수"):
+    - testid `chat-input-mention-exclusion`, role=status.
+    - 5초 후 자동 dismiss.
+    - 메시지: "⚠ 멘션 제외됨 — N개 (개수 한도 초과), N개 (중복), N개 (용량 한도 초과). 누적 X KB 사용."
+
+### Added (META 안전)
+
+- **META-4 (userData = workspace 차단)** — Codex picking (a): 차단 modal.
+  - `workspace/pick-folder` IPC 가 picked 폴더와 `app.getPath('userData')` 충돌 검사.
+  - 정확 일치 / 자식 / 부모 모두 차단 (3개 케이스 다른 메시지).
+  - `dialog.showMessageBox` 로 사용자에게 명시 안내 + Result.fail (`WORKSPACE_CONFLICT: ...`).
+  - 차단 사유: SQLite WAL/journal/sessions.sqlite 파일이 사용자 작업 트리에 노출되면 실수 commit / 삭제 위험.
+  - Windows path 비교는 case-insensitive (현실 사용 패턴).
+
+- **META-5 (CONTRIBUTING 가이드)** — README/CONTRIBUTING 정리.
+  - Windows VS Build Tools 2022 + Python 3 설치 가이드.
+  - macOS / Linux toolchain 안내.
+  - 한국어 / 비-ASCII 폴더 경로 — 저장소 path 는 ASCII 권장, 사용자 workspace 는 한국어 자유 (spawnSafe 본업).
+  - `chcp 65001` 권장 한국어 폴더 외부 tool 호출 시.
+  - userData / workspace 충돌 정책 명시.
+
+### Added (Tests)
+
+- `tests/main/jsonSchemaToZod.test.ts` — FAKE-5 변환 contract 11 시나리오:
+  - non-object input + type 미지정 → unknown.
+  - type=object + properties 없음 → record(unknown).
+  - 기본 type (string/number/integer/boolean/array) 매핑.
+  - nested object → record(unknown).
+  - additionalProperties strict / passthrough.
+  - 지원 X type → warnings.
+
+- `tests/renderer/mention-rate-limit.test.ts` — MENT-1 rate-limit 5 시나리오:
+  - 정상 입력 → limits 0.
+  - 51개 → dropped_over_count=1.
+  - 5개 같은 path → dropped_duplicate=4.
+  - dedupe + count 동시.
+  - cumulative byte 한도 초과 → dropped_over_bytes 누적.
+
+- `e2e/_drive11.spec.ts` — Round 11 drive harness 5 시나리오:
+  - 39: /compare 가 defaultWorkspace 사용 (WS-1 회귀 detector).
+  - 40: 사이드바 [비교] click → CompareModal mount.
+  - 41: audit/recent 의 mcp.input_schema_* prefix query.
+  - 42: 51개 mention 입력 → banner 표시.
+  - 43: workspace IPC 존재 검증 (META-4 IPC 차단은 단위 테스트).
+
+- 부수: `tests/renderer/keyboard/shortcuts.test.ts` — pre-existing fail 청산 (v1.0.8 의 `preview.toggle` 누락이었음, v1.0.13 에서 정정).
+
+### Verified
+
+- typecheck clean
+- lint: pre-existing 4 issues only (e2e/_drive.spec.ts, App.tsx) — 새 추가 0
+- 940/940 unit (16 신규: jsonSchemaToZod 11 + mention-rate-limit 5)
+- 11/11 spawnSafe
+- 52/52 drive e2e (drive1-10 회귀 0 + drive11 5 추가)
+
+### P1 명시 이관 (Codex 권고)
+
+- **multi-instance 진짜 지원** — 현재 single-instance 만, 다중 윈도우 (각 별도 SQLite) 는 v1.1.x 별도 슬롯.
+- **full JSON Schema → Zod 변환** — nested properties 까지. ajv-to-zod 등 의존 추가 필요 (v1.1.x).
+- **mention UX 고도화** — 단순 banner 보다 inline diff / preview 등 (v1.1.x+).
+
+### P0 종료
+
+`v1.x-roadmap.md` 의 P0 (FAKE / SEC / COST / WS / MENT / META) 모두 청산.
+Codex 결론: "v1.0.13 으로 P0 종료해도 된다. 추가로 보이는 P0 는 없다."
+
+다음 슬롯은 v1.1.0 (P1) — Workspace UX 마무리 + Plugin Loader + Loading/Error states + Visual polish + Real CLI integration e2e.
+
 ## [1.0.12] — 2026-05-05
 
 **COST-1 + COST-2 청산 — pricing 정직성 + 실제 hard limit enforcement.**

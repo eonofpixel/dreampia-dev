@@ -17,6 +17,7 @@ import {
   Compass,
   BarChart3,
   Server,
+  GitCompareArrows,
 } from 'lucide-react';
 import { SearchSection, type SearchResultEntry } from './SearchSection';
 import { useMcp } from '../../hooks/useMcp';
@@ -50,6 +51,11 @@ export interface SidebarProps {
    * disabled 처리. App.tsx 의 pickWorkspace (useWorkspace().pick) wire up.
    */
   onPickWorkspace?: () => void;
+  /**
+   * v1.0.13 (FAKE-2): [비교] 항목 클릭 — Compare modal 열기. 미지정 시 항목
+   * 자체를 숨김. App.tsx 의 setCompareModalOpen 이 wire up.
+   */
+  onOpenCompare?: () => void;
 
   // ── v0.7.0 (F-026 Chat Search) ────────────────────────────
   /**
@@ -78,6 +84,7 @@ export function Sidebar({
   onOpenUsage,
   onOpenMcpSettings,
   onPickWorkspace,
+  onOpenCompare,
   searchQuery = '',
   onSearchQueryChange,
   searchResults,
@@ -138,9 +145,18 @@ export function Sidebar({
         />
       </div>
 
-      {/* Nav — v1.0.3: 미구현 placeholder 명시화 (이전엔 onClick 없이 hover만
-          되어 사용자 혼란). v1.x 에서 실제 Plugin Loader / Automation 추가 예정. */}
+      {/* Nav — v1.0.3: 미구현 placeholder 명시화. v1.0.13 (FAKE-2): [비교]
+          만 활성화 — 백엔드가 v0.12.0 부터 있음. 사용자가 사이드바에서 진입
+          가능. */}
       <nav className="border-b border-border-primary p-2 text-text-secondary">
+        {onOpenCompare !== undefined && (
+          <SidebarNavItem
+            icon={<GitCompareArrows className="h-4 w-4" />}
+            label={t('sidebar.nav.compare')}
+            onClick={onOpenCompare}
+            testId="sidebar-open-compare"
+          />
+        )}
         <SidebarNavItem
           icon={<Puzzle className="h-4 w-4" />}
           label={t('sidebar.nav.plugins')}

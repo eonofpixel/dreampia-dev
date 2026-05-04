@@ -23,6 +23,7 @@ import type { McpServerConfig, McpServerState, McpToolInfo } from '@/types';
 import type { Tool, ToolRegistry, PermissionTarget } from '@/tools';
 import type { Capability } from '@/permission';
 import { McpClient, type McpClientOptions } from './McpClient';
+import { jsonSchemaToZod } from './jsonSchemaToZod';
 
 // ────────────────────────────────────────────────────────────
 // 의존성 주입 — settings 읽기/쓰기 함수를 외부에서 받는다.
@@ -43,6 +44,27 @@ export interface McpManagerOptions {
   clientOptions?: McpClientOptions;
   /** Test override — McpClient factory. */
   createClient?: (config: McpServerConfig, options?: McpClientOptions) => McpClient;
+  /**
+   * v1.0.13 (FAKE-5): input_schema 변환 결과 audit. 변환 실패 / fallback 시
+   * 호출자가 'mcp.input_schema_unconverted' event 영속할 수 있도록 sink 주입.
+   * 미지정 시 audit 미기록 (테스트 / pre-init 환경 호환).
+   */
+  schemaAuditSink?: (event: McpSchemaAuditEvent) => void;
+}
+
+/**
+ * v1.0.13 (FAKE-5): MCP input_schema 변환 audit event. AuditLogStore 가 받음.
+ *
+ * Codex 권고: "조용한 validation fail 은 디버깅 비용이 크다 — 거부 audit
+ * 을 남겨야 한다." 본 sink 가 그 통로.
+ */
+export interface McpSchemaAuditEvent {
+  timestamp: string;
+  server_id: string;
+  tool_name: string;
+  /** 'mcp.input_schema_unconverted' (fallback to z.unknown) | 'mcp.input_schema_converted' */
+  event: string;
+  warnings: string[];
 }
 
 // ────────────────────────────────────────────────────────────
@@ -57,11 +79,14 @@ export class McpManager {
     config: McpServerConfig,
     options?: McpClientOptions
   ) => McpClient;
+  /** v1.0.13 (FAKE-5): schema 변환 audit sink. 미설정 시 dormant. */
+  private readonly options: McpManagerOptions;
 
   constructor(
     private readonly registry: ToolRegistry,
     options: McpManagerOptions
   ) {
+    this.options = options;
     this.settings = options.settings;
     this.clientOptions = options.clientOptions;
     this.createClient =
@@ -227,14 +252,34 @@ export class McpManager {
     info: McpToolInfo
   ): Tool {
     const toolId = `mcp.${config.id}.${info.name}`;
+    // v1.0.13 (FAKE-5): JSON Schema → Zod 중간 변환 (top-level type + required).
+    // Codex 권고 (옵션 b). 변환 실패 / partial fallback 시 schemaAuditSink 호출.
+    const schemaInput = info.input_schema as unknown;
+    const conversion = jsonSchemaToZod(schemaInput);
+    if (this.options.schemaAuditSink !== undefined) {
+      try {
+        this.options.schemaAuditSink({
+          timestamp: new Date().toISOString(),
+          server_id: config.id,
+          tool_name: info.name,
+          event: conversion.converted
+            ? 'mcp.input_schema_converted'
+            : 'mcp.input_schema_unconverted',
+          warnings: conversion.warnings,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[McpManager] schema audit sink failed: ${msg}`);
+      }
+    }
     return {
       id: toolId,
       version: '1.0.0',
       source: 'mcp',
       source_id: config.id,
-      // P0: JSON Schema → Zod 변환 미구현. unknown 으로 통과시키고 MCP server 가
-      // 실제 스키마 검증을 하도록 함. P2 에서 변환 라이브러리 도입 예정.
-      input_schema: z.unknown(),
+      input_schema: conversion.schema,
+      // output_schema 는 P1 — MCP spec 의 outputSchema 가 optional 이고
+      // server 별 dialect 차이가 큼. unknown 그대로.
       output_schema: z.unknown(),
       required_capabilities: (): Capability[] => ['NETWORK_MCP'],
       permission_target: (): PermissionTarget => ({
