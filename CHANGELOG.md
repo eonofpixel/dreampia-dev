@@ -2,6 +2,50 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.0.10] — 2026-05-04
+
+**SEC-2 minimal scope — 권한 i18n 정직성 + v1.1.0 deferred 명시.**
+
+Codex 검토 (`docs/v1.x-roadmap.md` 1.2.1 SEC-2) 에서 발견된 권한 i18n 거짓말
+정정. 승인 modal + grant 추가/취소 UI 본격 구현은 큰 작업 (Queue async
+refactor + IPC 채널 + DB 흐름) 이라 v1.1.0 으로 분리. v1.0.10 은 사용자
+기대 mismatch 만이라도 즉시 해소.
+
+### Fixed (Honesty)
+
+- **SEC-2 (minimal)**: 사용자에게 거짓말하던 권한 hint 정정
+  - `settings.permission.hint.read_only`:
+    - Before: "쓰기/실행은 매번 사용자 승인" (실제로는 즉시 deny — Queue 의
+      `requires_user_confirmation` 처리)
+    - After: "쓰기/실행은 차단 (승인 modal 은 v1.1.0 예정)"
+  - `settings.permission.hint.custom`:
+    - Before: "사용자 grant 로 직접 구성 (v0.13.0 에서 UI 추가 예정)" — v0.13.0
+      이 이미 지났는데도 UI 없음
+    - After: "사용자 grant 로만 capability 허용. grant 추가 UI 는 v1.1.0
+      예정 — 현재는 거의 모든 capability 차단"
+
+### Added
+
+- **SEC-2 status banner**: PermissionPanel 상단에 노란색 banner —
+  *"⚠ 권한 승인 modal / Grant 관리 UI 는 v1.1.0 예정. 현재 default level
+  이 차단하는 capability 는 즉시 거부됩니다."*
+  - testid `settings-permission-grant-status`
+  - 사용자가 panel 열자마자 진짜 동작 한눈에 인지
+
+### Verified
+
+- typecheck clean
+- e2e drive8: 2/2 PASS (banner visibility + read_only hint 거짓말 사라짐 검증)
+
+### Deferred to v1.1.0 (full SEC-2)
+
+- Queue 의 async pause-resume 흐름 (현재 sync deny → async wait for user)
+- IPC 채널: `permission/request-confirmation`, `permission/confirmation-response`
+- 승인 modal UI (capability + target + tool 정보 + Allow once / Allow always
+  / Deny 버튼)
+- `permission_grants` insert 로 grant 영구화
+- Settings > 권한 panel 에 grant 목록 + revoke 버튼
+
 ## [1.0.9] — 2026-05-04
 
 **SEC-1 청산 — workspace/read-file 의 symlink/junction 우회 보안 hole 수정.**

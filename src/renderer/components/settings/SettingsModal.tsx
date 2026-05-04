@@ -391,6 +391,22 @@ function PermissionPanel(): React.JSX.Element {
         <h3 className="text-base font-semibold">{t('settings.permission.title')}</h3>
         <p className="text-xs text-text-secondary">{t('settings.permission.description')}</p>
       </header>
+      {/*
+       * v1.0.10 (SEC-2 정직성) — 이전에 "사용자 승인" 라벨이 거짓말이었음
+       * (Codex 검토 발견). 실제 Queue 는 requires_user_confirmation 을 즉시
+       * permission_denied 로 처리. 승인 modal + grant 추가 UI 는 v1.1.0 작업.
+       * 사용자에게 이 사실을 명시.
+       */}
+      <div
+        className="mb-4 rounded-md border border-yellow-700/40 bg-yellow-900/20 p-3 text-xs text-yellow-300"
+        data-testid="settings-permission-grant-status"
+        role="status"
+      >
+        <p className="font-medium">{t('settings.permission.grant_status_title')}</p>
+        <p className="mt-1 text-yellow-300/80">
+          {t('settings.permission.grant_status_body')}
+        </p>
+      </div>
       {loading ? (
         <p className="text-sm text-text-secondary">{t('settings.loading')}</p>
       ) : (
