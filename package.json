@@ -1,6 +1,6 @@
 {
   "name": "dreampia-dev",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "Open source desktop AI coding wrapper. Claude Code + OpenAI Codex 통합 GUI.",
   "private": true,
   "type": "module",

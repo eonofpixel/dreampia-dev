@@ -17,7 +17,7 @@
 
 import type { Turn, ToolCallId, ToolCallRef } from '@/types';
 import { newTurnId, newToolCallId, nowIso } from '@/types';
-import { estimateCostUsd } from './pricing';
+import { priceUsage } from './pricing';
 import type { StreamEvent, StreamingProvider, UsageEventData } from './types';
 
 // ────────────────────────────────────────────────────────────
@@ -131,6 +131,10 @@ export class MockProvider implements StreamingProvider {
     // Token 카운트는 응답 길이 기반 추정 (4 chars ≈ 1 token, OpenAI 권장).
     const synthOutput = Math.max(1, Math.ceil(responseText.length / 4));
     const synthInput = Math.max(1, Math.ceil(userText.length / 4));
+    const priced = priceUsage(input.model, {
+      input_tokens: synthInput,
+      output_tokens: synthOutput,
+    });
     const usageData: UsageEventData = {
       provider: 'mock',
       model: input.model,
@@ -140,11 +144,9 @@ export class MockProvider implements StreamingProvider {
       cache_creation_input_tokens: 0,
       cache_read_input_tokens: 0,
       reasoning_output_tokens: 0,
-      total_cost_usd: estimateCostUsd(input.model, {
-        input_tokens: synthInput,
-        output_tokens: synthOutput,
-      }),
+      total_cost_usd: priced.usd,
       recorded_at: new Date().toISOString(),
+      unknown_pricing: !priced.found,
     };
     yield { type: 'usage', data: usageData };
 

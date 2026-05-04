@@ -39,6 +39,12 @@ export interface UsageEventInput {
   total_cost_usd: number;
   recorded_at: string;
   source?: string;
+  /**
+   * v1.0.12 (COST-1): 이 event 의 모델이 MODEL_PRICING 에 미등록이면 true.
+   * UI 가 "?" badge 와 unknown 합계 stat 분기. true 일 때 total_cost_usd 는
+   * 항상 0 (priceUsage().found=false). 미지정 시 false.
+   */
+  unknown_pricing?: boolean;
 }
 
 /**
@@ -60,6 +66,8 @@ export interface UsageEvent {
   total_cost_usd: number;
   recorded_at: string;
   source?: string;
+  /** v1.0.12 (COST-1): 미등록 모델 영속 시 true. */
+  unknown_pricing: boolean;
 }
 
 export interface UsageRangeFilter {
@@ -110,6 +118,8 @@ interface UsageEventRow {
   total_cost_usd: number;
   recorded_at: string;
   source: string | null;
+  /** v1.0.12 — migration 006. SQLite INTEGER NOT NULL DEFAULT 0. */
+  unknown_pricing: number;
 }
 
 interface SummaryRow {
@@ -159,6 +169,7 @@ function rowToEvent(row: UsageEventRow): UsageEvent {
     reasoning_output_tokens: row.reasoning_output_tokens,
     total_cost_usd: row.total_cost_usd,
     recorded_at: row.recorded_at,
+    unknown_pricing: row.unknown_pricing === 1,
   };
   if (row.source !== null) evt.source = row.source;
   return evt;
@@ -169,18 +180,19 @@ export class UsageStore {
   private readonly insertStmt: Statement<[
     string, string, string, string, string,
     number, number, number, number, number,
-    number, string, string | null,
+    number, string, string | null, number,
   ]>;
 
   constructor(db: Database) {
     this.db = db;
+    // v1.0.12 (COST-1): unknown_pricing column added by migration 006.
     this.insertStmt = db.prepare(
       `INSERT INTO usage_events (
         id, session_id, turn_id, provider, model,
         input_tokens, output_tokens, cache_creation_input_tokens,
         cache_read_input_tokens, reasoning_output_tokens,
-        total_cost_usd, recorded_at, source
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        total_cost_usd, recorded_at, source, unknown_pricing
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
   }
 
@@ -226,6 +238,7 @@ export class UsageStore {
           ? Math.max(0, input.total_cost_usd)
           : 0,
       recorded_at: input.recorded_at,
+      unknown_pricing: input.unknown_pricing === true,
     };
     if (input.source !== undefined) row.source = input.source;
 
@@ -242,9 +255,52 @@ export class UsageStore {
       row.reasoning_output_tokens,
       row.total_cost_usd,
       row.recorded_at,
-      row.source ?? null
+      row.source ?? null,
+      row.unknown_pricing ? 1 : 0
     );
     return row;
+  }
+
+  // ── v1.0.12 (COST-2): MTD aggregation for cost limit gate ────
+
+  /**
+   * v1.0.12 (COST-2): 이번 달 (UTC) 누적 USD.
+   *
+   * Codex 권고: hard limit 의 단위는 MTD UTC default. UTC 기준 매월 1일 00:00
+   * 자동 reset (별도 reset 로직 X — query 가 시작 시각만 필터링).
+   *
+   * @param now 현재 시각 (테스트용 주입). 미지정 시 new Date().
+   */
+  getMonthToDateCostUsd(now: Date = new Date()): number {
+    // UTC 기준 이번 달 1일 00:00:00.000 → ISO 8601.
+    const monthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0)
+    ).toISOString();
+    const row = this.db
+      .prepare(
+        `SELECT COALESCE(SUM(total_cost_usd), 0) AS total
+         FROM usage_events
+         WHERE recorded_at >= ?`
+      )
+      .get(monthStart) as { total: number };
+    return row.total;
+  }
+
+  /**
+   * v1.0.12 (COST-1): 이번 달 unknown 모델 사용 횟수 (UI badge / 통계용).
+   */
+  getMonthToDateUnknownCount(now: Date = new Date()): number {
+    const monthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0)
+    ).toISOString();
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS c
+         FROM usage_events
+         WHERE recorded_at >= ? AND unknown_pricing = 1`
+      )
+      .get(monthStart) as { c: number };
+    return row.c;
   }
 
   // ── read ──────────────────────────────────────────────────────
@@ -362,7 +418,7 @@ export class UsageStore {
         `SELECT id, session_id, turn_id, provider, model,
                 input_tokens, output_tokens, cache_creation_input_tokens,
                 cache_read_input_tokens, reasoning_output_tokens,
-                total_cost_usd, recorded_at, source
+                total_cost_usd, recorded_at, source, unknown_pricing
          FROM usage_events
          WHERE session_id = ?
          ORDER BY recorded_at ASC, id ASC`
@@ -416,7 +472,7 @@ export class UsageStore {
       SELECT id, session_id, turn_id, provider, model,
              input_tokens, output_tokens, cache_creation_input_tokens,
              cache_read_input_tokens, reasoning_output_tokens,
-             total_cost_usd, recorded_at, source
+             total_cost_usd, recorded_at, source, unknown_pricing
       FROM usage_events
       ${whereSql}
       ORDER BY recorded_at ASC, id ASC

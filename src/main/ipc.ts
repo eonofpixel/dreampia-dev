@@ -1791,6 +1791,17 @@ export interface AiHandlerConfig {
   detectCli?: () => Promise<CliDetectionResult>;
   /** Optional Tool Queue integration for provider-emitted tool calls. */
   toolQueue?: ToolQueue;
+  /**
+   * v1.0.12 (COST-2): pre-flight cost limit gate. 미지정 시 enforcement 없음
+   * (테스트 / pre-init 환경 호환). 본 객체가 있으면 매 ai/start-stream 직전에
+   * checkBeforeStream 호출.
+   */
+  costGate?: import('./CostGate').CostGate;
+  /**
+   * v1.0.12 (COST-2): cost gate 차단 / threshold 도달 시 audit event 발행.
+   * 기본 (별도 sink) 미설정 시 audit 미기록 — Queue 의 audit_sink 와 다른 경로.
+   */
+  costAuditSink?: (event: import('./CostGate').CostAuditEvent) => void;
 }
 
 interface ActiveStream {
@@ -1840,6 +1851,80 @@ function registerAiHandlers(cfg: AiHandlerConfig, usage?: UsageStore): void {
           return { ok: false, error: `stream_id "${stream_id}" already active` };
         }
 
+        // v1.0.12 (COST-2): pre-flight cost limit check. 차단 시 즉시 fail
+        // — provider detection / spawn / stream 어떤 비용도 발생 X.
+        // Codex 외부 검토 결론: enforcement 는 main IPC boundary 에서만.
+        if (cfg.costGate !== undefined) {
+          // input estimate — turns 의 누적 char 수 기반 보수 추정 (4 chars ≈ 1 token).
+          const inputEstChars = turns.reduce((sum, t) => {
+            for (const block of t.content) {
+              if ('text' in block && typeof block.text === 'string') {
+                sum += block.text.length;
+              }
+            }
+            return sum;
+          }, 0);
+          const decision = cfg.costGate.checkBeforeStream({
+            model,
+            input_estimate_tokens: Math.ceil(inputEstChars / 4),
+            output_max_tokens: 4096,
+          });
+
+          if (decision.kind === 'block') {
+            // Audit (Codex picking).
+            cfg.costAuditSink?.({
+              timestamp: new Date().toISOString(),
+              session_id: session_id ?? '',
+              event:
+                decision.reason === 'unknown_model_under_limit'
+                  ? 'cost.unknown_model_blocked'
+                  : 'cost.limit_blocked',
+              model,
+              target_json: JSON.stringify({
+                reason: decision.reason,
+                limit_usd: decision.limit_usd,
+                mtd_total_usd: decision.mtd_total_usd,
+                projected_total_usd: decision.projected_total_usd,
+                projected_increment_usd: decision.projected_increment_usd,
+              }),
+              outcome: 'blocked',
+              hint: decision.hint,
+            });
+            // 사용자에게 보여줄 친화적 에러 — code 가 'COST_LIMIT_EXCEEDED'.
+            return {
+              ok: false,
+              error: JSON.stringify({
+                code: 'COST_LIMIT_EXCEEDED',
+                message: decision.hint,
+                details: {
+                  reason: decision.reason,
+                  limit_usd: decision.limit_usd,
+                  mtd_total_usd: decision.mtd_total_usd,
+                  projected_total_usd: decision.projected_total_usd,
+                },
+              }),
+            };
+          }
+
+          // allow + alert threshold 도달 시 audit (차단 X, toast 만).
+          if (decision.alert) {
+            cfg.costAuditSink?.({
+              timestamp: new Date().toISOString(),
+              session_id: session_id ?? '',
+              event: 'cost.alert_threshold',
+              model,
+              target_json: JSON.stringify({
+                projected_total_usd: decision.projected_total_usd,
+                projected_increment_usd: decision.projected_increment_usd,
+              }),
+              outcome: 'allowed_with_alert',
+            });
+          }
+
+          // Reserved ledger 등록 — stream 종료 시 release.
+          cfg.costGate.reserve(stream_id, decision.projected_increment_usd);
+        }
+
         // Codex spec 의 안전한 default — renderer 가 명시 안 했어도 sandbox 가
         // 강제되도록. Spec: docs/permission/provider-mapping.md
         const effectiveLevel: PermissionLevel = permission_level ?? 'workspace_write';
@@ -1861,6 +1946,7 @@ function registerAiHandlers(cfg: AiHandlerConfig, usage?: UsageStore): void {
         });
 
         // Stream 은 background 로 실행. Result 는 즉시 반환.
+        // CostGate.release 는 runStreamPump 의 finally 에서 호출되도록 wire.
         void runStreamPump(
           stream_id,
           provider,
@@ -1945,6 +2031,10 @@ async function runStreamPump(
         }),
         total_cost_usd: latestUsage.data.total_cost_usd,
         recorded_at: latestUsage.data.recorded_at,
+        // v1.0.12 (COST-1): unknown_pricing flag 전달 — UsageStore 가 영속.
+        ...(latestUsage.data.unknown_pricing !== undefined && {
+          unknown_pricing: latestUsage.data.unknown_pricing,
+        }),
       });
     } catch {
       // fire-and-forget — usage 기록 실패가 stream 을 깨뜨리면 안 됨
@@ -1988,6 +2078,10 @@ async function runStreamPump(
     // v0.4.0 — stream 종료 시 마지막 usage event 1건 영속.
     // session_id 가 없는 stream (e.g. detect 단계) 은 자동 skip.
     persistLatestUsage();
+    // v1.0.12 (COST-2): reserved ledger 해제 — 실 비용은 persistLatestUsage 가
+    // 영속하므로 reserved 는 단순 삭제. 다음 ai/start-stream 호출의 MTD 합계
+    // 가 갱신된 durable 합계 + (이번 stream 미반영) reserved 0 으로 정확.
+    cfg.costGate?.release(streamId);
     // Aborted 이고 terminal event 도 못 보냈으면 가짜 error event 발행 (renderer
     // 에서 hang 방지).
     if (!terminalEmitted && controller.signal.aborted) {

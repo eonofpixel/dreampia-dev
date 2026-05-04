@@ -56,6 +56,13 @@ export interface UsageEventData {
   total_cost_usd: number;
   /** ISO 8601 UTC. translator 가 채워 넣음. */
   recorded_at: string;
+  /**
+   * v1.0.12 (COST-1): 모델이 MODEL_PRICING 에 미등록일 때 true. UsageStore
+   * 가 이 플래그를 영속해 UI 가 "?" badge / unknown 합계 stat 분기. CLI 가
+   * total_cost_usd 를 직접 제공한 경우 (Claude result event) 에는 found=true
+   * 로 본다 — provider 가 합리적 추정을 해줬다는 의미.
+   */
+  unknown_pricing?: boolean;
 }
 
 /**

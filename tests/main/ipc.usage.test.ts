@@ -144,6 +144,7 @@ function sampleEvent(overrides: Partial<UsageEvent> = {}): UsageEvent {
     reasoning_output_tokens: 0,
     total_cost_usd: 0.001,
     recorded_at: '2026-05-03T10:00:00.000Z',
+    unknown_pricing: false,
     ...overrides,
   };
 }

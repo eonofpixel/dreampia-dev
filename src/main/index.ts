@@ -27,6 +27,8 @@ import {
 import { ShellRunTool, ToolQueue, ToolRegistry, type ToolAuditEvent } from '@/tools';
 import { getDefaultProvider } from '@/providers/auto';
 import type { ProviderFactory } from './compare/orchestrator';
+import { CostGate, type CostLimits, type CostAuditEvent } from './CostGate';
+import { readSettings } from './settings';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -244,9 +246,9 @@ app.whenReady().then(() => {
       decision_reason: event.decision_reason,
       ...(event.outcome !== undefined ? { outcome: event.outcome } : {}),
       ...(event.error !== undefined ? { error: event.error } : {}),
-      // tool_id 는 ai_model 컬럼에 임시 backfill — schema 가 별도 컬럼 없음.
-      // architectural debt: v1.3.x 에서 audit_log 컬럼 promote 권장.
-      ai_model: event.tool_id,
+      // v1.0.12 (migration 006): tool_id 정식 컬럼. v1.0.11 의 ai_model
+      // backfill debt 청산.
+      tool_id: event.tool_id,
     });
   };
   const queue = new ToolQueue(registry, (id) => sessionStore?.getSession(id) ?? undefined, {
@@ -293,6 +295,38 @@ app.whenReady().then(() => {
     return { provider: result.provider, source: result.source };
   };
 
+  // v1.0.12 (COST-2): cost gate. settings.json 의 cost_limit_usd /
+  // alert_threshold 를 매 호출마다 fresh 로 읽어 사용자가 설정 변경 시 즉시
+  // 반영. 미설정이면 enforcement 무력화 (한도 없음 → 모두 통과).
+  const costGate = new CostGate(usageStore, (): CostLimits => {
+    const settings = readSettings();
+    const out: CostLimits = {};
+    if (typeof settings.usage_cost_limit_usd === 'number') {
+      out.cost_limit_usd = settings.usage_cost_limit_usd;
+    }
+    if (typeof settings.usage_alert_threshold === 'number') {
+      out.alert_threshold = settings.usage_alert_threshold;
+    }
+    return out;
+  });
+
+  // v1.0.12 (COST-2): cost-gate audit sink — Codex 외부 검토에서 강조된
+  // 'cost.limit_blocked' / 'cost.unknown_model_blocked' / 'cost.alert_threshold'
+  // 를 audit_log 에 영속.
+  const costAuditSink = (event: CostAuditEvent): void => {
+    auditLogStore?.recordEvent({
+      timestamp: event.timestamp,
+      session_id: event.session_id.length > 0 ? event.session_id : 'unknown',
+      event: event.event,
+      capability: 'NETWORK_AI',
+      target_json: event.target_json,
+      decision_reason: event.outcome,
+      ai_model: event.model,
+      outcome: event.outcome,
+      ...(event.hint !== undefined ? { error: event.hint } : {}),
+    });
+  };
+
   registerIpcHandlers(
     app,
     sessionStore,
@@ -303,6 +337,8 @@ app.whenReady().then(() => {
     {
       getMainWindow: () => mainWindow,
       toolQueue: queue,
+      costGate,
+      costAuditSink,
     },
     {
       registry,

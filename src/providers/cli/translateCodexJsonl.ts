@@ -23,7 +23,7 @@
  */
 
 import type { ToolCallId } from '@/types';
-import { estimateCostUsd } from '../pricing';
+import { priceUsage } from '../pricing';
 import type { StreamEvent, UsageEventData } from '../types';
 
 interface TranslateContext {
@@ -91,7 +91,7 @@ export function translateCodexJsonl(parsed: unknown, ctx: TranslateContext): Str
     const cache_read_input_tokens = num(usageRaw, 'cached_input_tokens');
     const reasoning_output_tokens = num(usageRaw, 'reasoning_output_tokens');
 
-    const cost = estimateCostUsd(ctx.model, {
+    const priced = priceUsage(ctx.model, {
       input_tokens,
       output_tokens,
       cache_read_input_tokens,
@@ -106,7 +106,8 @@ export function translateCodexJsonl(parsed: unknown, ctx: TranslateContext): Str
       cache_creation_input_tokens: 0,
       cache_read_input_tokens,
       reasoning_output_tokens,
-      total_cost_usd: cost,
+      total_cost_usd: priced.usd,
+      unknown_pricing: !priced.found,
       recorded_at: new Date().toISOString(),
     };
     return [{ type: 'usage', data }];

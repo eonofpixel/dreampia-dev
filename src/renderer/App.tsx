@@ -21,6 +21,11 @@ import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { SettingsModal, applyTheme, type SettingsTabId } from './components/settings/SettingsModal';
 import { SlashHelpModal } from './components/chat/SlashHelpModal';
 import { CompareModal } from './components/chat/CompareModal';
+import {
+  CostLimitModal,
+  parseCostLimitError,
+  type ParsedCostLimitError,
+} from './components/cost/CostLimitModal';
 import { useCompare, type CompareSide } from './hooks/useCompare';
 import { KNOWN_MODELS, type SlashCommandId } from './commands/registry';
 import {
@@ -171,6 +176,9 @@ export function App(): React.JSX.Element {
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
   // v0.12.0 (I) — `/compare <prompt>` 슬래시 명령으로 여는 cross-AI 비교 모달.
   const [compareModalOpen, setCompareModalOpen] = useState(false);
+  // v1.0.12 (COST-2): main 의 ai/start-stream 이 COST_LIMIT_EXCEEDED 로 차단
+  // 시 본 state 가 채워져 modal 이 mount. parseCostLimitError 가 JSON 파싱.
+  const [costLimitError, setCostLimitError] = useState<ParsedCostLimitError | null>(null);
   const compareHook = useCompare({
     onError: (msg) => {
       console.error('[useCompare]', msg);
@@ -482,6 +490,12 @@ export function App(): React.JSX.Element {
     onComplete: handleStreamComplete,
     onError: (err) => {
       console.error('[ChatStreaming] error:', err);
+      // v1.0.12 (COST-2): main 의 cost gate 가 차단했으면 JSON 페이로드.
+      // 그 외 일반 에러는 console 만 (기존 동작).
+      const parsed = parseCostLimitError(err);
+      if (parsed !== null) {
+        setCostLimitError(parsed);
+      }
     },
   });
 
@@ -1167,6 +1181,25 @@ export function App(): React.JSX.Element {
           void compareHook.cancel();
         }}
         onAccept={handleAcceptCompare}
+      />
+      {/* v1.0.12 (COST-2): hard limit 차단 modal — main 이 차단한 정보 표시. */}
+      <CostLimitModal
+        open={costLimitError !== null}
+        onClose={() => setCostLimitError(null)}
+        onOpenSettings={() => {
+          setCostLimitError(null);
+          setSettingsInitialTab('usage');
+          setSettingsModalOpen(true);
+        }}
+        reason={costLimitError?.reason ?? 'limit_exceeded'}
+        {...(costLimitError?.limit_usd !== undefined && { limitUsd: costLimitError.limit_usd })}
+        {...(costLimitError?.mtd_total_usd !== undefined && {
+          mtdTotalUsd: costLimitError.mtd_total_usd,
+        })}
+        {...(costLimitError?.projected_total_usd !== undefined && {
+          projectedTotalUsd: costLimitError.projected_total_usd,
+        })}
+        {...(costLimitError?.message !== undefined && { hint: costLimitError.message })}
       />
     </>
   );

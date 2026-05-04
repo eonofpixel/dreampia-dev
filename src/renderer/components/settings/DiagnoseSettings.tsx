@@ -116,6 +116,8 @@ interface AuditEntry {
   capability: string;
   target_json: string;
   decision_reason: string;
+  /** v1.0.12: 정식 컬럼. v1.0.11 row 는 NULL (ai_model 에 backfill). */
+  tool_id?: string;
   ai_model?: string;
   ai_reason?: string;
   outcome?: string;
@@ -250,9 +252,14 @@ function AuditTable({
               </td>
               <td className="py-1 pr-3 font-mono text-text-primary">
                 {e.event}
-                {e.ai_model !== undefined && (
-                  <span className="ml-1 text-text-tertiary">[{e.ai_model}]</span>
-                )}
+                {(() => {
+                  // v1.0.12: tool_id 정식 컬럼. v1.0.11 row 는 ai_model 에
+                  // backfill 돼 있어 fallback.
+                  const toolLabel = e.tool_id ?? e.ai_model;
+                  return toolLabel !== undefined ? (
+                    <span className="ml-1 text-text-tertiary">[{toolLabel}]</span>
+                  ) : null;
+                })()}
               </td>
               <td className="py-1 pr-3 font-mono text-text-secondary">
                 {e.capability || '—'}

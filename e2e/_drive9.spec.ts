@@ -62,6 +62,8 @@ interface AuditEventShape {
   capability: string;
   target_json: string;
   decision_reason: string;
+  /** v1.0.12 (migration 006): 정식 컬럼. v1.0.11 row 는 NULL → ai_model 에 backfill 돼 있음. */
+  tool_id?: string;
   ai_model?: string;
   outcome?: string;
   error?: string;
@@ -242,8 +244,11 @@ test.describe('drive r9 — SEC-3 audit_log + SEC-4 side_effects (v1.0.11)', () 
     expect(mostRecent).toBeDefined();
     if (mostRecent !== undefined) {
       expect(mostRecent.event).toMatch(/^tool_use\./);
-      // ai_model 컬럼에 tool_id backfill 했으므로.
-      expect(mostRecent.ai_model).toBe('shell.run');
+      // v1.0.12 (migration 006): tool_id 정식 컬럼. v1.0.11 row 는 ai_model
+      // 에 backfill — fallback 으로 둘 다 받기.
+      const recordedTool =
+        (mostRecent as { tool_id?: string }).tool_id ?? mostRecent.ai_model;
+      expect(recordedTool).toBe('shell.run');
     }
   });
 

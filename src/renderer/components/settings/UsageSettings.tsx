@@ -29,6 +29,7 @@ import {
 } from '../../hooks/useUsage';
 import { UsageChart } from './UsageChart';
 import { useT } from '../../i18n';
+import { MODEL_PRICING_LAST_UPDATED } from '@/providers';
 
 export interface UsageSettingsProps {
   open: boolean;
@@ -182,6 +183,10 @@ export function UsageSettingsPanel(): React.JSX.Element {
 
   return (
     <>
+      {/* v1.0.12 (COST-1): 가격표 stale 경고 — 사용자가 비용이 부정확할 수
+          있음을 인지하도록. 30일 이하 = 미표시, 30~90일 = 회색 hint, 90일+ =
+          노란색 경고. */}
+      <PricingFreshnessBanner />
       {/* Preset tabs */}
       <div
         role="radiogroup"
@@ -591,4 +596,54 @@ function SectionHeader({ children }: { children: React.ReactNode }): React.JSX.E
       {children}
     </h3>
   );
+}
+
+// ────────────────────────────────────────────────────────────
+// v1.0.12 (COST-1): pricing freshness banner
+//
+// MODEL_PRICING_LAST_UPDATED 와 현재 시각 비교 후 경고 띄움.
+// - 0~29일: 미표시 (충분히 fresh).
+// - 30~89일: 회색 정보 hint.
+// - 90일+: 노란색 경고 ("가격 정보가 오래되어 비용 추정이 부정확할 수 있어요").
+// ────────────────────────────────────────────────────────────
+
+function PricingFreshnessBanner(): React.JSX.Element | null {
+  const t = useT();
+  const lastUpdated = MODEL_PRICING_LAST_UPDATED;
+  const ageDays = computeAgeDays(lastUpdated);
+
+  if (ageDays < 30) return null;
+
+  const stale = ageDays >= 90;
+  const tone = stale
+    ? 'border-yellow-700/40 bg-yellow-900/20 text-yellow-300'
+    : 'border-border-primary bg-bg-secondary text-text-secondary';
+
+  return (
+    <div
+      className={`mx-2 mt-2 rounded-md border ${tone} p-2 text-xs`}
+      data-testid="usage-pricing-freshness"
+      data-stale={stale ? 'true' : 'false'}
+      role={stale ? 'status' : undefined}
+    >
+      <p>
+        {t('usage.pricing_freshness.label', {
+          date: lastUpdated,
+          days: String(ageDays),
+        })}
+      </p>
+      {stale && (
+        <p className="mt-0.5 text-yellow-300/80">
+          {t('usage.pricing_freshness.stale_hint')}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function computeAgeDays(isoDate: string): number {
+  const parsed = Date.parse(`${isoDate}T00:00:00.000Z`);
+  if (!Number.isFinite(parsed)) return 0;
+  const diff = Date.now() - parsed;
+  return Math.max(0, Math.floor(diff / (24 * 60 * 60 * 1000)));
 }

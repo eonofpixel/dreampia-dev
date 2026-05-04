@@ -2,6 +2,130 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.0.12] — 2026-05-05
+
+**COST-1 + COST-2 청산 — pricing 정직성 + 실제 hard limit enforcement.**
+
+`docs/v1.x-roadmap.md` 1.2.3 의 비용 / 한도 묶음. v1.0.11 audit 인프라 위에
+실제 차단 enforcement + unknown 모델 정직 분리. 두 항목은 한도 도달 정책의
+prerequisite 라 같이 가는 게 자연스러움.
+
+Codex 외부 검토 (2026-05-04 — `codex-question-3.md`) 의 picking 그대로 반영:
+- (4a) **unknown 모델 + hard-limit 활성 = 즉시 차단** ("초과 방지" 가 hard
+  limit 의 핵심).
+- **MTD UTC 자동 reset** — 매월 1일 00:00 UTC, manual reset X (사용자 운영
+  실수 위험).
+- **하드 차단 (계속 진행 X)** — soft override 필요시 별도 명시 설정.
+- **Pre-flight estimate**: durable MTD + reserved + 보수 (input + output_max).
+
+### Added (Cost-1: 가격 정직성)
+
+- **`MODEL_PRICING_LAST_UPDATED = '2026-05-04'`** 상수 + UI stale 경고.
+  - 30일 미만 → 미표시 (fresh).
+  - 30~89일 → 회색 hint.
+  - 90일+ → 노란색 경고 banner ("가격표가 오래되어 비용 추정이 부정확할 수
+    있어요").
+  - 위치: Settings > 사용량 panel 상단. testid `usage-pricing-freshness`.
+- **`priceUsage(model, usage) → { usd, found }`** — 정식 API. found=false
+  면 미등록 모델. 기존 `estimateCostUsd` 는 호환 유지 (number 반환, 0 for
+  unknown).
+- **`estimatePreflightCost({ model, input_estimate_tokens, output_max_tokens })`**
+  — pre-flight 보수 estimate. default output_max=4096.
+- **`UsageEvent.unknown_pricing`** 컬럼 (migration 006). UI 가 "?" badge
+  분기. translator (Claude / Codex / Mock) 모두 `unknown_pricing` 영속.
+- **공식 가격 fetch (B 옵션 = HTML scrape)** 채택 X — Codex 권고대로 manual
+  갱신 + provider Costs/Admin Usage API 어댑터는 별도 슬롯 (v1.1.x+).
+
+### Added (Cost-2: hard limit enforcement)
+
+- **`src/main/CostGate.ts`** — pre-flight 차단 모듈.
+  - `checkBeforeStream({ model, input_estimate_tokens, output_max_tokens })`
+    → `{ kind: 'allow' | 'block', ... }`.
+  - 차단 reason: `'limit_exceeded'` | `'unknown_model_under_limit'`.
+  - In-memory reserved ledger (`reserve(streamId, usd)` / `release(streamId)`)
+    — 동시 진행 중 stream 의 보수 estimate 합산 → race condition 방지.
+  - `getMonthToDateCostUsd(now?)` — UsageStore 새 helper, UTC 월 시작 시각
+    이상 sum. 매월 1일 00:00 UTC 자동 reset (별도 reset 로직 X — query 가
+    시작 시각만 필터링하므로 동일 효과).
+
+- **`ai/start-stream` IPC gate** — main IPC boundary 에서만 enforcement
+  (Codex 권고: renderer pre-flight 는 UX 용, trust 는 main 에서만).
+  - 차단 시 즉시 `Result.fail` with `code: 'COST_LIMIT_EXCEEDED'` JSON
+    payload (limit_usd / mtd_total_usd / projected_total_usd / reason).
+  - Provider detection / spawn / stream 어떤 비용도 발생 X.
+  - allow 시 `gate.reserve(stream_id, projected)` → `runStreamPump.finally`
+    에서 `gate.release(stream_id)`.
+  - alert_threshold 도달 시 audit 만 발행 (차단 X).
+
+- **Stream 중 한도 도달 정책** — Codex 권고 그대로: 현재 turn complete,
+  다음 turn 부터 차단 (mid-cancel X). UsageStore 의 durable 합계 + reserved
+  합계가 다음 호출 gate 결정에 자동 반영.
+
+- **CostLimitModal** (`src/renderer/components/cost/CostLimitModal.tsx`) —
+  사용자가 차단을 명확히 인지하는 modal.
+  - reason 별 i18n title/body (limit_exceeded vs unknown_model_under_limit).
+  - 한도 / 이번 달 사용 / 예상 합계 / 다음 reset (매월 1일 00:00 UTC) 표시.
+  - "한도 설정" 버튼 → Settings > 사용량 탭 직접 이동.
+  - **"계속 진행" 버튼 X** — Codex 결정 (4a): hard limit 은 차단, override
+    원하면 별도 명시 설정.
+  - testid: `cost-limit-modal`, `cost-limit-modal-title`,
+    `cost-limit-modal-stats`, `cost-limit-modal-open-settings`,
+    `cost-limit-modal-close`.
+  - i18n ko/en (`cost.modal.*`).
+
+- **`parseCostLimitError(raw)`** — IpcStreamingProvider 의 error string 을
+  파싱해 ParsedCostLimitError 또는 null 반환. App.tsx `onError` 에서 검사 후
+  modal 발화.
+
+### Added (audit_log 확장)
+
+- **migration 006 — `audit_log.tool_id` 정식 컬럼** (Codex 권고: "audit/usage
+  schema 동시에 손볼 때 같이 정리"). v1.0.11 의 ai_model 백필 debt 청산.
+  - 이전 (v1.0.11) row: tool_id IS NULL, ai_model 에 backfill — UI 가
+    `tool_id ?? ai_model` fallback 으로 호환 표시.
+  - 신규 (v1.0.12) row: tool_id 직접 사용, ai_model 은 비워둠 (또는 cost
+    audit 의 model 이 들어감).
+  - Index `idx_audit_tool_id` 추가 (tool 별 통계 분석용).
+
+- **새 audit event 종류**:
+  - `cost.limit_blocked` — hard limit 도달로 ai/start-stream 차단.
+  - `cost.unknown_model_blocked` — unknown 모델 + hard-limit 차단.
+  - `cost.alert_threshold` — 임계값 도달 (차단 X, audit 만).
+  - capability='NETWORK_AI' (AI 호출과 연관된 비용 결정).
+  - target_json 에 limit/mtd/projected USD 직렬화.
+
+### Migration 006
+
+`src/storage/migrations/006_cost_v1_0_12.sql`:
+- `usage_events.unknown_pricing INTEGER NOT NULL DEFAULT 0` + partial index.
+- `audit_log.tool_id TEXT` + partial index.
+- ALTER TABLE ADD COLUMN — SQLite 가 default 로 자동 backfill.
+
+LATEST_SCHEMA_VERSION: 5 → 6.
+
+### Verified
+
+- typecheck clean
+- lint: pre-existing 4 issues only (e2e/_drive.spec.ts, App.tsx) — 새 추가 0
+- 403/403 unit (24 신규: pricing.cost1 11 + CostGate 13)
+- 11/11 spawnSafe
+- 47/47 drive e2e (drive1-9 회귀 0 + drive10 4 추가)
+  - 35: COST_LIMIT_EXCEEDED 차단 응답 + JSON payload
+  - 36: unknown 모델 차단 + audit 'cost.unknown_model_blocked' 영속
+  - 37: pricing freshness banner mount (stale=false 정상)
+  - 38: alert_threshold 도달 시 audit 'cost.alert_threshold' (차단 X)
+
+### Notes
+
+- COST-2 의 stream 중 차단은 의도적으로 next-turn 차단 — Codex 권고 ("현재
+  turn complete 후 다음 turn 차단" 이 사용자 신뢰에 맞음). mid-stream cancel
+  은 사용자가 명시 cancel 했을 때만.
+- v1.1.x 후속: provider Costs/Admin Usage API 어댑터 (사후 reconcile/import
+  용도) — admin key 필요 + freshness 지연 때문에 실시간 차단 단일 기준엔
+  부적합 (Codex 결론).
+- v1.3.x 후속: audit_log 의 `ai_model` 컬럼 deprecate 검토 — v1.0.11 백필
+  데이터가 충분히 zero-out 되면 column drop 가능.
+
 ## [1.0.11] — 2026-05-04
 
 **SEC-3 + SEC-4 청산 — audit_log 자동 기록 + tool result side_effects 정식 구조.**

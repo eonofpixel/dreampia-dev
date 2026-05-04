@@ -26,7 +26,7 @@
  */
 
 import type { ToolCallId } from '@/types';
-import { estimateCostUsd } from '../pricing';
+import { priceUsage } from '../pricing';
 import type { StreamEvent, UsageEventData } from '../types';
 
 interface TranslateContext {
@@ -112,14 +112,15 @@ export function translateClaudeJsonl(parsed: unknown, ctx: TranslateContext): St
     const usageRaw = message.usage as Record<string, unknown> | undefined;
     if (usageRaw !== undefined && usageRaw !== null) {
       const tokens = parseClaudeUsage(usageRaw);
-      const cost = estimateCostUsd(ctx.model, tokens);
+      const priced = priceUsage(ctx.model, tokens);
       const data: UsageEventData = {
         provider: 'claude',
         model: ctx.model,
         turn_id: ctx.turnId,
         ...tokens,
-        total_cost_usd: cost,
+        total_cost_usd: priced.usd,
         recorded_at: new Date().toISOString(),
+        unknown_pricing: !priced.found,
       };
       out.push({ type: 'usage', data });
     }
@@ -136,10 +137,14 @@ export function translateClaudeJsonl(parsed: unknown, ctx: TranslateContext): St
     if (usageRaw !== undefined && usageRaw !== null) {
       const tokens = parseClaudeUsage(usageRaw);
       const cliCost = obj.total_cost_usd;
-      const cost =
-        typeof cliCost === 'number' && Number.isFinite(cliCost) && cliCost >= 0
-          ? Math.round(cliCost * 1_000_000) / 1_000_000
-          : estimateCostUsd(ctx.model, tokens);
+      // CLI 가 직접 cost 를 줬으면 found=true (제공자 신뢰), 아니면 priceUsage.
+      const cliCostValid =
+        typeof cliCost === 'number' && Number.isFinite(cliCost) && cliCost >= 0;
+      const priced = priceUsage(ctx.model, tokens);
+      const cost = cliCostValid
+        ? Math.round((cliCost as number) * 1_000_000) / 1_000_000
+        : priced.usd;
+      const unknown = cliCostValid ? false : !priced.found;
       const data: UsageEventData = {
         provider: 'claude',
         model: ctx.model,
@@ -147,6 +152,7 @@ export function translateClaudeJsonl(parsed: unknown, ctx: TranslateContext): St
         ...tokens,
         total_cost_usd: cost,
         recorded_at: new Date().toISOString(),
+        unknown_pricing: unknown,
       };
       out.push({ type: 'usage', data });
     }

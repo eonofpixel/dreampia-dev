@@ -35,8 +35,11 @@ export type {
 // v0.4.0 — pricing (pure, sandbox-safe)
 export {
   MODEL_PRICING,
+  MODEL_PRICING_LAST_UPDATED,
   estimateCostUsd,
+  estimatePreflightCost,
   lookupPricing,
+  priceUsage,
   type ModelPricing,
   type UsageInputs,
 } from './pricing';

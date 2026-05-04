@@ -61,6 +61,11 @@ export interface AuditEventInput {
   /** caller-provided JSON. side_effects[] / ResolvedTarget / grant.target — 모두 이미 stringified. */
   target_json: string;
   decision_reason: string;
+  /**
+   * v1.0.12 (migration 006): tool 의 정식 컬럼. v1.0.11 까진 ai_model 에
+   * backfill 했으나 의미 혼동. 신규 row 부터 이 컬럼 직접 사용.
+   */
+  tool_id?: string;
   ai_model?: string;
   ai_reason?: string;
   outcome?: string;
@@ -70,6 +75,8 @@ export interface AuditEventInput {
 export interface AuditEvent extends AuditEventInput {
   id: number;
 }
+
+export type { AuditEvent as AuditEventRecord };
 
 export interface AuditQueryFilter {
   /** ISO8601 inclusive lower bound. */
@@ -95,6 +102,7 @@ interface AuditRow {
   capability: string;
   target_json: string;
   decision_reason: string;
+  tool_id: string | null;
   ai_model: string | null;
   ai_reason: string | null;
   outcome: string | null;
@@ -112,6 +120,9 @@ function rowToEvent(row: AuditRow): AuditEvent {
     decision_reason: row.decision_reason,
   };
   if (row.turn_id !== null) out.turn_id = row.turn_id;
+  // v1.0.12: tool_id 가 정식 컬럼. 이전 v1.0.11 row 는 ai_model 에 backfill 돼
+  // 있어 tool_id IS NULL. UI 가 tool_id ?? ai_model 패턴으로 호환.
+  if (row.tool_id !== null) out.tool_id = row.tool_id;
   if (row.ai_model !== null) out.ai_model = row.ai_model;
   if (row.ai_reason !== null) out.ai_reason = row.ai_reason;
   if (row.outcome !== null) out.outcome = row.outcome;
@@ -137,15 +148,17 @@ export class AuditLogStore {
     string | null,
     string | null,
     string | null,
+    string | null,
   ]>;
 
   constructor(db: Database) {
     this.db = db;
+    // v1.0.12 (migration 006): tool_id 정식 컬럼 추가. ai_model 은 호환 위해 유지.
     this.insertStmt = db.prepare(
       `INSERT INTO audit_log (
         timestamp, session_id, turn_id, event, capability, target_json,
-        decision_reason, ai_model, ai_reason, outcome, error
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        decision_reason, tool_id, ai_model, ai_reason, outcome, error
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
   }
 
@@ -177,6 +190,7 @@ export class AuditLogStore {
       input.capability,
       input.target_json,
       input.decision_reason,
+      input.tool_id ?? null,
       input.ai_model ?? null,
       input.ai_reason ?? null,
       input.outcome ?? null,
@@ -225,7 +239,7 @@ export class AuditLogStore {
     const whereSql = wheres.length > 0 ? `WHERE ${wheres.join(' AND ')}` : '';
     const sql = `
       SELECT id, timestamp, session_id, turn_id, event, capability, target_json,
-             decision_reason, ai_model, ai_reason, outcome, error
+             decision_reason, tool_id, ai_model, ai_reason, outcome, error
       FROM audit_log
       ${whereSql}
       ORDER BY timestamp DESC, id DESC
@@ -246,7 +260,7 @@ export class AuditLogStore {
     const rows = this.db
       .prepare(
         `SELECT id, timestamp, session_id, turn_id, event, capability, target_json,
-                decision_reason, ai_model, ai_reason, outcome, error
+                decision_reason, tool_id, ai_model, ai_reason, outcome, error
          FROM audit_log
          WHERE session_id = ?
          ORDER BY timestamp ASC, id ASC
