@@ -14,10 +14,10 @@
 
 import {
   app,
+  BrowserWindow,
   dialog,
   ipcMain,
   type App,
-  type BrowserWindow,
   type IpcMainInvokeEvent,
 } from 'electron';
 import { promises as fsp } from 'node:fs';
@@ -813,12 +813,20 @@ export function registerIpcHandlers(
 function registerWorkspaceHandlers(): void {
   ipcMain.handle(
     'workspace/pick-folder',
-    async (): Promise<Result<{ path: string; name: string } | null>> => {
+    async (
+      event: IpcMainInvokeEvent
+    ): Promise<Result<{ path: string; name: string } | null>> => {
       try {
-        const result = await dialog.showOpenDialog({
+        // v1.0.4 fix — parent BrowserWindow 명시. 이전엔 옵션만 넘겨서
+        // Windows 에서 dialog 가 main window 뒤로 가거나 안 뜨는 증상이 있었음
+        // (사용자 직접 검증으로 발견, 새 채팅 / 온보딩 폴더 선택 둘 다 영향).
+        const win = BrowserWindow.fromWebContents(event.sender);
+        const opts: Electron.OpenDialogOptions = {
           properties: ['openDirectory'],
           title: '작업 폴더 선택',
-        });
+        };
+        const result =
+          win !== null ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
         if (result.canceled || result.filePaths.length === 0) {
           return ok(null);
         }

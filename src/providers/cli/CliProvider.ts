@@ -20,7 +20,8 @@
  *   codex:  exec --json --skip-git-repo-check --ephemeral --model M "PROMPT"
  */
 
-import { spawn, type ChildProcess } from 'node:child_process';
+import { type ChildProcess } from 'node:child_process';
+import { ensureAsciiCwd, spawnSafe } from './spawnSafe';
 import type { PermissionLevel, Provider, ToolCallRef, Turn } from '@/types';
 import { newTurnId, nowIso } from '@/types';
 import type { StreamEvent, StreamingProvider } from '../types';
@@ -107,12 +108,18 @@ export class CliProvider implements StreamingProvider {
 
     const args = this.buildArgs({ model: input.model, prompt: userText });
 
+    // v1.0.6 — Windows 한국어/비-ASCII 폴더 → 8.3 short path 변환. Codex CLI 가
+    // cwd 를 HTTP header (x-codex-turn-metadata) 에 그대로 넣어 server 가 reject
+    // 하던 문제 회피. 변환 실패 시 원본 cwd 사용 (best-effort).
+    const safeCwd = await ensureAsciiCwd(this.opts.cwd);
+
     let child: ChildProcess;
     try {
-      child = spawn(this.opts.binaryPath, args, {
-        cwd: this.opts.cwd,
+      // v1.0.5 — Windows .cmd / .bat 는 spawnSafe 가 cmd.exe /c 로 wrapping.
+      // npm global 의 codex 가 .cmd 라서 직접 spawn 시 Node 22 EINVAL.
+      child = spawnSafe(this.opts.binaryPath, args, {
+        cwd: safeCwd,
         env: process.env,
-        shell: false,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

@@ -2,6 +2,64 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.0.4] — 2026-05-04
+
+**3 production bug fix bundle — Windows + 한국어 워크스페이스 (사용자 직접 검증).**
+
+사용자가 v1.0.3 dev 앱에서 직접 사용 후 발견한 3개 critical bug 즉시 fix.
+모두 Windows-specific 이거나 한국어 폴더 경로와 관련.
+
+### Fixed
+
+#### Bug #1: 폴더 선택 dialog 안 뜸
+- 증상: 온보딩 wizard step 4 [폴더 찾아보기] 클릭, [새 채팅] 시 picker
+  호출했지만 OS dialog 가 main window 뒤로 가거나 표시 안 됨
+- 원인: `dialog.showOpenDialog(opts)` — parent BrowserWindow 인자 누락 →
+  Windows 에서 z-order 문제
+- Fix: `BrowserWindow.fromWebContents(event.sender)` 로 parent 추출 후
+  `dialog.showOpenDialog(parentWindow, opts)` 형태로 호출
+
+#### Bug #2: codex CLI spawn EINVAL
+- 증상: AI 응답 요청 시 "spawn failed: spawn EINVAL"
+- 원인: Node.js 18.20.2+ / 20.12.2+ / 22+ 부터 child_process.spawn 으로
+  `.cmd` / `.bat` 직접 실행 거부 (CVE-2024-27980 — Windows batch 파일
+  argument injection 보안 fix). npm global 의 `codex.cmd` 가 영향.
+- Fix: `src/providers/cli/spawnSafe.ts` 신규 — Windows + .cmd / .bat 시
+  `cmd.exe /d /s /c` 로 wrapping. .ps1 은 powershell.exe 로 wrapping.
+  `where codex` multi-line 결과 (확장자 없는 unix wrapper + .cmd) 중
+  `.cmd` / `.exe` / `.bat` 우선 sort.
+
+#### Bug #3: codex 한국어 워크스페이스 → server reject
+- 증상: codex 응답 시 "Reconnecting... 2/5 (UTF-8 encoding error: failed to
+  convert header to str for header name 'x-codex-turn-metadata' with value
+  ...분석... )"
+- 원인: Codex CLI 가 cwd 를 `x-codex-turn-metadata` HTTP 헤더에 raw bytes
+  로 packing. 한국어 폴더 (`C:\Dev\분석\dreampia-dev`) 의 UTF-8 byte 가
+  HTTP 헤더 ASCII 규약 위반 → server (chatgpt.com) reject → 5회 reconnect
+  → 최종 실패.
+- Fix: `ensureAsciiCwd(cwd)` — Windows 에서 cwd 가 non-ASCII 면:
+  1. `cmd.exe for %I in (...) do @echo %~sI` 로 8.3 short path 시도
+  2. 부모 폴더 8.3 disabled 면 long path 그대로 → junction fallback
+  3. `%TEMP%\dreampia-cwd-<sha1>` 로 PowerShell `New-Item -ItemType
+     Junction -Target <한국어 cwd>` 생성 (best-effort)
+  4. junction path (ASCII-only) 를 spawn cwd 로 사용 → codex header ASCII
+- 캐시: 동일 cwd hash 면 junction 재사용 (재생성 X)
+- Fallback: junction 생성 실패해도 원본 cwd 그대로 사용 (silent best-effort)
+
+### Verified
+
+- 사용자 직접 dev 앱에서 codex 응답 받기 성공 (gpt-5.5 모델)
+- 1430 vitest pass / 0 typecheck / 0 lint
+
+### Files
+
+- `src/main/ipc.ts` — workspace/pick-folder 에 parent BrowserWindow 추가
+- `src/providers/cli/CliProvider.ts` — spawnSafe + ensureAsciiCwd 사용
+- `src/providers/cli/detect.ts` — execPathLookup (multi-line where) +
+  execLineSafe (.cmd 의 --version)
+- `src/providers/cli/spawnSafe.ts` (신규) — spawnSafe / isDirectlySpawnable
+  / ensureAsciiCwd / createJunctionAlias
+
 ## [1.0.3] — 2026-05-04
 
 **UX Bug Fix — 사이드바 미구현 nav 항목 명시화 (사용자 직접 검증 후).**
