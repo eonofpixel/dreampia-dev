@@ -377,24 +377,29 @@ function ChatHeader({
     sessionWorkspaceName !== workspaceName;
 
   return (
-    <div className="flex h-12 items-center justify-between border-b border-border-primary px-4">
-      <h1 className="truncate text-sm font-semibold">{session.title}</h1>
-      <div className="flex items-center gap-3 text-xs text-text-tertiary">
+    // v1.0.7 — Codex 검토 반영: flex-shrink-0 + whitespace-nowrap + min-w-0 로
+    // narrow 한 header 에서 모든 자식이 단일 row 유지. 이전 v1.0.6 는 drift
+    // badge 추가로 모든 요소 wrap 됐었음.
+    <div className="flex h-12 items-center justify-between gap-3 border-b border-border-primary px-4">
+      <h1 className="min-w-0 truncate text-sm font-semibold">{session.title}</h1>
+      <div className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs text-text-tertiary">
         {driftDetected && (
+          // v1.0.7 — 짧은 형태 (⚠ icon only). 자세한 설명은 tooltip + aria.
+          // 이전 v1.0.6 의 "다른 폴더에서 시작됨" 라벨은 너무 길어 layout 깨뜨림.
           <span
-            className="rounded bg-yellow-900/30 px-2 py-0.5 text-[10px] text-yellow-400"
+            className="shrink-0 rounded bg-yellow-900/30 px-1.5 py-0.5 text-[11px] leading-none text-yellow-400"
             title={t('chat.header.drift_tooltip', { name: sessionWorkspaceName })}
             aria-label={t('chat.header.drift_aria', { name: sessionWorkspaceName })}
             data-testid="workspace-drift-badge"
           >
-            ⚠ {t('chat.header.drift_label')}
+            ⚠
           </span>
         )}
         {workspaceName !== undefined && onPickWorkspace !== undefined && (
           <button
             type="button"
             onClick={onPickWorkspace}
-            className="rounded bg-bg-tertiary px-2 py-0.5 hover:bg-border-primary"
+            className="max-w-[160px] shrink-0 truncate rounded bg-bg-tertiary px-2 py-0.5 hover:bg-border-primary"
             title={t('chat.header.workspace_tooltip', { name: workspaceName })}
             aria-label={t('chat.header.workspace_pick_aria')}
             data-testid="workspace-pick-button"
@@ -410,12 +415,16 @@ function ChatHeader({
           disabled={permissionDisabled || onChangePermission === undefined}
         />
         <CliStatusBadge status={cliStatus} />
-        <span>
+        <span className="shrink-0">
           {session.conversation.current_model}
           <span className="mx-1">·</span>
           {EFFORT_LABELS_KO[session.conversation.current_effort]}
         </span>
-        <span aria-label={t('chat.header.more')}>···</span>
+        {/*
+         * v1.0.7 — FAKE-3 청산: ··· (more) 가 핸들러 없는 장식이었음. 진짜
+         * dropdown menu 는 v1.1.0 에 별도 작업 — 일단 제거해서 사용자 기대와
+         * 동작 mismatch 해소.
+         */}
       </div>
     </div>
   );

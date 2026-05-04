@@ -2,6 +2,50 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.0.7] — 2026-05-04
+
+**ChatHeader UX 회귀 청산 + drive harness 강화 + version sync.**
+
+v1.0.6 의 drift badge 가 ChatHeader layout 깨뜨린 게 drive harness 에서
+통과됐던 사실 (Codex 외부 검토로 발견) 을 즉시 fix. 회귀 detection 자체부터
+강화한 후 layout 재설계.
+
+### Fixed
+
+- **UX-REG-1**: ChatHeader 의 모든 자식 요소가 narrow 한 폭에서 wrap 되던
+  문제. `flex-shrink-0` + `whitespace-nowrap` + 제목 `min-w-0` + drift
+  badge 짧은 형태 (`⚠` icon only + tooltip) + workspace 버튼 `max-w-[160px]
+  truncate` 로 안정적인 단일 row 보장.
+
+### Removed
+
+- **FAKE-3**: ChatHeader 의 `···` (more) 장식 span 제거. 핸들러 0 이라
+  사용자 기대와 mismatch 였음. 진짜 dropdown menu 는 v1.1.0 작업.
+
+### Strengthened
+
+- **TEST-1**: `e2e/_drive5.spec.ts` 의 시나리오 23 에 ChatHeader layout
+  guard 추가. 모든 header 자식의 `getBoundingClientRect().height < 30px`
+  + header 전체 `< 60px` (h-12 + 여유) 검증. 이전 v1.0.6 의 깨진 layout
+  은 이 guard 부재로 통과됐었음. 이제 회귀 자동 차단.
+
+### Synced
+
+- **META-1**: `package.json` version `1.0.5` → `1.0.7` (v1.0.6 의 commit
+  drift 와 함께). 앱 내부 진단 패널의 "앱 버전" 표시도 정합.
+
+### Verified
+
+- drive 회귀 33/33 → 그대로 통과 (TEST-1 강화 후 ChatHeader fix 로 다시
+  통과)
+- spawnSafe unit 11/11
+- typecheck clean
+
+### 참조
+
+- `docs/v1.x-roadmap.md` — Codex 0.125.0 검토로 발견된 9개 gap 통합 본
+- 다음 v1.0.8: Panel 토글 시스템
+
 ## [1.0.5] — 2026-05-04
 
 **Workspace UX bug bundle — 사용자 직접 검증으로 발견.**
