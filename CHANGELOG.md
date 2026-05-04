@@ -2,6 +2,65 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.0.5] — 2026-05-04
+
+**Workspace UX bug bundle — 사용자 직접 검증으로 발견.**
+
+사용자가 v1.0.4 dev 앱에서 [프로젝트] 클릭 → 폴더 변경했지만 sidebar /
+ChatHeader 라벨 안 변경 + AI 가 자기 폴더를 junction path 로 응답하는 일관성
+문제 발견. 4개 연결된 버그 일괄 fix.
+
+### Fixed
+
+#### Bug #1: 사이드바 [프로젝트] 클릭 비활성
+- 증상: 사이드바 좌측 [📁 폴더] 클릭해도 동작 X
+- 원인: v1.0.3 SidebarNavItem 자동 disabled 룰 (onClick 없으면) 이 [프로젝트]
+  display 항목까지 disable
+- Fix: `SidebarProps.onPickWorkspace` 추가 + Sidebar [프로젝트] 항목에 wire-up
+  → App.tsx 가 `pickWorkspace` 호출
+
+#### Bug #2: 폴더 변경해도 sidebar/ChatHeader 라벨 안 변경
+- 증상: [프로젝트] 클릭 → dialog → 새 폴더 선택했지만 sidebar/ChatHeader 라벨
+  옛 폴더 그대로
+- 원인: `projectName` / `chatHeaderWorkspaceName` 둘 다 `activeSession.workspace
+  .name ?? defaultWorkspace.name` 로 active session 우선 → 폴더 변경해도 active
+  session 의 영구화된 workspace 가 그대로
+- Fix: 두 라벨 모두 `defaultWorkspace.name` 만 사용. session.workspace 는 DB
+  영구화 메타로 유지 (사용자 시각엔 항상 "현재 작업 폴더" 표시)
+
+#### Bug #3: AI 가 자기 폴더를 junction path 로 응답
+- 증상: 사용자가 "지금 폴더명 뭐야?" → AI 응답 "dreampia-cwd-99c329a1e5"
+  (junction alias) → 사용자 혼란
+- 원인 1: streaming 의 `workspaceRoot = activeSession.workspace.root` (옛 한국어
+  폴더) → ensureAsciiCwd 가 junction 생성 → AI 의 process.cwd() = junction
+- 원인 2: codex CLI 가 `-C/--cd` 옵션을 제공 — spawn cwd 와 별개로 working root
+  를 명시 가능
+- Fix 1: streaming `workspaceRoot = defaultWorkspace.root ?? session.workspace
+  .root` (현재 작업 폴더 우선)
+- Fix 2: CodexAdapter args 에 `-C, this.opts.cwd` 추가 — junction 으로 spawn
+  되어도 AI 가 인식하는 working root 는 사용자 선택 폴더
+
+#### Bug #4: @ 멘션 후보가 옛 폴더 파일
+- 증상: 사용자가 폴더 변경 후 @ 입력 → 옛 폴더의 파일 후보 표시
+- 원인: `mentionWorkspaceRoot = activeSession?.workspace.root`
+- Fix: `mentionWorkspaceRoot = defaultWorkspace?.root ?? activeSession?.workspace
+  .root` (현재 작업 폴더 우선)
+
+### Verified
+
+- 사용자 직접 dev 앱 테스트:
+  1. [프로젝트] 클릭 → dialog → 폴더 변경 → sidebar/ChatHeader 즉시 갱신 ✅
+  2. AI 에게 "폴더명 뭐야" → 사용자 선택 폴더명 정확히 응답 ✅
+- 1430 vitest pass / 0 typecheck / 0 lint
+
+### Files
+
+- `src/renderer/App.tsx` — projectName, chatHeaderWorkspaceName, mentionWorkspaceRoot,
+  effectiveWorkspaceRoot 모두 defaultWorkspace 우선 + Sidebar onPickWorkspace prop
+- `src/renderer/components/sidebar/Sidebar.tsx` — onPickWorkspace prop + [프로젝트]
+  onClick wire-up
+- `src/providers/cli/CliProvider.ts` — codex args 에 `-C, cwd` 옵션 추가
+
 ## [1.0.4] — 2026-05-04
 
 **3 production bug fix bundle — Windows + 한국어 워크스페이스 (사용자 직접 검증).**

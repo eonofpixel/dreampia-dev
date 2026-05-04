@@ -670,15 +670,22 @@ export function App(): React.JSX.Element {
       //    persisted on message_complete (handleStreamComplete).
       // session.permission.default_level 을 명시적으로 forward — main 이 이걸로
       // CLI sandbox/tool-policy 결정. Spec: docs/permission/provider-mapping.md
+      // v1.0.5 — workspaceRoot 우선순위: 현재 사용자 작업 폴더 (defaultWorkspace)
+      // > session 의 영구화된 workspace.root. 이전엔 후자만 사용해서 사용자가
+      // [프로젝트] 클릭으로 새 폴더 선택해도 streaming 은 옛 폴더 (예: 한국어
+      // 폴더) 로 가서 ensureAsciiCwd 가 junction 생성 → AI 가 junction path 를
+      // 자기 cwd 로 인식하는 혼란 발생. 사용자 시각적 표시 (sidebar/ChatHeader)
+      // 와 실제 AI cwd 를 일치시킴.
+      const effectiveWorkspaceRoot = defaultWorkspace?.root ?? activeSession.workspace.root;
       void startStream({
         turns: [...activeSession.conversation.turns, userTurn],
         model: activeSession.conversation.current_model,
         sessionId: activeSession.id,
-        workspaceRoot: activeSession.workspace.root,
+        workspaceRoot: effectiveWorkspaceRoot,
         permissionLevel: activeSession.permission.default_level,
       });
     },
-    [activeSession, isStreaming, persistTurn, startStream, provider]
+    [activeSession, defaultWorkspace, isStreaming, persistTurn, startStream, provider]
   );
 
   // Surface IPC errors in the console; UI-level error states come later.
@@ -693,10 +700,11 @@ export function App(): React.JSX.Element {
     () => sessions.map((s) => ({ id: s.id, title: s.title, pinned: s.pinned })),
     [sessions]
   );
-  // Sidebar 의 project name — active session 우선, 없으면 default, 둘 다 없으면
-  // 사용자가 picker 누르도록 안내 placeholder.
-  const projectName =
-    activeSession?.workspace.name ?? defaultWorkspace?.name ?? t('sidebar.workspace.fallback');
+  // v1.0.5 — Sidebar 의 project name = "현재 작업 폴더" (defaultWorkspace) 만.
+  // 이전엔 activeSession.workspace 우선이라 사용자가 [프로젝트] 클릭 → 새 폴더
+  // 선택해도 active session 의 옛 폴더 라벨 그대로 → "변경 안 됨" 으로 보였음.
+  // session.workspace 자체는 DB 영구화된 세션 메타로 그대로 유지.
+  const projectName = defaultWorkspace?.name ?? t('sidebar.workspace.fallback');
 
   // v0.6.0 (F-019) — @ mention 의 file/session 후보 + resolver context.
   // 활성 session 의 workspace.root / ignore_patterns 를 그대로 forward.
@@ -706,7 +714,9 @@ export function App(): React.JSX.Element {
     () => sessions.map((s) => ({ id: s.id, title: s.title })),
     [sessions]
   );
-  const mentionWorkspaceRoot = activeSession?.workspace.root;
+  // v1.0.5 — @ mention 도 현재 작업 폴더 (defaultWorkspace) 우선. session 의
+  // 옛 폴더 mention 후보를 보여줘 사용자 혼란 발생하지 않도록.
+  const mentionWorkspaceRoot = defaultWorkspace?.root ?? activeSession?.workspace.root;
   const mentionIgnorePatterns = activeSession?.workspace.ignore_patterns;
   const mentionResolverContext = useMemo<ResolverContext | undefined>(() => {
     if (mentionWorkspaceRoot === undefined) return undefined;
@@ -725,12 +735,12 @@ export function App(): React.JSX.Element {
     };
   }, [mentionWorkspaceRoot, getSession]);
 
-  // Phase 3 audit fix #4 — ChatHeader 가 표시할 workspace name.
-  // 우선순위: active session 의 workspace.name (실제 메시지가 향하는 폴더) >
-  //          defaultWorkspace.name (새 채팅이 만들어질 폴더).
-  // 이전엔 항상 defaultWorkspace.name 만 보여서 session.workspace 와 drift 가
-  // 났다 (사용자가 picker 로 폴더 바꿔도 기존 session 에는 반영 X).
-  const chatHeaderWorkspaceName = activeSession?.workspace.name ?? defaultWorkspace?.name;
+  // v1.0.5 — ChatHeader 의 workspace 라벨도 현재 작업 폴더 (defaultWorkspace) 만.
+  // 사용자 입장에서 "현재 작업 폴더" 는 단일 컨셉 → sidebar/ChatHeader 모두 같은
+  // 라벨 표시. 사용자가 폴더 변경 시 즉시 두 위치 갱신. session.workspace 는
+  // DB 영구화 메타로 유지 (이전엔 active session 우선 → 폴더 변경해도 변경 안
+  // 보였음).
+  const chatHeaderWorkspaceName = defaultWorkspace?.name;
 
   // v0.5.0 (F-018) — slash command handler 맵. ChatInput 으로 forward 되어
   // 사용자가 `/help`, `/clear` 등을 입력했을 때 호출된다. 인자가 없는 명령은
@@ -1042,6 +1052,11 @@ export function App(): React.JSX.Element {
               // v0.9.0 — Sidebar 의 MCP status indicator 클릭 시 MCP 탭으로 직진입.
               setSettingsInitialTab('mcp');
               setSettingsModalOpen(true);
+            }}
+            onPickWorkspace={() => {
+              // v1.0.5 — [프로젝트] 폴더 항목 클릭 시 workspace 변경 picker.
+              // 사용자가 다른 폴더 선택하면 settings.workspace_root 영속 + 재계산.
+              void pickWorkspace();
             }}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}

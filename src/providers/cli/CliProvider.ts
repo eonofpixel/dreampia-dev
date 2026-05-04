@@ -325,6 +325,12 @@ export class CliProvider implements StreamingProvider {
       '--model',
       input.model,
     ];
+    // v1.0.5 — Codex CLI 의 `-C/--cd` 옵션으로 사용자 의도 워킹 폴더 명시. spawn
+    // cwd 는 ensureAsciiCwd 가 한국어 → junction 으로 변환했지만, AI 가 인식하는
+    // working root 는 -C 가 우선. 사용자가 "내 폴더 이름" 물으면 진짜 폴더명 응답.
+    if (this.opts.cwd !== undefined && this.opts.cwd.length > 0) {
+      args.push('-C', this.opts.cwd);
+    }
     if (this.opts.extraArgs !== undefined && this.opts.extraArgs.length > 0) {
       args.push(...this.opts.extraArgs);
     }

@@ -45,6 +45,11 @@ export interface SidebarProps {
    * 자체를 숨김. App.tsx 가 SettingsModal('mcp' tab) 으로 wire up.
    */
   onOpenMcpSettings?: () => void;
+  /**
+   * v1.0.5 — [프로젝트] 폴더 항목 클릭 시 workspace 변경 picker. 미지정 시
+   * disabled 처리. App.tsx 의 pickWorkspace (useWorkspace().pick) wire up.
+   */
+  onPickWorkspace?: () => void;
 
   // ── v0.7.0 (F-026 Chat Search) ────────────────────────────
   /**
@@ -72,6 +77,7 @@ export function Sidebar({
   onReopenOnboarding,
   onOpenUsage,
   onOpenMcpSettings,
+  onPickWorkspace,
   searchQuery = '',
   onSearchQueryChange,
   searchResults,
@@ -148,10 +154,17 @@ export function Sidebar({
         />
       </nav>
 
-      {/* Projects (placeholder) */}
+      {/* Projects — v1.0.5: 클릭 시 workspace 폴더 변경 picker 열림.
+          이전엔 onClick 없어서 v1.0.3 자동 disabled 룰에 걸렸음 (사용자 보고).
+          onPickWorkspace 미지정 시에는 disabled 처리 (안전 가드). */}
       <section className="border-b border-border-primary p-2">
         <SectionHeader>{t('sidebar.section.projects')}</SectionHeader>
-        <SidebarNavItem icon={<Folder className="h-4 w-4" />} label={displayProjectName} />
+        <SidebarNavItem
+          icon={<Folder className="h-4 w-4" />}
+          label={displayProjectName}
+          onClick={onPickWorkspace}
+          testId="sidebar-pick-workspace"
+        />
       </section>
 
       {/* Chats */}
