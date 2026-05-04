@@ -27,7 +27,8 @@ export type ShortcutAction =
   | 'sidebar.toggle'
   | 'help.open'
   | 'modal.close'
-  | 'chat.cancel';
+  | 'chat.cancel'
+  | 'preview.toggle';
 
 /** 사용자에게 노출할 카테고리. SettingsModal 의 그룹핑에 사용. */
 export type ShortcutCategory = 'navigation' | 'settings' | 'chat' | 'modal';
@@ -61,6 +62,14 @@ export const SHORTCUT_DEFS: ReadonlyArray<ShortcutDef> = [
     default: 'Mod+B',
     label: '사이드바 토글',
     description: '사이드바 표시 / 숨김',
+    category: 'navigation',
+  },
+  {
+    action: 'preview.toggle',
+    // Mod+\ 는 VSCode 의 panel split / Cursor 의 right-pane toggle 과 같은 키.
+    default: 'Mod+\\',
+    label: '미리보기 토글',
+    description: '우측 미리보기 패널 표시 / 숨김',
     category: 'navigation',
   },
   {

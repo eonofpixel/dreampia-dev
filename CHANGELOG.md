@@ -2,6 +2,40 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.0.8] — 2026-05-04
+
+**Panel 토글 시스템 + FAKE-1 청산.**
+
+`browser.panel_visible` 이 schema/state 만 있고 UI/IPC 가 0 이었던 가짜
+완성을 진짜 토글로 청산. 사이드바 토글 (Mod+B, v0.10.0) 패턴 그대로 차용.
+
+### Added
+
+- **FAKE-1 청산**: 미리보기 패널 토글 시스템
+  - `ThreePanelLayout` 에 `previewVisible` prop (sidebarVisible 패턴 동일)
+  - 단축키 `Mod+\\` (`shortcuts.ts` 의 `preview.toggle` action 신규)
+  - ChatHeader 우측 [👁 / 👁‍🗨] 토글 버튼 — `aria-pressed` + tooltip
+  - hidden 시 chat 패널이 우측까지 확장 (grid template `0px` collapse)
+  - i18n 키 4개 (preview_hide_tooltip / preview_show_tooltip / 동 aria, ko/en)
+- e2e drive6: 3 시나리오 (button click toggle, Mod+\\ shortcut, sidebar toggle 회귀)
+
+### Changed
+
+- `ThreePanelLayout` 의 grid template 을 Tailwind dynamic class → inline
+  style 로 전환 (Tailwind compile 시점 한계 우회). `data-preview-visible`
+  attribute 도 추가해 e2e selector 안정화.
+
+### Verified
+
+- 16/16 drive e2e PASS (drive1 + drive2 + drive5 + drive6, 30.3s)
+- typecheck clean
+- 토글 후 layout 전환 즉시 반영 (CSS class)
+
+### 참조
+
+- 다음 v1.0.9 (P0 가장 큰 묶음): SEC-1 (workspace/read-file symlink guard) +
+  SEC-2 (permission grant UI/IPC 본격 구현)
+
 ## [1.0.7] — 2026-05-04
 
 **ChatHeader UX 회귀 청산 + drive harness 강화 + version sync.**

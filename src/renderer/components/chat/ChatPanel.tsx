@@ -61,6 +61,13 @@ export interface ChatPanelProps {
   /** [폴더 변경] 클릭 시 main 의 dialog.showOpenDialog 호출. */
   onPickWorkspace?: () => void;
   /**
+   * v1.0.8 (FAKE-1 청산) — 미리보기 패널 토글 상태. ChatHeader 의 [👁]
+   * 버튼이 이 prop 으로 표시 (open/close icon).
+   */
+  previewVisible?: boolean;
+  /** v1.0.8 — [👁] 버튼 클릭 시 호출. App.tsx 가 setPreviewVisible. */
+  onTogglePreview?: () => void;
+  /**
    * Phase 3 audit (HIGH) — production 에서 preload script 가 깨져 IPC 가
    * 누락된 상태. true 면 입력을 disable 하고 명시적 error banner 를 띄운다.
    */
@@ -145,6 +152,8 @@ export function ChatPanel({
   workspaceName,
   sessionWorkspaceName,
   onPickWorkspace,
+  previewVisible,
+  onTogglePreview,
   ipcUnavailable = false,
   initialInputValue,
   commandHandlers,
@@ -175,6 +184,8 @@ export function ChatPanel({
         workspaceName={workspaceName}
         sessionWorkspaceName={sessionWorkspaceName}
         onPickWorkspace={onPickWorkspace}
+        previewVisible={previewVisible}
+        onTogglePreview={onTogglePreview}
         onChangePermission={onChangePermission}
         permissionDisabled={ipcUnavailable}
       />
@@ -356,6 +367,8 @@ function ChatHeader({
   workspaceName,
   sessionWorkspaceName,
   onPickWorkspace,
+  previewVisible,
+  onTogglePreview,
   onChangePermission,
   permissionDisabled = false,
 }: {
@@ -364,6 +377,8 @@ function ChatHeader({
   workspaceName?: string;
   sessionWorkspaceName?: string;
   onPickWorkspace?: () => void;
+  previewVisible?: boolean;
+  onTogglePreview?: () => void;
   onChangePermission?: (next: PermissionLevel) => void;
   permissionDisabled?: boolean;
 }): React.JSX.Element {
@@ -420,6 +435,31 @@ function ChatHeader({
           <span className="mx-1">·</span>
           {EFFORT_LABELS_KO[session.conversation.current_effort]}
         </span>
+        {/*
+         * v1.0.8 — 미리보기 패널 토글 (FAKE-1 청산). schema 만 있고 UI/IPC 0
+         * 이었던 panel_visible 을 진짜 토글로. Mod+\\ 단축키와 동기화.
+         */}
+        {onTogglePreview !== undefined && (
+          <button
+            type="button"
+            onClick={onTogglePreview}
+            className="shrink-0 rounded px-1.5 py-0.5 text-[14px] leading-none hover:bg-bg-tertiary"
+            title={
+              previewVisible === true
+                ? t('chat.header.preview_hide_tooltip')
+                : t('chat.header.preview_show_tooltip')
+            }
+            aria-label={
+              previewVisible === true
+                ? t('chat.header.preview_hide_aria')
+                : t('chat.header.preview_show_aria')
+            }
+            aria-pressed={previewVisible === true}
+            data-testid="preview-toggle-button"
+          >
+            {previewVisible === true ? '👁' : '👁‍🗨'}
+          </button>
+        )}
         {/*
          * v1.0.7 — FAKE-3 청산: ··· (more) 가 핸들러 없는 장식이었음. 진짜
          * dropdown menu 는 v1.1.0 에 별도 작업 — 일단 제거해서 사용자 기대와

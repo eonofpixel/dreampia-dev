@@ -178,6 +178,10 @@ export function App(): React.JSX.Element {
   });
   // v0.10.0 (F-025) — 사이드바 토글. Mod+B 로 표시/숨김.
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  // v1.0.8 (FAKE-1 청산) — 미리보기 패널 토글. Mod+\\ 로 표시/숨김.
+  // 이전엔 schema (browser.panel_visible) 만 있고 UI/IPC 0 — 사용자가 닫을
+  // 방법 없었음. 사이드바 토글 패턴 그대로 차용.
+  const [previewVisible, setPreviewVisible] = useState(true);
   // v0.7.0 (F-026) — Sidebar 메시지 검색 state. 입력은 즉시 반영, 실제 IPC
   // 호출은 300ms debounce 후 별도 useEffect 가 트리거. results / error /
   // loading 은 IPC 응답에 따라 갱신. pendingFocusTurnId 는 사용자가 검색 결과
@@ -958,6 +962,9 @@ export function App(): React.JSX.Element {
       'sidebar.toggle': (): void => {
         setSidebarVisible((v) => !v);
       },
+      'preview.toggle': (): void => {
+        setPreviewVisible((v) => !v);
+      },
       'help.open': (): void => {
         setSlashHelpOpen(true);
       },
@@ -989,6 +996,7 @@ export function App(): React.JSX.Element {
     };
   }, [
     sidebarVisible,
+    previewVisible,
     handleNewChat,
     slashHelpOpen,
     settingsModalOpen,
@@ -1027,6 +1035,7 @@ export function App(): React.JSX.Element {
       )}
       <ThreePanelLayout
         sidebarVisible={sidebarVisible}
+        previewVisible={previewVisible}
         sidebar={
           <Sidebar
             sessions={sidebarSessions}
@@ -1100,6 +1109,8 @@ export function App(): React.JSX.Element {
             onPickWorkspace={() => {
               void pickWorkspace();
             }}
+            previewVisible={previewVisible}
+            onTogglePreview={() => setPreviewVisible((v) => !v)}
             ipcUnavailable={provider === null}
             initialInputValue={pendingPrompt}
             commandHandlers={commandHandlers}
