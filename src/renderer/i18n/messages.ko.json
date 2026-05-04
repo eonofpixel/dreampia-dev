@@ -14,6 +14,7 @@
   "sidebar.new_chat": "새 채팅",
   "sidebar.nav.plugins": "플러그인",
   "sidebar.nav.automation": "자동화",
+  "sidebar.coming_soon": "준비 중 — v1.x 에서 추가될 예정인 기능입니다",
   "sidebar.section.projects": "프로젝트",
   "sidebar.section.chats": "채팅",
   "sidebar.chats.aria_label": "채팅 목록",

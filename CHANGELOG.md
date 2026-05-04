@@ -2,6 +2,35 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.0.3] — 2026-05-04
+
+**UX Bug Fix — 사이드바 미구현 nav 항목 명시화 (사용자 직접 검증 후).**
+
+사용자가 v1.0.2 release 후 실제 앱에서 좌측 메뉴 클릭 시 작동 안 하는 문제
+보고. 진단 결과: `[플러그인]` / `[자동화]` SidebarNavItem 이 의도적
+placeholder (Plugin Loader / Automation 은 v1.x 후보) 였지만, hover effect
+는 살아있어 사용자에게 클릭 가능한 항목으로 보였던 design oversight.
+
+### Fixed
+
+- `Sidebar.tsx` SidebarNavItem 에 `comingSoon` + `comingSoonHint` prop 추가
+  - `disabled` 속성 + `cursor-not-allowed` + `opacity-50` 시각화
+  - `aria-disabled` 접근성 속성
+  - 우측에 작은 "준비 중" 배지 표시
+  - hover tooltip: "준비 중 — v1.x 에서 추가될 예정인 기능입니다"
+- `[플러그인]` (TO-8/9/10 Plugin Loader) — comingSoon 적용
+- `[자동화]` (Bot Automation) — comingSoon 적용
+- onClick 누락된 SidebarNavItem 도 자동 disabled 가드
+
+### i18n keys 추가
+
+- `sidebar.coming_soon` (ko/en)
+
+### Verified
+
+- 1430 vitest pass / 28 e2e pass / 0 typecheck / 0 lint
+- 사용자가 직접 dev 앱에서 GUI 클릭 테스트 후 발견 → 즉시 수정
+
 ## [1.0.2] — 2026-05-04
 
 **Patch — v1.0.1 잔여 type stub 회수.**

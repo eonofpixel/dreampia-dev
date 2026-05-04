@@ -131,10 +131,21 @@ export function Sidebar({
         />
       </div>
 
-      {/* Nav */}
+      {/* Nav — v1.0.3: 미구현 placeholder 명시화 (이전엔 onClick 없이 hover만
+          되어 사용자 혼란). v1.x 에서 실제 Plugin Loader / Automation 추가 예정. */}
       <nav className="border-b border-border-primary p-2 text-text-secondary">
-        <SidebarNavItem icon={<Puzzle className="h-4 w-4" />} label={t('sidebar.nav.plugins')} />
-        <SidebarNavItem icon={<Bot className="h-4 w-4" />} label={t('sidebar.nav.automation')} />
+        <SidebarNavItem
+          icon={<Puzzle className="h-4 w-4" />}
+          label={t('sidebar.nav.plugins')}
+          comingSoon
+          comingSoonHint={t('sidebar.coming_soon')}
+        />
+        <SidebarNavItem
+          icon={<Bot className="h-4 w-4" />}
+          label={t('sidebar.nav.automation')}
+          comingSoon
+          comingSoonHint={t('sidebar.coming_soon')}
+        />
       </nav>
 
       {/* Projects (placeholder) */}
@@ -307,28 +318,55 @@ function SidebarNavItem({
   shortcut,
   onClick,
   testId,
+  comingSoon,
+  comingSoonHint,
 }: {
   icon: React.ReactNode;
   label: string;
   shortcut?: string;
   onClick?: () => void;
   testId?: string;
+  /** v1.0.3: 미구현 placeholder. true 이면 disabled + 회색 + tooltip 표시. */
+  comingSoon?: boolean;
+  comingSoonHint?: string;
 }): React.JSX.Element {
+  // onClick 이 없거나 comingSoon 이면 button 비활성화. 사용자 혼란 방지.
+  const isDisabled = comingSoon === true || (onClick === undefined && !comingSoon);
   return (
     <button
       onClick={onClick}
+      disabled={isDisabled}
       data-testid={testId}
-      className="group flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left hover:bg-bg-tertiary"
+      title={comingSoon === true ? comingSoonHint : undefined}
+      aria-disabled={isDisabled}
+      className={`group flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left ${
+        isDisabled
+          ? 'cursor-not-allowed opacity-50'
+          : 'hover:bg-bg-tertiary'
+      }`}
     >
       <span className="flex-shrink-0">{icon}</span>
       <span className="flex-1 truncate">{label}</span>
-      {shortcut && (
-        <kbd className="text-[10px] text-text-tertiary opacity-0 group-hover:opacity-100">
-          {shortcut}
-        </kbd>
+      {comingSoon === true ? (
+        <span className="rounded-sm bg-bg-tertiary px-1 py-0.5 text-[9px] uppercase tracking-wide text-text-tertiary">
+          {t_label_coming_soon()}
+        </span>
+      ) : (
+        shortcut && (
+          <kbd className="text-[10px] text-text-tertiary opacity-0 group-hover:opacity-100">
+            {shortcut}
+          </kbd>
+        )
       )}
     </button>
   );
+}
+
+/** Tiny helper — useT() 는 hook 이라 nested function 에선 호출 불가, 위치 기반
+ *  static label 로 충당. i18n key 는 caller 가 comingSoonHint 로 전달. */
+function t_label_coming_soon(): string {
+  // 우선순위 한국어 default, 영어는 미세하게 다름. caller hint 가 우선.
+  return '준비 중';
 }
 
 function ChatItem({
