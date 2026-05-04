@@ -361,8 +361,31 @@ export interface SessionStoreDiagnostic {
 // SessionStore
 // ────────────────────────────────────────────────────────────
 
+/**
+ * v1.0.11 SEC-3: SessionStore 가 새 permission grant 를 영속할 때 호출되는
+ * audit sink. main/index.ts 가 setPermissionGrantAuditSink 로 wire-up.
+ *
+ * Storage layer 가 AuditLogStore 직접 import 하지 않아 (양방향 의존 회피)
+ * callback 만 받는다.
+ */
+export interface PermissionGrantAuditEvent {
+  timestamp: string;
+  session_id: string;
+  capability: string;
+  /** JSON: { id, target } — insertGrants 가 target_json 으로 넣는 값. */
+  target_json: string;
+  granted_by: string;
+  scope: string;
+  expires_at: string | null;
+  reason: string | null;
+}
+
+export type PermissionGrantAuditSink = (event: PermissionGrantAuditEvent) => void;
+
 export class SessionStore {
   private readonly db: DatabaseT;
+  /** v1.0.11 SEC-3: insertGrants 가 새 grant 영속 시 호출. */
+  private permissionGrantAuditSink: PermissionGrantAuditSink | undefined;
 
   /**
    * Whether the FTS5 `turns_fts` virtual table is available.
@@ -445,6 +468,17 @@ export class SessionStore {
 
   close(): void {
     this.db.close();
+  }
+
+  /**
+   * v1.0.11 SEC-3: 새 permission grant 영속 시 호출될 audit sink 등록.
+   *
+   * main/index.ts 가 AuditLogStore 와 SessionStore 둘 다 만든 후 wire-up.
+   * 미설정 시 audit 미기록 (테스트 / 격리 환경 호환). throw 시 console.error
+   * 로 떨어지고 grant insertion 은 그대로 진행.
+   */
+  setPermissionGrantAuditSink(sink: PermissionGrantAuditSink | undefined): void {
+    this.permissionGrantAuditSink = sink;
   }
 
   getSchemaVersion(): number {
@@ -1018,10 +1052,11 @@ export class SessionStore {
     }
 
     for (const g of grants) {
+      const targetJson = JSON.stringify({ id: g.id, target: g.target });
       this.stmts.insertGrant.run({
         session_id: s.id,
         capability: g.capability,
-        target_json: JSON.stringify({ id: g.id, target: g.target }),
+        target_json: targetJson,
         granted_at: g.granted_at,
         granted_by: g.granted_by,
         expires_at: g.expires_at ?? null,
@@ -1029,6 +1064,29 @@ export class SessionStore {
         reason: g.reason ?? null,
         scope: g.scope,
       });
+
+      // v1.0.11 SEC-3: 새로 영속되는 grant 마다 audit 발행. createSession 의
+      // 부트스트랩 grants 도 포함 — "이 세션은 이런 권한을 갖고 시작했다" 가
+      // audit trail 에 남도록. revoked_at 가 미리 채워져 있으면 (이전 세션
+      // 복원 등) 의미 약하지만 invariant 단순성을 위해 일관 발행.
+      const sink = this.permissionGrantAuditSink;
+      if (sink !== undefined) {
+        try {
+          sink({
+            timestamp: g.granted_at,
+            session_id: s.id,
+            capability: g.capability,
+            target_json: targetJson,
+            granted_by: g.granted_by,
+            scope: g.scope,
+            expires_at: g.expires_at ?? null,
+            reason: g.reason ?? null,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[SessionStore] permission grant audit sink failed: ${msg}`);
+        }
+      }
     }
   }
 

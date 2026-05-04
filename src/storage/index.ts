@@ -33,3 +33,10 @@ export type {
   CompareSideResult,
   CompareSideStatus,
 } from './CompareStore';
+export { AuditLogStore } from './AuditLogStore';
+export type {
+  AuditEvent,
+  AuditEventInput,
+  AuditEventName,
+  AuditQueryFilter,
+} from './AuditLogStore';

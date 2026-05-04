@@ -13,12 +13,19 @@
 export type {
   ActiveExecution,
   ExecutionContext,
+  FileSideEffect,
+  FileSideEffectOp,
   LogEntry,
   LogLevel,
+  NetworkSideEffect,
+  NetworkSideEffectOp,
   PermissionTarget,
   PermissionTargetKind,
+  ProcessSideEffect,
+  ProcessSideEffectOp,
   QueueStats,
   SideEffect,
+  SideEffectKind,
   Tool,
   ToolCall,
   ToolCallOrigin,
@@ -54,7 +61,12 @@ export { ToolRegistry } from './Registry';
 export { createContext } from './Context';
 
 // ── Queue ──
-export { ToolQueue, type ToolQueueOptions } from './Queue';
+export {
+  ToolQueue,
+  type ToolAuditEvent,
+  type ToolAuditSink,
+  type ToolQueueOptions,
+} from './Queue';
 
 // ── Built-in tools ──
 export { ShellRunTool, type ShellRunInput, type ShellRunOutput } from './builtin/shellRun';

@@ -92,8 +92,209 @@ export function DiagnoseSettings(): React.JSX.Element {
       ) : data !== null ? (
         <DiagnoseDataBlock t={t} data={data} />
       ) : null}
+
+      {/* v1.0.11 SEC-3 — Audit log viewer. 별도 IPC 호출이라 위 진단 섹션과
+          독립적으로 fetch + error. */}
+      <AuditLogSection t={t} />
     </section>
   );
+}
+
+// ────────────────────────────────────────────────────────────
+// v1.0.11 SEC-3 — Audit log viewer
+//
+// 진단 탭 아래쪽에 mount. tool_use.* / permission.* 이벤트 최근 50건.
+// IPC: dreampia.audit.recent({ limit: 50 })
+// ────────────────────────────────────────────────────────────
+
+interface AuditEntry {
+  id: number;
+  timestamp: string;
+  session_id: string;
+  turn_id?: string;
+  event: string;
+  capability: string;
+  target_json: string;
+  decision_reason: string;
+  ai_model?: string;
+  ai_reason?: string;
+  outcome?: string;
+  error?: string;
+}
+
+function AuditLogSection({ t }: SubProps): React.JSX.Element {
+  const [entries, setEntries] = useState<AuditEntry[] | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const [auditLoading, setAuditLoading] = useState(true);
+
+  const reload = useCallback(async (): Promise<void> => {
+    setAuditLoading(true);
+    setAuditError(null);
+    const auditApi = typeof window !== 'undefined' ? window.dreampia?.audit : undefined;
+    if (auditApi === undefined || typeof auditApi.recent !== 'function') {
+      setAuditError(t('error.ipc_unavailable'));
+      setAuditLoading(false);
+      return;
+    }
+    try {
+      const result = await auditApi.recent({ limit: 50 });
+      if (result.ok) {
+        setEntries(result.value);
+      } else {
+        setAuditError(result.error);
+      }
+    } catch (err) {
+      setAuditError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  return (
+    <section
+      className="mt-6 rounded-md border border-border-primary bg-bg-secondary p-3"
+      data-testid="settings-diagnose-audit"
+    >
+      <header className="mb-2 flex items-start justify-between gap-3">
+        <div className="flex-1">
+          <h4 className="text-sm font-semibold">{t('settings.diagnose.audit.title')}</h4>
+          <p className="text-xs text-text-tertiary">
+            {t('settings.diagnose.audit.description')}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            void reload();
+          }}
+          disabled={auditLoading}
+          className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-xs hover:bg-bg-primary disabled:cursor-not-allowed disabled:opacity-50"
+          data-testid="settings-diagnose-audit-refresh"
+        >
+          {t('settings.diagnose.audit.refresh')}
+        </button>
+      </header>
+
+      {auditLoading ? (
+        <p className="text-xs text-text-secondary">{t('settings.diagnose.loading')}</p>
+      ) : auditError !== null ? (
+        <div
+          className="rounded border border-red-400/40 bg-red-500/10 p-2"
+          role="alert"
+          data-testid="settings-diagnose-audit-error"
+        >
+          <p className="text-xs font-semibold text-red-400">
+            {t('settings.diagnose.audit.error.title')}
+          </p>
+          <p className="break-words font-mono text-[11px] text-text-secondary">{auditError}</p>
+        </div>
+      ) : entries !== null && entries.length > 0 ? (
+        <AuditTable entries={entries} t={t} />
+      ) : (
+        <p
+          className="text-xs text-text-tertiary"
+          data-testid="settings-diagnose-audit-empty"
+        >
+          {t('settings.diagnose.audit.empty')}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function AuditTable({
+  entries,
+  t,
+}: {
+  entries: AuditEntry[];
+  t: ReturnType<typeof useT>;
+}): React.JSX.Element {
+  return (
+    <div className="overflow-x-auto">
+      <table
+        className="w-full border-collapse text-left text-[11px]"
+        data-testid="settings-diagnose-audit-table"
+      >
+        <thead className="text-text-tertiary">
+          <tr>
+            <th className="border-b border-border-primary py-1 pr-3 font-medium">
+              {t('settings.diagnose.audit.column.time')}
+            </th>
+            <th className="border-b border-border-primary py-1 pr-3 font-medium">
+              {t('settings.diagnose.audit.column.event')}
+            </th>
+            <th className="border-b border-border-primary py-1 pr-3 font-medium">
+              {t('settings.diagnose.audit.column.capability')}
+            </th>
+            <th className="border-b border-border-primary py-1 pr-3 font-medium">
+              {t('settings.diagnose.audit.column.outcome')}
+            </th>
+            <th className="border-b border-border-primary py-1 font-medium">
+              {t('settings.diagnose.audit.column.target')}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((e) => (
+            <tr
+              key={e.id}
+              className="border-b border-border-primary/30 last:border-b-0 hover:bg-bg-tertiary/40"
+              data-testid={`settings-diagnose-audit-row-${e.id}`}
+            >
+              <td className="py-1 pr-3 font-mono text-text-secondary">
+                {formatAuditTime(e.timestamp)}
+              </td>
+              <td className="py-1 pr-3 font-mono text-text-primary">
+                {e.event}
+                {e.ai_model !== undefined && (
+                  <span className="ml-1 text-text-tertiary">[{e.ai_model}]</span>
+                )}
+              </td>
+              <td className="py-1 pr-3 font-mono text-text-secondary">
+                {e.capability || '—'}
+              </td>
+              <td
+                className={`py-1 pr-3 font-mono ${auditOutcomeClass(e)}`}
+              >
+                {e.outcome ?? e.decision_reason}
+              </td>
+              <td className="py-1 font-mono text-text-tertiary">
+                <span className="block max-w-[280px] truncate" title={e.target_json}>
+                  {e.target_json}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function formatAuditTime(iso: string): string {
+  // ISO 8601 → 'HH:MM:SS' (날짜는 audit row 가 많아져도 의미가 작아 시간만).
+  const t = iso.indexOf('T');
+  if (t < 0) return iso;
+  const tail = iso.slice(t + 1);
+  const dot = tail.indexOf('.');
+  return dot >= 0 ? tail.slice(0, dot) : tail.replace(/Z.*$/, '');
+}
+
+function auditOutcomeClass(e: AuditEntry): string {
+  if (e.event.startsWith('permission.denied') || e.event === 'tool_use.failed') {
+    return 'text-red-400';
+  }
+  if (e.event === 'tool_use.cancelled' || e.event === 'tool_use.timeout') {
+    return 'text-yellow-400';
+  }
+  if (e.event === 'tool_use.success' || e.event === 'permission.granted') {
+    return 'text-emerald-400';
+  }
+  return 'text-text-secondary';
 }
 
 // ────────────────────────────────────────────────────────────

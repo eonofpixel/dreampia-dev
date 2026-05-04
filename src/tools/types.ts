@@ -6,10 +6,15 @@
  * Phase 1 P0 minimum:
  *  - Zod schemas (NOT JSONSchema/AJV) — TS 친화 + 이미 deps 에 있음
  *  - Sub-resources (ctx.fs / ctx.net / ctx.shell) 미구현 — tool 이 native API 직접 호출
- *  - SideEffect / RetryPolicy / progress reporter 는 placeholder
+ *  - RetryPolicy / progress reporter 는 placeholder
  *  - log_tail 는 in-memory only (TO-7 에서 DB 영구화)
  *
- * 모든 export 는 type-only (런타임 export 는 Registry/Queue/Context/errors 에서).
+ * v1.0.11 (SEC-4): SideEffect 가 정식 discriminated union — Tool 이
+ * ctx.record_side_effect() 로 file/process/network 부작용을 보고하면
+ * Queue 가 ToolResult.side_effects 에 누적. audit/replay 의 데이터 무결성
+ * 기반 (SEC-3 의존성).
+ *
+ * 모든 타입 export 는 type-only (런타임 export 는 Registry/Queue/Context/errors 에서).
  */
 
 import type { z } from 'zod';
@@ -130,6 +135,13 @@ export interface ExecutionContext {
   /** 로깅. 결과의 log_tail 에도 누적됨. */
   log: (level: LogLevel, message: string, data?: Record<string, unknown>) => void;
 
+  /**
+   * Side-effect 보고. Tool 이 file/process/network 부작용 발생 직후 호출.
+   * Queue 가 ActiveExecution 에 누적 → ToolResult.side_effects 로 흘러간다.
+   * v1.0.11 SEC-4 기준 — audit_log 의 target_json 직렬화 source.
+   */
+  record_side_effect: (effect: SideEffect) => void;
+
   /** Optional: 0-100 진행률 보고. P0 에선 사용처 없지만 인터페이스만 노출. */
   progress?: (percent: number, message?: string) => void;
 
@@ -188,11 +200,71 @@ export interface ToolError {
   user_visible_hint?: string;
 }
 
-/**
- * SideEffect placeholder (TO-12 trace UI 가 사용).
- * P0 에선 빈 배열 — Tool 이 자체 추적 X.
- */
-export type SideEffect = never;
+// ────────────────────────────────────────────────────────────
+// SideEffect — v1.0.11 SEC-4: 정식 discriminated union
+//
+// Tool 이 ctx.record_side_effect() 로 호출. Queue 가 ActiveExecution
+// 에 누적해 ToolResult.side_effects 에 그대로 채움. audit_log 의
+// target_json 도 이 구조를 그대로 직렬화 → replay/감사 무결성.
+//
+// 설계 원칙:
+//  - kind discriminator + 작업별 op enum (확장 가능)
+//  - 식별자 (path / pid / url) 은 가능한 한 절대 경로 / URL
+//  - 보안 민감 payload (파일 내용, body) 는 기록 X — meta 만
+// ────────────────────────────────────────────────────────────
+
+export type SideEffectKind = 'file' | 'process' | 'network';
+
+export type FileSideEffectOp =
+  | 'read'
+  | 'write'
+  | 'create'
+  | 'delete'
+  | 'rename'
+  | 'chmod';
+
+export interface FileSideEffect {
+  kind: 'file';
+  op: FileSideEffectOp;
+  /** 절대 경로. rename 의 경우 source. */
+  path: AbsolutePath;
+  /** rename 의 destination. */
+  to_path?: AbsolutePath;
+  /** read/write 시 바이트 수 (선택). */
+  bytes?: number;
+}
+
+export type ProcessSideEffectOp = 'spawn' | 'kill' | 'exit';
+
+export interface ProcessSideEffect {
+  kind: 'process';
+  op: ProcessSideEffectOp;
+  /** spawn 시 실행된 명령 (truncate 권장 — 사용자 secret 포함 가능). */
+  cmd?: string;
+  /** OS pid (선택 — child_process spawn 직후 알 수 있음). */
+  pid?: number;
+  /** exit op 시 종료 코드. */
+  exit_code?: number;
+  /** kill / exit 시 signal. */
+  signal?: string;
+}
+
+export type NetworkSideEffectOp = 'request' | 'connect' | 'disconnect';
+
+export interface NetworkSideEffect {
+  kind: 'network';
+  op: NetworkSideEffectOp;
+  /** HTTP / WebSocket / generic URL. */
+  url?: string;
+  /** request op 시 HTTP method. */
+  method?: string;
+  /** request op 응답 status. */
+  status?: number;
+  /** 호스트 (URL 분해 — 필터링 편의). */
+  host?: string;
+}
+
+export type SideEffect = FileSideEffect | ProcessSideEffect | NetworkSideEffect;
 
 export interface ToolResult {
   call_id: ToolCallId;
@@ -228,6 +300,8 @@ export interface ActiveExecution {
   abort_controller: AbortController;
   /** 누적 로그 — 완료 시 result.log_tail 의 source. */
   log: LogEntry[];
+  /** v1.0.11 SEC-4: ctx.record_side_effect() 누적 — result.side_effects source. */
+  side_effects: SideEffect[];
 }
 
 // ────────────────────────────────────────────────────────────

@@ -11,7 +11,14 @@
  * Tool 작성자가 직접 ToolError 만들 일 거의 없음 — Queue 가 처리.
  */
 
-import type { ToolCall, ToolError, ToolResult, ToolResultStatus, LogEntry } from './types';
+import type {
+  ToolCall,
+  ToolError,
+  ToolResult,
+  ToolResultStatus,
+  LogEntry,
+  SideEffect,
+} from './types';
 
 // ────────────────────────────────────────────────────────────
 // 표준 에러 코드 (확장 가능 string union)
@@ -67,6 +74,11 @@ interface FailedResultArgs {
   started_at?: string;
   completed_at?: string;
   log?: LogEntry[];
+  /**
+   * v1.0.11 SEC-4: tool 이 실행 중 발생시킨 부작용. failed/cancelled/timeout
+   * 도 spawn 까지는 됐을 수 있어 의미가 있다. 미지정 시 빈 배열.
+   */
+  side_effects?: SideEffect[];
 }
 
 function nowIso(): string {
@@ -92,7 +104,7 @@ export function buildFailedResult(args: FailedResultArgs): ToolResult {
     completed_at: completedIso,
     duration_ms: duration,
     attempt_count: 1,
-    side_effects: [],
+    side_effects: args.side_effects ?? [],
     log_tail: args.log ?? [],
   };
 }
@@ -102,6 +114,8 @@ export function buildSuccessResult(args: {
   output: unknown;
   started_at: string;
   log: LogEntry[];
+  /** v1.0.11 SEC-4: ctx.record_side_effect() 누적분. */
+  side_effects?: SideEffect[];
 }): ToolResult {
   const completedIso = nowIso();
   const startedMs = Date.parse(args.started_at);
@@ -120,7 +134,7 @@ export function buildSuccessResult(args: {
     completed_at: completedIso,
     duration_ms: duration,
     attempt_count: 1,
-    side_effects: [],
+    side_effects: args.side_effects ?? [],
     log_tail: args.log,
   };
 }

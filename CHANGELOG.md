@@ -2,6 +2,113 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.0.11] — 2026-05-04
+
+**SEC-3 + SEC-4 청산 — audit_log 자동 기록 + tool result side_effects 정식 구조.**
+
+`docs/v1.x-roadmap.md` 1.2.1 의 마지막 두 P0 보안 항목. 둘은 의존 관계 (SEC-3
+의 target_json 데이터 무결성이 SEC-4 의 정식 구조에 기댐) 라서 묶음. v1.0.10
+가 SEC-2 minimal 만 다루어 v1.0.10 슬롯이 의도와 어긋났던 것을 v1.0.11 에서
+정정.
+
+### Added (Security / Audit Trail)
+
+- **SEC-4 — `ToolResult.side_effects` 정식 discriminated union**
+  - 이전: `side_effects: never[]` placeholder. preload 가 `never[]` 로 노출
+    하던 거짓 ABI 였음 (`docs/v1.x-roadmap.md` SEC-4).
+  - 이제: `SideEffect = FileSideEffect | ProcessSideEffect | NetworkSideEffect`
+    discriminated union. `op` enum 별로 식별자 (path / pid / url / cmd /
+    exit_code) 구조화.
+  - `ExecutionContext.record_side_effect(effect)` 가 Tool 의 정식 emit API.
+    Queue 가 sink 콜백으로 buffer → `ToolResult.side_effects` 에 누적.
+  - 보안 민감 payload (파일 내용, request body) 는 의도적 X — meta 만 기록.
+  - `ShellRunTool` 가 첫 emit 사례: spawn 직후 `process.spawn` (cmd
+    truncate 200 자, pid), close 시 `process.exit` (exit_code, signal).
+
+- **SEC-3 — `audit_log` 자동 기록**
+  - 이전: 001_init.sql 에 audit_log 테이블만 존재, 코드 어디서도 INSERT X.
+  - 이제: 모든 `tool_use` 결정과 permission grant/denial 이 자동 영속.
+  - 새 `src/storage/AuditLogStore.ts`:
+    - `recordEvent(input)` — append-only INSERT.
+    - `getRecent(limit, filter?)` — timestamp DESC, id DESC tiebreak.
+    - `getBySession(sessionId, limit?)` — timestamp ASC.
+    - `count(filter?)` — UI 페이지네이션용.
+  - `ToolQueue` 의 새 옵션 `audit_sink: (event: ToolAuditEvent) => void` —
+    main 의 closure 가 AuditLogStore 로 변환. Tools 모듈은 storage 직접
+    의존 X (양방향 의존 회피).
+  - 발행되는 event:
+    - `tool_use.success` / `failed` / `cancelled` / `timeout` — 모든 결과.
+      `target_json = JSON.stringify(side_effects)`.
+    - `permission.denied` — Queue.checkPermissions 가 차단 시. capability +
+      ResolvedTarget JSON.
+    - `permission.granted` — `SessionStore.insertGrants` 가 새 grant 영속 시.
+      `granted_by` / `scope` / `expires_at` / `reason` 보존.
+
+- **`audit/*` IPC 채널** (read-only):
+  - `audit/recent` — `{ limit?, session_id?, capability?, event_prefix?, from?, to? }` →
+    `AuditEvent[]`. limit max 1000.
+  - `audit/by-session` — `{ session_id, limit? }` → `AuditEvent[]` ASC.
+  - preload 의 `dreampia.audit.recent()` / `dreampia.audit.bySession()`.
+
+- **Settings > 진단 → 감사 로그 viewer**
+  - `DiagnoseSettings.tsx` 에 `AuditLogSection` 추가 — 최근 50건 table.
+  - 컬럼: 시각 / 이벤트 / 권한 / 결과 / 대상 (target_json truncate).
+  - 결과 색상: success/granted = emerald, failed/denied = red,
+    cancelled/timeout = yellow.
+  - i18n ko/en 모두 추가 (`settings.diagnose.audit.*`).
+  - testid `settings-diagnose-audit` / `settings-diagnose-audit-table` /
+    `settings-diagnose-audit-row-{id}` / `settings-diagnose-audit-empty` /
+    `settings-diagnose-audit-refresh`.
+
+### Changed
+
+- `ToolQueue.checkPermissions` signature 가 `call: ToolCall` 도 받음 —
+  permission denial 시 audit event 의 session_id / turn_id / tool_id 를
+  채우기 위해.
+- `ExecutionContext.record_side_effect` 와 createContext 의 `sideEffectSink`
+  arg 가 v1.0.11 에서 정식 wire-up. 이전 v1.0.10 까지 type 만 있었지만
+  Queue 가 sink 를 createContext 에 전달하지 않아 placeholder 였음.
+- `buildSuccessResult` / `buildFailedResult` 가 `side_effects?: SideEffect[]`
+  param 받음 — 이전엔 항상 `[]` 반환.
+- `SessionStore` 에 `setPermissionGrantAuditSink(sink)` 메서드 추가. main
+  process 가 wire-up. 미설정 시 audit 미기록 (테스트 격리 호환).
+
+### Added (Tests)
+
+- `tests/storage/AuditLogStore.test.ts` — record + getRecent ordering +
+  getBySession + filter (session_id / capability / event_prefix / from / to)
+  + count + clamp + 빈 입력 방어 (12 시나리오).
+- `tests/tools/Queue.audit.test.ts` — side_effects propagation (success +
+  failed + 빈 배열) + audit_sink invocation (success/failed/TOOL_NOT_FOUND/
+  permission denied 더블-emit) + sink throw 격리 (8 시나리오).
+- `e2e/_drive9.spec.ts` — Round 9 drive harness:
+  - 32: shell.run 이 process.spawn + process.exit side_effects 발행.
+  - 33: audit/recent 가 tool_use.success entry 노출 (ai_model = 'shell.run').
+  - 34: Settings > 진단 → 감사 로그 section + table row 확인 + screenshot.
+
+### Verified
+
+- typecheck clean
+- 11/11 spawnSafe unit
+- 새 unit 20+ 시나리오 (위 테스트들)
+- e2e drive9 3/3
+- 기존 e2e drive1-8 회귀 0
+
+### Schema / ABI
+
+- 기존 audit_log 테이블 (001_init.sql 124-142) 그대로 사용 — 새 migration X.
+- `tool_id` 는 ai_model 컬럼에 임시 backfill (architectural debt B-2 의 일부).
+  v1.3.x 에서 audit_log 컬럼 promote 권장 (별도 tool_id 컬럼 + index).
+
+### Notes
+
+- v1.0.10 의 SEC-2 minimal i18n 정정은 그대로 유효. 승인 modal + grant 추가/
+  취소 UI 본격 구현 (full SEC-2) 은 여전히 v1.1.0 예정. SEC-3 의
+  permission.granted 이벤트는 v1.1.0 의 grant API 가 들어오면 자동으로
+  새 grant 도 audit 에 누적.
+- COST-1 / COST-2 (pricing + hard limit) 가 v1.0.12 / v1.0.13 으로 한 슬롯씩
+  미뤄짐. 로드맵 자체는 v1.x-roadmap.md 다음 갱신 시 정리.
+
 ## [1.0.10] — 2026-05-04
 
 **SEC-2 minimal scope — 권한 i18n 정직성 + v1.1.0 deferred 명시.**

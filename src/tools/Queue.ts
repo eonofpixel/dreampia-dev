@@ -36,6 +36,7 @@ import type {
   LogEntry,
   PermissionTarget,
   QueueStats,
+  SideEffect,
   Tool,
   ToolCall,
   ToolError,
@@ -63,6 +64,33 @@ import type { ToolRegistry } from './Registry';
 // Options
 // ────────────────────────────────────────────────────────────
 
+/**
+ * v1.0.11 SEC-3: Queue 가 모든 tool_use 결정 (success/failed/cancelled/timeout
+ * + permission denial) 시 호출할 audit sink 가 받는 이벤트.
+ *
+ * Storage layer (AuditLogStore) 와 Tools 모듈을 분리하기 위해 plain shape 만
+ * 정의. main process 가 sink callback 안에서 AuditLogStore.recordEvent 로
+ * 변환한다. (Tool 모듈은 better-sqlite3 의존 X — renderer 와도 잠재적 공유.)
+ */
+export interface ToolAuditEvent {
+  timestamp: string;
+  session_id: string;
+  turn_id?: string;
+  /** 'tool_use.success' | 'tool_use.failed' | 'tool_use.cancelled' | 'tool_use.timeout' | 'permission.denied' */
+  event: string;
+  tool_id: string;
+  /** 권한 거부 시 해당 capability. tool_use 결정 시 첫 required_capability. */
+  capability: string;
+  /** SideEffect[] (tool_use) 또는 ResolvedTarget (permission.*) 의 JSON. */
+  target_json: string;
+  /** 'success' | 'permission_denied' | 'dangerous_pattern' | 'execution_error' | ... */
+  decision_reason: string;
+  outcome?: string;
+  error?: string;
+}
+
+export type ToolAuditSink = (event: ToolAuditEvent) => void;
+
 export interface ToolQueueOptions {
   /** 글로벌 동시 실행 한도. default 3. */
   max_concurrent?: number;
@@ -72,6 +100,14 @@ export interface ToolQueueOptions {
   default_timeout_ms?: number;
   /** ToolResult.log_tail 최대 항목 수. default 50. */
   log_tail_size?: number;
+  /**
+   * v1.0.11 SEC-3: 모든 tool_use 결정 + permission denial 에서 호출.
+   * 미지정 시 audit 미기록 (테스트 / 격리 환경 호환).
+   * Sink 는 동기여야 함 — Queue 가 await 하지 않음. 안에서 비동기 작업 시
+   * fire-and-forget. throw 시 Queue 는 결과를 그대로 반환 (audit 실패가 tool
+   * 실행을 막지 않음).
+   */
+  audit_sink?: ToolAuditSink;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -99,7 +135,8 @@ interface PendingEntry {
 export class ToolQueue {
   private readonly registry: ToolRegistry;
   private readonly getSession: (id: SessionId) => Session | undefined;
-  private readonly opts: Required<ToolQueueOptions>;
+  private readonly opts: Required<Omit<ToolQueueOptions, 'audit_sink'>>;
+  private readonly auditSink: ToolAuditSink | undefined;
 
   /** 현재 실행 중인 calls. */
   private readonly active = new Map<ToolCallId, ActiveExecution>();
@@ -131,6 +168,61 @@ export class ToolQueue {
       default_timeout_ms: options.default_timeout_ms ?? 30_000,
       log_tail_size: options.log_tail_size ?? 50,
     };
+    this.auditSink = options.audit_sink;
+  }
+
+  /**
+   * v1.0.11 SEC-3: audit sink 안전 호출. throw 시 console.error 만 — tool
+   * 결과는 그대로. Queue 의 모든 결정 출구가 이 함수를 호출.
+   */
+  private emitAudit(event: ToolAuditEvent): void {
+    if (!this.auditSink) return;
+    try {
+      this.auditSink(event);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[ToolQueue] audit sink failed for ${event.event}: ${msg}`);
+    }
+  }
+
+  /**
+   * tool_use.* 결과로부터 audit event 변환.
+   *
+   * target_json 는 SideEffect[] JSON — replay/감사 시 어떤 부작용이 발생했는지
+   * 식별 가능. capability 는 tool 의 첫 required_capability (input 없는 단계
+   * 에선 빈 문자열).
+   */
+  private resultToAuditEvent(call: ToolCall, result: ToolResult): ToolAuditEvent {
+    const eventName = `tool_use.${result.status}`;
+    const decisionReason =
+      result.status === 'success' ? 'success' : (result.error?.code ?? 'unknown');
+    const errMsg = result.error
+      ? `${result.error.code}: ${result.error.message}`
+      : undefined;
+    return {
+      timestamp: result.completed_at,
+      session_id: call.session_id,
+      turn_id: call.turn_id,
+      event: eventName,
+      tool_id: call.tool_id,
+      capability: this.firstCapability(call) ?? '',
+      target_json: JSON.stringify(result.side_effects ?? []),
+      decision_reason: decisionReason,
+      outcome: result.status,
+      ...(errMsg !== undefined ? { error: errMsg } : {}),
+    };
+  }
+
+  /** required_capabilities 의 첫 항목 — registry 미등록 / input parse 전이면 undefined. */
+  private firstCapability(call: ToolCall): string | undefined {
+    const tool = this.registry.get(call.tool_id);
+    if (!tool) return undefined;
+    try {
+      const caps = tool.required_capabilities(call.input);
+      return caps[0];
+    } catch {
+      return undefined;
+    }
   }
 
   // ──────────────────────────────────────────────────────────
@@ -145,53 +237,65 @@ export class ToolQueue {
     // ── Step 1: Tool 조회 ──
     const tool = this.registry.get(call.tool_id);
     if (!tool) {
-      return buildFailedResult({
+      const result = buildFailedResult({
         call,
         status: 'failed',
         error: toolNotFoundError(call.tool_id),
       });
+      this.emitAudit(this.resultToAuditEvent(call, result));
+      return result;
     }
 
     // ── Step 2: Input 검증 (Zod) ──
     const inputParse = tool.input_schema.safeParse(call.input);
     if (!inputParse.success) {
-      return buildFailedResult({
+      const result = buildFailedResult({
         call,
         status: 'failed',
         error: invalidInputError(call.tool_id, inputParse.error.message),
       });
+      this.emitAudit(this.resultToAuditEvent(call, result));
+      return result;
     }
     const validatedInput = inputParse.data;
 
     // ── Step 3: Session 조회 ──
     const session = this.getSession(call.session_id);
     if (!session) {
-      return buildFailedResult({
+      const result = buildFailedResult({
         call,
         status: 'failed',
         error: sessionNotFoundError(call.session_id),
       });
+      this.emitAudit(this.resultToAuditEvent(call, result));
+      return result;
     }
 
     // ── Step 4: Permission 체크 (P4) ──
-    const permError = this.checkPermissions(tool, validatedInput, session);
+    const permError = this.checkPermissions(tool, validatedInput, session, call);
     if (permError) {
-      return buildFailedResult({ call, status: 'failed', error: permError });
+      const result = buildFailedResult({ call, status: 'failed', error: permError });
+      this.emitAudit(this.resultToAuditEvent(call, result));
+      return result;
     }
 
     // ── Step 5: capacity 대기 ──
     const cap = await this.waitForCapacity(call);
     if (!cap.ok) {
       // 대기 중 취소됨 — cancelled 응답
-      return buildFailedResult({
+      const result = buildFailedResult({
         call,
         status: 'cancelled',
         error: abortedError(cap.reason),
       });
+      this.emitAudit(this.resultToAuditEvent(call, result));
+      return result;
     }
 
     // ── Step 6: 실행 ──
-    return this.runTool(call, tool, validatedInput, session);
+    const result = await this.runTool(call, tool, validatedInput, session);
+    this.emitAudit(this.resultToAuditEvent(call, result));
+    return result;
   }
 
   /**
@@ -291,7 +395,12 @@ export class ToolQueue {
   // 내부 — Permission
   // ──────────────────────────────────────────────────────────
 
-  private checkPermissions(tool: Tool, input: unknown, session: Session): ToolError | null {
+  private checkPermissions(
+    tool: Tool,
+    input: unknown,
+    session: Session,
+    call: ToolCall
+  ): ToolError | null {
     const caps = tool.required_capabilities(input);
 
     for (const cap of caps) {
@@ -312,6 +421,10 @@ export class ToolQueue {
             hint: danger.rule.message,
           };
           if (danger.action === 'warn') continue;
+          // v1.0.11 SEC-3: dangerous_pattern 도 별도 permission audit 발행
+          // (tool_use.failed 와 별개 — 어떤 capability/target 가 차단됐는지
+          // 추적 가능).
+          this.emitPermissionDeniedAudit(call, cap, resolved, decision);
           return this.decisionToError(cap, decision);
         }
       }
@@ -329,10 +442,36 @@ export class ToolQueue {
       }
 
       // ── deny: ToolError 생성 ──
+      this.emitPermissionDeniedAudit(call, cap, resolved, decision);
       return this.decisionToError(cap, decision);
     }
 
     return null;
+  }
+
+  /**
+   * v1.0.11 SEC-3: permission denial 단독 audit. tool_use.failed 와 함께
+   * 발행되지만 sourceevent 가 다르므로 분리 — 권한 검토 시 "어떤 capability
+   * 가 가장 자주 거부되는가" 분석 가능.
+   */
+  private emitPermissionDeniedAudit(
+    call: ToolCall,
+    capability: Capability,
+    target: ResolvedTarget,
+    decision: GrantDecision
+  ): void {
+    this.emitAudit({
+      timestamp: new Date().toISOString(),
+      session_id: call.session_id,
+      turn_id: call.turn_id,
+      event: 'permission.denied',
+      tool_id: call.tool_id,
+      capability,
+      target_json: JSON.stringify({ kind: target.kind, value: target.value }),
+      decision_reason: decision.reason,
+      outcome: 'denied',
+      ...(decision.hint !== undefined ? { error: decision.hint } : {}),
+    });
   }
 
   private decisionToError(capability: Capability, decision: GrantDecision): ToolError {
@@ -501,6 +640,13 @@ export class ToolQueue {
       }
     };
 
+    // v1.0.11 SEC-4: ctx.record_side_effect() 누적 buffer.
+    // ActiveExecution 와 ToolResult 둘 다 동일 array reference.
+    const sideEffects: SideEffect[] = [];
+    const sideEffectSink = (effect: SideEffect): void => {
+      sideEffects.push(effect);
+    };
+
     const ctx = createContext({
       session_id: call.session_id,
       turn_id: call.turn_id,
@@ -508,6 +654,7 @@ export class ToolQueue {
       cwd: session.workspace.root,
       signal: abortController.signal,
       logSink,
+      sideEffectSink,
       ...(call.parent_call_id !== undefined && { parent_call_id: call.parent_call_id }),
     });
 
@@ -519,6 +666,7 @@ export class ToolQueue {
       started_at: startedAt,
       abort_controller: abortController,
       log,
+      side_effects: sideEffects,
     };
     this.active.set(call.id, exec);
 
@@ -550,10 +698,18 @@ export class ToolQueue {
         output,
         started_at: startedAt,
         log: log.slice(-this.opts.log_tail_size),
+        side_effects: sideEffects.slice(),
       });
     } catch (err) {
       clearTimeout(timeoutHandle);
-      return this.handleExecutionError(call, startedAt, log, err, abortController);
+      return this.handleExecutionError(
+        call,
+        startedAt,
+        log,
+        err,
+        abortController,
+        sideEffects.slice()
+      );
     } finally {
       this.active.delete(call.id);
       // 슬롯 반납 + 다음 waiter 깨우기 (순서 중요: release 먼저)
@@ -567,7 +723,8 @@ export class ToolQueue {
     startedAt: string,
     log: LogEntry[],
     err: unknown,
-    abortController: AbortController
+    abortController: AbortController,
+    sideEffects: SideEffect[]
   ): ToolResult {
     const truncatedLog = log.slice(-this.opts.log_tail_size);
     const aborted = abortController.signal.aborted;
@@ -586,6 +743,7 @@ export class ToolQueue {
           ),
           started_at: startedAt,
           log: truncatedLog,
+          side_effects: sideEffects,
         });
       }
       return buildFailedResult({
@@ -594,6 +752,7 @@ export class ToolQueue {
         error: abortedError(reason),
         started_at: startedAt,
         log: truncatedLog,
+        side_effects: sideEffects,
       });
     }
 
@@ -605,6 +764,7 @@ export class ToolQueue {
         error: abortedError(err instanceof AbortError ? err.reason : 'aborted'),
         started_at: startedAt,
         log: truncatedLog,
+        side_effects: sideEffects,
       });
     }
 
@@ -615,6 +775,7 @@ export class ToolQueue {
       error: executionError(call.tool_id, err),
       started_at: startedAt,
       log: truncatedLog,
+      side_effects: sideEffects,
     });
   }
 }

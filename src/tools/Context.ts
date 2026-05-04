@@ -8,10 +8,13 @@
  *  - signal — Queue 가 만든 AbortController 의 signal 그대로 전달
  *  - cwd — workspace.root 또는 process.cwd() (호출자 제공)
  *
+ * v1.0.11 SEC-4:
+ *  - record_side_effect — Tool 이 file/process/network 부작용 보고
+ *
  * sub-resources (fs/net/shell adapters) 는 후속 phase 에서 추가.
  */
 
-import type { ExecutionContext, LogEntry, LogLevel } from './types';
+import type { ExecutionContext, LogEntry, LogLevel, SideEffect } from './types';
 import type { SessionId, TurnId, ToolCallId, AbsolutePath } from '@/types';
 
 interface CreateContextArgs {
@@ -22,6 +25,8 @@ interface CreateContextArgs {
   signal: AbortSignal;
   /** Queue 가 누적 로그 저장 위해 제공하는 sink. */
   logSink: (entry: LogEntry) => void;
+  /** Queue 가 side_effects 누적 위해 제공하는 sink. v1.0.11 SEC-4. */
+  sideEffectSink: (effect: SideEffect) => void;
   /** 부모 call 추적용 (sub-call). */
   parent_call_id?: ToolCallId;
   /** Optional progress reporter. */
@@ -43,6 +48,9 @@ export function createContext(args: CreateContextArgs): ExecutionContext {
         ...(data !== undefined ? { data } : {}),
       };
       args.logSink(entry);
+    },
+    record_side_effect: (effect: SideEffect) => {
+      args.sideEffectSink(effect);
     },
     ...(args.parent_call_id !== undefined && { parent_call_id: args.parent_call_id }),
     ...(args.progress !== undefined && { progress: args.progress }),

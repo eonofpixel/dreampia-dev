@@ -51,6 +51,8 @@ import {
   type TurnId,
 } from '@/types';
 import type {
+  AuditEvent,
+  AuditLogStore,
   CompareRun,
   CompareStore,
   DailyUsageRow,
@@ -241,6 +243,19 @@ const UsageDailyArgsSchema = z
   .object({
     days: z.number().int().positive().max(365),
     provider: UsageProviderSchema.optional(),
+  })
+  .strict();
+
+// audit/* — v1.0.11 SEC-3. 진단 탭이 audit_log 조회. 인자는 모두 optional +
+// strict — limit 은 UI 페이지네이션 용 (max 1000, default 100).
+const AuditRecentArgsSchema = z
+  .object({
+    limit: z.number().int().positive().max(1000).optional(),
+    session_id: z.string().min(1).optional(),
+    capability: z.string().min(1).optional(),
+    event_prefix: z.string().min(1).max(100).optional(),
+    from: z.string().min(1).optional(),
+    to: z.string().min(1).optional(),
   })
   .strict();
 
@@ -540,7 +555,8 @@ export function registerIpcHandlers(
   tools?: ToolHandlerConfig,
   mcp?: McpManager,
   usage?: UsageStore,
-  compare?: CompareHandlerConfig
+  compare?: CompareHandlerConfig,
+  audit?: AuditLogStore
 ): void {
   ipcMain.handle('app:get-version', (): AppInfo => {
     return {
@@ -835,6 +851,7 @@ export function registerIpcHandlers(
   if (mcp) registerMcpHandlers(mcp);
   if (usage) registerUsageHandlers(usage);
   if (compare) registerCompareHandlers(compare);
+  if (audit) registerAuditHandlers(audit);
 }
 
 // ────────────────────────────────────────────────────────────
@@ -1681,6 +1698,52 @@ function registerUsageHandlers(usageStore: UsageStore): void {
       }
       writeSettings(patch);
       return ok(undefined);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+}
+
+// ────────────────────────────────────────────────────────────
+// audit/* — v1.0.11 SEC-3 (Audit log read API)
+//
+// Spec: docs/v1.x-roadmap.md (SEC-3), 001_init.sql (audit_log)
+//
+// 2 read-only handlers:
+//   - audit/recent     — { limit?, session_id?, capability?, event_prefix?, from?, to? } → AuditEvent[]
+//   - audit/by-session — { session_id, limit? } → AuditEvent[] (시간 ASC)
+//
+// Mutation IPC 는 의도적으로 X — append-only (recordEvent 는 main 의 sink
+// closure 에서만 호출).
+// ────────────────────────────────────────────────────────────
+
+function registerAuditHandlers(audit: AuditLogStore): void {
+  ipcMain.handle('audit/recent', (_evt, raw: unknown): Result<AuditEvent[]> => {
+    try {
+      const args = AuditRecentArgsSchema.parse(raw ?? {});
+      const limit = args.limit ?? 100;
+      const filter: import('@/storage').AuditQueryFilter = {};
+      if (args.session_id !== undefined) filter.session_id = args.session_id;
+      if (args.capability !== undefined) filter.capability = args.capability;
+      if (args.event_prefix !== undefined) filter.event_prefix = args.event_prefix;
+      if (args.from !== undefined) filter.from = args.from;
+      if (args.to !== undefined) filter.to = args.to;
+      return ok(audit.getRecent(limit, filter));
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('audit/by-session', (_evt, raw: unknown): Result<AuditEvent[]> => {
+    try {
+      const args = z
+        .object({
+          session_id: z.string().min(1),
+          limit: z.number().int().positive().max(5000).optional(),
+        })
+        .strict()
+        .parse(raw);
+      return ok(audit.getBySession(args.session_id, args.limit ?? 500));
     } catch (err) {
       return fail(err);
     }

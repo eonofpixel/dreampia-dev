@@ -143,6 +143,40 @@ interface ToolResultRefShape {
   duration_ms: number;
 }
 
+/**
+ * v1.0.11 SEC-4 — SideEffect 정식 discriminated union. Tool 이
+ * ctx.record_side_effect() 로 보고한 부작용. Renderer 는 ToolResult.side_effects
+ * 로 받음 — 사용자가 "이 tool 이 무엇을 했는가" 확인 가능 + audit_log 의
+ * target_json 직렬화 source.
+ */
+type FileSideEffectShape = {
+  kind: 'file';
+  op: 'read' | 'write' | 'create' | 'delete' | 'rename' | 'chmod';
+  path: string;
+  to_path?: string;
+  bytes?: number;
+};
+type ProcessSideEffectShape = {
+  kind: 'process';
+  op: 'spawn' | 'kill' | 'exit';
+  cmd?: string;
+  pid?: number;
+  exit_code?: number;
+  signal?: string;
+};
+type NetworkSideEffectShape = {
+  kind: 'network';
+  op: 'request' | 'connect' | 'disconnect';
+  url?: string;
+  method?: string;
+  status?: number;
+  host?: string;
+};
+type SideEffectShape =
+  | FileSideEffectShape
+  | ProcessSideEffectShape
+  | NetworkSideEffectShape;
+
 interface ToolResultShape {
   call_id: string;
   tool_id: string;
@@ -159,13 +193,43 @@ interface ToolResultShape {
   completed_at: string;
   duration_ms: number;
   attempt_count: number;
-  side_effects: never[];
+  /** v1.0.11 SEC-4: 정식 discriminated union — 이전엔 `never[]` placeholder. */
+  side_effects: SideEffectShape[];
   log_tail: Array<{
     level: 'debug' | 'info' | 'warn' | 'error';
     timestamp: string;
     message: string;
     data?: Record<string, unknown>;
   }>;
+}
+
+/**
+ * v1.0.11 SEC-3 — Audit log entry shape (renderer 노출용).
+ * @see src/storage/AuditLogStore.ts AuditEvent
+ */
+interface AuditEventShape {
+  id: number;
+  timestamp: string;
+  session_id: string;
+  turn_id?: string;
+  event: string;
+  capability: string;
+  /** JSON string. side_effects[] 또는 ResolvedTarget 직렬화. */
+  target_json: string;
+  decision_reason: string;
+  ai_model?: string;
+  ai_reason?: string;
+  outcome?: string;
+  error?: string;
+}
+
+interface AuditRecentArgsShape {
+  limit?: number;
+  session_id?: string;
+  capability?: string;
+  event_prefix?: string;
+  from?: string;
+  to?: string;
 }
 
 // v0.2.0 — MCP Bridge shapes (Issue #5). Inlined here so preload doesn't
@@ -483,6 +547,9 @@ const ALLOWED_INVOKE_CHANNELS = [
   'compare/get',
   'compare/list',
   'compare/cancel',
+  // v1.0.11 (SEC-3) — Audit log read API
+  'audit/recent',
+  'audit/by-session',
 ] as const;
 
 const ALLOWED_RECEIVE_CHANNELS = [
@@ -1050,6 +1117,30 @@ const api = {
       ipcRenderer.on('compare/stream-event', handler);
       return () => ipcRenderer.removeListener('compare/stream-event', handler);
     },
+  },
+
+  /**
+   * v1.0.11 SEC-3 — Audit log read API.
+   *
+   * Spec: docs/v1.x-roadmap.md (SEC-3)
+   *
+   * Renderer 의 진단 탭이 audit_log 조회. 모든 method 는 read-only —
+   * 영속 (recordEvent) 는 main 의 sink closure 에서만 호출.
+   */
+  audit: {
+    /** 최근 audit event 조회 — 시간 DESC. limit default 100, max 1000. */
+    recent: (args?: AuditRecentArgsShape): Promise<Result<AuditEventShape[]>> =>
+      ipcRenderer.invoke('audit/recent', args ?? {}) as Promise<Result<AuditEventShape[]>>,
+
+    /** 단일 세션의 audit event — 시간 ASC. limit default 500, max 5000. */
+    bySession: (
+      sessionId: string,
+      limit?: number
+    ): Promise<Result<AuditEventShape[]>> =>
+      ipcRenderer.invoke(
+        'audit/by-session',
+        limit !== undefined ? { session_id: sessionId, limit } : { session_id: sessionId }
+      ) as Promise<Result<AuditEventShape[]>>,
   },
 };
 

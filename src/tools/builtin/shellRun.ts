@@ -34,7 +34,7 @@ import path from 'node:path';
 import { z } from 'zod';
 
 import type { Capability } from '@/permission';
-import type { Tool, PermissionTarget } from '../types';
+import type { Tool, PermissionTarget, ProcessSideEffect } from '../types';
 
 // ────────────────────────────────────────────────────────────
 // Schemas
@@ -107,6 +107,10 @@ export const ShellRunTool: Tool<ShellRunInput, ShellRunOutput> = {
     const startedMs = Date.now();
     ctx.log('info', `Spawning shell: ${input.cmd}`);
 
+    // v1.0.11 SEC-4: cmd 가 secret/credential 포함 가능성 — 200자 truncate.
+    // pid 는 spawn 직후만 알 수 있어 'spawn' 이벤트로 별도 emit.
+    const cmdForAudit = input.cmd.length > 200 ? `${input.cmd.slice(0, 200)}…` : input.cmd;
+
     return new Promise<ShellRunOutput>((resolve, reject) => {
       const child = spawn(input.cmd, {
         shell: true,
@@ -115,6 +119,23 @@ export const ShellRunTool: Tool<ShellRunInput, ShellRunOutput> = {
         // Node 16+ — AbortSignal 로 subprocess kill 가능 (engines >=22)
         signal: ctx.signal,
       });
+
+      // v1.0.11 SEC-4: 'spawn' op — pid 알 수 있는 가장 이른 시점.
+      if (typeof child.pid === 'number') {
+        ctx.record_side_effect({
+          kind: 'process',
+          op: 'spawn',
+          cmd: cmdForAudit,
+          pid: child.pid,
+        });
+      } else {
+        // pid 미상 (spawn error pending) 도 일관되게 spawn 시도 1건은 기록.
+        ctx.record_side_effect({
+          kind: 'process',
+          op: 'spawn',
+          cmd: cmdForAudit,
+        });
+      }
 
       let stdout = '';
       let stderr = '';
@@ -150,6 +171,14 @@ export const ShellRunTool: Tool<ShellRunInput, ShellRunOutput> = {
           return;
         }
         const duration = Date.now() - startedMs;
+        // v1.0.11 SEC-4: 'exit' op — exit_code + signal.
+        const exitEffect: ProcessSideEffect = {
+          kind: 'process',
+          op: 'exit',
+          exit_code: code ?? -1,
+        };
+        if (sig) exitEffect.signal = sig;
+        ctx.record_side_effect(exitEffect);
         ctx.log('info', `shell exit ${code ?? -1} (${duration}ms)`, {
           signal: sig ?? null,
         });
