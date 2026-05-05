@@ -2,6 +2,49 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.10] — 2026-05-06
+
+**VCR loader (drive17 prep) — Codex Q10 권고 replay/record/live mode 인프라.**
+
+drive17 (VCR drift detection) 의 핵심 모듈. Tier 3 nightly real CLI 가
+fixture 와 hash 비교로 translator regression detect.
+
+### Added
+
+- **`src/providers/cli/vcrLoader.ts`**:
+  - `loadFixture(path)` — JSON 파싱 + schema 검증 (version === '1', provider
+    claude|codex, spawn{argv, cwd}, exit{code, signal} 필수). missing →
+    `VcrFixtureMissingError`. invalid → `VcrFixtureInvalidError`.
+  - `eventsHashOf(events)` — StreamEvent[] 결정성 SHA-256 hash. timestamps
+    / turn_id / cost float / tool_call.id 제외.
+  - `detectDrift(fixture, events)` — `expected_events_hash` 와 비교, drift
+    + actual + expected 반환. fixture hash 미지정 시 drift X (opt-in).
+  - `updateFixtureHash(path, events)` — record mode helper. fixture 의
+    `expected_events_hash` + `recorded_at` 갱신 후 file 에 write.
+  - `shouldRequireFixture(mode)` — replay → true / record / live → false.
+
+- **`tests/providers/cli/vcrLoader.test.ts`** — 18 시나리오:
+  - `loadFixture`: missing / parse fail / version mismatch / missing
+    provider / invalid provider / missing spawn / valid (7 시나리오).
+  - `eventsHashOf`: 빈 배열 / 같은 events 같은 hash (turn_id 무시) / 다른
+    text 다른 hash / 순서 바뀌면 다른 hash (4 시나리오).
+  - `detectDrift`: hash 미지정 opt-in / 일치 false / mismatch true (3 시나리오).
+  - `updateFixtureHash`: 파일 갱신 검증 (1 시나리오).
+  - `shouldRequireFixture`: 3 mode 검증 (3 시나리오).
+
+### Verified
+
+- typecheck clean
+- 신규 18 unit 통과
+
+### Notes
+
+- **drive17 spec 본체** (DREAMPIA_VCR_MODE=replay missing fail / live drift
+  detection) 은 별도 후속. 본 commit 은 인프라.
+- **PR CI 통합 권고**: nightly job 에서 `DREAMPIA_VCR_MODE=live` 로 e2e 실행
+  → drift 발견 시 fail → 사람이 fixture 갱신 + commit (Codex Q10 picking
+  manual record).
+
 ## [1.1.9] — 2026-05-06
 
 **drive16 — Real CLI integration e2e: failure modes (Codex Q9 권고 시나리오).**
