@@ -266,6 +266,69 @@ export interface NetworkSideEffect {
 
 export type SideEffect = FileSideEffect | ProcessSideEffect | NetworkSideEffect;
 
+// ────────────────────────────────────────────────────────────
+// PermissionConfirmer — v1.1.0 SEC-2 full (Codex Q6 (3a)+(4b)+(5c)+(6))
+//
+// Queue 가 `requires_user_confirmation` 또는 dangerous_pattern action=
+// 'require_modal' 만나면 본 인터페이스의 confirm() 호출 + Promise await.
+// Tools 모듈은 Electron / IPC 직접 의존 X — main 의 IpcPermissionConfirmer
+// 가 본 인터페이스를 구현해 renderer 와 brokering.
+//
+// Codex 권고: "PermissionConfirmer 인터페이스 주입 — Queue 가 permission /
+// audit 단일 관문이라 여기서 처리해야 invariant 안 깨짐."
+// ────────────────────────────────────────────────────────────
+
+/**
+ * 사용자 응답 종류 (Codex (4b) picking):
+ *  - 'once'    : 이번 호출만 허용. grant 영속 X.
+ *  - 'session' : 이 세션 동안 허용. session.permission.grants 에 in-memory
+ *                추가 (DB 영속 X — 세션 종료 시 사라짐).
+ *  - 'always'  : 영구 grant. SessionStore.addPermissionGrant 로 DB 영속.
+ *  - 'deny'    : 차단. grant 영속 X (필요 시 별도 deny grant 추가).
+ */
+export type PermissionGrantDuration = 'once' | 'session' | 'always' | 'deny';
+
+export interface PermissionRequest {
+  /** 매 요청마다 고유 — main / renderer 가 응답을 매칭하기 위함. */
+  request_id: string;
+  session_id: SessionId;
+  turn_id: TurnId;
+  call_id: ToolCallId;
+  tool_id: ToolId;
+  capability: string;
+  target: { kind: PermissionTargetKind; value: string };
+  /** Resolver 가 만든 사용자 표시용 힌트. */
+  hint?: string;
+  /**
+   * dangerous_pattern action='require_modal' 인 경우 true. UI 가 inline 카드
+   * 대신 center modal 로 escalate (Codex (5c)).
+   */
+  is_dangerous: boolean;
+  /** Tool 의 display.name — UI 가 사용자에게 보여줄 짧은 이름. */
+  tool_display_name: string;
+  /** 요청 시각 — UI 가 timeout 카운트다운 표시용. */
+  requested_at: ISO8601;
+}
+
+export interface PermissionResponse {
+  request_id: string;
+  decision: PermissionGrantDuration;
+  /** 사용자가 입력한 사유 (선택). audit_log 에 기록. */
+  reason?: string;
+}
+
+export interface PermissionConfirmer {
+  /**
+   * 사용자에게 권한 confirmation 을 요청. Promise resolve 까지 await.
+   *
+   * timeout (default 60s) 시 'deny' 반환 (fail-closed — Codex (6)).
+   * Renderer 미연결 / IPC 실패 시 'deny'.
+   * 사용자가 dismiss (X / Esc) 시 'deny' 반환 + grant 영속 X (cancelled
+   * 와 구분 — Codex (6)).
+   */
+  confirm(request: PermissionRequest): Promise<PermissionResponse>;
+}
+
 export interface ToolResult {
   call_id: ToolCallId;
   tool_id: ToolId;

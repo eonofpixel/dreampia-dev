@@ -608,6 +608,121 @@ export class SessionStore {
     tx(session);
   }
 
+  /**
+   * v1.1.0 SEC-2 full: 단일 grant 추가 — 사용자가 'always' 응답 시 호출.
+   *
+   * insertGrants 와 다르게 단일 row INSERT + audit 자동 발행 (sink 가
+   * 설정돼있으면). createSession 의 bulk 와 분리해 race 회피 + caller
+   * 가 await 후 조회 가능.
+   */
+  addPermissionGrant(grant: import('../types/permission').PermissionGrant): void {
+    if (!this.stmts.insertGrant) {
+      this.stmts.insertGrant = this.db.prepare(
+        `INSERT INTO permission_grants
+         (session_id, capability, target_json, granted_at, granted_by, expires_at, revoked_at, reason, scope)
+         VALUES (@session_id, @capability, @target_json, @granted_at, @granted_by, @expires_at, @revoked_at, @reason, @scope)`
+      );
+    }
+    const targetJson = JSON.stringify({ id: grant.id, target: grant.target });
+    this.stmts.insertGrant.run({
+      session_id: grant.session_id,
+      capability: grant.capability,
+      target_json: targetJson,
+      granted_at: grant.granted_at,
+      granted_by: grant.granted_by,
+      expires_at: grant.expires_at ?? null,
+      revoked_at: grant.revoked_at ?? null,
+      reason: grant.reason ?? null,
+      scope: grant.scope,
+    });
+
+    // v1.0.11 SEC-3: audit 자동.
+    const sink = this.permissionGrantAuditSink;
+    if (sink !== undefined) {
+      try {
+        sink({
+          timestamp: grant.granted_at,
+          session_id: grant.session_id,
+          capability: grant.capability,
+          target_json: targetJson,
+          granted_by: grant.granted_by,
+          scope: grant.scope,
+          expires_at: grant.expires_at ?? null,
+          reason: grant.reason ?? null,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[SessionStore.addPermissionGrant] audit sink failed: ${msg}`);
+      }
+    }
+  }
+
+  /**
+   * v1.1.0 SEC-2 full: grant revoke. revoked_at 설정 — Resolver 의
+   * findActiveGrants 가 자동 제외.
+   *
+   * @param grantId permission_grants.target_json 의 id 필드 (UUID).
+   * @returns true 면 1개 row update, false 면 미발견.
+   */
+  revokePermissionGrant(grantId: string, revokedAt: string): boolean {
+    // target_json LIKE '%"id":"<uuid>"%' — JSON1 extension 사용 가능하면 더 정교.
+    // 기본 SQLite 빌드의 JSON1 가 켜져 있으므로 json_extract 사용.
+    const result = this.db
+      .prepare(
+        `UPDATE permission_grants
+         SET revoked_at = @revoked_at
+         WHERE revoked_at IS NULL
+           AND json_extract(target_json, '$.id') = @grant_id`
+      )
+      .run({ revoked_at: revokedAt, grant_id: grantId });
+    return result.changes > 0;
+  }
+
+  /**
+   * v1.1.0 SEC-2 full: active grant 목록 조회 (revoked_at IS NULL).
+   *
+   * UI 의 Settings > 권한 패널이 list view 로 표시 + revoke 버튼.
+   */
+  listActivePermissionGrants(
+    sessionId: import('@/types').SessionId
+  ): Array<{
+    id: string;
+    capability: string;
+    target_json: string;
+    granted_at: string;
+    granted_by: string;
+    scope: string;
+    expires_at: string | null;
+    reason: string | null;
+  }> {
+    const rows = this.db
+      .prepare(
+        `SELECT capability, target_json, granted_at, granted_by, expires_at, reason, scope
+         FROM permission_grants
+         WHERE session_id = @session_id AND revoked_at IS NULL
+         ORDER BY granted_at DESC`
+      )
+      .all({ session_id: sessionId }) as Array<{
+        capability: string;
+        target_json: string;
+        granted_at: string;
+        granted_by: string;
+        expires_at: string | null;
+        reason: string | null;
+        scope: string;
+      }>;
+    return rows.map((r) => {
+      let id = '';
+      try {
+        const parsed = JSON.parse(r.target_json) as { id?: string };
+        id = typeof parsed.id === 'string' ? parsed.id : '';
+      } catch {
+        // ignore parse error
+      }
+      return { ...r, id };
+    });
+  }
+
   appendTurn(sessionId: SessionId, turn: Turn): void {
     const tx = this.db.transaction((sid: string, t: Turn) => {
       const exists = this.getSessionExistsStmt().get(sid) as { id: string } | undefined;

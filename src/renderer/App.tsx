@@ -26,6 +26,9 @@ import {
   parseCostLimitError,
   type ParsedCostLimitError,
 } from './components/cost/CostLimitModal';
+import { PermissionApprovalCard } from './components/permission/PermissionApprovalCard';
+import { PermissionDangerModal } from './components/permission/PermissionDangerModal';
+import { usePermissionRequests } from './hooks/usePermissionRequests';
 import { useCompare, type CompareSide } from './hooks/useCompare';
 import { KNOWN_MODELS, type SlashCommandId } from './commands/registry';
 import {
@@ -179,6 +182,9 @@ export function App(): React.JSX.Element {
   // v1.0.12 (COST-2): main 의 ai/start-stream 이 COST_LIMIT_EXCEEDED 로 차단
   // 시 본 state 가 채워져 modal 이 mount. parseCostLimitError 가 JSON 파싱.
   const [costLimitError, setCostLimitError] = useState<ParsedCostLimitError | null>(null);
+  // v1.1.0 SEC-2 full: 권한 승인 요청 모음. dangerous 는 center modal,
+  // 그 외는 ChatPanel 안에 inline.
+  const permission = usePermissionRequests();
   const compareHook = useCompare({
     onError: (msg) => {
       console.error('[useCompare]', msg);
@@ -1206,6 +1212,38 @@ export function App(): React.JSX.Element {
           void compareHook.cancel();
         }}
         onAccept={handleAcceptCompare}
+      />
+      {/* v1.1.0 SEC-2 full: 비-dangerous 권한 요청 inline approval card.
+          Codex (5c) — chat panel 문맥. 위치는 fixed bottom-right 으로 chat
+          입력 가리지 않도록. */}
+      {permission.current !== null && !permission.current.is_dangerous && (
+        <div className="pointer-events-none fixed bottom-4 right-4 z-40 w-[420px] max-w-[95vw]">
+          <div className="pointer-events-auto">
+            <PermissionApprovalCard
+              request={permission.current}
+              onDecide={(decision, reason) => {
+                if (permission.current === null) return;
+                void permission.respond(
+                  permission.current.request_id,
+                  decision,
+                  reason
+                );
+              }}
+            />
+          </div>
+        </div>
+      )}
+      {/* v1.1.0 SEC-2 full: dangerous 권한 요청 center modal escalation. */}
+      <PermissionDangerModal
+        request={
+          permission.current !== null && permission.current.is_dangerous
+            ? permission.current
+            : null
+        }
+        onDecide={(decision, reason) => {
+          if (permission.current === null) return;
+          void permission.respond(permission.current.request_id, decision, reason);
+        }}
       />
       {/* v1.0.12 (COST-2): hard limit 차단 modal — main 이 차단한 정보 표시. */}
       <CostLimitModal

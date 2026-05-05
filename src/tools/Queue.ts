@@ -28,12 +28,16 @@
 
 import { checkDangerousPattern, isAllowed, type GrantDecision } from '@/permission';
 import type { Capability } from '@/permission';
+import type { PermissionGrant } from '@/types/permission';
 import type { Session, SessionId, TurnId, ToolCallId } from '@/types';
 import type { ResolvedTarget } from '@/permission/Targets';
 
 import type {
   ActiveExecution,
   LogEntry,
+  PermissionConfirmer,
+  PermissionGrantDuration,
+  PermissionRequest,
   PermissionTarget,
   QueueStats,
   SideEffect,
@@ -108,6 +112,24 @@ export interface ToolQueueOptions {
    * 실행을 막지 않음).
    */
   audit_sink?: ToolAuditSink;
+  /**
+   * v1.1.0 SEC-2 full: requires_user_confirmation / require_modal 만나면
+   * Queue 가 본 confirmer 의 confirm() 을 await. 미지정 시 v1.0.x 동작
+   * (즉시 deny — 호환).
+   */
+  permission_confirmer?: PermissionConfirmer;
+  /**
+   * v1.1.0 SEC-2 full: 사용자가 'session' / 'always' 응답 시 grant 추가 콜백.
+   * - 'session' grant: caller (보통 main 의 SessionStore wrapper) 가 in-memory
+   *   session.permission.grants 에 추가. DB 영속 X.
+   * - 'always' grant: caller 가 DB 에 영속 (SessionStore.addPermissionGrant).
+   * 미지정 시 grant 영속 X (테스트 / 호환). 'once' / 'deny' 는 호출 X.
+   */
+  grant_persister?: (
+    session_id: SessionId,
+    grant: PermissionGrant,
+    duration: 'session' | 'always'
+  ) => void;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -135,8 +157,14 @@ interface PendingEntry {
 export class ToolQueue {
   private readonly registry: ToolRegistry;
   private readonly getSession: (id: SessionId) => Session | undefined;
-  private readonly opts: Required<Omit<ToolQueueOptions, 'audit_sink'>>;
+  private readonly opts: Required<
+    Omit<ToolQueueOptions, 'audit_sink' | 'permission_confirmer' | 'grant_persister'>
+  >;
   private readonly auditSink: ToolAuditSink | undefined;
+  private readonly confirmer: PermissionConfirmer | undefined;
+  private readonly grantPersister:
+    | ((session_id: SessionId, grant: PermissionGrant, duration: 'session' | 'always') => void)
+    | undefined;
 
   /** 현재 실행 중인 calls. */
   private readonly active = new Map<ToolCallId, ActiveExecution>();
@@ -169,6 +197,8 @@ export class ToolQueue {
       log_tail_size: options.log_tail_size ?? 50,
     };
     this.auditSink = options.audit_sink;
+    this.confirmer = options.permission_confirmer;
+    this.grantPersister = options.grant_persister;
   }
 
   /**
@@ -271,8 +301,9 @@ export class ToolQueue {
       return result;
     }
 
-    // ── Step 4: Permission 체크 (P4) ──
-    const permError = this.checkPermissions(tool, validatedInput, session, call);
+    // ── Step 4: Permission 체크 (P4) — v1.1.0 SEC-2 full: async ──
+    // requires_user_confirmation / require_modal 시 confirmer.confirm() await.
+    const permError = await this.checkPermissions(tool, validatedInput, session, call);
     if (permError) {
       const result = buildFailedResult({ call, status: 'failed', error: permError });
       this.emitAudit(this.resultToAuditEvent(call, result));
@@ -395,12 +426,20 @@ export class ToolQueue {
   // 내부 — Permission
   // ──────────────────────────────────────────────────────────
 
-  private checkPermissions(
+  /**
+   * v1.1.0 SEC-2 full: async — `requires_user_confirmation` / 'require_modal'
+   * 만나면 confirmer.confirm() await. 사용자 응답에 따라:
+   *  - 'once': 이번 호출만 통과 (grant 영속 X).
+   *  - 'session' / 'always': grant 영속 (persister 호출) 후 통과.
+   *  - 'deny': 즉시 차단.
+   *  - timeout: confirmer 가 'deny' 반환 (fail-closed).
+   */
+  private async checkPermissions(
     tool: Tool,
     input: unknown,
     session: Session,
     call: ToolCall
-  ): ToolError | null {
+  ): Promise<ToolError | null> {
     const caps = tool.required_capabilities(input);
 
     for (const cap of caps) {
@@ -421,9 +460,23 @@ export class ToolQueue {
             hint: danger.rule.message,
           };
           if (danger.action === 'warn') continue;
-          // v1.0.11 SEC-3: dangerous_pattern 도 별도 permission audit 발행
-          // (tool_use.failed 와 별개 — 어떤 capability/target 가 차단됐는지
-          // 추적 가능).
+          // v1.1.0: 'require_modal' 은 confirmer 호출. 'deny_silent' 는 즉시 차단.
+          if (danger.action === 'require_modal' && this.confirmer !== undefined) {
+            const userOk = await this.askConfirmation(
+              tool,
+              call,
+              cap,
+              resolved,
+              session,
+              decision.hint,
+              true // is_dangerous
+            );
+            if (userOk) continue;
+            // confirmer 거부 시 audit + ToolError. (askConfirmation 안에서
+            // emitPermissionDeniedAudit 가 이미 발행 — 중복 X.)
+            return this.decisionToError(cap, decision);
+          }
+          // require_modal 인데 confirmer 가 없으면 v1.0.x 호환 deny.
           this.emitPermissionDeniedAudit(call, cap, resolved, decision);
           return this.decisionToError(cap, decision);
         }
@@ -434,11 +487,26 @@ export class ToolQueue {
       if (decision.allowed) continue;
 
       // ── warn-action override (Queue-level) ──
-      // dangerous_pattern + action='warn' 은 정보 제공만 — 차단 X.
-      // log 기록은 ctx.log 에서 — 여기선 그냥 통과시킴.
       if (decision.reason === 'dangerous_pattern' && decision.action === 'warn') {
-        // continue — 다음 capability 체크
         continue;
+      }
+
+      // ── v1.1.0 SEC-2 full: requires_user_confirmation → confirmer ──
+      if (
+        decision.reason === 'requires_user_confirmation' &&
+        this.confirmer !== undefined
+      ) {
+        const userOk = await this.askConfirmation(
+          tool,
+          call,
+          cap,
+          resolved,
+          session,
+          decision.hint,
+          false // is_dangerous
+        );
+        if (userOk) continue;
+        return this.decisionToError(cap, decision);
       }
 
       // ── deny: ToolError 생성 ──
@@ -447,6 +515,140 @@ export class ToolQueue {
     }
 
     return null;
+  }
+
+  /**
+   * v1.1.0 SEC-2 full: 사용자에게 confirmation 요청 + grant 영속 분기.
+   *
+   * @returns true 면 caller 가 다음 capability 진행. false 면 deny (caller 가
+   *          decisionToError 로 차단).
+   */
+  private async askConfirmation(
+    tool: Tool,
+    call: ToolCall,
+    capability: Capability,
+    resolved: ResolvedTarget,
+    _session: Session,
+    hint: string | undefined,
+    isDangerous: boolean
+  ): Promise<boolean> {
+    if (this.confirmer === undefined) return false;
+    const requestedAt = new Date().toISOString();
+    const request: PermissionRequest = {
+      request_id: `pcr-${call.id}-${capability}-${Date.now()}`,
+      session_id: call.session_id,
+      turn_id: call.turn_id,
+      call_id: call.id,
+      tool_id: call.tool_id,
+      capability,
+      target: { kind: resolved.kind, value: resolved.value },
+      ...(hint !== undefined && { hint }),
+      is_dangerous: isDangerous,
+      tool_display_name: tool.display.name,
+      requested_at: requestedAt,
+    };
+
+    let response;
+    try {
+      response = await this.confirmer.confirm(request);
+    } catch (err) {
+      // confirmer throw 는 fail-closed (deny).
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[ToolQueue] confirmer.confirm threw: ${msg}`);
+      this.emitPermissionDecisionAudit(
+        call,
+        capability,
+        resolved,
+        'permission.confirm_error',
+        'denied',
+        msg
+      );
+      return false;
+    }
+
+    // Audit 기록 — 사용자 응답 종류 + reason.
+    const auditEvent = this.responseToAuditEvent(response.decision);
+    this.emitPermissionDecisionAudit(
+      call,
+      capability,
+      resolved,
+      auditEvent,
+      response.decision === 'deny' ? 'denied' : 'allowed',
+      response.reason
+    );
+
+    if (response.decision === 'deny') return false;
+
+    // 'session' / 'always' → grant 영속 (persister 가 처리).
+    if (
+      (response.decision === 'session' || response.decision === 'always') &&
+      this.grantPersister !== undefined
+    ) {
+      const grantTarget = resolvedToGrantTarget(resolved);
+      if (grantTarget !== null) {
+        const grant: PermissionGrant = {
+          id: response.request_id,
+          session_id: call.session_id,
+          capability,
+          target: grantTarget,
+          granted_at: new Date().toISOString(),
+          granted_by: 'user',
+          scope: response.decision === 'always' ? 'persistent' : 'session',
+          ...(response.reason !== undefined &&
+            response.reason.length > 0 && { reason: response.reason }),
+        };
+        try {
+          this.grantPersister(call.session_id, grant, response.decision);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[ToolQueue] grantPersister failed: ${msg}`);
+          // grant 영속 실패 시에도 'once' 처럼 동작.
+        }
+      }
+    }
+    return true;
+  }
+
+  /**
+   * PermissionGrantDuration → audit event 이름.
+   */
+  private responseToAuditEvent(d: PermissionGrantDuration): string {
+    switch (d) {
+      case 'once':
+        return 'permission.granted_once';
+      case 'session':
+        return 'permission.granted_session';
+      case 'always':
+        return 'permission.granted_always';
+      case 'deny':
+        return 'permission.denied_by_user';
+    }
+  }
+
+  /**
+   * v1.1.0: confirmer 응답 audit. emitPermissionDeniedAudit 와 다른 점은
+   * 사용자 응답 (allow/deny) 도 포함.
+   */
+  private emitPermissionDecisionAudit(
+    call: ToolCall,
+    capability: Capability,
+    target: ResolvedTarget,
+    eventName: string,
+    outcome: 'allowed' | 'denied',
+    reason?: string
+  ): void {
+    this.emitAudit({
+      timestamp: new Date().toISOString(),
+      session_id: call.session_id,
+      turn_id: call.turn_id,
+      event: eventName,
+      tool_id: call.tool_id,
+      capability,
+      target_json: JSON.stringify({ kind: target.kind, value: target.value }),
+      decision_reason: outcome === 'allowed' ? 'user_confirmed' : 'user_denied',
+      outcome,
+      ...(reason !== undefined && reason.length > 0 ? { error: reason } : {}),
+    });
   }
 
   /**
@@ -777,6 +979,33 @@ export class ToolQueue {
       log: truncatedLog,
       side_effects: sideEffects,
     });
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────────────────────
+
+/**
+ * v1.1.0 SEC-2 full: ResolvedTarget → GrantTarget 변환. permission grant 의
+ * target shape 이 ResolvedTarget 과 다름 (path vs value). 변환 불가능한
+ * 케이스 (e.g. file system path 가 아닌 raw value) 는 null 반환 → caller
+ * 가 grant 영속 skip + 'once' 처럼 동작.
+ */
+function resolvedToGrantTarget(
+  resolved: ResolvedTarget
+): import('@/types/permission').GrantTarget | null {
+  switch (resolved.kind) {
+    case 'path':
+      return { kind: 'path', path: resolved.value };
+    case 'url':
+      return { kind: 'url', url: resolved.value };
+    case 'domain':
+      return { kind: 'domain', domain: resolved.value };
+    case 'global':
+      return { kind: 'global' };
+    default:
+      return null;
   }
 }
 

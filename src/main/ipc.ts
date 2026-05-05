@@ -259,6 +259,27 @@ const AuditRecentArgsSchema = z
   })
   .strict();
 
+// permission/* — v1.1.0 SEC-2 full. respond / list / revoke 입력 검증.
+const PermissionRespondArgsSchema = z
+  .object({
+    request_id: z.string().min(1),
+    decision: z.enum(['once', 'session', 'always', 'deny']),
+    reason: z.string().max(500).optional(),
+  })
+  .strict();
+
+const PermissionGrantsListArgsSchema = z
+  .object({
+    session_id: z.string().min(1),
+  })
+  .strict();
+
+const PermissionGrantsRevokeArgsSchema = z
+  .object({
+    grant_id: z.string().min(1),
+  })
+  .strict();
+
 // ────────────────────────────────────────────────────────────
 // compare/* — v0.12.0 I (Cross-AI Verify/Compare MVP)
 // ────────────────────────────────────────────────────────────
@@ -560,7 +581,8 @@ export function registerIpcHandlers(
   mcp?: McpManager,
   usage?: UsageStore,
   compare?: CompareHandlerConfig,
-  audit?: AuditLogStore
+  audit?: AuditLogStore,
+  permission?: PermissionHandlerConfig
 ): void {
   ipcMain.handle('app:get-version', (): AppInfo => {
     return {
@@ -869,6 +891,78 @@ export function registerIpcHandlers(
   if (usage) registerUsageHandlers(usage);
   if (compare) registerCompareHandlers(compare);
   if (audit) registerAuditHandlers(audit);
+  if (permission) registerPermissionHandlers(permission, store);
+}
+
+// ────────────────────────────────────────────────────────────
+// permission/* — v1.1.0 SEC-2 full
+//
+// IPC 의 main → renderer 'permission/request' 는 IpcPermissionConfirmer 가
+// webContents.send 로 직접 발화 — 본 함수는 renderer → main invoke 만 등록.
+// ────────────────────────────────────────────────────────────
+
+export interface PermissionHandlerConfig {
+  /** IpcPermissionConfirmer 인스턴스 — respond / listPending 위임. */
+  confirmer: import('./IpcPermissionConfirmer').IpcPermissionConfirmer;
+}
+
+function registerPermissionHandlers(
+  cfg: PermissionHandlerConfig,
+  store?: SessionStore
+): void {
+  ipcMain.handle(
+    'permission/respond',
+    (_evt, raw: unknown): Result<{ matched: boolean }> => {
+      try {
+        const args = PermissionRespondArgsSchema.parse(raw);
+        const matched = cfg.confirmer.respond(
+          args.request_id,
+          args.decision,
+          args.reason
+        );
+        return ok({ matched });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle('permission/list-pending', (): Result<unknown[]> => {
+    try {
+      return ok(cfg.confirmer.getPendingRequests());
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('permission/grants/list', (_evt, raw: unknown): Result<unknown[]> => {
+    try {
+      const args = PermissionGrantsListArgsSchema.parse(raw);
+      if (store === undefined) return ok([]);
+      return ok(
+        store.listActivePermissionGrants(args.session_id as import('@/types').SessionId)
+      );
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle(
+    'permission/grants/revoke',
+    (_evt, raw: unknown): Result<{ revoked: boolean }> => {
+      try {
+        const args = PermissionGrantsRevokeArgsSchema.parse(raw);
+        if (store === undefined) return ok({ revoked: false });
+        const revoked = store.revokePermissionGrant(
+          args.grant_id,
+          new Date().toISOString()
+        );
+        return ok({ revoked });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
 }
 
 // ────────────────────────────────────────────────────────────

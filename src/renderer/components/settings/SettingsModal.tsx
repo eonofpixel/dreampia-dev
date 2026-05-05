@@ -336,6 +336,196 @@ const PERMISSION_LEVEL_ORDER: ReadonlyArray<PermissionLevel> = [
   'custom',
 ];
 
+// ────────────────────────────────────────────────────────────
+// v1.1.0 SEC-2 full — Active permission grants block.
+//
+// Settings > 권한 panel 안에 mount. 현재 active session 의 grant 목록 +
+// 즉시 revoke 버튼. v1.0.10 의 deferred banner 를 대체.
+// ────────────────────────────────────────────────────────────
+
+interface GrantSummary {
+  id: string;
+  capability: string;
+  target_json: string;
+  granted_at: string;
+  granted_by: string;
+  scope: string;
+  expires_at: string | null;
+  reason: string | null;
+}
+
+function PermissionGrantsBlock(): React.JSX.Element {
+  const t = useT();
+  const [grants, setGrants] = useState<GrantSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = useCallback(async (): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    const w = typeof window !== 'undefined' ? window : undefined;
+    const sessionApi = w?.dreampia?.session;
+    const permApi = (w?.dreampia as { permission?: { listGrants: (id: string) => Promise<{ ok: boolean; value?: GrantSummary[]; error?: string }> } } | undefined)?.permission;
+    if (sessionApi === undefined || permApi === undefined) {
+      setLoading(false);
+      return;
+    }
+    try {
+      const sessions = await sessionApi.list();
+      if (!sessions.ok || sessions.value.length === 0) {
+        setGrants([]);
+        return;
+      }
+      const sessionId = sessions.value[0]!.id;
+      const r = await permApi.listGrants(sessionId);
+      if (r.ok && Array.isArray(r.value)) {
+        setGrants(r.value);
+      } else if (!r.ok) {
+        setError(r.error ?? 'unknown');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const handleRevoke = useCallback(
+    async (grantId: string): Promise<void> => {
+      const w = typeof window !== 'undefined' ? window : undefined;
+      const permApi = (w?.dreampia as { permission?: { revokeGrant: (id: string) => Promise<{ ok: boolean }> } } | undefined)?.permission;
+      if (permApi === undefined) return;
+      try {
+        await permApi.revokeGrant(grantId);
+      } catch {
+        // ignore
+      }
+      void reload();
+    },
+    [reload]
+  );
+
+  return (
+    <section
+      className="mb-4 rounded-md border border-border-primary bg-bg-secondary p-3"
+      data-testid="settings-permission-grants"
+    >
+      <header className="mb-2 flex items-start justify-between gap-3">
+        <div className="flex-1">
+          <h4 className="text-sm font-semibold">{t('settings.permission.grants.title')}</h4>
+          <p className="text-xs text-text-tertiary">
+            {t('settings.permission.grants.description')}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            void reload();
+          }}
+          disabled={loading}
+          className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-xs hover:bg-bg-primary disabled:cursor-not-allowed disabled:opacity-50"
+          data-testid="settings-permission-grants-refresh"
+        >
+          {t('settings.permission.grants.refresh')}
+        </button>
+      </header>
+
+      {error !== null && (
+        <p
+          className="mb-2 break-words font-mono text-[11px] text-red-400"
+          data-testid="settings-permission-grants-error"
+        >
+          {error}
+        </p>
+      )}
+
+      {loading ? (
+        <p className="text-xs text-text-secondary">{t('settings.loading')}</p>
+      ) : grants.length === 0 ? (
+        <p
+          className="text-xs text-text-tertiary"
+          data-testid="settings-permission-grants-empty"
+        >
+          {t('settings.permission.grants.empty')}
+        </p>
+      ) : (
+        <table
+          className="w-full border-collapse text-left text-[11px]"
+          data-testid="settings-permission-grants-table"
+        >
+          <thead className="text-text-tertiary">
+            <tr>
+              <th className="border-b border-border-primary py-1 pr-3 font-medium">
+                {t('settings.permission.grants.col.capability')}
+              </th>
+              <th className="border-b border-border-primary py-1 pr-3 font-medium">
+                {t('settings.permission.grants.col.target')}
+              </th>
+              <th className="border-b border-border-primary py-1 pr-3 font-medium">
+                {t('settings.permission.grants.col.scope')}
+              </th>
+              <th className="border-b border-border-primary py-1 pr-3 font-medium">
+                {t('settings.permission.grants.col.granted_at')}
+              </th>
+              <th className="border-b border-border-primary py-1 font-medium" />
+            </tr>
+          </thead>
+          <tbody>
+            {grants.map((g) => (
+              <tr
+                key={g.id || `${g.capability}-${g.granted_at}`}
+                className="border-b border-border-primary/30 last:border-b-0"
+                data-testid={`settings-permission-grant-row-${g.id}`}
+              >
+                <td className="py-1 pr-3 font-mono text-text-primary">{g.capability}</td>
+                <td className="max-w-[180px] truncate py-1 pr-3 font-mono text-text-secondary">
+                  <span title={g.target_json}>{shortTarget(g.target_json)}</span>
+                </td>
+                <td className="py-1 pr-3 font-mono text-text-secondary">{g.scope}</td>
+                <td className="py-1 pr-3 font-mono text-text-tertiary">
+                  {g.granted_at.slice(11, 19)}
+                </td>
+                <td className="py-1 text-right">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleRevoke(g.id);
+                    }}
+                    disabled={g.id === ''}
+                    className="rounded-md border border-red-600/40 bg-red-900/20 px-2 py-0.5 text-[10px] text-red-300 hover:bg-red-900/30 disabled:cursor-not-allowed disabled:opacity-50"
+                    data-testid={`settings-permission-grant-revoke-${g.id}`}
+                  >
+                    {t('settings.permission.grants.revoke')}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
+function shortTarget(targetJson: string): string {
+  try {
+    const obj = JSON.parse(targetJson) as { target?: { kind?: string; path?: string; url?: string; domain?: string } };
+    const t = obj.target;
+    if (t === undefined) return targetJson;
+    if (t.kind === 'path' && t.path !== undefined) return `path:${t.path}`;
+    if (t.kind === 'url' && t.url !== undefined) return `url:${t.url}`;
+    if (t.kind === 'domain' && t.domain !== undefined) return `domain:${t.domain}`;
+    if (t.kind === 'global') return 'global';
+    return targetJson;
+  } catch {
+    return targetJson;
+  }
+}
+
 function PermissionPanel(): React.JSX.Element {
   const t = useT();
   const [level, setLevel] = useState<PermissionLevel>('workspace_write');
@@ -392,21 +582,14 @@ function PermissionPanel(): React.JSX.Element {
         <p className="text-xs text-text-secondary">{t('settings.permission.description')}</p>
       </header>
       {/*
-       * v1.0.10 (SEC-2 정직성) — 이전에 "사용자 승인" 라벨이 거짓말이었음
-       * (Codex 검토 발견). 실제 Queue 는 requires_user_confirmation 을 즉시
-       * permission_denied 로 처리. 승인 modal + grant 추가 UI 는 v1.1.0 작업.
-       * 사용자에게 이 사실을 명시.
+       * v1.1.0 (SEC-2 full) — v1.0.10 의 deferred banner 제거 + 실제 grant
+       * 관리 UI. 사용자가 권한 승인 요청 시 'always' 로 답하면 본 panel 의
+       * grant list 에 노출됨. 즉시 revoke 가능.
+       *
+       * 정직성 banner 는 더 이상 거짓말이 아님 — 실제로 동작하므로 제거.
        */}
-      <div
-        className="mb-4 rounded-md border border-yellow-700/40 bg-yellow-900/20 p-3 text-xs text-yellow-300"
-        data-testid="settings-permission-grant-status"
-        role="status"
-      >
-        <p className="font-medium">{t('settings.permission.grant_status_title')}</p>
-        <p className="mt-1 text-yellow-300/80">
-          {t('settings.permission.grant_status_body')}
-        </p>
-      </div>
+      <PermissionGrantsBlock />
+
       {loading ? (
         <p className="text-sm text-text-secondary">{t('settings.loading')}</p>
       ) : (

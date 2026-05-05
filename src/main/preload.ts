@@ -232,6 +232,36 @@ interface AuditRecentArgsShape {
   to?: string;
 }
 
+/**
+ * v1.1.0 SEC-2 full — permission request shape (mirrors src/tools/types.ts
+ * PermissionRequest). Inlined to keep preload sandbox-safe.
+ */
+interface PermissionRequestShape {
+  request_id: string;
+  session_id: string;
+  turn_id: string;
+  call_id: string;
+  tool_id: string;
+  capability: string;
+  target: { kind: 'path' | 'url' | 'domain' | 'global'; value: string };
+  hint?: string;
+  is_dangerous: boolean;
+  tool_display_name: string;
+  requested_at: string;
+}
+
+interface PermissionGrantSummaryShape {
+  id: string;
+  capability: string;
+  /** JSON string — `{ id, target }` 형식 (v1.0.x 그대로). */
+  target_json: string;
+  granted_at: string;
+  granted_by: string;
+  scope: string;
+  expires_at: string | null;
+  reason: string | null;
+}
+
 // v0.2.0 — MCP Bridge shapes (Issue #5). Inlined here so preload doesn't
 // transitively pull in @/types runtime (zod) — sandbox 안전. main 의
 // McpServerConfigSchema 가 IPC 경계에서 검증을 담당하므로 preload 는
@@ -550,6 +580,11 @@ const ALLOWED_INVOKE_CHANNELS = [
   // v1.0.11 (SEC-3) — Audit log read API
   'audit/recent',
   'audit/by-session',
+  // v1.1.0 (SEC-2 full) — permission confirm + grant management
+  'permission/respond',
+  'permission/list-pending',
+  'permission/grants/list',
+  'permission/grants/revoke',
 ] as const;
 
 const ALLOWED_RECEIVE_CHANNELS = [
@@ -558,9 +593,8 @@ const ALLOWED_RECEIVE_CHANNELS = [
   'ai/stream-end',
   // v0.12.0 (I) — Cross-AI Verify/Compare stream events.
   'compare/stream-event',
-  // Phase 2+:
-  // 'session:updated',
-  // 'tool:result',
+  // v1.1.0 (SEC-2 full) — permission request from main → renderer
+  'permission/request',
 ] as const;
 
 type AllowedInvokeChannel = (typeof ALLOWED_INVOKE_CHANNELS)[number];
@@ -1141,6 +1175,65 @@ const api = {
         'audit/by-session',
         limit !== undefined ? { session_id: sessionId, limit } : { session_id: sessionId }
       ) as Promise<Result<AuditEventShape[]>>,
+  },
+
+  /**
+   * v1.1.0 SEC-2 full — Permission confirm + grant management.
+   *
+   * Spec: docs/v1.x-roadmap.md (SEC-2), Codex 외부 검토 Q6.
+   *
+   * 흐름:
+   *  1. main 의 ToolQueue 가 사용자 confirmation 필요 시
+   *     'permission/request' (receive) 발화 → 본 모듈의 onRequest listener.
+   *  2. 사용자가 응답 (allow once / session / always / deny) 후
+   *     respond() 로 main 에 통지.
+   *  3. main 이 'session' / 'always' 면 grant 영속, 'once' 는 영속 X.
+   */
+  permission: {
+    /** main → renderer 의 permission/request 구독. unsubscribe 함수 반환. */
+    onRequest: (
+      listener: (request: PermissionRequestShape) => void
+    ): (() => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: PermissionRequestShape
+      ): void => {
+        listener(payload);
+      };
+      ipcRenderer.on('permission/request', handler);
+      return () => ipcRenderer.removeListener('permission/request', handler);
+    },
+
+    /** 사용자 응답을 main 으로. 매칭되는 pending 없으면 ok=true 지만 silently drop. */
+    respond: (
+      request_id: string,
+      decision: 'once' | 'session' | 'always' | 'deny',
+      reason?: string
+    ): Promise<Result<{ matched: boolean }>> =>
+      ipcRenderer.invoke(
+        'permission/respond',
+        reason !== undefined ? { request_id, decision, reason } : { request_id, decision }
+      ) as Promise<Result<{ matched: boolean }>>,
+
+    /** UI mount/reload 시 — 진행 중 요청 다시 받아 inline card 복원. */
+    listPending: (): Promise<Result<PermissionRequestShape[]>> =>
+      ipcRenderer.invoke('permission/list-pending') as Promise<
+        Result<PermissionRequestShape[]>
+      >,
+
+    /** Settings > 권한 — active grant 목록 (revoked 제외). */
+    listGrants: (
+      sessionId: string
+    ): Promise<Result<PermissionGrantSummaryShape[]>> =>
+      ipcRenderer.invoke('permission/grants/list', { session_id: sessionId }) as Promise<
+        Result<PermissionGrantSummaryShape[]>
+      >,
+
+    /** Grant revoke. */
+    revokeGrant: (grantId: string): Promise<Result<{ revoked: boolean }>> =>
+      ipcRenderer.invoke('permission/grants/revoke', { grant_id: grantId }) as Promise<
+        Result<{ revoked: boolean }>
+      >,
   },
 };
 

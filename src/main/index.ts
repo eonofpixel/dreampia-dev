@@ -30,6 +30,7 @@ import type { ProviderFactory } from './compare/orchestrator';
 import { CostGate, type CostLimits, type CostAuditEvent } from './CostGate';
 import { readSettings, writeSettings } from './settings';
 import { classifyUserDataConflict } from './workspaceConflict';
+import { IpcPermissionConfirmer } from './IpcPermissionConfirmer';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -299,6 +300,24 @@ app.whenReady().then(() => {
     });
   });
 
+  // v1.1.0 SEC-2 full: IpcPermissionConfirmer. Queue 가 사용자 confirmation
+  // 필요 시 본 객체의 confirm() 호출 → main 이 webContents.send 로 renderer
+  // 에 'permission/request' 전송.
+  const permissionConfirmer = new IpcPermissionConfirmer({
+    send: (channel, payload): boolean => {
+      const win = mainWindow;
+      if (win === null || win.isDestroyed()) return false;
+      try {
+        win.webContents.send(channel, payload);
+        return true;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[IpcPermissionConfirmer.send] ${channel}: ${msg}`);
+        return false;
+      }
+    },
+  });
+
   // Tool Queue: main process owns all tool execution. Renderer/AI streams use
   // IPC only; subprocess-capable tools never cross into the sandboxed renderer.
   const registry = new ToolRegistry();
@@ -321,6 +340,16 @@ app.whenReady().then(() => {
   };
   const queue = new ToolQueue(registry, (id) => sessionStore?.getSession(id) ?? undefined, {
     audit_sink: toolAuditSink,
+    permission_confirmer: permissionConfirmer,
+    grant_persister: (sessionId, grant, duration) => {
+      // 'session' / 'always' 둘 다 DB 영속 — Resolver 의 findActiveGrants 가
+      // session_id + revoked_at IS NULL 로 즉시 활성화. 'session' 은 expires_at
+      // 미설정 (앱 재시작 시 사라지는 효과는 사용자가 settings 에서 수동 revoke).
+      // 더 정교한 'session' lifecycle 은 v1.1.x 후속.
+      void sessionId;
+      void duration;
+      sessionStore?.addPermissionGrant(grant);
+    },
   });
 
   // BrowserManager owns one WebContentsView per tab. It needs the
@@ -440,7 +469,11 @@ app.whenReady().then(() => {
       getMainWindow: () => mainWindow,
       factory: compareFactory,
     },
-    auditLogStore
+    auditLogStore,
+    {
+      // v1.1.0 SEC-2 full: permission/* IPC handlers.
+      confirmer: permissionConfirmer,
+    }
   );
   mainWindow = createMainWindow();
 

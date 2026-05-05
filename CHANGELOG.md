@@ -2,6 +2,151 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.0] — 2026-05-05
+
+**SEC-2 full — 권한 승인 modal + Queue async pause-resume + grant 관리.**
+
+`docs/v1.x-roadmap.md` 의 P1 첫 슬롯 (Codex Q5 picking). v1.0.10 의 SEC-2
+minimal banner ("v1.1.0 예정") 가 약속한 본체. Codex Q6 의 모든 picking 을
+그대로 반영:
+
+- **(3a) Queue async pause-resume** — Queue 가 permission/audit 단일 관문
+  이라 여기서 `requires_user_confirmation` 처리. `PermissionConfirmer`
+  인터페이스 주입 (Electron 직접 의존 X).
+- **(4b) Allow once / this session / always (영속) / Deny** — 4 가지 결정.
+- **(5c) Inline ChatPanel approval card 기본 + dangerous 는 center modal**.
+- **(6)** 60s timeout = auto deny (fail-closed) / X / Esc dismiss = deny
+  grant 영속 X / 같은 session 다음 tool 대기 / 다른 session 진행.
+
+### Added (Core)
+
+- **`src/tools/types.ts` PermissionConfirmer interface**:
+  - `PermissionRequest` (request_id / session/turn/call/tool ID / capability /
+    target / hint / is_dangerous / tool_display_name / requested_at).
+  - `PermissionResponse` (request_id / decision / reason?).
+  - `PermissionGrantDuration` = 'once' | 'session' | 'always' | 'deny'.
+  - `confirm(request) → Promise<response>` — Queue 가 await.
+
+- **`ToolQueue` async permission flow**:
+  - `permission_confirmer?` + `grant_persister?` 옵션. 미설정 시 v1.0.x
+    호환 (즉시 deny).
+  - `checkPermissions` async — `requires_user_confirmation` 또는
+    dangerous_pattern 'require_modal' 만나면 confirmer.confirm() await.
+  - 응답 처리:
+    - 'once' → 통과 (grant 영속 X).
+    - 'session' / 'always' → grantPersister 호출 후 통과 (DB 영속).
+    - 'deny' → permission_denied error.
+    - confirmer throw → fail-closed deny + audit.
+    - persister throw → 이번 call 만 통과 (once 처럼).
+
+- **`src/main/IpcPermissionConfirmer.ts`** — main-side bridge:
+  - `webContents.send('permission/request', request)` 발화.
+  - `respond(request_id, decision, reason?)` ← renderer 응답 매칭.
+  - 60s timeout = auto deny.
+  - send 실패 / throw → 즉시 deny (fail-closed).
+  - `drainAllAsDeny()` 셧다운 helper.
+
+- **`SessionStore.addPermissionGrant(grant)`** — 단일 grant INSERT + audit
+  자동 (createSession 의 bulk 와 분리). v1.0.11 audit 인프라 활용.
+- **`SessionStore.revokePermissionGrant(grantId, revokedAt)`** — JSON1
+  json_extract 로 target_json.id 매칭 + revoked_at 설정.
+- **`SessionStore.listActivePermissionGrants(sessionId)`** — UI list view.
+
+### Added (IPC)
+
+- **`permission/request`** (main → renderer, receive) — IpcPermissionConfirmer
+  가 webContents.send 로 발화.
+- **`permission/respond`** — renderer 응답.
+- **`permission/list-pending`** — UI mount/reload 시 pending 복원.
+- **`permission/grants/list`** — Settings > 권한 panel 의 grant 목록.
+- **`permission/grants/revoke`** — grant 즉시 revoke.
+
+### Added (UI)
+
+- **`PermissionApprovalCard`** (`src/renderer/components/permission/`) —
+  inline approval card. fixed bottom-right (chat 입력 가리지 않음).
+  - 4 버튼: 이번만 / 이 세션 동안 / 항상 / 거부.
+  - 60s 카운트다운 표시.
+  - testid: `permission-approval-card`, `permission-approval-{once|session|always|deny}`,
+    `permission-approval-countdown`.
+
+- **`PermissionDangerModal`** — center modal escalation (dangerous 만).
+  - X / Esc dismiss 불가 — 명시 응답 필수 (Codex 권고).
+  - reason textarea (audit 기록).
+  - testid: `permission-danger-modal`, `permission-danger-{once|deny|reason}`.
+
+- **`usePermissionRequests`** hook — IPC subscribe + listPending 초기화.
+  multi-pending 추적 + dangerous 우선.
+
+- **Settings > 권한 panel 갱신** — v1.0.10 deferred banner 제거. 새
+  `PermissionGrantsBlock`:
+  - active grants table (capability / target / scope / granted_at + revoke).
+  - `permission/grants/list` 호출 + 즉시 reload.
+  - testid: `settings-permission-grants`, `settings-permission-grants-table`,
+    `settings-permission-grant-row-{id}`, `settings-permission-grant-revoke-{id}`,
+    `settings-permission-grants-empty`.
+
+- **i18n ko/en** (`permission.card.*` + `permission.danger.*` +
+  `settings.permission.grants.*`).
+
+### Added (Tests)
+
+- **`tests/main/IpcPermissionConfirmer.test.ts`** — 8 시나리오:
+  - confirm() send 호출 + Promise pending.
+  - respond() 매칭 → resolve + reason 보존.
+  - timeout → deny (fakeTimers).
+  - send=false → 즉시 deny.
+  - send throw → deny.
+  - respond 미매칭 → false.
+  - drainAllAsDeny.
+  - getPendingRequests 동시 다중.
+
+- **`tests/tools/Queue.permission.confirm.test.ts`** — 7 시나리오:
+  - 'once' / 'session' / 'always' / 'deny' 각 응답 확인.
+  - confirmer 미설정 → v1.0.x 호환 deny.
+  - confirmer throw → fail-closed deny + audit.
+  - grant_persister throw → 이번 call 통과.
+
+- **`e2e/_drive13.spec.ts`** — 5 시나리오:
+  - 46: PermissionPanel grants block mount + deferred banner 제거.
+  - 47: dreampia.permission API (5개) 모두 노출.
+  - 48: list-pending 빈 배열.
+  - 49: grants/list 빈 배열.
+  - 50: 초기 상태 inline card / center modal mount X (회귀 detector).
+
+- **`e2e/_drive8.spec.ts`** 갱신 — v1.1.0 의 deferred banner 제거 확인.
+
+### Changed
+
+- **drive8 r30** 회귀: v1.0.10 ~ v1.0.15 의 `settings-permission-grant-status`
+  banner 가 사라졌는지 검증으로 변경. 기존 banner 의 v1.1.0 약속이 이번
+  commit 으로 이행됨.
+
+### Verified
+
+- typecheck clean
+- lint: pre-existing 4 issues only — 새 추가 0
+- 15/15 SEC-2 unit (IpcPermissionConfirmer 8 + Queue.permission 7)
+- 11/11 spawnSafe
+- **59/59 drive e2e** (drive r1-r12 회귀 0 + drive13 5 신규)
+
+### Codex 권고 — P1 다음 슬롯 순서
+
+Codex Q5 picking 그대로:
+- v1.1.1: Real CLI integration e2e (VCR + live gated).
+- v1.1.2: Workspace UX 마무리 (Auto-new-chat prompt, sticky workspace lock,
+  drift badge → real menu).
+- v1.1.3: Plugin Loader MVP (sandbox + capability grant — 본 SEC-2 인프라
+  활용).
+- v1.1.4: Loading / Error / Empty + 필요한 visual polish.
+
+### Notes
+
+- **release/1.0.x branch** 가 v1.0.15 (e3811bc) 까지 매칭. 본 commit 은
+  main 만 — release 는 hotfix 만 cherry-pick.
+- 'session' grant 가 현재는 expires_at 미설정으로 영속 동작 — 더 정교한
+  in-memory only lifecycle 은 v1.1.x 후속.
+
 ## [1.0.15] — 2026-05-05
 
 **META-4 두 번째 hotfix — Codex Q6 의 lexical 우회 차단.**

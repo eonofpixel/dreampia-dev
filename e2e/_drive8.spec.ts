@@ -16,8 +16,10 @@ const SHOT_DIR = resolve(__dirname, '..', 'test-results', 'drive');
 mkdirSync(SHOT_DIR, { recursive: true });
 const shot = (name: string): string => resolve(SHOT_DIR, `r8-${name}.png`);
 
-test.describe('drive r8 — SEC-2 honest i18n + grant status banner (v1.0.10)', () => {
-  test('30 — PermissionPanel shows v1.1.0 deferred banner', async ({ window }) => {
+test.describe('drive r8 — SEC-2 honest i18n + grants block (v1.0.10 → v1.1.0)', () => {
+  test('30 — PermissionPanel shows active grants block (v1.1.0 — deferred banner 제거)', async ({
+    window,
+  }) => {
     await expect(window.getByTestId('sidebar-search-input')).toBeVisible({ timeout: 10_000 });
     await window.evaluate(() => document.body.focus());
     await window.keyboard.press('ControlOrMeta+,');
@@ -26,11 +28,14 @@ test.describe('drive r8 — SEC-2 honest i18n + grant status banner (v1.0.10)', 
     await window.getByTestId('settings-tab-permission').click();
     await expect(window.getByTestId('settings-permission-panel')).toBeVisible();
 
-    // 새로 추가된 grant status banner.
-    const banner = window.getByTestId('settings-permission-grant-status');
-    await expect(banner).toBeVisible();
-    await expect(banner).toContainText('v1.1.0');
-    await window.screenshot({ path: shot('30-grant-status-banner'), fullPage: true });
+    // v1.1.0: deferred banner 제거 + grants block mount.
+    // 이전 (v1.0.10~v1.0.15) 의 settings-permission-grant-status 는 더이상 X.
+    const oldBanner = window.getByTestId('settings-permission-grant-status');
+    expect(await oldBanner.count()).toBe(0);
+
+    const grantsBlock = window.getByTestId('settings-permission-grants');
+    await expect(grantsBlock).toBeVisible();
+    await window.screenshot({ path: shot('30-grants-block'), fullPage: true });
   });
 
   test('31 — read_only hint reflects honest behavior (no longer claims approval)', async ({
