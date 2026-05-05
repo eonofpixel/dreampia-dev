@@ -2,6 +2,17 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.27] — 2026-05-06
+
+**EmptyState 통일 컴포넌트.**
+
+`src/renderer/components/empty/EmptyState.tsx` — icon (선택) + title +
+description + optional action 버튼. role=status, center align.
+
+- 5 unit (title only / icon+desc / action click / default testId / role).
+
+후속: 실제 사용처 wire-up — 채팅 0 일 때 Sidebar / 검색 결과 0 / 등.
+
 ## [1.1.26] — 2026-05-06
 
 **Loading skeleton — 통일 컴포넌트.**
