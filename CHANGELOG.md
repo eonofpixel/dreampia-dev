@@ -2,6 +2,18 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.3.6] — 2026-05-06
+
+**운영 안정성 — Telemetry stub.**
+
+`Telemetry` class — error / event / metric 3 종 emit. opt-in (default
+disabled). PII 금지 정책. ConsoleSink fallback. 실 Sentry SDK 통합은 후속.
+
+- `src/main/telemetry/Telemetry.ts` — Telemetry / TelemetrySink interface +
+  ConsoleSink + getTelemetry singleton.
+- 6 unit (disabled / error+context / Error stack / event+metric /
+  setEnabled / singleton).
+
 ## [1.3.5] — 2026-05-06
 
 **Dark mode system theme detection.**
