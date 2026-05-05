@@ -120,6 +120,17 @@ export interface ChatPanelProps {
    * 호출 + local activeSession shadow 갱신을 수행.
    */
   onChangePermission?: (next: PermissionLevel) => void;
+  /**
+   * v1.1.11 (Workspace UX): per-session sticky workspace lock 상태. App.tsx 가
+   * IPC `session/get-workspace-locked` 결과를 prop 으로 주입. 미지정 시
+   * default false (UI 는 🔓).
+   */
+  workspaceLocked?: boolean;
+  /**
+   * v1.1.11: 🔒/🔓 toggle 클릭 시 호출. App.tsx 가 IPC
+   * `session/set-workspace-locked` 호출 후 state 갱신.
+   */
+  onToggleWorkspaceLock?: () => void;
 }
 
 interface MessagesAreaProps {
@@ -166,6 +177,8 @@ export function ChatPanel({
   onChangePermission,
   onSubmitBlocks,
   onPickSession,
+  workspaceLocked = false,
+  onToggleWorkspaceLock,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -188,6 +201,8 @@ export function ChatPanel({
         onTogglePreview={onTogglePreview}
         onChangePermission={onChangePermission}
         permissionDisabled={ipcUnavailable}
+        workspaceLocked={workspaceLocked}
+        onToggleWorkspaceLock={onToggleWorkspaceLock}
       />
       {ipcUnavailable && <IpcUnavailableBanner />}
       <MessagesArea
@@ -371,6 +386,8 @@ function ChatHeader({
   onTogglePreview,
   onChangePermission,
   permissionDisabled = false,
+  workspaceLocked = false,
+  onToggleWorkspaceLock,
 }: {
   session: Session;
   cliStatus: CliStatus;
@@ -381,6 +398,13 @@ function ChatHeader({
   onTogglePreview?: () => void;
   onChangePermission?: (next: PermissionLevel) => void;
   permissionDisabled?: boolean;
+  /**
+   * v1.1.11 (Workspace UX): per-session sticky workspace lock.
+   * App 이 IPC `session/get-workspace-locked` 결과를 prop 으로 주입.
+   */
+  workspaceLocked?: boolean;
+  /** Toggle handler. App 이 IPC `session/set-workspace-locked` 호출 후 state 갱신. */
+  onToggleWorkspaceLock?: () => void;
 }): React.JSX.Element {
   const t = useT();
   // v1.0.6 — drift detection: 이 세션이 만들어진 폴더 이름과 현재 작업 폴더 이름이
@@ -420,6 +444,33 @@ function ChatHeader({
             data-testid="workspace-pick-button"
           >
             📁 {workspaceName}
+          </button>
+        )}
+        {/*
+         * v1.1.11 (Workspace UX): per-session sticky workspace lock toggle.
+         * 잠긴 세션은 폴더 변경 시 자기 workspace 로 복귀 (drift 검사 분기는
+         * v1.1.13+ 후속 commits 에서). default 표시 (workspaceLocked=false).
+         */}
+        {onToggleWorkspaceLock !== undefined && (
+          <button
+            type="button"
+            onClick={onToggleWorkspaceLock}
+            className="shrink-0 rounded px-1.5 py-0.5 text-[14px] leading-none hover:bg-bg-tertiary"
+            title={
+              workspaceLocked
+                ? t('chat.header.workspace_unlock_tooltip')
+                : t('chat.header.workspace_lock_tooltip')
+            }
+            aria-label={
+              workspaceLocked
+                ? t('chat.header.workspace_unlock_aria')
+                : t('chat.header.workspace_lock_aria')
+            }
+            aria-pressed={workspaceLocked}
+            data-testid="workspace-lock-toggle"
+            data-locked={workspaceLocked ? 'true' : 'false'}
+          >
+            {workspaceLocked ? '🔒' : '🔓'}
           </button>
         )}
         <PermissionDropdown

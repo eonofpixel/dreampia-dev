@@ -536,6 +536,9 @@ const ALLOWED_INVOKE_CHANNELS = [
   'session/search',
   // v0.8.0 — H Permission Dropdown (세션 단위 권한 변경).
   'session/update-permission',
+  // v1.1.11 (Workspace UX) — sticky workspace lock toggle.
+  'session/set-workspace-locked',
+  'session/get-workspace-locked',
   'lock/acquire',
   'lock/release',
   'lock/get',
@@ -862,6 +865,30 @@ const api = {
     ): Promise<Result<Session>> =>
       ipcRenderer.invoke('session/update-permission', id, patch) as Promise<
         Result<Session>
+      >,
+
+    /**
+     * v1.1.11 (Workspace UX): per-session sticky workspace lock toggle.
+     * ChatHeader 의 🔒 toggle 이 호출. main 측이 sessions.workspace_locked
+     * 컬럼 갱신 후 ok 반환.
+     */
+    setWorkspaceLocked: (
+      sessionId: SessionId,
+      locked: boolean
+    ): Promise<Result<{ ok: boolean }>> =>
+      ipcRenderer.invoke('session/set-workspace-locked', {
+        sessionId,
+        locked,
+      }) as Promise<Result<{ ok: boolean }>>,
+
+    /**
+     * v1.1.11: 특정 세션의 lock 상태 read — UI mount / 새 세션 전환 시 동기화.
+     */
+    getWorkspaceLocked: (
+      sessionId: SessionId
+    ): Promise<Result<{ locked: boolean }>> =>
+      ipcRenderer.invoke('session/get-workspace-locked', sessionId) as Promise<
+        Result<{ locked: boolean }>
       >,
   },
 

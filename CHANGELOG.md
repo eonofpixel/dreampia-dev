@@ -2,6 +2,43 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.12] — 2026-05-06
+
+**Workspace UX 둘째 단계 — sticky lock UI (preload bridge + ChatHeader toggle).**
+
+v1.1.11 의 storage layer 위에 renderer 측 UI 연결. ChatHeader 의 🔒/🔓
+toggle 이 실제 IPC 호출로 잠금 상태 변경.
+
+### Added
+
+- **Preload bridge**:
+  - `'session/set-workspace-locked'` + `'session/get-workspace-locked'`
+    채널 화이트리스트.
+  - `window.dreampia.session.setWorkspaceLocked(sessionId, locked)` —
+    `Promise<Result<{ ok: boolean }>>`.
+  - `window.dreampia.session.getWorkspaceLocked(sessionId)` —
+    `Promise<Result<{ locked: boolean }>>`.
+
+- **`ChatPanel` / `ChatHeader`** props:
+  - `workspaceLocked?: boolean` (default false).
+  - `onToggleWorkspaceLock?: () => void`.
+  - 🔒/🔓 toggle button — `data-testid="workspace-lock-toggle"` +
+    `data-locked` 속성. Tooltip + aria.
+
+- **i18n** ko/en — `chat.header.workspace_lock_*` 4 keys.
+
+### Verified
+
+- typecheck clean
+- lint pre-existing 4 + 2 only
+- unit: 1597/1604 — 7 fail 모두 v1.1.11 baseline 동일 (회귀 0)
+
+### Notes
+
+- **App.tsx 통합** (실제 toggle handler 가 IPC 호출 + state 갱신) +
+  **drift 검사 분기** (잠긴 세션은 prompt 제외) 는 v1.1.13+ 에서.
+- **Auto-new-chat prompt** + **drift menu** 도 후속.
+
 ## [1.1.11] — 2026-05-06
 
 **Workspace UX 첫 단계 — Per-session sticky workspace lock (storage layer).**
