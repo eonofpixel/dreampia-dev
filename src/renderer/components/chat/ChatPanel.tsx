@@ -556,14 +556,34 @@ function ChatHeader({
 /**
  * CLI 감지 상태 뱃지 — onMount 후 갱신. Mock 도 명시적으로 표시.
  */
+/**
+ * v1.1.28 (Visual polish): provider-source 별 색상 paradigm 통일.
+ *
+ * 이전엔 모두 `bg-bg-tertiary` 동일 색상이라 사용자가 mock 인지 real CLI
+ * 인지 글자 읽어야 구분 가능. 이제:
+ *   - claude-cli → 파랑 (text-blue-300, border).
+ *   - codex-cli → 보라 (text-purple-300, border).
+ *   - mock → yellow (사용자에게 fake 임을 시각적으로).
+ *   - none → 회색 (info).
+ *
+ * 동일 typography (text-[10px] + 1.5px+0.5px padding) 유지.
+ */
+const PROVIDER_BADGE_CLASS: Record<string, string> = {
+  'claude-cli': 'border-blue-600/40 bg-blue-900/20 text-blue-300',
+  'codex-cli': 'border-purple-600/40 bg-purple-900/20 text-purple-300',
+  mock: 'border-yellow-600/40 bg-yellow-900/20 text-yellow-300',
+  none: 'border-border-primary bg-bg-tertiary text-text-tertiary',
+};
+
 function CliStatusBadge({ status }: { status: CliStatus }): React.JSX.Element | null {
   if (status === null) return null;
+  const baseClass = 'rounded border px-1.5 py-0.5 text-[10px]';
   if (status.source === 'mock') {
     return (
       <span
         title="Mock provider in use (CLI not detected)"
         aria-label="Mock provider"
-        className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px]"
+        className={`${baseClass} ${PROVIDER_BADGE_CLASS.mock}`}
         data-testid="provider-status-badge"
         data-provider-source="mock"
       >
@@ -577,7 +597,7 @@ function CliStatusBadge({ status }: { status: CliStatus }): React.JSX.Element | 
       <span
         title={`Claude CLI ${v} detected at ${status.claude.path}`}
         aria-label={`Claude CLI ${v}`}
-        className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px]"
+        className={`${baseClass} ${PROVIDER_BADGE_CLASS['claude-cli']}`}
         data-testid="provider-status-badge"
         data-provider-source="claude-cli"
       >
@@ -591,7 +611,7 @@ function CliStatusBadge({ status }: { status: CliStatus }): React.JSX.Element | 
       <span
         title={`Codex CLI ${v} detected at ${status.codex.path}`}
         aria-label={`Codex CLI ${v}`}
-        className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px]"
+        className={`${baseClass} ${PROVIDER_BADGE_CLASS['codex-cli']}`}
         data-testid="provider-status-badge"
         data-provider-source="codex-cli"
       >
@@ -603,7 +623,7 @@ function CliStatusBadge({ status }: { status: CliStatus }): React.JSX.Element | 
     <span
       title="No CLI detected — using Mock"
       aria-label="No CLI"
-      className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px]"
+      className={`${baseClass} ${PROVIDER_BADGE_CLASS.none}`}
       data-testid="provider-status-badge"
       data-provider-source="none"
     >

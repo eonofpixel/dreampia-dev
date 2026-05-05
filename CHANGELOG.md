@@ -2,6 +2,20 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.28] — 2026-05-06
+
+**Visual polish — Provider badge 색상 paradigm 통일.**
+
+CliStatusBadge 의 4 종 (claude-cli / codex-cli / mock / none) 이 모두
+같은 `bg-bg-tertiary` 였던 것을 시각적으로 구분되는 색상으로 변경:
+
+- claude-cli — 파랑 (`bg-blue-900/20 text-blue-300`).
+- codex-cli — 보라 (`bg-purple-900/20 text-purple-300`).
+- mock — yellow (`bg-yellow-900/20 text-yellow-300`) — fake 임을 즉시 인지.
+- none — 회색 (info).
+
+`PROVIDER_BADGE_CLASS` map 으로 lookup. typography (text-[10px]) 유지.
+
 ## [1.1.27] — 2026-05-06
 
 **EmptyState 통일 컴포넌트.**
