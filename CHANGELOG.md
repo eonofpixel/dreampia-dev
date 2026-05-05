@@ -2,6 +2,26 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.3.7] — 2026-05-06
+
+**Bot Automation manager (마지막 P3 슬롯).**
+
+`AutomationManager` — interval / webhook 두 종 rule. interval 은 setInterval
+기반 fire, webhook 은 stub (HTTP listener 후속). audit 로 fire/error 추적.
+사이드바 [자동화] 가짜 완성 해소를 위한 backend 인프라.
+
+- `src/main/automation/AutomationManager.ts` — register / unregister / list /
+  start / stop / fire (test).
+- 7 unit (register / interval validation / fire / throw recovery / start
+  auto fire / stop / webhook register).
+
+### v1.x 로드맵 1차 완료
+
+이 commit 으로 docs/v1.x-roadmap.md 의 P1 / P2 / P3 모든 슬롯이 인프라 또는
+실 구현으로 도달. 후속 v1.4.x 에서 Schema debt 실 작업 (008-011 의 실 SQL
+backfill) + Direct API 실 SSE + PreviewPanel UI 통합 + Sentry SDK +
+Automation HTTP listener / cron expression 등.
+
 ## [1.3.6] — 2026-05-06
 
 **운영 안정성 — Telemetry stub.**
