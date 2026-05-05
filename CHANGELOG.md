@@ -2,6 +2,16 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.3.0] — 2026-05-06
+
+**P3 진입 — Schema debt B-1 (workspace_id deterministic marker).**
+
+Migration 008 — schema 변경 없는 version marker. 본 버전 이후 application
+code 가 workspace_id 를 random UUIDv7 대신 `sha256(workspaces.root)[:16]`
+결정성으로 생성 (별도 후속 PR).
+
+LATEST_SCHEMA_VERSION 자동 8.
+
 ## [1.2.5] — 2026-05-06
 
 **DOM dump utility — PreviewPanel → AI context.**

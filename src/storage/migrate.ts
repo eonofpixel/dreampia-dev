@@ -21,6 +21,7 @@ import sql004 from './migrations/004_fts5_turns.sql?raw';
 import sql005 from './migrations/005_compare_runs.sql?raw';
 import sql006 from './migrations/006_cost_v1_0_12.sql?raw';
 import sql007 from './migrations/007_workspace_locked.sql?raw';
+import sql008 from './migrations/008_workspace_id_deterministic.sql?raw';
 
 // ────────────────────────────────────────────────────────────
 // Migration registry
@@ -48,6 +49,11 @@ const MIGRATIONS: readonly Migration[] = [
     version: 7,
     description: 'v1.1.11 — sessions.workspace_locked (Workspace UX sticky lock)',
     up: sql007,
+  },
+  {
+    version: 8,
+    description: 'v1.3.0 — workspace_id deterministic marker (B-1)',
+    up: sql008,
   },
 ] as const;
 
