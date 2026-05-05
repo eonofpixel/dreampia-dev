@@ -2,6 +2,15 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.19] — 2026-05-06
+
+**Workspace UX — drift 검사 잠긴 세션 분기.**
+
+ChatHeader 의 `driftDetected` 가 `workspaceLocked === true` 면 false 강제.
+사용자가 본 세션을 자기 workspace 에 고정한 경우 ⚠ badge 표시 X.
+
+- `ChatPanel.tsx` ChatHeader 의 driftDetected 계산식에 `!workspaceLocked` 가드.
+
 ## [1.1.18] — 2026-05-06
 
 **drive14-3 — saved tool turn 검증.**

@@ -410,7 +410,10 @@ function ChatHeader({
   // v1.0.6 — drift detection: 이 세션이 만들어진 폴더 이름과 현재 작업 폴더 이름이
   // 다르면 사용자에게 시각적으로 알린다. 옛 turn 의 파일 참조가 더 이상 유효하지
   // 않을 가능성을 의미한다 (DB 자체는 안전 — 삭제 X).
+  // v1.1.19 (Workspace UX): 잠긴 세션 (workspaceLocked=true) 은 drift 표시 X —
+  // 사용자가 이 세션을 자기 workspace 에 고정 의도. 미래 자동 복귀 흐름의 prep.
   const driftDetected =
+    !workspaceLocked &&
     sessionWorkspaceName !== undefined &&
     workspaceName !== undefined &&
     sessionWorkspaceName !== workspaceName;
