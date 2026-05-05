@@ -310,17 +310,21 @@ app.whenReady().then(() => {
   // v1.1.0 SEC-2 full: IpcPermissionConfirmer. Queue 가 사용자 confirmation
   // 필요 시 본 객체의 confirm() 호출 → main 이 webContents.send 로 renderer
   // 에 'permission/request' 전송.
+  // v1.1.3 hotfix (Codex Q9): send 가 webContentsId 도 반환 — confirmer 가
+  // pending 에 owner 캡처 → respond 시 같은 webContents 만 수락.
   const permissionConfirmer = new IpcPermissionConfirmer({
-    send: (channel, payload): boolean => {
+    send: (channel, payload) => {
       const win = mainWindow;
-      if (win === null || win.isDestroyed()) return false;
+      if (win === null || win.isDestroyed()) {
+        return { sent: false, web_contents_id: -1 };
+      }
       try {
         win.webContents.send(channel, payload);
-        return true;
+        return { sent: true, web_contents_id: win.webContents.id };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[IpcPermissionConfirmer.send] ${channel}: ${msg}`);
-        return false;
+        return { sent: false, web_contents_id: -1 };
       }
     },
   });

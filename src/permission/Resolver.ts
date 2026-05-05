@@ -102,6 +102,12 @@ export function findDeny(
 
 /**
  * Active 한 (만료/취소 X) + capability 매칭 (정확 또는 부모) + target 매칭 grant 모두 반환.
+ *
+ * v1.1.3 hotfix (Codex Q9 strict): grant.session_id 필터 추가 — defense-in-depth.
+ * Queue 의 augmentSessionWithRuntimeGrants 가 이미 session.id 매칭만 머지하지만
+ * 다른 caller (DB 직접 fetch 등) 가 session.permission.grants 에 다른 세션의
+ * grant 를 섞을 가능성에 대한 안전망. 'session' grant 가 사용자 인식 ("이
+ * chat session 동안") 과 정합.
  */
 export function findActiveGrants(
   capability: Capability,
@@ -110,6 +116,7 @@ export function findActiveGrants(
 ): PermissionGrant[] {
   return session.permission.grants
     .filter((g) => !isExpired(g))
+    .filter((g) => g.session_id === session.id)
     .filter((g) => {
       // capability 매칭: 정확 일치 OR g.capability 가 부모이고 capability 가 자식
       // g.capability 는 Capability 또는 deny string ('__deny__:...') 일 수 있음.

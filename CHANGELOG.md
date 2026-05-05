@@ -2,6 +2,81 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.3] — 2026-05-06
+
+**v1.1.2 SEC-2 hotfix 의 외부 검토 후속 — Codex Q9 strict blind spot 청산.**
+
+Codex Q9 외부 검토 strict 발견:
+
+1. **`findActiveGrants` session_id 필터 누락** — `webContentsId` 격리만으로 부족.
+   같은 webContents 안에서 sessionA 의 'session' grant 가 sessionB 호출에서
+   활성될 수 있음. v1.1.2 의 webContentsId 키 전환은 다른 webContents 의 grant
+   spoof 는 막지만, 같은 webContents 안의 cross-session 누수는 미해결.
+2. **`permission/respond` owner binding 부재** — pending 요청을 emit 한
+   webContents 가 아닌 다른 sender 가 응답 가능. 이론상 다른 BrowserWindow
+   또는 spoofed sender 가 다른 창의 권한 결정 빌릴 수 있음.
+
+### Fixed (Security)
+
+- **`augmentSessionWithRuntimeGrants` session_id 필터** (Codex Q9 핵심 fix):
+  - Queue 의 1차 필터 — webContentsId 버킷의 grant 중 `g.session_id ===
+    session.id` 만 머지. 같은 webContents 의 sessionA grant 가 sessionB
+    호출에서 활성되는 누수 차단.
+  - 'session' grant 의미 정합: 사용자 인식 ("이 chat session 동안") 과
+    실제 동작 일치.
+
+- **`findActiveGrants` defense-in-depth 필터**:
+  - Resolver 의 2차 필터 — `g.session_id !== session.id` grant 무시. 다른
+    caller (DB 직접 fetch / plugin 등) 가 session.permission.grants 에 다른
+    세션의 grant 를 섞을 가능성에 대한 안전망.
+
+- **`IpcPermissionConfirmer` owner binding** (v1.1.3 Codex Q9):
+  - `send` 가 `boolean | { sent, web_contents_id }` 반환 — confirm 시점에
+    pending 에 owner webContentsId 캡처.
+  - `respond(request_id, decision, reason?, senderWebContentsId?)` — 같은
+    webContents 의 응답만 수락. 다른 sender 는 silently drop + console.warn
+    (정상 흐름이 아닌 spoof 시도).
+  - `getPendingRequests(senderWebContentsId?)` — 같은 webContents 의 pending
+    만 노출. legacy boolean send 와 미지정 sender 는 모든 sender 수락 (-1
+    sentinel) — 테스트 호환.
+  - `permission/respond`, `permission/list-pending` IPC 핸들러가
+    `event.sender.id` 전달.
+
+### Added (Tests)
+
+- **`tests/permission/Resolver.test.ts`** — 2 시나리오 (#19):
+  - 다른 session_id grant 무시 — default level fallback.
+  - 같은 session_id grant 정상 활성.
+
+- **`tests/main/IpcPermissionConfirmer.test.ts`** — 5 시나리오 (owner binding):
+  - send 가 webContentsId 반환 시 owner 캡처.
+  - 다른 webContents 에서 respond 시 silently drop.
+  - senderWebContentsId 미지정 시 모두 수락 (legacy 호환).
+  - boolean send 의 -1 sentinel 모든 sender 수락.
+  - getPendingRequests(senderId) 가 같은 webContents 만 반환.
+
+- **`tests/tools/Queue.web-contents-binding.test.ts`** — 1 신규 시나리오:
+  - 같은 webContentsId 안에서 sessionA grant 가 sessionB 호출에 활성되지 않음.
+
+### Verified
+
+- typecheck clean
+- lint pre-existing 4 errors + 2 warnings only — 신규 0
+- unit: 1558/1565 — 7 fail 모두 v1.1.2 baseline 동일 (5 ipc.workspace +
+  2 SessionStore migrations). 회귀 0.
+- 신규 8 unit (Resolver session filter 2 + IpcPermissionConfirmer owner 5 +
+  Queue cross-session 1) 통과.
+
+### Notes
+
+- **슬롯 재배열**: 본 hotfix 가 v1.1.3 슬롯 차지. Codex iterative hotfix 패턴
+  (Q5→v1.0.14 / Q6→v1.0.15 / Q7→v1.1.1 / Q8→v1.1.2 / Q9→v1.1.3). 새 plan:
+  v1.1.4 Real CLI e2e / v1.1.5 Workspace UX / v1.1.6 Plugin Loader / v1.1.7
+  Loading-Error-Empty + visual polish.
+- **`tool/cancel-call` / `tool/cancel-turn` origin 검증** 은 v1.1.4 (Real CLI
+  e2e 슬롯) 의 IPC binding 시나리오로 묶음 — privilege escalation 아니라
+  정도 낮음. drive 시나리오 추가 시 같이 해결.
+
 ## [1.1.2] — 2026-05-06
 
 **v1.1.1 SEC-2 hotfix 의 외부 검토 후속 — Codex Q8 strict blind spot 청산.**

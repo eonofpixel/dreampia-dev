@@ -213,3 +213,39 @@ describe('v1.1.2 hotfix — webContentsId 기반 grant 격리', () => {
     expect(ToolQueue.NO_ORIGIN).toBe(0);
   });
 });
+
+describe('v1.1.3 hotfix — 같은 webContentsId 내 cross-session grant 격리 (Codex Q9)', () => {
+  it("sessionA 의 'session' grant 가 sessionB 호출에 활성되지 X", async () => {
+    const sessionA = loadSession();
+    // sessionB 는 같은 fixture base 에 id 만 다른 변형.
+    const sessionB = { ...sessionA, id: ('019d-bbbb-bbbb-bbbb-bbbbbbbbbbbb' as typeof sessionA.id) };
+    const reg = new ToolRegistry();
+    reg.register(makeTool(['SYSTEM_AUTOMATION']));
+    let confirmCount = 0;
+    const confirmer: PermissionConfirmer = {
+      confirm: async (req) => {
+        confirmCount += 1;
+        return { request_id: req.request_id, decision: 'session' };
+      },
+    };
+    // getSession 이 호출 session_id 에 따라 분기.
+    const q = new ToolQueue(
+      reg,
+      (id) => (id === sessionA.id ? sessionA : id === sessionB.id ? sessionB : undefined),
+      { permission_confirmer: confirmer }
+    );
+
+    // sessionA 첫 호출 (webContents 5) — confirm + grant 저장.
+    await q.enqueue(makeCall({ session_id: sessionA.id }), { web_contents_id: 5 });
+    expect(confirmCount).toBe(1);
+
+    // 같은 webContents 5 의 sessionB 호출 — sessionA grant 가 활성되면 안 됨.
+    // session_id 필터로 거르므로 confirm 다시 호출.
+    await q.enqueue(makeCall({ session_id: sessionB.id }), { web_contents_id: 5 });
+    expect(confirmCount).toBe(2);
+
+    // sessionA 의 같은 webContents 두 번째 호출 — grant 활성 (confirm 생략).
+    await q.enqueue(makeCall({ session_id: sessionA.id }), { web_contents_id: 5 });
+    expect(confirmCount).toBe(2);
+  });
+});

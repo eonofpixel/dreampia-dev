@@ -912,13 +912,21 @@ function registerPermissionHandlers(
 ): void {
   ipcMain.handle(
     'permission/respond',
-    (_evt, raw: unknown): Result<{ matched: boolean }> => {
+    (event, raw: unknown): Result<{ matched: boolean }> => {
       try {
         const args = PermissionRespondArgsSchema.parse(raw);
+        // v1.1.3 hotfix (Codex Q9): event.sender.id 를 confirmer 에 전달.
+        // confirm 시점 owner webContents 와 다르면 silently drop — 다른 창
+        // 또는 spoofed sender 차단.
+        const senderId =
+          typeof (event as { sender?: { id?: unknown } } | undefined)?.sender?.id === 'number'
+            ? (event as { sender: { id: number } }).sender.id
+            : undefined;
         const matched = cfg.confirmer.respond(
           args.request_id,
           args.decision,
-          args.reason
+          args.reason,
+          senderId
         );
         return ok({ matched });
       } catch (err) {
@@ -927,9 +935,14 @@ function registerPermissionHandlers(
     }
   );
 
-  ipcMain.handle('permission/list-pending', (): Result<unknown[]> => {
+  ipcMain.handle('permission/list-pending', (event): Result<unknown[]> => {
     try {
-      return ok(cfg.confirmer.getPendingRequests());
+      // v1.1.3 hotfix (Codex Q9): 같은 webContents 의 pending 만 노출.
+      const senderId =
+        typeof (event as { sender?: { id?: unknown } } | undefined)?.sender?.id === 'number'
+          ? (event as { sender: { id: number } }).sender.id
+          : undefined;
+      return ok(cfg.confirmer.getPendingRequests(senderId));
     } catch (err) {
       return fail(err);
     }

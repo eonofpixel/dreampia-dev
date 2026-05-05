@@ -32,18 +32,34 @@ interface PendingDeferred {
   request: PermissionRequest;
   resolve: (response: PermissionResponse) => void;
   timeoutHandle: NodeJS.Timeout;
+  /**
+   * v1.1.3 hotfix (Codex Q9): send 시점에 캡처한 webContentsId. respond 시
+   * 같은 webContents 만 수락 — 다른 창 (또는 spoofed sender) 차단.
+   */
+  webContentsId: number;
 }
 
 export interface IpcPermissionConfirmerOptions {
-  /** Renderer 로 IPC send 위임. main 의 BrowserWindow 가 이 함수 안에서 send 호출. */
-  send: (channel: string, payload: unknown) => boolean;
+  /**
+   * Renderer 로 IPC send 위임. main 의 BrowserWindow 가 이 함수 안에서 send 호출.
+   *
+   * v1.1.3 hotfix (Codex Q9): 반환값에 추적할 webContentsId 도 포함. respond
+   * 시 같은 ID 의 webContents 만 수락. send 실패 시 -1 같은 sentinel 권고 X —
+   * 단순 false 반환 (기존 호환).
+   */
+  send: (
+    channel: string,
+    payload: unknown
+  ) =>
+    | boolean
+    | { sent: boolean; web_contents_id: number };
   /** Auto deny timeout. default 60s. */
   timeout_ms?: number;
 }
 
 export class IpcPermissionConfirmer implements PermissionConfirmer {
   private readonly pending = new Map<string, PendingDeferred>();
-  private readonly send: (channel: string, payload: unknown) => boolean;
+  private readonly send: IpcPermissionConfirmerOptions['send'];
   private readonly timeoutMs: number;
 
   constructor(options: IpcPermissionConfirmerOptions) {
@@ -62,35 +78,65 @@ export class IpcPermissionConfirmer implements PermissionConfirmer {
         resolve({ request_id: request.request_id, decision: 'deny' });
       }, this.timeoutMs);
 
-      this.pending.set(request.request_id, { request, resolve, timeoutHandle });
-
       // Renderer 미연결 / send 실패 시 즉시 deny — fail-closed.
       let sent = false;
+      let webContentsId = -1;
       try {
-        sent = this.send('permission/request', request);
+        const result = this.send('permission/request', request);
+        if (typeof result === 'boolean') {
+          sent = result;
+        } else {
+          sent = result.sent;
+          webContentsId = result.web_contents_id;
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[IpcPermissionConfirmer] send threw: ${msg}`);
       }
       if (!sent) {
         clearTimeout(timeoutHandle);
-        this.pending.delete(request.request_id);
         resolve({ request_id: request.request_id, decision: 'deny' });
+        return;
       }
+
+      this.pending.set(request.request_id, {
+        request,
+        resolve,
+        timeoutHandle,
+        webContentsId,
+      });
     });
   }
 
   /**
    * Renderer 가 'permission/respond' 호출 시 ipc handler 가 본 메서드로
    * 위임. 매칭되는 pending 이 없으면 (timeout 후 응답 등) silently drop.
+   *
+   * v1.1.3 hotfix (Codex Q9): senderWebContentsId 가 confirm 시점의
+   * webContentsId 와 일치할 때만 수락. 다른 webContents 에서 온 응답은
+   * silently drop (audit X — 정상 흐름이 아닌 spoof 시도). webContentsId
+   * 추적 미지원 send (테스트 호환) 의 경우 -1 sentinel — 모든 sender 수락.
    */
   respond(
     request_id: string,
     decision: PermissionGrantDuration,
-    reason?: string
+    reason?: string,
+    senderWebContentsId?: number
   ): boolean {
     const deferred = this.pending.get(request_id);
     if (deferred === undefined) return false;
+    if (
+      deferred.webContentsId !== -1 &&
+      senderWebContentsId !== undefined &&
+      deferred.webContentsId !== senderWebContentsId
+    ) {
+      // owner binding 위반 — silently drop. 정상 UI 흐름은 이 경로에 도달 X.
+      console.warn(
+        `[IpcPermissionConfirmer] respond from wcid=${senderWebContentsId} ` +
+          `does not match request owner wcid=${deferred.webContentsId} — dropped`
+      );
+      return false;
+    }
     clearTimeout(deferred.timeoutHandle);
     this.pending.delete(request_id);
     const response: PermissionResponse = { request_id, decision };
@@ -101,9 +147,16 @@ export class IpcPermissionConfirmer implements PermissionConfirmer {
 
   /**
    * 현재 대기 중인 요청 목록 — UI 가 페이지 reload / mount 시 조회.
+   *
+   * v1.1.3 hotfix (Codex Q9): senderWebContentsId 지정 시 같은 webContents
+   * 에서 온 요청만 노출. 미지정 시 모두 (테스트/legacy 호환).
    */
-  getPendingRequests(): PermissionRequest[] {
-    return Array.from(this.pending.values()).map((d) => d.request);
+  getPendingRequests(senderWebContentsId?: number): PermissionRequest[] {
+    const all = Array.from(this.pending.values());
+    if (senderWebContentsId === undefined) return all.map((d) => d.request);
+    return all
+      .filter((d) => d.webContentsId === -1 || d.webContentsId === senderWebContentsId)
+      .map((d) => d.request);
   }
 
   /**

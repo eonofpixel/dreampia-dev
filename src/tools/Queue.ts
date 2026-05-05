@@ -752,12 +752,17 @@ export class ToolQueue {
    * SessionStore.getSession 결과 (DB-backed) — mutation 하지 X. shallow copy
    * + permission.grants 만 머지.
    * v1.1.2 hotfix: webContentsId 버킷에서 grants 조회.
+   * v1.1.3 hotfix (Codex Q9 strict): grant.session_id === session.id 필터.
+   * 같은 webContentsId 안에서 sessionA 의 'session' grant 가 sessionB 호출에
+   * 활성되는 누수 차단 — 사용자 인식 ("이 chat session 동안") 과 정합.
    */
   private augmentSessionWithRuntimeGrants(
     session: Session,
     webContentsId: number
   ): Session {
-    const runtime = this.sessionGrants.get(webContentsId) ?? [];
+    const bucket = this.sessionGrants.get(webContentsId) ?? [];
+    if (bucket.length === 0) return session;
+    const runtime = bucket.filter((g) => g.session_id === session.id);
     if (runtime.length === 0) return session;
     return {
       ...session,

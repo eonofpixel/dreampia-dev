@@ -518,3 +518,56 @@ describe('isAllowed - custom level with no grants requires confirmation', () => 
     expect(decision.reason).toBe('requires_user_confirmation');
   });
 });
+
+// ─── 19. v1.1.3 hotfix (Codex Q9): grant.session_id 필터 ─────────────────────
+//
+// findActiveGrants 가 grant.session_id !== session.id 인 grant 를 제외해야
+// 함. 같은 webContents 안에서 sessionA 의 grant 가 sessionB 호출에 활성되는
+// 누수 차단 (defense-in-depth — Queue.augmentSessionWithRuntimeGrants 가
+// 1차 필터, Resolver 가 2차).
+
+describe('isAllowed - v1.1.3 hotfix: cross-session grant 격리 (Codex Q9)', () => {
+  it('다른 session_id 의 grant 는 무시 — default level 로 fallback', () => {
+    const base = loadBaseSession();
+    // 본 base.id 와 다른 session_id 의 grant 주입.
+    const otherSessionGrant: PermissionGrant = {
+      id: 'foreign-grant',
+      session_id: '019d0000-0000-7000-8000-99999999999f' as Session['id'],
+      capability: 'LOCAL_WRITE',
+      target: { kind: 'path', path: 'C:\\Dev\\foo', recursive: true },
+      scope: 'session',
+      granted_at: '2026-05-02T00:00:00.000Z',
+      granted_by: 'user',
+    };
+    const session = withPermission(base, {
+      default_level: 'read_only',
+      grants: [otherSessionGrant],
+    });
+    const decision = isAllowed('LOCAL_WRITE', PATH_TARGET, session);
+    // grant 가 활성됐다면 'allowed_by_grant' 였을 것 — 필터로 무시되어
+    // read_only level 의 default 결정 (LOCAL_WRITE 는 read_only 미포함).
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).not.toBe('allowed_by_grant');
+  });
+
+  it('같은 session_id 의 grant 는 정상 활성', () => {
+    const base = loadBaseSession();
+    // session_id 가 base.id 와 동일한 grant.
+    const ownGrant: PermissionGrant = {
+      id: 'own-grant',
+      session_id: base.id,
+      capability: 'LOCAL_WRITE',
+      target: { kind: 'path', path: 'C:\\Dev\\foo', recursive: true },
+      scope: 'session',
+      granted_at: '2026-05-02T00:00:00.000Z',
+      granted_by: 'user',
+    };
+    const session = withPermission(base, {
+      default_level: 'read_only',
+      grants: [ownGrant],
+    });
+    const decision = isAllowed('LOCAL_WRITE', PATH_TARGET, session);
+    expect(decision.allowed).toBe(true);
+    expect(decision.reason).toBe('allowed_by_grant');
+  });
+});
