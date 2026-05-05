@@ -2,6 +2,25 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.17] — 2026-05-06
+
+**drive17 — VCR drift detection (Tier 2 vitest).**
+
+Tier 3 nightly real CLI 가 fixture 와 hash 비교로 translator regression
+detect 가 가능한지 — Tier 2 시나리오 추가.
+
+### Added
+
+- `tests/providers/cli/fakeCliReplay.test.ts` 1 시나리오 추가:
+  - text-happy fixture replay → events 캡처 → loadFixture +
+    detectDrift(fixture, events) → 미지정 hash 시 drift false.
+  - 잘못된 expected_events_hash 강제 → drift true + actual hash 검증.
+  - 결정성: 같은 events 의 hash 는 매번 같음.
+
+### Verified
+
+- typecheck clean / 6/6 fakeCliReplay 통과.
+
 ## [1.1.16] — 2026-05-06
 
 **L/E/E 첫 단계 — 통일된 toast 알림 시스템.**

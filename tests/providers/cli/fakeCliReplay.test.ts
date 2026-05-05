@@ -21,6 +21,11 @@ import { fileURLToPath } from 'node:url';
 
 import { CliProvider } from '../../../src/providers/cli/CliProvider';
 import { translateClaudeJsonl } from '../../../src/providers/cli/translateClaudeJsonl';
+import {
+  detectDrift,
+  eventsHashOf,
+  loadFixture,
+} from '../../../src/providers/cli/vcrLoader';
 import type { StreamEvent } from '../../../src/providers/types';
 import type { Turn } from '../../../src/types';
 import { newTurnId, nowIso } from '../../../src/types';
@@ -244,6 +249,51 @@ describe('v1.1.5 — fake CLI replay (Tier 2 integration)', () => {
         if (e?.type === 'error') {
           expect(e.error).toMatch(/authentication failed/i);
         }
+      } finally {
+        if (originalEnv === undefined) delete process.env.DREAMPIA_VCR_FIXTURE;
+        else process.env.DREAMPIA_VCR_FIXTURE = originalEnv;
+      }
+    },
+    20_000
+  );
+
+  it(
+    'drive17: VCR drift detection — fixture 의 expected_events_hash 와 비교',
+    async () => {
+      // 본 시나리오: text-happy fixture 를 replay → events 캡처 → hash 계산
+      // → fixture 에 (가짜) expected_events_hash 주입 → drift detect.
+      const provider = new CliProvider({
+        binaryPath: execPath,
+        provider: 'claude',
+        translate: translateClaudeJsonl,
+        preArgs: [FAKE_CLI],
+      });
+
+      const originalEnv = process.env.DREAMPIA_VCR_FIXTURE;
+      process.env.DREAMPIA_VCR_FIXTURE = FIXTURE_TEXT_HAPPY;
+      try {
+        const events = await collectStream(provider, {
+          turns: [makeUserTurn('안녕')],
+          model: 'claude-sonnet-4-6',
+        });
+
+        // fixture 자체에 expected_events_hash 미설정 → drift X.
+        const fixture = loadFixture(FIXTURE_TEXT_HAPPY);
+        const noDrift = detectDrift(fixture, events);
+        expect(noDrift.drift).toBe(false);
+
+        // 잘못된 hash 강제 주입 → drift true.
+        const drifted = detectDrift(
+          { ...fixture, expected_events_hash: 'definitely-stale-hash' },
+          events
+        );
+        expect(drifted.drift).toBe(true);
+        expect(drifted.actual).toMatch(/^[a-f0-9]+$/);
+
+        // 결정성: 같은 events 에 대한 hash 는 매번 같음.
+        const h1 = eventsHashOf(events);
+        const h2 = eventsHashOf(events);
+        expect(h1).toBe(h2);
       } finally {
         if (originalEnv === undefined) delete process.env.DREAMPIA_VCR_FIXTURE;
         else process.env.DREAMPIA_VCR_FIXTURE = originalEnv;
