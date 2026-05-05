@@ -2,6 +2,33 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.22] — 2026-05-06
+
+**Plugin Hook runtime — vm sandbox + pre/post turn.**
+
+Plugin manifest 의 `hooks.pre_turn` / `hooks.post_turn` 을 Node `vm` sandbox
+안에서 실행. 한 plugin throw 해도 다음 plugin 진행 (best-effort).
+
+### Added
+
+- `src/main/plugins/PluginHookRunner.ts`:
+  - `runHook(plugins, kind, ctx)` — 모든 loaded plugin 의 hook 순차 실행.
+  - `vm.Script` cache (file 별).
+  - timeout (default 5s) — `vm.runInContext({ timeout })`.
+  - audit events: `plugin.hook_ok` / `plugin.hook_error` / `plugin.hook_timeout`
+    (duration_ms 포함).
+  - Sandbox: `console` + `ctx` 만. Node fs/process/require X.
+  - `clearScriptCache()` — test/shutdown helper.
+
+- `tests/main/plugins/PluginHookRunner.test.ts` — 7 시나리오:
+  - ctx mutate / throw → 다음 plugin 진행 / hook 미정의 skip / post_turn /
+    timeout / duration_ms / cache invalidation.
+
+### Verified
+
+- typecheck clean
+- 19/19 plugin unit (manager 12 + hook runner 7) 통과
+
 ## [1.1.21] — 2026-05-06
 
 **Workspace UX — drift menu (popover).**
