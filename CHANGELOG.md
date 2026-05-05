@@ -2,6 +2,49 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.9] — 2026-05-06
+
+**drive16 — Real CLI integration e2e: failure modes (Codex Q9 권고 시나리오).**
+
+CliProvider 의 fail-closed 정책이 production code path 에서도 정상 작동
+하는지 회귀 lock. fake CLI 가 의도적으로 실패 (exit !=0 / stderr error)
+하면 renderer 가 error UI 를 통해 사용자에게 알림.
+
+### Added
+
+- **Fixtures (2 신규)**:
+  - `tests/fixtures/cli-vcr/claude/failure-exit-nonzero.json` — system init
+    chunk 만 emit 한 뒤 exit 1.
+  - `tests/fixtures/cli-vcr/claude/failure-stderr-error.json` — system init
+    + stderr 에 "Error: API authentication failed (401 Unauthorized)" 출력
+    + exit 0. CliProvider 의 stderr error keyword 매칭이 caller 에 error
+    이벤트 전달하는지 검증.
+
+- **`tests/providers/cli/fakeCliReplay.test.ts` Tier 2 시나리오 2 추가**:
+  - `failure: exit code !== 0` — error event 의 message 가 `exit code 1`
+    포함.
+  - `failure: stderr error keyword + exit 0` — error event 의 message 가
+    `authentication failed` 포함.
+
+- **`e2e/_drive16.spec.ts`** 신규:
+  - 16-1: fake CLI exit 1 → assistant turn mount + streaming-cursor 사라짐.
+  - 16-2: fake CLI stderr 401 → 마찬가지.
+
+### Verified
+
+- typecheck clean
+- lint pre-existing 4 + 2 only
+- fakeCliReplay: 5/5 (text + tool_use + exit_nonzero + stderr_error +
+  argv_mismatch).
+- Playwright spec list: drive16 = 2 tests.
+
+### Notes
+
+- **drive17 (VCR drift detection)** 은 VCR loader / replay-record-live
+  mode 전환 모듈 필요 — 별도 commit (v1.1.10).
+- **drive14-3 (saved tool turn)** 도 별도 후속 — `session/get-tool-history`
+  IPC 또는 sqlite 직접 query.
+
 ## [1.1.8] — 2026-05-06
 
 **drive14 확장 + drive15 (KR cwd) — Codex Q9/Q10 권고 시나리오 보강.**

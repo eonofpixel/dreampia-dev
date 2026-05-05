@@ -1,0 +1,35 @@
+{
+  "version": "1",
+  "fixture_id": "claude/failure-exit-nonzero",
+  "provider": "claude",
+  "recorded_at": "2026-05-06T00:00:00.000Z",
+  "encoding": "utf8",
+  "spawn": {
+    "argv": [
+      "--print",
+      "--output-format",
+      "stream-json",
+      "--bare",
+      "--verbose",
+      "--model",
+      "claude-sonnet-4-6",
+      "실패 케이스"
+    ],
+    "cwd": ".",
+    "env_keys": ["ANTHROPIC_API_KEY"]
+  },
+  "stdin_chunks": [],
+  "stdout_chunks": [
+    {
+      "delay_ms": 5,
+      "data": "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"vcr-fail\"}\n"
+    }
+  ],
+  "stderr_chunks": [],
+  "exit": { "code": 1, "signal": null },
+  "timing": { "spawn_to_first_chunk_ms": 5, "total_ms": 10 },
+  "argv_assert": {
+    "prompt_last": "실패 케이스",
+    "model_arg": { "index": 6, "value": "claude-sonnet-4-6" }
+  }
+}

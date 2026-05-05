@@ -45,6 +45,24 @@ const FIXTURE_TOOL_USE = resolve(
   'claude',
   'tool-use-roundtrip.json'
 );
+const FIXTURE_FAILURE_EXIT = resolve(
+  __dirname,
+  '..',
+  '..',
+  'fixtures',
+  'cli-vcr',
+  'claude',
+  'failure-exit-nonzero.json'
+);
+const FIXTURE_FAILURE_STDERR = resolve(
+  __dirname,
+  '..',
+  '..',
+  'fixtures',
+  'cli-vcr',
+  'claude',
+  'failure-stderr-error.json'
+);
 
 function makeUserTurn(text: string): Turn {
   return {
@@ -161,6 +179,71 @@ describe('v1.1.5 — fake CLI replay (Tier 2 integration)', () => {
         // 에러 event 없음.
         const errors = events.filter((e) => e.type === 'error');
         expect(errors.length).toBe(0);
+      } finally {
+        if (originalEnv === undefined) delete process.env.DREAMPIA_VCR_FIXTURE;
+        else process.env.DREAMPIA_VCR_FIXTURE = originalEnv;
+      }
+    },
+    20_000
+  );
+
+  it(
+    'failure: exit code !== 0 → CliProvider 가 error event emit (exit code 노출)',
+    async () => {
+      const provider = new CliProvider({
+        binaryPath: execPath,
+        provider: 'claude',
+        translate: translateClaudeJsonl,
+        preArgs: [FAKE_CLI],
+      });
+
+      const originalEnv = process.env.DREAMPIA_VCR_FIXTURE;
+      process.env.DREAMPIA_VCR_FIXTURE = FIXTURE_FAILURE_EXIT;
+      try {
+        const events = await collectStream(provider, {
+          turns: [makeUserTurn('실패 케이스')],
+          model: 'claude-sonnet-4-6',
+        });
+
+        const errors = events.filter((e) => e.type === 'error');
+        expect(errors.length).toBeGreaterThan(0);
+        // CliProvider 의 errorState 가 'exit code 1' 텍스트 포함.
+        const e = errors[0];
+        if (e?.type === 'error') {
+          expect(e.error).toMatch(/exit code 1/i);
+        }
+      } finally {
+        if (originalEnv === undefined) delete process.env.DREAMPIA_VCR_FIXTURE;
+        else process.env.DREAMPIA_VCR_FIXTURE = originalEnv;
+      }
+    },
+    20_000
+  );
+
+  it(
+    'failure: stderr 에 error keyword → exit 0 이어도 error event emit',
+    async () => {
+      const provider = new CliProvider({
+        binaryPath: execPath,
+        provider: 'claude',
+        translate: translateClaudeJsonl,
+        preArgs: [FAKE_CLI],
+      });
+
+      const originalEnv = process.env.DREAMPIA_VCR_FIXTURE;
+      process.env.DREAMPIA_VCR_FIXTURE = FIXTURE_FAILURE_STDERR;
+      try {
+        const events = await collectStream(provider, {
+          turns: [makeUserTurn('stderr 에러')],
+          model: 'claude-sonnet-4-6',
+        });
+
+        const errors = events.filter((e) => e.type === 'error');
+        expect(errors.length).toBeGreaterThan(0);
+        const e = errors[0];
+        if (e?.type === 'error') {
+          expect(e.error).toMatch(/authentication failed/i);
+        }
       } finally {
         if (originalEnv === undefined) delete process.env.DREAMPIA_VCR_FIXTURE;
         else process.env.DREAMPIA_VCR_FIXTURE = originalEnv;
