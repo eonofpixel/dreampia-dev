@@ -2,6 +2,20 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.24] — 2026-05-06
+
+**cost-limit-hook example plugin — 첫 sample.**
+
+`examples/plugins/cost-limit-hook/` 에 manifest + index.js + README. 사용자가
+`~/.dreampia/plugins/` 에 복사하면 PluginManager 가 자동 감지 → PluginHookRunner
+가 post_turn 마다 `ctx.payload.mtd_total_usd / limit_usd` 비교 후 80% / 100%
+경고 toast.
+
+- manifest.json: name=cost-limit-hook v0.1.0, hooks.post_turn=index.js,
+  capabilities=[].
+- index.js: pure JS sandbox-safe — ctx.notify 만 사용. fs / process X.
+- 5 unit (manifest 로드 / 80% 미만 / 80% 경고 / 100% 에러 / limit 미지정).
+
 ## [1.1.23] — 2026-05-06
 
 **Plugin capability grant — IpcPermissionConfirmer 통합 (SEC-2 인프라 재사용).**

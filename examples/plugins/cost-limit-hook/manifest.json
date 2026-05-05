@@ -1,0 +1,9 @@
+{
+  "name": "cost-limit-hook",
+  "version": "0.1.0",
+  "description": "post_turn 마다 누적 비용을 검사해서 한도 초과 시 ctx.notify 로 알림. v1.1.x sample.",
+  "hooks": {
+    "post_turn": "index.js"
+  },
+  "capabilities": []
+}
