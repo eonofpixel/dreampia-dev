@@ -2,6 +2,20 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.2.1] — 2026-05-06
+
+**Direct API mode 인프라 stub — Anthropic / OpenAI provider class.**
+
+P2 Direct API mode 의 인프라 stub. 실제 SSE / fetch / key handling 은
+v1.2.2 이후. 본 commit 은 type 정의 + class skeleton 만.
+
+- `src/providers/api/types.ts` — DirectApiVendor / DirectApiOptions /
+  DirectApiProvider interface.
+- `src/providers/api/AnthropicProvider.ts` — vendor='anthropic' /
+  provider='claude'. stream() 호출 시 'not yet implemented' error event.
+- `src/providers/api/OpenAIProvider.ts` — vendor='openai' / provider='codex'.
+- 5 unit (instantiate / vendor / stream not_implemented x 2 / baseUrl override).
+
 ## [1.2.0] — 2026-05-06
 
 **P2 진입 — Image/PDF media 정책 상수 (mediaConstants.ts 부활).**

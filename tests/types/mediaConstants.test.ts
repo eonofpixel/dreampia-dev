@@ -9,7 +9,6 @@ import {
   PDF_MAX_BYTES,
   PDF_MAX_PER_TURN,
   PDF_MIME_TYPE,
-  TURN_MEDIA_TOTAL_MAX_BYTES,
   checkAttachment,
   checkTurnAttachments,
   isImageMime,
