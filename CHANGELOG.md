@@ -2,6 +2,18 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.2.5] — 2026-05-06
+
+**DOM dump utility — PreviewPanel → AI context.**
+
+Element 를 직렬화 (tag/id/classes/attrs/text/bounds/children) 해서 AI 가
+페이지 구조 이해. depth cap (default 3) + text cap (default 200) +
+attr 값 100자 truncate. 자식 element 의 text 는 부모 text 에 포함 X.
+
+- `src/renderer/utils/domDump.ts` — `dumpElement(el, options)`.
+- 7 unit (single / depth cap / text cap / 자식 text 분리 / id-class 중복 X /
+  attr truncate / 빈 element).
+
 ## [1.2.4] — 2026-05-06
 
 **PreviewPanel Annotation overlay skeleton.**
