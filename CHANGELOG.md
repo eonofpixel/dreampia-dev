@@ -2,6 +2,17 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.20] — 2026-05-06
+
+**Workspace UX — auto-new-chat prompt (drift 발생 시 toast).**
+
+활성 session 의 workspace 와 현재 폴더가 달라지고 잠금 X 면 toast 의
+[재시도] 버튼이 새 채팅 생성. driftPromptedRef 로 같은 (session, current
+workspace) 조합당 1회만.
+
+- App.tsx useEffect — chatHeaderWorkspaceName / sessionWorkspaceName /
+  workspaceLocked 의존성. toasts.warning + retry=handleNewChat.
+
 ## [1.1.19] — 2026-05-06
 
 **Workspace UX — drift 검사 잠긴 세션 분기.**

@@ -834,6 +834,38 @@ export function App(): React.JSX.Element {
   // 보였음).
   const chatHeaderWorkspaceName = defaultWorkspace?.name;
 
+  // v1.1.20 (Workspace UX): auto-new-chat prompt — 활성 session 의
+  // workspace 와 현재 폴더가 달라지고, 잠긴 세션이 아니면, toast 로 "새
+  // 채팅으로 시작?" 알림. retry 버튼 = handleNewChat.
+  const driftPromptedRef = useRef<string>('');
+  useEffect(() => {
+    if (activeSession === null) return;
+    if (workspaceLocked) return;
+    if (sessionWorkspaceName === undefined) return;
+    if (chatHeaderWorkspaceName === undefined) return;
+    if (sessionWorkspaceName === chatHeaderWorkspaceName) return;
+    // 같은 (session, current workspace) 조합엔 한 번만 알림.
+    const key = `${activeSession.id}::${chatHeaderWorkspaceName}`;
+    if (driftPromptedRef.current === key) return;
+    driftPromptedRef.current = key;
+    toasts.warning(
+      `작업 폴더가 변경되었습니다 (${sessionWorkspaceName} → ${chatHeaderWorkspaceName})`,
+      {
+        detail: '새 채팅으로 시작하려면 [재시도] 를 누르세요.',
+        ttl_ms: 12_000,
+        retry: () => {
+          void handleNewChat();
+        },
+      }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeSession?.id,
+    chatHeaderWorkspaceName,
+    sessionWorkspaceName,
+    workspaceLocked,
+  ]);
+
   // v0.5.0 (F-018) — slash command handler 맵. ChatInput 으로 forward 되어
   // 사용자가 `/help`, `/clear` 등을 입력했을 때 호출된다. 인자가 없는 명령은
   // arg 인자를 무시한다. KNOWN_MODELS 화이트리스트는 `/model` 에서만 사용.
