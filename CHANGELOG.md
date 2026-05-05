@@ -2,6 +2,15 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.25] — 2026-05-06
+
+**Error 경로 → toasts.error() 마이그레이션 (시작).**
+
+`handleToggleWorkspaceLock` 의 silent fail 두 경로 (IPC ok=false, throw)
+에 `toasts.error()` 추가. 사용자가 lock 토글 실패 시 침묵 X.
+
+후속: handleChangePermission / search / cost / IPC unavailable 등.
+
 ## [1.1.24] — 2026-05-06
 
 **cost-limit-hook example plugin — 첫 sample.**

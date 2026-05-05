@@ -631,11 +631,17 @@ export function App(): React.JSX.Element {
           next
         );
         if (!result.ok) {
-          // IPC 실패 → 원복.
+          // IPC 실패 → 원복 + 사용자 알림 (v1.1.25 — silent fail X).
           setWorkspaceLocked(!next);
+          toasts.error('작업 폴더 고정 상태 저장 실패', {
+            detail: typeof result.error === 'string' ? result.error : undefined,
+          });
         }
-      } catch {
+      } catch (err) {
         setWorkspaceLocked(!next);
+        toasts.error('작업 폴더 고정 IPC 호출 실패', {
+          detail: err instanceof Error ? err.message : String(err),
+        });
       }
     })();
     // 같은 이유로 activeSession 객체 전체가 아닌 id 만 dep.
