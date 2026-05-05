@@ -2,6 +2,62 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.16] — 2026-05-06
+
+**L/E/E 첫 단계 — 통일된 toast 알림 시스템.**
+
+P1 v1.1.x 의 Loading / Error / Empty 슬롯의 첫 commit. error 알림이 코드
+곳곳 console.error 또는 inline UI 였던 것을 통합 toast container 로 통일.
+
+### Added
+
+- **`src/renderer/hooks/useToasts.ts`**:
+  - `useToasts(): { list, push, error, warning, info, success, dismiss, clear }`.
+  - 4 종 kind — error 8s / warning 6s / info / success 4s default TTL.
+  - `ttl_ms: 0` → 수동 dismiss 만 (persistent).
+  - `retry?: () => void` callback — toast 안에 [재시도] 버튼.
+  - cap 5 (오버플로우 시 oldest drop).
+
+- **`src/renderer/components/toast/ToastContainer.tsx`**:
+  - fixed top-right 위치, z-30 (PermissionDangerModal 의 60 보다 낮음).
+  - kind 별 색상 + 아이콘 (✖ error / ⚠ warning / ℹ info / ✓ success).
+  - aria-live='polite' (assertive 아님 — 작업 흐름 방해 X).
+  - retry 버튼 + dismiss 버튼.
+  - testid: `toast-container` / `toast-item` / `toast-retry` / `toast-dismiss` +
+    `data-toast-kind` 속성.
+
+- **i18n** ko/en — `toast.retry` / `toast.dismiss_aria`.
+
+- **App.tsx wire-up**:
+  - `const toasts = useToasts()`.
+  - `<ToastContainer toasts={toasts.list} onDismiss={toasts.dismiss} />` mount.
+
+- **`tests/renderer/useToasts.test.ts`** — 10 시나리오:
+  - push 가 ToastItem 추가 + ID 반환.
+  - 4 helper kind 정확.
+  - dismiss 항목별 / clear 모두.
+  - cap 5 + oldest drop.
+  - 자동 dismiss timer (error 8s / info 4s).
+  - ttl_ms=0 persistent.
+  - retry callback 보존.
+
+### Verified
+
+- typecheck clean
+- lint pre-existing 4 + 2 only
+- 10/10 useToasts unit 통과
+
+### Notes
+
+- **본 commit 은 인프라**. 다음 (v1.1.17+):
+  - 기존 error 경로를 `toasts.error()` 로 마이그레이션 (예: cost limit /
+    permission ipc fail / IPC unavailable banner 일부).
+  - Loading skeleton (Sidebar sessions list / 폴더 변경 / MCP 연결).
+  - Empty state 디자인 통일 (활성 session 없는 ChatPanel + 빈 sessions
+    sidebar).
+  - Visual polish (색상 paradigm + typography scale + Mock/Claude/Codex
+    badge 일관화).
+
 ## [1.1.15] — 2026-05-06
 
 **Plugin Loader UI 활성화 — Sidebar [플러그인] '준비 중' 해체.**

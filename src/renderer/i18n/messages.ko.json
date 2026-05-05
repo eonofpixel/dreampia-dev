@@ -211,6 +211,8 @@
   "plugins.modal.rescan": "다시 스캔",
   "plugins.modal.footer_hint": "Hook 실행은 v1.1.16+ 에서 활성화됩니다.",
   "plugins.error.ipc_unavailable": "IPC 사용 불가 — preload 스크립트 로드 실패.",
+  "toast.retry": "재시도",
+  "toast.dismiss_aria": "알림 닫기",
   "permission.danger.reason_label": "사유 (선택, audit 에 기록됨)",
   "permission.danger.reason_placeholder": "예: 디버그 시도",
   "settings.permission.grants.title": "활성 권한 grant",

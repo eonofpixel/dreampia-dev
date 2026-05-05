@@ -22,6 +22,8 @@ import { SettingsModal, applyTheme, type SettingsTabId } from './components/sett
 import { SlashHelpModal } from './components/chat/SlashHelpModal';
 import { CompareModal } from './components/chat/CompareModal';
 import { PluginsModal } from './components/plugins/PluginsModal';
+import { ToastContainer } from './components/toast/ToastContainer';
+import { useToasts } from './hooks/useToasts';
 import {
   CostLimitModal,
   parseCostLimitError,
@@ -182,6 +184,8 @@ export function App(): React.JSX.Element {
   const [compareModalOpen, setCompareModalOpen] = useState(false);
   // v1.1.15 — Plugin Loader UI: Sidebar [플러그인] 클릭 시 mount.
   const [pluginsModalOpen, setPluginsModalOpen] = useState(false);
+  // v1.1.16 — 통일된 toast 알림 (error / warning / info / success).
+  const toasts = useToasts();
   // v1.0.12 (COST-2): main 의 ai/start-stream 이 COST_LIMIT_EXCEEDED 로 차단
   // 시 본 state 가 채워져 modal 이 mount. parseCostLimitError 가 JSON 파싱.
   const [costLimitError, setCostLimitError] = useState<ParsedCostLimitError | null>(null);
@@ -1280,6 +1284,8 @@ export function App(): React.JSX.Element {
         open={pluginsModalOpen}
         onClose={() => setPluginsModalOpen(false)}
       />
+      {/* v1.1.16 — 통일된 toast container. fixed top-right. */}
+      <ToastContainer toasts={toasts.list} onDismiss={toasts.dismiss} />
       {/* v1.1.0 SEC-2 full: 비-dangerous 권한 요청 inline approval card.
           Codex (5c) — chat panel 문맥. 위치는 fixed bottom-right 으로 chat
           입력 가리지 않도록. */}

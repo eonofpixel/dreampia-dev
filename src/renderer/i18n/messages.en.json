@@ -211,6 +211,8 @@
   "plugins.modal.rescan": "Rescan",
   "plugins.modal.footer_hint": "Hook execution will be enabled in v1.1.16+.",
   "plugins.error.ipc_unavailable": "IPC unavailable — preload script load failure.",
+  "toast.retry": "Retry",
+  "toast.dismiss_aria": "Dismiss notification",
   "permission.danger.reason_label": "Reason (optional, recorded in audit)",
   "permission.danger.reason_placeholder": "e.g. debugging attempt",
   "settings.permission.grants.title": "Active permission grants",
