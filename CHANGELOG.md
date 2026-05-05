@@ -2,6 +2,48 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.11] — 2026-05-06
+
+**Workspace UX 첫 단계 — Per-session sticky workspace lock (storage layer).**
+
+P1 v1.1.x Workspace UX 슬롯의 첫 단계. ChatHeader 의 🔒 toggle 로 사용자가
+본 세션을 특정 workspace 에 고정 — 폴더 변경 / drift 발생 시 본 세션은
+자기 workspace 로 복귀.
+
+### Added (Storage layer)
+
+- **Migration 007 — `sessions.workspace_locked`**:
+  - `INTEGER NOT NULL DEFAULT 0` (boolean flag).
+  - `idx_sessions_workspace_locked` partial index (locked=1 만).
+
+- **`WorkspaceSchema.locked?: boolean`** — Session.workspace 에 optional 필드.
+  ChatHeader 가 본 값으로 toggle UI 렌더.
+
+- **`SessionStore`**:
+  - `setWorkspaceLocked(id, locked)` — UPDATE + return changed boolean.
+  - `getWorkspaceLocked(id)` — UI mount 동기화.
+  - `listLockedSessions()` — boot-time workspace 복귀 흐름용.
+
+- **IPC handlers**:
+  - `session/set-workspace-locked` — payload `{ sessionId, locked }`.
+  - `session/get-workspace-locked` — payload `sessionId` → `{ locked }`.
+
+### Verified
+
+- typecheck clean
+- lint pre-existing 4 + 2 only
+- unit: 1597/1604 — 7 fail 모두 v1.1.10 baseline 동일 (회귀 0)
+- LATEST_SCHEMA_VERSION 자동 7 (MIGRATIONS 마지막). 기존 SessionStore
+  migration 테스트 통과.
+
+### Notes
+
+- **다음 commit (v1.1.12)**: ChatHeader UI 의 🔒 toggle 버튼 + 잠긴 세션의
+  drift 검사 분기 + 잠금 상태 보존을 위한 Session.workspace.locked
+  hydration (read path).
+- **Auto-new-chat prompt** (폴더 변경 시 dialog) + **drift menu** 는 후속
+  commits.
+
 ## [1.1.10] — 2026-05-06
 
 **VCR loader (drive17 prep) — Codex Q10 권고 replay/record/live mode 인프라.**

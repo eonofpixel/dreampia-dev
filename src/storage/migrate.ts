@@ -20,6 +20,7 @@ import sql003 from './migrations/003_usage_events.sql?raw';
 import sql004 from './migrations/004_fts5_turns.sql?raw';
 import sql005 from './migrations/005_compare_runs.sql?raw';
 import sql006 from './migrations/006_cost_v1_0_12.sql?raw';
+import sql007 from './migrations/007_workspace_locked.sql?raw';
 
 // ────────────────────────────────────────────────────────────
 // Migration registry
@@ -42,6 +43,11 @@ const MIGRATIONS: readonly Migration[] = [
     version: 6,
     description: 'v1.0.12 — usage_events.unknown_pricing + audit_log.tool_id (COST-1 + debt)',
     up: sql006,
+  },
+  {
+    version: 7,
+    description: 'v1.1.11 — sessions.workspace_locked (Workspace UX sticky lock)',
+    up: sql007,
   },
 ] as const;
 

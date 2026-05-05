@@ -94,6 +94,14 @@ export const WorkspaceSchema = z.object({
   file_count: z.number().int().nonnegative().optional(),
 
   is_temporary: z.boolean(),
+
+  /**
+   * v1.1.11 (Workspace UX): per-session sticky lock. true 면 사용자가 본 세션을
+   * 본 workspace 에 고정 — 폴더 변경 / drift 가 발생해도 본 세션은 자기
+   * workspace 로 복귀. ChatHeader 의 🔒 toggle 로 변경.
+   * Migration 007 의 sessions.workspace_locked INTEGER 컬럼에서 채움.
+   */
+  locked: z.boolean().optional(),
 });
 
 export type Workspace = z.infer<typeof WorkspaceSchema>;

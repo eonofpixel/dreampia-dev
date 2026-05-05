@@ -938,6 +938,44 @@ export class SessionStore {
     }
   }
 
+  /**
+   * v1.1.11 (Workspace UX): per-session sticky workspace lock toggle.
+   *
+   * - locked=true: ChatHeader 의 🔒 toggle ON. drift / auto-new-chat prompt
+   *   대상에서 제외 — 본 세션은 자기 workspace 에 고정.
+   * - locked=false: 잠금 해제 → drift 검사 정상 발화.
+   *
+   * @returns true 면 session row 갱신, false 면 not found.
+   */
+  setWorkspaceLocked(id: SessionId, locked: boolean): boolean {
+    const now = new Date().toISOString();
+    const result = this.db
+      .prepare(
+        `UPDATE sessions
+         SET workspace_locked = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(locked ? 1 : 0, now, id);
+    return result.changes > 0;
+  }
+
+  /** v1.1.11: 잠긴 세션 ID 목록 — boot-time workspace 복귀 흐름. */
+  listLockedSessions(): SessionId[] {
+    const rows = this.db
+      .prepare(`SELECT id FROM sessions WHERE workspace_locked = 1`)
+      .all() as Array<{ id: string }>;
+    return rows.map((r) => r.id as SessionId);
+  }
+
+  /** v1.1.11: 특정 세션의 lock 상태 read. */
+  getWorkspaceLocked(id: SessionId): boolean {
+    const row = this.db
+      .prepare(`SELECT workspace_locked AS locked FROM sessions WHERE id = ?`)
+      .get(id) as { locked: number } | undefined;
+    if (row === undefined) return false;
+    return row.locked === 1;
+  }
+
   deleteSession(id: SessionId): void {
     const tx = this.db.transaction((sid: string) => {
       // Delete in FK-safe order (children before parents).

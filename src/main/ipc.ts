@@ -1245,6 +1245,48 @@ function registerSessionHandlers(store: SessionStore): void {
     }
   );
 
+  // v1.1.11 (Workspace UX): per-session sticky workspace lock toggle.
+  // ChatHeader 의 🔒 toggle 이 호출. payload: { sessionId, locked }.
+  ipcMain.handle(
+    'session/set-workspace-locked',
+    (_evt, raw: unknown): Result<{ ok: boolean }> => {
+      try {
+        if (typeof raw !== 'object' || raw === null) {
+          throw new Error('payload must be object { sessionId, locked }');
+        }
+        const obj = raw as { sessionId?: unknown; locked?: unknown };
+        if (typeof obj.sessionId !== 'string' || obj.sessionId.length === 0) {
+          throw new Error('sessionId required');
+        }
+        if (typeof obj.locked !== 'boolean') {
+          throw new Error('locked must be boolean');
+        }
+        const updated = store.setWorkspaceLocked(
+          obj.sessionId as SessionId,
+          obj.locked
+        );
+        return ok({ ok: updated });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  // v1.1.11: 특정 세션의 lock 상태 read — UI 가 mount 시 동기화.
+  ipcMain.handle(
+    'session/get-workspace-locked',
+    (_evt, sessionId: unknown): Result<{ locked: boolean }> => {
+      try {
+        if (typeof sessionId !== 'string') {
+          throw new Error('session id must be string');
+        }
+        return ok({ locked: store.getWorkspaceLocked(sessionId as SessionId) });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
   ipcMain.handle('session/delete', (_evt, sessionId: unknown): Result<void> => {
     try {
       if (typeof sessionId !== 'string') {
