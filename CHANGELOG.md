@@ -2,6 +2,18 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.3.4] — 2026-05-06
+
+**A11y — aria-live announcer.**
+
+`LiveAnnouncerRegion` (App.tsx mount) + `useAnnouncer()` hook. 두 region —
+polite (default) / assertive. 같은 메시지 toggle 처리 (공백 padding) 으로
+reader 가 매번 announce.
+
+- focus-visible 통일은 이미 v1.0.x 에 적용 (index.css *:focus-visible {
+  outline: 2px solid ... }).
+- `src/renderer/components/a11y/LiveAnnouncer.tsx`.
+
 ## [1.3.3] — 2026-05-06
 
 **Schema debt B-2/B-3/B-4 forward markers (migrations 009~011).**
