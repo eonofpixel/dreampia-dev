@@ -114,8 +114,13 @@ export class IpcPermissionConfirmer implements PermissionConfirmer {
    *
    * v1.1.3 hotfix (Codex Q9): senderWebContentsId 가 confirm 시점의
    * webContentsId 와 일치할 때만 수락. 다른 webContents 에서 온 응답은
-   * silently drop (audit X — 정상 흐름이 아닌 spoof 시도). webContentsId
-   * 추적 미지원 send (테스트 호환) 의 경우 -1 sentinel — 모든 sender 수락.
+   * silently drop (audit X — 정상 흐름이 아닌 spoof 시도).
+   *
+   * v1.1.4 hotfix (Codex Q10): -1 sentinel 정리 — 이전엔 legacy boolean send
+   * 호환을 위해 -1 (= 미추적) 이면 모든 sender 수락했음. production main 에는
+   * 도달 불가능 (send 가 항상 {sent, web_contents_id} 반환) 이지만 future
+   * footgun. 이제: senderWebContentsId 명시 + owner 가 -1 이면 fail-closed
+   * (다른 sender 거절). senderWebContentsId 미지정만 호환 유지.
    */
   respond(
     request_id: string,
@@ -125,17 +130,22 @@ export class IpcPermissionConfirmer implements PermissionConfirmer {
   ): boolean {
     const deferred = this.pending.get(request_id);
     if (deferred === undefined) return false;
-    if (
-      deferred.webContentsId !== -1 &&
-      senderWebContentsId !== undefined &&
-      deferred.webContentsId !== senderWebContentsId
-    ) {
-      // owner binding 위반 — silently drop. 정상 UI 흐름은 이 경로에 도달 X.
-      console.warn(
-        `[IpcPermissionConfirmer] respond from wcid=${senderWebContentsId} ` +
-          `does not match request owner wcid=${deferred.webContentsId} — dropped`
-      );
-      return false;
+    if (senderWebContentsId !== undefined) {
+      // owner -1 (미추적) + sender 명시 = fail-closed. 정상 production 안 옴.
+      if (deferred.webContentsId === -1) {
+        console.warn(
+          `[IpcPermissionConfirmer] respond from wcid=${senderWebContentsId} ` +
+            `but request owner is untracked (-1) — fail-closed drop`
+        );
+        return false;
+      }
+      if (deferred.webContentsId !== senderWebContentsId) {
+        console.warn(
+          `[IpcPermissionConfirmer] respond from wcid=${senderWebContentsId} ` +
+            `does not match request owner wcid=${deferred.webContentsId} — dropped`
+        );
+        return false;
+      }
     }
     clearTimeout(deferred.timeoutHandle);
     this.pending.delete(request_id);
@@ -150,12 +160,15 @@ export class IpcPermissionConfirmer implements PermissionConfirmer {
    *
    * v1.1.3 hotfix (Codex Q9): senderWebContentsId 지정 시 같은 webContents
    * 에서 온 요청만 노출. 미지정 시 모두 (테스트/legacy 호환).
+   *
+   * v1.1.4 hotfix (Codex Q10): -1 sentinel fail-closed — sender 명시 + owner
+   * -1 인 request 는 노출 X.
    */
   getPendingRequests(senderWebContentsId?: number): PermissionRequest[] {
     const all = Array.from(this.pending.values());
     if (senderWebContentsId === undefined) return all.map((d) => d.request);
     return all
-      .filter((d) => d.webContentsId === -1 || d.webContentsId === senderWebContentsId)
+      .filter((d) => d.webContentsId === senderWebContentsId)
       .map((d) => d.request);
   }
 

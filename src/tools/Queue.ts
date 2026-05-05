@@ -173,6 +173,8 @@ interface PendingEntry {
   notify: () => void;
   /** cancelled 상태로 즉시 응답시킬 때 호출 — enqueue 의 promise 를 resolve. */
   cancel: (reason: string) => void;
+  /** v1.1.4 hotfix (Codex Q10): IPC 출처 — cancel origin 검증용. */
+  web_contents_id: number;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -370,7 +372,7 @@ export class ToolQueue {
     }
 
     // ── Step 5: capacity 대기 ──
-    const cap = await this.waitForCapacity(call);
+    const cap = await this.waitForCapacity(call, webContentsId);
     if (!cap.ok) {
       // 대기 중 취소됨 — cancelled 응답
       const result = buildFailedResult({
@@ -383,19 +385,43 @@ export class ToolQueue {
     }
 
     // ── Step 6: 실행 ──
-    const result = await this.runTool(call, tool, validatedInput, session);
+    const result = await this.runTool(
+      call,
+      tool,
+      validatedInput,
+      session,
+      webContentsId
+    );
     this.emitAudit(this.resultToAuditEvent(call, result));
     return result;
   }
 
   /**
    * 특정 call 취소. active 면 abort, pending 이면 cancelled 로 즉시 응답.
+   *
+   * v1.1.4 hotfix (Codex Q10): requesterWebContentsId 가 call 의 owner 와 다르면
+   * 거절. 다른 webContents 가 임의로 active call 을 abort 시키는 attack 차단.
+   * 미지정 / NO_ORIGIN 은 모든 cancel 수락 (테스트 / 프로그램적 호출 호환).
+   *
    * @returns 실제로 취소되었는지 여부.
    */
-  cancelCall(callId: ToolCallId, reason: string = 'user_cancelled'): boolean {
+  cancelCall(
+    callId: ToolCallId,
+    reason: string = 'user_cancelled',
+    requesterWebContentsId?: number
+  ): boolean {
     // active 인 경우
     const active = this.active.get(callId);
     if (active) {
+      if (
+        requesterWebContentsId !== undefined &&
+        requesterWebContentsId !== ToolQueue.NO_ORIGIN &&
+        active.web_contents_id !== ToolQueue.NO_ORIGIN &&
+        active.web_contents_id !== requesterWebContentsId
+      ) {
+        // origin 불일치 — 거절. 정상 UI 흐름은 같은 webContents.
+        return false;
+      }
       active.abort_controller.abort(reason);
       // tool.cancel cleanup hook (옵셔널) — fire-and-forget, 에러는 로그
       if (active.tool.cancel) {
@@ -413,6 +439,14 @@ export class ToolQueue {
     // pending 인 경우 — entry.cancel 으로 enqueue 의 promise 즉시 resolve
     const pending = this.pending.find((p) => p.call.id === callId);
     if (pending) {
+      if (
+        requesterWebContentsId !== undefined &&
+        requesterWebContentsId !== ToolQueue.NO_ORIGIN &&
+        pending.web_contents_id !== ToolQueue.NO_ORIGIN &&
+        pending.web_contents_id !== requesterWebContentsId
+      ) {
+        return false;
+      }
       pending.cancel(reason);
       return true;
     }
@@ -422,30 +456,46 @@ export class ToolQueue {
 
   /**
    * 같은 turn 의 모든 active + pending 취소.
+   *
+   * v1.1.4 hotfix (Codex Q10): requesterWebContentsId 와 owner 가 다른 calls
+   * 는 skip. 같은 webContents 의 calls 만 취소.
+   *
    * @returns 취소된 call 개수.
    */
-  cancelTurn(turnId: TurnId, reason: string = 'turn_cancelled'): number {
+  cancelTurn(
+    turnId: TurnId,
+    reason: string = 'turn_cancelled',
+    requesterWebContentsId?: number
+  ): number {
     let count = 0;
+    const matchOwner = (ownerWcid: number): boolean => {
+      if (requesterWebContentsId === undefined) return true;
+      if (requesterWebContentsId === ToolQueue.NO_ORIGIN) return true;
+      if (ownerWcid === ToolQueue.NO_ORIGIN) return true;
+      return ownerWcid === requesterWebContentsId;
+    };
 
     // active: abort + cleanup hook
     for (const exec of this.active.values()) {
-      if (exec.call.turn_id === turnId) {
-        exec.abort_controller.abort(reason);
-        if (exec.tool.cancel) {
-          exec.tool.cancel(exec.context).catch((err: unknown) => {
-            exec.log.push({
-              level: 'error',
-              timestamp: new Date().toISOString(),
-              message: `tool.cancel() failed: ${err instanceof Error ? err.message : String(err)}`,
-            });
+      if (exec.call.turn_id !== turnId) continue;
+      if (!matchOwner(exec.web_contents_id)) continue;
+      exec.abort_controller.abort(reason);
+      if (exec.tool.cancel) {
+        exec.tool.cancel(exec.context).catch((err: unknown) => {
+          exec.log.push({
+            level: 'error',
+            timestamp: new Date().toISOString(),
+            message: `tool.cancel() failed: ${err instanceof Error ? err.message : String(err)}`,
           });
-        }
-        count += 1;
+        });
       }
+      count += 1;
     }
 
     // pending: cancel callback 으로 enqueue promise 즉시 resolve
-    const toCancel = this.pending.filter((p) => p.call.turn_id === turnId);
+    const toCancel = this.pending.filter(
+      (p) => p.call.turn_id === turnId && matchOwner(p.web_contents_id)
+    );
     for (const entry of toCancel) {
       entry.cancel(reason);
       count += 1;
@@ -949,7 +999,8 @@ export class ToolQueue {
    *          또는 'cancelled' 시 reason 문자열.
    */
   private async waitForCapacity(
-    call: ToolCall
+    call: ToolCall,
+    webContentsId: number
   ): Promise<{ ok: true } | { ok: false; reason: string }> {
     if (this.hasCapacity(call.session_id)) {
       this.reserveSlot(call.session_id);
@@ -960,6 +1011,7 @@ export class ToolQueue {
     return new Promise<{ ok: true } | { ok: false; reason: string }>((resolve) => {
       const entry: PendingEntry = {
         call,
+        web_contents_id: webContentsId,
         notify: () => {
           // capacity 잡혔는지 다시 체크 — 다른 waiter 와 race 가능
           if (this.hasCapacity(call.session_id)) {
@@ -1017,7 +1069,8 @@ export class ToolQueue {
     call: ToolCall,
     tool: Tool,
     validatedInput: unknown,
-    session: Session
+    session: Session,
+    webContentsId: number
   ): Promise<ToolResult> {
     const startedAt = new Date().toISOString();
     const abortController = new AbortController();
@@ -1057,6 +1110,7 @@ export class ToolQueue {
       abort_controller: abortController,
       log,
       side_effects: sideEffects,
+      web_contents_id: webContentsId,
     };
     this.active.set(call.id, exec);
 

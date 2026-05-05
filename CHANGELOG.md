@@ -2,6 +2,76 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.4] — 2026-05-06
+
+**Real CLI integration e2e 슬롯 첫 commit — Codex Q10 권고 보안 prep.**
+
+Codex Q10 외부 검토에서 v1.1.3 까지 미해결된 두 가지 IPC origin 검증
+gap 지적:
+
+1. **`tool/cancel-call`, `tool/cancel-turn` origin 미검증** — 다른
+   webContents 가 임의로 active call 또는 turn 을 abort 시키는 attack
+   면. privilege escalation 은 아니지만 cross-window DoS 가능.
+2. **`IpcPermissionConfirmer` -1 sentinel future footgun** — production
+   main 에는 도달 불가 (send 가 항상 `{sent, web_contents_id}` 반환)
+   이지만, 다른 caller 가 -1 owner 의 request 를 만들면 모든 sender 가
+   응답 가능했던 코드 path. fail-closed 로 정리.
+
+### Fixed (Security)
+
+- **`cancelCall` / `cancelTurn` origin 검증** (Codex Q10):
+  - `ToolQueue.cancelCall(callId, reason, requesterWebContentsId?)` —
+    active call 의 `web_contents_id` 와 비교, 다르면 false 반환 (no-op).
+  - `ToolQueue.cancelTurn(turnId, reason, requesterWebContentsId?)` —
+    같은 owner 의 calls 만 cancel. 다른 owner 의 calls 는 skip.
+  - NO_ORIGIN(0) 또는 미지정 = 호환 (테스트 / 프로그램적 호출).
+  - `ActiveExecution.web_contents_id` + `PendingEntry.web_contents_id`
+    필드 — runTool 진입 + waitForCapacity 시 webContentsId 캡처.
+  - `tool/cancel-call`, `tool/cancel-turn` IPC 핸들러가
+    `event.sender.id` 전달.
+
+- **IpcPermissionConfirmer -1 sentinel fail-closed** (Codex Q10):
+  - `respond` 가 `senderWebContentsId !== undefined` + owner === -1 인
+    경우 fail-closed. 이전엔 모든 sender 수락 (legacy 호환 명목).
+  - `getPendingRequests(senderId)` 가 owner === -1 인 request 를 노출 X.
+  - production 정합성 — main 의 send 는 항상 owner 추적 (-1 도달 불가).
+    legacy boolean send 는 sender 미지정 시만 수락 (테스트 호환).
+
+### Added (Tests)
+
+- **`tests/tools/Queue.cancel-origin.test.ts`** — 6 시나리오:
+  - cancelCall 같은 webContents 수락 / 다른 webContents 거절.
+  - requesterWebContentsId 미지정 호환.
+  - owner === NO_ORIGIN 모든 sender 수락.
+  - cancelTurn 같은 webContents 의 calls 만 취소.
+  - cancelTurn 미지정 모든 calls 취소 (legacy).
+
+- **`tests/main/IpcPermissionConfirmer.test.ts`** 갱신:
+  - boolean send + sender 명시 → fail-closed (이전엔 -1 모든 수락이었음).
+  - sender 미지정 → 수락 (테스트 호환).
+
+### Verified
+
+- typecheck clean
+- lint pre-existing 4 errors + 2 warnings only
+- unit: 1564/1571 — 7 fail 모두 v1.1.3 baseline 동일 (회귀 0)
+- 신규 6 unit (Queue.cancel-origin) + 갱신 1 (IpcPermissionConfirmer
+  legacy fail-closed) 통과
+
+### Notes
+
+- **v1.1.4 슬롯 = "Real CLI integration e2e"** 의 첫 commit (보안 prep).
+  나머지 작업은 후속 commits:
+  - VCR fixture format + fake-claude-cli.js + provider env override.
+  - drive14 (Claude CLI tool_use round-trip) — argv-last + KR cwd +
+    permission flow + 저장된 tool turn 검증.
+  - drive15 (KR cwd + streaming) / drive16 (failure modes) /
+    drive17 (VCR drift detection).
+- **`permission/grants/list` / `grants/revoke` owner binding** 은 mainWindow
+  1개 가정 환경 (production 현재) 에서는 사실상 trivial — Codex Q10 은
+  "외부 릴리스 전 합치기" 권고했으나 melti-window 도입 (v1.2.x scope)
+  시점에 적정 architectural fix. v1.1.4 에서는 -1 fail-closed 로 충분.
+
 ## [1.1.3] — 2026-05-06
 
 **v1.1.2 SEC-2 hotfix 의 외부 검토 후속 — Codex Q9 strict blind spot 청산.**

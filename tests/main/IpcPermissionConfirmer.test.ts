@@ -182,14 +182,21 @@ describe('v1.1.3 hotfix — respond owner binding (Codex Q9)', () => {
     await promise;
   });
 
-  it('boolean send (legacy) 는 owner 추적 X — 모든 sender 수락', async () => {
+  it('boolean send (legacy) — sender 미지정 시 수락, sender 명시 시 fail-closed', async () => {
+    // v1.1.4 hotfix (Codex Q10): -1 sentinel 정리. legacy boolean send 는
+    // owner 미추적 (-1) — production 도달 불가. sender 명시 시 fail-closed.
     const confirmer = new IpcPermissionConfirmer({
       send: () => true, // legacy boolean
       timeout_ms: 1_000_000,
     });
     const promise = confirmer.confirm(sampleRequest({ request_id: 'legacy-bool' }));
-    // 임의 sender — 수락 (-1 sentinel 은 모든 sender 수락 의미).
-    const matched = confirmer.respond('legacy-bool', 'once', undefined, 999);
+    // sender 명시 — fail-closed (production 정합성).
+    const droppedMatched = confirmer.respond('legacy-bool', 'once', undefined, 999);
+    expect(droppedMatched).toBe(false);
+    // pending 그대로 유지.
+    expect(confirmer.getPendingRequests().length).toBe(1);
+    // sender 미지정 — 수락 (테스트 호환).
+    const matched = confirmer.respond('legacy-bool', 'once');
     expect(matched).toBe(true);
     await promise;
   });

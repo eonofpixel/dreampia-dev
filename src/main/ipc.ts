@@ -1611,7 +1611,7 @@ function registerToolHandlers(tools: ToolHandlerConfig): void {
     }
   });
 
-  ipcMain.handle('tool/cancel-call', (_evt, callId: unknown, reason: unknown): Result<boolean> => {
+  ipcMain.handle('tool/cancel-call', (event, callId: unknown, reason: unknown): Result<boolean> => {
     try {
       if (typeof callId !== 'string') {
         throw new Error('call id must be string');
@@ -1619,13 +1619,19 @@ function registerToolHandlers(tools: ToolHandlerConfig): void {
       if (reason !== undefined && typeof reason !== 'string') {
         throw new Error('reason must be string');
       }
-      return ok(tools.queue.cancelCall(callId as ToolCallId, reason));
+      // v1.1.4 hotfix (Codex Q10): event.sender.id 를 cancelCall 에 전달.
+      // call owner webContents 와 다르면 거절.
+      const requesterId =
+        typeof (event as { sender?: { id?: unknown } } | undefined)?.sender?.id === 'number'
+          ? (event as { sender: { id: number } }).sender.id
+          : undefined;
+      return ok(tools.queue.cancelCall(callId as ToolCallId, reason, requesterId));
     } catch (err) {
       return fail(err);
     }
   });
 
-  ipcMain.handle('tool/cancel-turn', (_evt, turnId: unknown, reason: unknown): Result<number> => {
+  ipcMain.handle('tool/cancel-turn', (event, turnId: unknown, reason: unknown): Result<number> => {
     try {
       if (typeof turnId !== 'string') {
         throw new Error('turn id must be string');
@@ -1633,7 +1639,13 @@ function registerToolHandlers(tools: ToolHandlerConfig): void {
       if (reason !== undefined && typeof reason !== 'string') {
         throw new Error('reason must be string');
       }
-      return ok(tools.queue.cancelTurn(turnId as TurnId, reason));
+      // v1.1.4 hotfix (Codex Q10): event.sender.id 를 cancelTurn 에 전달.
+      // 다른 webContents 의 active calls 는 skip — 같은 owner 만 취소.
+      const requesterId =
+        typeof (event as { sender?: { id?: unknown } } | undefined)?.sender?.id === 'number'
+          ? (event as { sender: { id: number } }).sender.id
+          : undefined;
+      return ok(tools.queue.cancelTurn(turnId as TurnId, reason, requesterId));
     } catch (err) {
       return fail(err);
     }

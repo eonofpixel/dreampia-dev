@@ -365,6 +365,12 @@ export interface ActiveExecution {
   log: LogEntry[];
   /** v1.0.11 SEC-4: ctx.record_side_effect() 누적 — result.side_effects source. */
   side_effects: SideEffect[];
+  /**
+   * v1.1.4 hotfix (Codex Q10): IPC 출처 webContentsId. cancelCall/cancelTurn 의
+   * requester webContentsId 와 비교해서 다른 webContents 의 cancel 시도 거절.
+   * NO_ORIGIN(0) = 테스트/프로그램적 호출 — 모든 cancel 수락 (호환).
+   */
+  web_contents_id: number;
 }
 
 // ────────────────────────────────────────────────────────────
