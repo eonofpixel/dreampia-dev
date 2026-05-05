@@ -43,6 +43,14 @@ export interface VcrTestOptions {
   vcrFixture: string;
 }
 
+export interface MakeVcrTestOptions {
+  /**
+   * v1.1.8 (drive15): workspace 디렉토리 이름에 한국어 prefix. KR cwd 회귀
+   * lock — Codex Q5 picking 의 한국어 폴더 처리 검증.
+   */
+  koreanWorkspace?: boolean;
+}
+
 /**
  * Spec 단위로 VCR fixture path 를 주입하는 base test.
  *
@@ -50,8 +58,11 @@ export interface VcrTestOptions {
  *   import { makeVcrTest } from './fixtures-vcr';
  *   const test = makeVcrTest('claude/tool-use-roundtrip.json');
  *   test('drive14 — ...', async ({ window, ... }) => { ... });
+ *
+ *   const krTest = makeVcrTest('claude/tool-use-roundtrip.json', { koreanWorkspace: true });
+ *   krTest('drive15 — KR cwd ...', ...);
  */
-export function makeVcrTest(fixtureRelPath: string) {
+export function makeVcrTest(fixtureRelPath: string, options: MakeVcrTestOptions = {}) {
   const fixturePath = resolve(
     __dirname,
     '..',
@@ -60,6 +71,7 @@ export function makeVcrTest(fixtureRelPath: string) {
     'cli-vcr',
     fixtureRelPath
   );
+  const wsPrefix = options.koreanWorkspace === true ? 'dreampia-한국어-' : 'dreampia-ws-vcr-';
   return base.extend<VcrFixtures>({
     userDataDir: async ({}, use) => {
       const dir = mkdtempSync(join(tmpdir(), 'dreampia-e2e-vcr-'));
@@ -72,7 +84,7 @@ export function makeVcrTest(fixtureRelPath: string) {
     },
 
     workspaceDir: async ({}, use) => {
-      const dir = mkdtempSync(join(tmpdir(), 'dreampia-ws-vcr-'));
+      const dir = mkdtempSync(join(tmpdir(), wsPrefix));
       writeFileSync(join(dir, 'sample.txt'), 'fixture sample\n', 'utf-8');
       writeFileSync(join(dir, 'src.ts'), 'export const x = 1;\n', 'utf-8');
       await use(dir);

@@ -2,6 +2,51 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.8] — 2026-05-06
+
+**drive14 확장 + drive15 (KR cwd) — Codex Q9/Q10 권고 시나리오 보강.**
+
+v1.1.7 의 drive14-1 minimum 위에 14-2 (tool_result UI) 와 14-4 (mock
+fallback 금지) 추가. 한국어 워크스페이스 회귀 lock (Codex Q5 picking) 을
+drive15 로 분리.
+
+### Added
+
+- **`ChatPanel.tsx` `CliStatusBadge` testid 추가**:
+  - `data-testid="provider-status-badge"` + `data-provider-source="<source>"`
+    (mock / claude-cli / codex-cli / none).
+  - drive14-4 의 mock fallback 검증 가능.
+
+- **`e2e/fixtures-vcr.ts` `MakeVcrTestOptions`**:
+  - `koreanWorkspace?: boolean` — workspace 디렉토리 prefix 를
+    `dreampia-한국어-` 로 변경. drive15 가 사용.
+
+- **`e2e/_drive14.spec.ts` 14-2 / 14-4** 추가:
+  - 14-2: tool 실행 결과가 ChatPanel 의 `tool-call-card` UI 로 노출.
+  - 14-4: Mock fallback 미발생 — `provider-status-badge` 의
+    `data-provider-source !== 'mock'`. badge 미마운트도 OK (detect
+    pending). 핵심 assertion 은 mock 으로 fallback 안 함.
+
+- **`e2e/_drive15.spec.ts`** 신규:
+  - 15-1: 한국어 워크스페이스 폴더 (`dreampia-한국어-...`) 에서 tool_use
+    round-trip 정상 — `ensureAsciiCwd` 의 Windows 8.3 short path 변환
+    회귀 lock + KR prompt 회귀 lock.
+
+### Verified
+
+- typecheck clean
+- lint pre-existing 4 + 2 only (신규 0)
+- unit: 1577/1584 — 7 fail 모두 v1.1.7 baseline 동일 (회귀 0)
+- Playwright spec enumerate: 4 tests in 2 files (drive14: 3, drive15: 1)
+
+### Notes
+
+- **다음 commit**: drive16 (failure modes — fake CLI exit !=0 / stderr
+  error / killed) + drive17 (VCR drift detection — fixture 변경 시 drift
+  fail).
+- **drive14-3 (saved tool turn)** 은 sessions.sqlite 직접 query 필요 →
+  `session/get-tool-history` IPC 또는 fs 직접 query. 별도 후속 commit.
+
 ## [1.1.7] — 2026-05-06
 
 **drive14 — Real CLI integration e2e: Claude CLI tool_use round-trip

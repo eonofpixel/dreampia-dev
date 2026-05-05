@@ -481,6 +481,8 @@ function CliStatusBadge({ status }: { status: CliStatus }): React.JSX.Element | 
         title="Mock provider in use (CLI not detected)"
         aria-label="Mock provider"
         className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px]"
+        data-testid="provider-status-badge"
+        data-provider-source="mock"
       >
         Mock
       </span>
@@ -493,6 +495,8 @@ function CliStatusBadge({ status }: { status: CliStatus }): React.JSX.Element | 
         title={`Claude CLI ${v} detected at ${status.claude.path}`}
         aria-label={`Claude CLI ${v}`}
         className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px]"
+        data-testid="provider-status-badge"
+        data-provider-source="claude-cli"
       >
         Claude CLI {v}
       </span>
@@ -505,6 +509,8 @@ function CliStatusBadge({ status }: { status: CliStatus }): React.JSX.Element | 
         title={`Codex CLI ${v} detected at ${status.codex.path}`}
         aria-label={`Codex CLI ${v}`}
         className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px]"
+        data-testid="provider-status-badge"
+        data-provider-source="codex-cli"
       >
         Codex CLI {v}
       </span>
@@ -515,6 +521,8 @@ function CliStatusBadge({ status }: { status: CliStatus }): React.JSX.Element | 
       title="No CLI detected — using Mock"
       aria-label="No CLI"
       className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px]"
+      data-testid="provider-status-badge"
+      data-provider-source="none"
     >
       No CLI
     </span>
