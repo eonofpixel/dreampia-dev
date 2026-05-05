@@ -2,6 +2,22 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.26] — 2026-05-06
+
+**Loading skeleton — 통일 컴포넌트.**
+
+`src/renderer/components/skeleton/Skeleton.tsx` 의 base + 두 사용처 preset
+(`SidebarSessionsSkeleton`, `ChatTurnSkeleton`). Tailwind animate-pulse +
+bg-bg-tertiary. role=status + aria-label optional.
+
+- Skeleton primitive (div / span variant).
+- SidebarSessionsSkeleton — 5 placeholder.
+- ChatTurnSkeleton — 2 라인.
+- 5 unit (default / span / aria / sessions / chat).
+
+후속: 실제 사용처 wire-up (Sidebar 가 sessions list loading 중 표시 / Chat
+panel 이 hydration 중 표시).
+
 ## [1.1.25] — 2026-05-06
 
 **Error 경로 → toasts.error() 마이그레이션 (시작).**
