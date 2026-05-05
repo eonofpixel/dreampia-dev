@@ -60,8 +60,8 @@ test.describe('drive r5 — drift detection', () => {
     // 6) tooltip (title) 이 원래 폴더 이름을 포함하는지.
     const titleAttr = await badge.getAttribute('title');
     expect(titleAttr).not.toBeNull();
-    // fixture 의 tmpdir basename 은 'dreampia-e2e-XXXXXX' 형식.
-    expect(titleAttr ?? '').toMatch(/dreampia-e2e-/);
+    // v1.0.14: fixture 의 workspace 가 'dreampia-ws-XXXXXX' (이전엔 e2e-).
+    expect(titleAttr ?? '').toMatch(/dreampia-(e2e|ws)-/);
 
     // 7) v1.0.7 — Codex 검토 후 추가: ChatHeader layout 회귀 가드.
     //    drift badge 가 들어가도 header 가 단일 row 로 유지되어야 한다.

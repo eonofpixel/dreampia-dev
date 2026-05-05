@@ -487,36 +487,9 @@ function fail(err: unknown): { ok: false; error: string } {
   return { ok: false, error: toErrorMessage(err) };
 }
 
-/**
- * v1.0.13 (META-4): 사용자가 workspace 로 선택한 폴더가 Electron userData
- * 폴더와 충돌하는지 검사. Codex 권고 (a): 정확 일치 + parent + child 모두
- * 차단 — SQLite WAL/journal/sessions.sqlite 파일 노출 위험.
- *
- * @returns 차단 사유 (사용자 메시지) 또는 null (안전).
- */
-function checkUserDataConflict(picked: string, userDataDir: string): string | null {
-  // realpath 까지는 무겁고 Windows path 비교는 case-insensitive — 일단
-  // path.resolve + 소문자 비교로 충분 (대부분의 케이스 커버).
-  const resolvedPicked = path.resolve(picked);
-  const resolvedUd = path.resolve(userDataDir);
-  // Windows 는 case-insensitive — toLowerCase 후 비교. POSIX 도 그대로
-  // 동작 (실제 운영에서 사용자가 대소문자 차이로 우회 시도 X).
-  const a = process.platform === 'win32' ? resolvedPicked.toLowerCase() : resolvedPicked;
-  const b = process.platform === 'win32' ? resolvedUd.toLowerCase() : resolvedUd;
-
-  if (a === b) {
-    return `선택한 폴더 "${picked}" 가 앱 데이터 폴더 "${userDataDir}" 와 정확히 같아요. SQLite WAL/journal 파일이 작업 폴더에 노출되면 위험합니다. 다른 폴더를 선택해주세요.`;
-  }
-  // picked 가 userData 안 (자식)
-  if (a.startsWith(`${b}${path.sep}`) || a.startsWith(`${b}/`)) {
-    return `선택한 폴더 "${picked}" 가 앱 데이터 폴더 "${userDataDir}" 안에 있어요. SQLite 파일이 같은 트리에 있으면 사용자 실수로 손상 가능. 다른 위치의 폴더를 선택해주세요.`;
-  }
-  // picked 가 userData 의 부모
-  if (b.startsWith(`${a}${path.sep}`) || b.startsWith(`${a}/`)) {
-    return `선택한 폴더 "${picked}" 가 앱 데이터 폴더 "${userDataDir}" 의 상위 폴더에요. SQLite 파일이 작업 폴더 안에 노출됩니다. 더 깊은 곳의 폴더를 선택해주세요.`;
-  }
-  return null;
-}
+// v1.0.14: workspaceConflict 모듈로 추출 (ipc.ts + main/index.ts 공유 + 단위
+// 테스트). 본 파일에서 sym re-export.
+import { checkUserDataConflict } from './workspaceConflict';
 
 export interface LockHandlerConfig {
   /**
@@ -821,6 +794,19 @@ export function registerIpcHandlers(
       const settings = readSettings();
       if (typeof settings.workspace_root === 'string' && settings.workspace_root.length > 0) {
         const root = settings.workspace_root;
+        // v1.0.14 (META-4 hotfix — Codex blind spot 발견): 저장된 workspace
+        // 가 userData 폴더와 충돌하면 null 반환 + 사용자에게 picker 강제.
+        // v1.0.13 의 META-4 는 picker 시점만 차단했어서 이전 버전 / 수동
+        // settings 편집 / upgrade 시 우회 가능했음.
+        const userDataDir = electronApp.getPath('userData');
+        const conflict = checkUserDataConflict(root, userDataDir);
+        if (conflict !== null) {
+          console.warn(
+            '[app:get-default-workspace] saved workspace conflicts with userData — returning null:',
+            conflict
+          );
+          return ok(null);
+        }
         const name =
           typeof settings.workspace_name === 'string' && settings.workspace_name.length > 0
             ? settings.workspace_name
@@ -952,6 +938,17 @@ function registerWorkspaceHandlers(electronApp: App): void {
         typeof settings.workspace_name === 'string' &&
         settings.workspace_name.length > 0
       ) {
+        // v1.0.14 (META-4 hotfix): 저장된 workspace 가 userData 와 충돌하면
+        // null 반환 — 사용자가 picker 로 다시 선택해야 함.
+        const userDataDir = electronApp.getPath('userData');
+        const conflict = checkUserDataConflict(
+          settings.workspace_root,
+          userDataDir
+        );
+        if (conflict !== null) {
+          console.warn('[workspace/get] saved workspace conflicts with userData:', conflict);
+          return ok(null);
+        }
         return ok({ path: settings.workspace_root, name: settings.workspace_name });
       }
       return ok(null);

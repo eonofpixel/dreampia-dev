@@ -37,6 +37,12 @@ export interface DreampiaFixtures {
   app: ElectronApplication;
   window: Page;
   userDataDir: string;
+  /**
+   * v1.0.14: workspace_root 는 userDataDir 와 분리. v1.0.13 까지는 userDataDir
+   * 를 그대로 workspace 로 썼지만, v1.0.14 의 META-4 hotfix 가 그 케이스를
+   * userData 충돌로 차단함. e2e 도 userDataDir 와 별도 임시 폴더 사용.
+   */
+  workspaceDir: string;
 }
 
 export const test = base.extend<DreampiaFixtures>({
@@ -55,18 +61,38 @@ export const test = base.extend<DreampiaFixtures>({
     }
   },
 
-  app: async ({ userDataDir }, use) => {
+  workspaceDir: async ({}, use) => {
+    const dir = mkdtempSync(join(tmpdir(), 'dreampia-ws-'));
+    // v1.0.14: workspaceDir 가 userDataDir 와 분리되면서 빈 폴더가 됨.
+    // mention popover 등 일부 e2e 가 workspace 안 file list 에 의존하므로
+    // sample 파일 몇 개 미리 생성. fixture-level 이라 모든 spec 이 받음.
+    writeFileSync(join(dir, 'sample.txt'), 'fixture sample\n', 'utf-8');
+    writeFileSync(join(dir, 'session.md'), '# session\n', 'utf-8');
+    writeFileSync(join(dir, 'src.ts'), 'export const x = 1;\n', 'utf-8');
+    await use(dir);
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  },
+
+  app: async ({ userDataDir, workspaceDir }, use) => {
     // Phase 3 B2: 기존 16 e2e 가 onboarding wizard 에 막히지 않도록 settings.json
     // 을 미리 써둔다. wizard 자체를 검증하는 onboarding spec 은 별도 fixture 에서
     // 이 파일을 쓰지 않거나 비워둔 상태로 launch.
     // Spec: docs/ia/onboarding.md
+    //
+    // v1.0.14: workspace_root 는 userDataDir 가 아닌 별도 workspaceDir 사용
+    // (META-4 차단 회피). 이전엔 userDataDir 를 workspace 로 썼는데 v1.0.14
+    // 의 hotfix 가 그걸 정확히 막음.
     writeFileSync(
       join(userDataDir, 'settings.json'),
       JSON.stringify(
         {
           onboarding_completed: true,
-          workspace_root: userDataDir,
-          workspace_name: basename(userDataDir),
+          workspace_root: workspaceDir,
+          workspace_name: basename(workspaceDir),
         },
         null,
         2

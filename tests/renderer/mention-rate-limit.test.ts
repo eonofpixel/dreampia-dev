@@ -13,10 +13,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { resolveMentionsRich } from '../../src/renderer/mentions/resolver';
-import type {
-  MentionMatch,
-  ResolverContext,
-} from '../../src/renderer/mentions/resolver';
+import type { ResolverContext } from '../../src/renderer/mentions/resolver';
+import type { MentionMatch } from '../../src/renderer/mentions/parser';
 
 function fileMatch(path: string): MentionMatch {
   return {

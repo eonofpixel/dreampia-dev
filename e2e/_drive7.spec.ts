@@ -24,7 +24,7 @@ mkdirSync(SHOT_DIR, { recursive: true });
 test.describe('drive r7 — SEC-1 path guard (v1.0.9)', () => {
   test('28 — workspace/read-file rejects symlink pointing outside workspace', async ({
     window,
-    userDataDir,
+    workspaceDir,
   }) => {
     // 외부 폴더 + secret 파일 + workspace 안에 symlink 배치.
     const externalDir = join(tmpdir(), 'sec1-r7-external-' + Date.now());
@@ -32,8 +32,8 @@ test.describe('drive r7 — SEC-1 path guard (v1.0.9)', () => {
     const secretFile = join(externalDir, 'secret.txt');
     writeFileSync(secretFile, 'TOP-SECRET-EXTERNAL', 'utf-8');
 
-    // fixture 의 settings.json 가 workspace_root = userDataDir 로 셋업됨.
-    const workspaceRoot = userDataDir;
+    // v1.0.14: workspace_root 는 userDataDir 와 분리된 workspaceDir 사용.
+    const workspaceRoot = workspaceDir;
 
     const linkPath = join(workspaceRoot, 'evil-link.txt');
     let symlinkOk = true;
@@ -82,9 +82,10 @@ test.describe('drive r7 — SEC-1 path guard (v1.0.9)', () => {
 
   test('29 — workspace/read-file allows normal in-workspace file (positive control)', async ({
     window,
-    userDataDir,
+    workspaceDir,
   }) => {
-    const workspaceRoot = userDataDir;
+    // v1.0.14: workspace 는 userDataDir 와 분리된 별도 폴더.
+    const workspaceRoot = workspaceDir;
 
     // 정상 파일 생성 후 read.
     const normalFile = join(workspaceRoot, 'normal.txt');

@@ -2,6 +2,73 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.0.14] — 2026-05-05
+
+**META-4 hotfix — Codex 외부 검토 (Q5) 에서 발견된 P0 closure blind spot.**
+
+v1.0.13 의 META-4 가 `workspace/pick-folder` 시점만 차단하고, 저장된
+`settings.workspace_root` 는 `app:get-default-workspace` / `workspace/get`
+에서 재검증 없이 반환했다. 이전 버전 / 수동 settings 편집 / upgrade
+케이스에서 우회 가능했음.
+
+Codex 결론: "v1.0.14 급 hotfix 후보 — 본 커밋이 그것."
+
+### Fixed (Security)
+
+- **META-4 우회 청산**:
+  - `app:get-default-workspace` IPC 가 저장된 `workspace_root` 를 반환 전
+    `checkUserDataConflict` 재검증. 충돌 시 null 반환 → renderer 가
+    onboarding/picker 강제.
+  - `workspace/get` IPC 도 동일 재검증.
+  - **Boot 시점 dialog**: `app.whenReady` 직후 `checkSavedWorkspaceConflictAtBoot()`
+    가 settings 검사 + 충돌 시 사용자에게 명시 dialog ("저장된 작업 폴더가
+    위험합니다") + `writeSettings({workspace_root: undefined, workspace_name: undefined})`
+    로 자동 리셋. 기존 채팅 세션은 보존 (workspace_root 만 제거).
+  - packaged build 에서만 dialog (dev/e2e 자동화 흐름 보호).
+
+- **Module extraction**: `src/main/workspaceConflict.ts` — `checkUserDataConflict`
+  + `classifyUserDataConflict` 를 ipc.ts 에서 추출. main/index.ts 와 ipc.ts
+  가 같은 함수 사용 + 단위 테스트 가능.
+
+### Fixed (Docs)
+
+- `docs/v1.x-roadmap.md` 의 v1.1.0 sticky workspace lock migration 번호 정정:
+  **006 → 007** (006 은 v1.0.12 의 cost / audit 이 이미 사용). Codex 추가 발견.
+
+### Fixed (Test fixtures)
+
+- `e2e/fixtures.ts` 가 `workspace_root = userDataDir` 패턴을 사용했었음 — META-4
+  hotfix 가 정확히 차단하는 시나리오. 별도 `workspaceDir` fixture 추가, 두
+  폴더 분리. sample 파일 (sample.txt / session.md / src.ts) 미리 생성 —
+  mention popover 등 spec 호환.
+- `_drive7.spec.ts` 28/29 — `userDataDir` → `workspaceDir` 변경.
+- `_drive5.spec.ts` 23 — fixture path basename 정규식 `dreampia-(e2e|ws)-`.
+
+### Added (Tests)
+
+- `tests/main/workspaceConflict.test.ts` — 12 시나리오:
+  - 정확/자식/부모/무관/형제 분류.
+  - Windows case-insensitive (runIf platform=win32).
+  - Boundary safety (prefix-only false positive 방지).
+  - **Codex blind spot regression**: settings 우회 케이스 직접 검증.
+- `e2e/_drive12.spec.ts` — 2 시나리오 (별도 fixture 로 직접 settings 주입):
+  - 44: saved workspace_root = userDataDir → `app:get-default-workspace` null.
+  - 45: saved workspace_root = 정상 폴더 → 정상값 (회귀 0).
+
+### Verified
+
+- typecheck clean
+- lint: pre-existing 4 issues only — 새 추가 0
+- 756/756 unit (12 신규 workspaceConflict)
+- 11/11 spawnSafe
+- **54/54 drive e2e** (drive r1-r11 회귀 0 + drive12 2 신규)
+
+### Notes (P0 진짜 종료)
+
+Codex 의 v1.0.13 review 가 이 blind spot 을 잡지 못한 채 P0 종료를 선언했지만,
+본 hotfix 가 진짜로 P0 를 닫는다. **다음 슬롯 v1.1.0 (P1) 진입 가능**:
+SEC-2 full (권한 grant UI 본체) 가 Codex Q5 의 첫 슬롯 추천.
+
 ## [1.0.13] — 2026-05-05
 
 **P0 종료 슬롯 — FAKE 정리 + 입력/메타.**

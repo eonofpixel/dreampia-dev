@@ -28,7 +28,8 @@ import { ShellRunTool, ToolQueue, ToolRegistry, type ToolAuditEvent } from '@/to
 import { getDefaultProvider } from '@/providers/auto';
 import type { ProviderFactory } from './compare/orchestrator';
 import { CostGate, type CostLimits, type CostAuditEvent } from './CostGate';
-import { readSettings } from './settings';
+import { readSettings, writeSettings } from './settings';
+import { classifyUserDataConflict } from './workspaceConflict';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -63,6 +64,73 @@ const windowRuntimes = new Map<number, WindowRuntime>();
  *
  * Spec: docs/release.md, docs/performance/electron-tuning.md (Auto-update 섹션)
  */
+/**
+ * v1.0.14 (META-4 hotfix): boot 시점 saved workspace 충돌 검사.
+ *
+ * Codex 외부 검토에서 발견된 blind spot — v1.0.13 의 META-4 가 picker 시점만
+ * 차단해 이전 버전 / 수동 settings 편집 시 우회 가능했음. 본 함수가 boot
+ * 직후 settings.workspace_root 를 다시 검사 + 충돌 시 dialog + settings 리셋.
+ *
+ * 시퀀스:
+ *  1. settings.workspace_root 읽음.
+ *  2. userData 와 충돌 검사 (정확/자식/부모).
+ *  3. 충돌 → dialog "저장된 작업 폴더가 위험" + Confirm. settings 의
+ *     workspace_root / workspace_name 제거 → 다음 부팅 / 새 채팅 시 picker.
+ *  4. 충돌 X → no-op.
+ *
+ * 동기 dialog 가 main window 로딩을 막을 수 있어 setImmediate 한 tick 늦춤.
+ */
+async function checkSavedWorkspaceConflictAtBoot(): Promise<void> {
+  // window 가 ready-to-show 직후 띄우도록 짧은 delay.
+  await new Promise<void>((resolve) => setTimeout(resolve, 500));
+  try {
+    const settings = readSettings();
+    const root = settings.workspace_root;
+    if (typeof root !== 'string' || root.length === 0) return;
+
+    const userDataDir = app.getPath('userData');
+    const kind = classifyUserDataConflict(root, userDataDir);
+    if (kind === null) return;
+
+    const conflictLabel =
+      kind === 'exact'
+        ? 'userData 와 정확히 같은 폴더'
+        : kind === 'child'
+          ? 'userData 폴더 안'
+          : 'userData 의 부모 폴더';
+
+    const win = mainWindow;
+    if (win === null || win.isDestroyed()) return;
+
+    await dialog.showMessageBox(win, {
+      type: 'warning',
+      title: 'Dreampia-Dev — 저장된 작업 폴더가 위험합니다',
+      message: '저장된 작업 폴더를 사용할 수 없어요',
+      detail: [
+        `저장된 작업 폴더: ${root}`,
+        `앱 데이터 폴더: ${userDataDir}`,
+        `상태: ${conflictLabel}`,
+        '',
+        'SQLite WAL/journal/sessions.sqlite 파일이 작업 트리에 노출되면 사용자 실수로 손상될 위험이 있어요.',
+        '',
+        '확인을 누르면 저장된 작업 폴더 설정이 초기화되고, 사이드바의 [프로젝트] 에서 다른 폴더를 선택할 수 있어요. 기존 채팅 세션은 그대로 보존됩니다.',
+      ].join('\n'),
+      buttons: ['확인'],
+      defaultId: 0,
+    });
+
+    // settings 리셋 — workspace_root / workspace_name 제거.
+    // writeSettings 가 Partial<AppSettings> 를 받고 undefined 는 JSON.stringify
+    // 가 자연스럽게 drop 하므로 다음 부팅 시 saved 가 없는 상태.
+    writeSettings({
+      workspace_root: undefined,
+      workspace_name: undefined,
+    });
+  } catch (err) {
+    console.error('[checkSavedWorkspaceConflictAtBoot] failed:', err);
+  }
+}
+
 function setupAutoUpdater(): void {
   if (!app.isPackaged) return;
   autoUpdater.autoDownload = true;
@@ -375,6 +443,13 @@ app.whenReady().then(() => {
     auditLogStore
   );
   mainWindow = createMainWindow();
+
+  // v1.0.14 (META-4 hotfix — Codex blind spot): 저장된 workspace 가 userData
+  // 와 충돌하면 사용자에게 dialog 로 알리고 picker 강제 (settings 리셋).
+  // packaged build 에서만 표시 — dev/e2e 자동화 흐름 보호.
+  if (app.isPackaged) {
+    void checkSavedWorkspaceConflictAtBoot();
+  }
 
   // packaged build 에서만 GitHub Releases 폴링. dev/e2e 엔 영향 X.
   setupAutoUpdater();
