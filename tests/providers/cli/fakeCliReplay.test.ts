@@ -36,6 +36,15 @@ const FIXTURE_TEXT_HAPPY = resolve(
   'claude',
   'text-happy.json'
 );
+const FIXTURE_TOOL_USE = resolve(
+  __dirname,
+  '..',
+  '..',
+  'fixtures',
+  'cli-vcr',
+  'claude',
+  'tool-use-roundtrip.json'
+);
 
 function makeUserTurn(text: string): Turn {
   return {
@@ -103,6 +112,53 @@ describe('v1.1.5 — fake CLI replay (Tier 2 integration)', () => {
         }
 
         // 에러 event 없음 (happy path).
+        const errors = events.filter((e) => e.type === 'error');
+        expect(errors.length).toBe(0);
+      } finally {
+        if (originalEnv === undefined) delete process.env.DREAMPIA_VCR_FIXTURE;
+        else process.env.DREAMPIA_VCR_FIXTURE = originalEnv;
+      }
+    },
+    20_000
+  );
+
+  it(
+    'tool_use round-trip — assistant 가 shell_run tool 호출 → tool_call_complete event',
+    async () => {
+      const provider = new CliProvider({
+        binaryPath: execPath,
+        provider: 'claude',
+        translate: translateClaudeJsonl,
+        preArgs: [FAKE_CLI],
+      });
+
+      const originalEnv = process.env.DREAMPIA_VCR_FIXTURE;
+      process.env.DREAMPIA_VCR_FIXTURE = FIXTURE_TOOL_USE;
+      try {
+        const events = await collectStream(provider, {
+          turns: [makeUserTurn('현재 디렉토리 파일 목록 보여줘')],
+          model: 'claude-sonnet-4-6',
+        });
+
+        // text_delta + tool_call_start + tool_call_complete + message_complete.
+        const types = events.map((e) => e.type);
+        expect(types).toContain('text_delta');
+        expect(types).toContain('tool_call_start');
+        expect(types).toContain('tool_call_complete');
+        expect(types).toContain('message_complete');
+
+        // tool_call_complete 의 tool_id 가 'shell.run' (Claude convention:
+        // underscore → dot, shell_run → shell.run).
+        const completes = events.filter((e) => e.type === 'tool_call_complete');
+        expect(completes.length).toBe(1);
+        const tc = completes[0];
+        if (tc?.type === 'tool_call_complete') {
+          expect(tc.tool_call.tool_id).toBe('shell.run');
+          expect(tc.tool_call.id).toBe('toolu_vcr_001');
+          expect(tc.tool_call.input).toEqual({ command: 'ls' });
+        }
+
+        // 에러 event 없음.
         const errors = events.filter((e) => e.type === 'error');
         expect(errors.length).toBe(0);
       } finally {

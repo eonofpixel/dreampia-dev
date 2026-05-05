@@ -2,6 +2,45 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.6] — 2026-05-06
+
+**drive14 prep — Tool_use round-trip fixture + Tier 2 통합 검증.**
+
+v1.1.5 의 VCR 인프라 위에 tool_use 시나리오 추가. drive14 (Playwright e2e)
+는 후속 commit — 이번엔 main process layer 의 tool_use round-trip 만 검증.
+
+### Added (Fixtures + Tests)
+
+- **`tests/fixtures/cli-vcr/claude/tool-use-roundtrip.json`** — Claude CLI
+  의 `tool_use` block 을 포함한 fixture. 한국어 prompt "현재 디렉토리 파일
+  목록 보여줘" → assistant text + `shell_run` tool call + result.
+  - `tool_use.id` = `toolu_vcr_001` (안정적 ID — 검증 가능).
+  - `tool_use.input` = `{"command":"ls"}`.
+  - Claude convention: tool name `shell_run` → translator 가
+    `shell.run` 으로 변환 (underscore → dot).
+
+- **`tests/providers/cli/fakeCliReplay.test.ts`** — Tier 2 시나리오 신규 1:
+  - Tool_use round-trip: text_delta + tool_call_start + tool_call_complete
+    + message_complete event sequence.
+  - `tool_call.id` / `tool_id` / `input` 정확성 검증.
+  - 에러 event 0 (happy path).
+
+### Verified
+
+- typecheck clean
+- lint pre-existing 4 errors + 2 warnings only
+- 신규 1 unit (Tier 2 tool_use) 통과 — 합계 3/3 fakeCliReplay.
+
+### Notes
+
+- **다음 commit (drive14 e2e)**:
+  - `e2e/_drive14.spec.ts` — Playwright + Electron + 실제 UI flow.
+  - Fixtures 확장: `DREAMPIA_CLI_COMMAND` / `DREAMPIA_CLI_PREARGS` /
+    `DREAMPIA_VCR_FIXTURE` env 를 Electron launch 시 set.
+  - 검증: 사용자 메시지 → fake CLI 의 tool_use → PermissionApprovalCard
+    표시 → 'once' 클릭 → tool 실행 (fake) → tool_result UI →
+    저장된 tool turn (sessions.sqlite).
+
 ## [1.1.5] — 2026-05-06
 
 **Real CLI integration e2e 인프라 — Codex Q10 권고 (VCR fixture format +
