@@ -2,6 +2,17 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.18] — 2026-05-06
+
+**drive14-3 — saved tool turn 검증.**
+
+session/list + session/get IPC 통해 SessionStore 에 영속된 마지막
+assistant turn 의 tool_calls 가 1+ 개인지 검증.
+
+- e2e/_drive14.spec.ts 14-3 추가. window.evaluate 로 renderer 의
+  window.dreampia.session API 호출 — 가장 최근 session 의 마지막 assistant
+  turn 의 tool_calls 길이 확인.
+
 ## [1.1.17] — 2026-05-06
 
 **drive17 — VCR drift detection (Tier 2 vitest).**

@@ -88,6 +88,57 @@ test.describe('drive14 — Claude CLI tool_use round-trip (VCR)', () => {
   );
 
   test(
+    '14-3 — tool 실행 후 turn 의 tool_calls 가 SessionStore 에 영속',
+    async ({ window, app }) => {
+      await expect(window.getByTestId('sidebar-search-input')).toBeVisible({
+        timeout: 15_000,
+      });
+      const composer = window.getByTestId('chat-input');
+      await composer.fill('현재 디렉토리 파일 목록 보여줘');
+      await composer.press('Enter');
+
+      const card = window.getByTestId('permission-approval-card');
+      await expect(card).toBeVisible({ timeout: 20_000 });
+      await window.getByTestId('permission-approval-once').click();
+
+      const toolCard = window.getByTestId('tool-call-card');
+      await expect(toolCard).toBeVisible({ timeout: 15_000 });
+
+      // session/list → 가장 최근 session 의 turns 에 tool_calls 가 있는지.
+      // Playwright 의 evaluate 로 renderer 에서 IPC 호출.
+      const tool_call_count = await window.evaluate(async () => {
+        const w = window as unknown as { dreampia?: { session?: { list?: () => Promise<unknown> } } };
+        if (w.dreampia?.session?.list === undefined) return -1;
+        const result = (await w.dreampia.session.list()) as {
+          ok: boolean;
+          value?: Array<{ id: string }>;
+        };
+        if (!result.ok || result.value === undefined || result.value.length === 0) return -2;
+        const sessionId = result.value[0]?.id;
+        if (sessionId === undefined) return -3;
+        const w2 = window as unknown as {
+          dreampia?: { session?: { get?: (id: string) => Promise<unknown> } };
+        };
+        if (w2.dreampia?.session?.get === undefined) return -4;
+        const sessRes = (await w2.dreampia.session.get(sessionId)) as {
+          ok: boolean;
+          value?: {
+            conversation: {
+              turns: Array<{ role: string; tool_calls?: Array<{ tool_id: string }> }>;
+            };
+          };
+        };
+        if (!sessRes.ok || sessRes.value === undefined) return -5;
+        const turns = sessRes.value.conversation.turns;
+        const lastAssistant = [...turns].reverse().find((t) => t.role === 'assistant');
+        return lastAssistant?.tool_calls?.length ?? 0;
+      });
+      expect(tool_call_count).toBeGreaterThan(0);
+      void app; // 사용 안함 — 컨텍스트 hint.
+    }
+  );
+
+  test(
     '14-4 — Mock fallback 미발생 (provider source !== mock)',
     async ({ window }) => {
       // ai/detect-cli 결과가 cliStatus 에 set 된 후 badge 가 마운트. detect 는
