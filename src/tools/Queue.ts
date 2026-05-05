@@ -65,6 +65,31 @@ import { createContext } from './Context';
 import type { ToolRegistry } from './Registry';
 
 // ────────────────────────────────────────────────────────────
+// v1.1.1 hotfix (Codex Q7): high-risk capability set
+//
+// 사용자가 한 번 'always' 로 승인하면 영원히 noisy / dangerous 작업이 silent
+// 해질 capability 들. 이런 권한 요청은:
+//  1. confirmer 에 is_dangerous=true 강제 → renderer 가 center modal 사용.
+//  2. 'session' / 'always' 응답을 'once' 로 silently 다운그레이드.
+//
+// Codex 권고:
+//   `LOCAL_WRITE.delete`, `LOCAL_OUTSIDE_CWD.write`, `LOCAL_EXECUTE.elevated`,
+//   `NETWORK_REMOTE.upload` — 사용자 데이터 손실 / 권한 escalation / 외부
+//   업로드 등 회복 불가능한 작업.
+// ────────────────────────────────────────────────────────────
+
+const HIGH_RISK_CAPABILITIES: ReadonlySet<string> = new Set<string>([
+  'LOCAL_WRITE.delete',
+  'LOCAL_OUTSIDE_CWD.write',
+  'LOCAL_EXECUTE.elevated',
+  'NETWORK_REMOTE.upload',
+]);
+
+function isHighRiskCapability(cap: string): boolean {
+  return HIGH_RISK_CAPABILITIES.has(cap);
+}
+
+// ────────────────────────────────────────────────────────────
 // Options
 // ────────────────────────────────────────────────────────────
 
@@ -165,6 +190,15 @@ export class ToolQueue {
   private readonly grantPersister:
     | ((session_id: SessionId, grant: PermissionGrant, duration: 'session' | 'always') => void)
     | undefined;
+
+  /**
+   * v1.1.1 hotfix (Codex Q7 blind spot): 'session' grant 는 DB 영속 X — Queue
+   * 의 in-memory map 으로만 추적. 앱 재시작 시 자동 사라짐 (의도). 'always'
+   * 는 grantPersister 가 DB 저장.
+   *
+   * checkPermissions 가 Resolver 호출 전 session.permission.grants 와 머지.
+   */
+  private readonly sessionGrants = new Map<SessionId, PermissionGrant[]>();
 
   /** 현재 실행 중인 calls. */
   private readonly active = new Map<ToolCallId, ActiveExecution>();
@@ -442,6 +476,10 @@ export class ToolQueue {
   ): Promise<ToolError | null> {
     const caps = tool.required_capabilities(input);
 
+    // v1.1.1 hotfix: in-memory session grants 와 머지된 session 객체.
+    // Resolver 의 findActiveGrants 가 본 augmented session 의 grants 를 본다.
+    const augmentedSession = this.augmentSessionWithRuntimeGrants(session);
+
     for (const cap of caps) {
       const target = this.resolveTarget(tool, input, cap, session);
       const resolved: ResolvedTarget = {
@@ -472,8 +510,6 @@ export class ToolQueue {
               true // is_dangerous
             );
             if (userOk) continue;
-            // confirmer 거부 시 audit + ToolError. (askConfirmation 안에서
-            // emitPermissionDeniedAudit 가 이미 발행 — 중복 X.)
             return this.decisionToError(cap, decision);
           }
           // require_modal 인데 confirmer 가 없으면 v1.0.x 호환 deny.
@@ -482,7 +518,34 @@ export class ToolQueue {
         }
       }
 
-      const decision = isAllowed(cap, resolved, session, session.workspace.root);
+      // v1.1.1 hotfix (Codex Q7): high-risk capability 는 parent capability
+      // 매칭 (예: LOCAL_WRITE 가 LOCAL_WRITE.delete 자동 허용) 으로 우회되면
+      // 안 됨. Resolver 호출 전에 confirmer 강제 — 항상 dangerous modal.
+      if (isHighRiskCapability(cap) && this.confirmer !== undefined) {
+        const userOk = await this.askConfirmation(
+          tool,
+          call,
+          cap,
+          resolved,
+          session,
+          undefined, // hint
+          true // is_dangerous (high-risk → 강제 escalation)
+        );
+        if (userOk) continue;
+        const denyDecision: GrantDecision = {
+          allowed: false,
+          reason: 'requires_user_confirmation',
+          hint: `high-risk capability ${cap} requires explicit user approval`,
+        };
+        return this.decisionToError(cap, denyDecision);
+      }
+
+      const decision = isAllowed(
+        cap,
+        resolved,
+        augmentedSession,
+        augmentedSession.workspace.root
+      );
 
       if (decision.allowed) continue;
 
@@ -533,6 +596,9 @@ export class ToolQueue {
     isDangerous: boolean
   ): Promise<boolean> {
     if (this.confirmer === undefined) return false;
+    // v1.1.1 hotfix: high-risk capability 는 강제 dangerous → center modal.
+    const highRisk = isHighRiskCapability(capability);
+    const effectiveDangerous = isDangerous || highRisk;
     const requestedAt = new Date().toISOString();
     const request: PermissionRequest = {
       request_id: `pcr-${call.id}-${capability}-${Date.now()}`,
@@ -543,7 +609,7 @@ export class ToolQueue {
       capability,
       target: { kind: resolved.kind, value: resolved.value },
       ...(hint !== undefined && { hint }),
-      is_dangerous: isDangerous,
+      is_dangerous: effectiveDangerous,
       tool_display_name: tool.display.name,
       requested_at: requestedAt,
     };
@@ -566,24 +632,40 @@ export class ToolQueue {
       return false;
     }
 
+    // v1.1.1 hotfix: high-risk → 'session'/'always' 응답을 'once' 로 silently
+    // downgrade. UI 가 dangerous modal 만 노출했을 때도 사용자가 IPC 직접 호출
+    // 등으로 우회 시도하면 본 server-side downgrade 가 차단.
+    let effectiveDecision = response.decision;
+    if (
+      highRisk &&
+      (response.decision === 'session' || response.decision === 'always')
+    ) {
+      effectiveDecision = 'once';
+      this.emitPermissionDecisionAudit(
+        call,
+        capability,
+        resolved,
+        'permission.high_risk_downgrade',
+        'allowed',
+        `decision ${response.decision} downgraded to once (high-risk capability)`
+      );
+    }
+
     // Audit 기록 — 사용자 응답 종류 + reason.
-    const auditEvent = this.responseToAuditEvent(response.decision);
+    const auditEvent = this.responseToAuditEvent(effectiveDecision);
     this.emitPermissionDecisionAudit(
       call,
       capability,
       resolved,
       auditEvent,
-      response.decision === 'deny' ? 'denied' : 'allowed',
+      effectiveDecision === 'deny' ? 'denied' : 'allowed',
       response.reason
     );
 
-    if (response.decision === 'deny') return false;
+    if (effectiveDecision === 'deny') return false;
 
-    // 'session' / 'always' → grant 영속 (persister 가 처리).
-    if (
-      (response.decision === 'session' || response.decision === 'always') &&
-      this.grantPersister !== undefined
-    ) {
+    // 'session' / 'always' → grant 영속 분기.
+    if (effectiveDecision === 'session' || effectiveDecision === 'always') {
       const grantTarget = resolvedToGrantTarget(resolved);
       if (grantTarget !== null) {
         const grant: PermissionGrant = {
@@ -593,20 +675,68 @@ export class ToolQueue {
           target: grantTarget,
           granted_at: new Date().toISOString(),
           granted_by: 'user',
-          scope: response.decision === 'always' ? 'persistent' : 'session',
+          scope: effectiveDecision === 'always' ? 'persistent' : 'session',
           ...(response.reason !== undefined &&
             response.reason.length > 0 && { reason: response.reason }),
         };
-        try {
-          this.grantPersister(call.session_id, grant, response.decision);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error(`[ToolQueue] grantPersister failed: ${msg}`);
-          // grant 영속 실패 시에도 'once' 처럼 동작.
+
+        if (effectiveDecision === 'session') {
+          // v1.1.1 hotfix: 'session' grant 는 in-memory only — DB 영속 X.
+          // Queue 의 sessionGrants 가 다음 호출에 augmenting. 앱 재시작 =
+          // 사라짐 (의도). grantPersister 호출 X.
+          this.appendSessionGrant(call.session_id, grant);
+        } else if (this.grantPersister !== undefined) {
+          // 'always' → DB 영속.
+          try {
+            this.grantPersister(call.session_id, grant, 'always');
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`[ToolQueue] grantPersister failed: ${msg}`);
+            // grant 영속 실패 시에도 'once' 처럼 동작.
+          }
         }
       }
     }
     return true;
+  }
+
+  /**
+   * v1.1.1 hotfix: in-memory session grant 추가. checkPermissions 의 Resolver
+   * 호출 전 session.permission.grants 와 머지된다.
+   */
+  private appendSessionGrant(sessionId: SessionId, grant: PermissionGrant): void {
+    const list = this.sessionGrants.get(sessionId) ?? [];
+    list.push(grant);
+    this.sessionGrants.set(sessionId, list);
+  }
+
+  /**
+   * v1.1.1 hotfix: Resolver 호출 전 augmented session 빌드. session 자체는
+   * SessionStore.getSession 결과 (DB-backed) — mutation 하지 X. shallow copy
+   * + permission.grants 만 머지.
+   */
+  private augmentSessionWithRuntimeGrants(session: Session): Session {
+    const runtime = this.sessionGrants.get(session.id) ?? [];
+    if (runtime.length === 0) return session;
+    return {
+      ...session,
+      permission: {
+        ...session.permission,
+        grants: [...session.permission.grants, ...runtime],
+      },
+    };
+  }
+
+  /** Test / shutdown helper — in-memory session grant 모두 제거. */
+  clearSessionGrants(): void {
+    this.sessionGrants.clear();
+  }
+
+  /**
+   * Test inspection — 특정 세션의 in-memory grant 목록 (read-only).
+   */
+  getSessionGrants(sessionId: SessionId): ReadonlyArray<PermissionGrant> {
+    return this.sessionGrants.get(sessionId) ?? [];
   }
 
   /**

@@ -2,6 +2,76 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.1] — 2026-05-05
+
+**v1.1.0 SEC-2 full hotfix — Codex Q7 외부 검토 발견 두 blind spot 청산.**
+
+v1.1.0 commit 직후 Codex 가 strict 기준 두 가지 hole 발견:
+
+1. **'session' grant 가 DB 영속** — `expires_at=null` 로 저장돼 앱 재시작 후
+   에도 active. 사실상 'always' 와 같은 효과 (만료 없음).
+2. **High-risk capability 우회** — `LOCAL_WRITE.delete`, `LOCAL_OUTSIDE_CWD.write`,
+   `LOCAL_EXECUTE.elevated`, `NETWORK_REMOTE.upload` 가 dangerous_pattern 에만
+   묶여 있음. 사용자가 'always' 로 한 번 승인하면 영원히 silent. 또한
+   parent capability (예: `LOCAL_WRITE` → `LOCAL_WRITE.delete`) 매칭으로
+   confirm 없이 바로 통과.
+
+Codex 권고 그대로 반영. v1.1.0 → v1.1.1 release branch (main) 로 hotfix.
+
+### Fixed (Security)
+
+- **'session' grant in-memory only**:
+  - `ToolQueue` 에 `sessionGrants: Map<SessionId, PermissionGrant[]>` 추가.
+  - `askConfirmation` 의 'session' 응답 → `appendSessionGrant` (in-memory) +
+    grantPersister 호출 X. 'always' 만 grantPersister 호출 (DB 영속).
+  - `checkPermissions` 가 Resolver 호출 전 `augmentSessionWithRuntimeGrants`
+    로 session.permission.grants + sessionGrants 머지 (immutable shallow copy).
+  - 앱 재시작 = sessionGrants Map 초기화 = 'session' grant 자동 사라짐.
+  - main/index.ts grant_persister 단순화: `if (duration !== 'always') return`.
+
+- **High-risk capability 강제 escalation**:
+  - 새 `HIGH_RISK_CAPABILITIES` set: `LOCAL_WRITE.delete`,
+    `LOCAL_OUTSIDE_CWD.write`, `LOCAL_EXECUTE.elevated`, `NETWORK_REMOTE.upload`.
+  - **Resolver 호출 전 강제 confirm** — high-risk cap 만나면 parent capability
+    매칭 우회 차단. `is_dangerous=true` 강제 → renderer 가 center modal.
+  - **응답 silently downgrade**: 'session' / 'always' 응답 → 'once' 로
+    server-side downgrade. UI 가 의도와 달리 보내도 (또는 사용자가 IPC
+    직접 호출 등 우회 시도) 차단됨.
+  - audit event `permission.high_risk_downgrade` 영속 — 사용자 의도와 실제
+    적용 결정의 차이 추적 가능.
+
+- **`Queue` 추가 helper API** (test / inspection):
+  - `getSessionGrants(sessionId)` — 현재 in-memory grant 목록 (read-only).
+  - `clearSessionGrants()` — test/shutdown helper.
+
+### Added (Tests)
+
+- **`tests/tools/Queue.high-risk.test.ts`** — 8 시나리오:
+  - high-risk + session/always/deny 각 응답.
+  - high-risk → confirmer.is_dangerous=true 강제 검증.
+  - non-high-risk + session → in-memory 추가, persister X.
+  - non-high-risk + always → persister 호출, in-memory X (DB 만).
+  - 'session' grant 재호출 시 confirm 생략 (Resolver augmented 인식).
+  - clearSessionGrants helper.
+
+- **`tests/tools/Queue.permission.confirm.test.ts`** 갱신: 'session' 응답
+  → in-memory only + persister 호출 X 검증으로 변경 (v1.1.1 행동 반영).
+
+### Verified
+
+- typecheck clean
+- lint: pre-existing 4 issues only — 새 추가 0
+- 115/115 tools + main unit (8 신규 high-risk + 기존 회귀 0)
+- 11/11 spawnSafe
+- 59/59 drive e2e (drive r1-r13 모두 회귀 0 — IPC layer 무관 변경)
+
+### Notes
+
+- **drive harness 신규 X**: hotfix 가 Queue 내부 로직 변경이라 unit 으로
+  충분 검증. 8 신규 unit + 기존 SEC-2 unit (15) 가 contract 보장.
+- v1.1.x 후속 (Codex Q7 권고): v1.1.2 Real CLI integration e2e (VCR + live
+  gated), v1.1.3 Workspace UX, v1.1.4 Plugin Loader MVP, v1.1.5 Loading/Error.
+
 ## [1.1.0] — 2026-05-05
 
 **SEC-2 full — 권한 승인 modal + Queue async pause-resume + grant 관리.**

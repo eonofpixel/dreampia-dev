@@ -29,7 +29,7 @@ import type {
 } from '../../src/tools/types';
 import type { Capability } from '../../src/permission';
 import type { PermissionGrant } from '../../src/types/permission';
-import type { Session, SessionId, ToolCallId, TurnId } from '../../src/types';
+import type { Session, ToolCallId, TurnId } from '../../src/types';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = join(__dirname, '..', 'fixtures', 'sessions');
@@ -123,44 +123,45 @@ describe('ToolQueue — SEC-2 full async pause-resume', () => {
     expect(granted?.outcome).toBe('allowed');
   });
 
-  it("'session' 응답 → 통과 + grantPersister 호출 (duration='session')", async () => {
+  it("'session' 응답 → 통과 + in-memory grant only (v1.1.1: DB 영속 X)", async () => {
     const session = loadSession();
     const reg = new ToolRegistry();
     reg.register(makeConfirmTool());
     const { confirmer } = makeConfirmer('session');
-    let persistedDuration: 'session' | 'always' | null = null;
-    let persistedGrant: PermissionGrant | null = null;
+    const persister = vi.fn();
     const q = new ToolQueue(reg, () => session, {
       permission_confirmer: confirmer,
-      grant_persister: (sid, grant, d) => {
-        void sid;
-        persistedGrant = grant;
-        persistedDuration = d;
-      },
+      grant_persister: persister,
     });
     const result = await q.enqueue(makeCall({ input: {} }));
     expect(result.status).toBe('success');
-    expect(persistedDuration).toBe('session');
-    expect(persistedGrant).not.toBeNull();
-    expect(persistedGrant?.scope).toBe('session');
+    // v1.1.1: 'session' 은 grantPersister 호출 X.
+    expect(persister).not.toHaveBeenCalled();
+    // 그러나 in-memory sessionGrants 에는 추가됨 — 같은 세션의 다음 호출이
+    // 같은 capability + target 으로 confirm 거치지 않고 통과.
+    const inMemory = q.getSessionGrants(session.id);
+    expect(inMemory.length).toBe(1);
+    expect(inMemory[0]?.scope).toBe('session');
   });
 
-  it("'always' 응답 → 통과 + scope='persistent'", async () => {
+  it("'always' 응답 → 통과 + grantPersister 호출 (duration='always')", async () => {
     const session = loadSession();
     const reg = new ToolRegistry();
     reg.register(makeConfirmTool());
     const { confirmer } = makeConfirmer('always', { reason: 'trust' });
-    let persistedGrant: PermissionGrant | null = null;
+    const persistedGrants: { duration: 'session' | 'always'; grant: PermissionGrant }[] = [];
     const q = new ToolQueue(reg, () => session, {
       permission_confirmer: confirmer,
-      grant_persister: (_sid, grant) => {
-        persistedGrant = grant;
+      grant_persister: (_sid, grant, d) => {
+        persistedGrants.push({ duration: d, grant });
       },
     });
     const result = await q.enqueue(makeCall({ input: {} }));
     expect(result.status).toBe('success');
-    expect(persistedGrant?.scope).toBe('persistent');
-    expect(persistedGrant?.reason).toBe('trust');
+    expect(persistedGrants.length).toBe(1);
+    expect(persistedGrants[0]?.duration).toBe('always');
+    expect(persistedGrants[0]?.grant.scope).toBe('persistent');
+    expect(persistedGrants[0]?.grant.reason).toBe('trust');
   });
 
   it("'deny' 응답 → permission_denied error", async () => {

@@ -342,12 +342,11 @@ app.whenReady().then(() => {
     audit_sink: toolAuditSink,
     permission_confirmer: permissionConfirmer,
     grant_persister: (sessionId, grant, duration) => {
-      // 'session' / 'always' 둘 다 DB 영속 — Resolver 의 findActiveGrants 가
-      // session_id + revoked_at IS NULL 로 즉시 활성화. 'session' 은 expires_at
-      // 미설정 (앱 재시작 시 사라지는 효과는 사용자가 settings 에서 수동 revoke).
-      // 더 정교한 'session' lifecycle 은 v1.1.x 후속.
+      // v1.1.1 hotfix (Codex Q7 blind spot): 'always' 만 DB 영속.
+      // 'session' grant 는 Queue 의 in-memory sessionGrants 가 처리 — Queue
+      // 가 grantPersister 호출 자체를 안 함. 본 콜백은 'always' 만 받음.
       void sessionId;
-      void duration;
+      if (duration !== 'always') return;
       sessionStore?.addPermissionGrant(grant);
     },
   });
