@@ -2,6 +2,56 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.7] — 2026-05-06
+
+**drive14 — Real CLI integration e2e: Claude CLI tool_use round-trip
+(Codex Q9/Q10 권고 본격 시나리오).**
+
+v1.1.5 의 VCR 인프라 + v1.1.6 의 tool_use fixture 위에 Playwright e2e
+spec 추가. Production code path (CliProvider) + IPC + Queue + Permission
++ React UI 가 한 통합 시나리오에서 검증.
+
+### Added
+
+- **`e2e/fixtures-vcr.ts`** — VCR variant Playwright fixture:
+  - `makeVcrTest(fixtureRelPath)` factory — spec 단위 fixture path 주입.
+  - `DREAMPIA_TEST=0` (mock 조기 반환 회피).
+  - `DREAMPIA_CLI_COMMAND=process.execPath` + `DREAMPIA_CLI_PREARGS=fake-cli.cjs`
+    + `DREAMPIA_VCR_FIXTURE=<path>` env launch.
+  - userDataDir / workspaceDir 격리 — 기존 `fixtures.ts` 와 동일 패턴.
+  - settings.json 미리 작성 (onboarding wizard 우회).
+
+- **`e2e/_drive14.spec.ts`** — 14-1 시나리오 (minimum):
+  - 사용자 prompt "현재 디렉토리 파일 목록 보여줘" 입력 (한국어 prompt
+    + KR cwd 회귀 lock).
+  - Fake CLI 가 fixture 의 tool_use 응답 emit → AI stream 이 shell.run
+    호출.
+  - PermissionApprovalCard inline 표시 (testid `permission-approval-card`).
+  - 'once' 클릭 → Permission 통과 → tool 실행 (workspaceDir 의 ls).
+  - PermissionApprovalCard 사라짐으로 round-trip 완료 검증.
+
+### Verified
+
+- typecheck clean
+- Playwright spec list — 1 test 정상 enumerate.
+- Spec testids 검증 — `sidebar-search-input` / `chat-input` /
+  `permission-approval-card` / `permission-approval-once` 모두 src/renderer
+  에 존재.
+
+### Notes
+
+- **본 commit 은 14-1 minimum**. 후속 commits 에서 추가:
+  - 14-2: tool_result 가 ChatPanel 에 turn-tool 또는 tool_call_result
+    UI 로 표시 검증.
+  - 14-3: SessionStore 의 saved tool turn 검증 (sessions.sqlite 직접
+    query 또는 IPC 통한 state 조회).
+  - 14-4: source=claude-cli 검증 (mock fallback 금지) — provider source
+    badge 가 ChatHeader 에 노출되는지.
+- **drive15/16/17 후속** (KR cwd / failure modes / VCR drift) — 별도 슬롯.
+- **Real Electron 실행 환경** 필요 — better-sqlite3 ABI rebuild + vite
+  build (pretest:e2e). 본 commit 은 spec compile + testid 검증만. 실제
+  spec 실행은 dev/CI 환경에서 사용자가 트리거.
+
 ## [1.1.6] — 2026-05-06
 
 **drive14 prep — Tool_use round-trip fixture + Tier 2 통합 검증.**
