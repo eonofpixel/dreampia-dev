@@ -47,6 +47,9 @@ let mcpManager: McpManager | null = null;
 let usageStore: UsageStore | null = null;
 let compareStore: CompareStore | null = null;
 let auditLogStore: AuditLogStore | null = null;
+// v1.1.2 hotfix (Codex Q8): module scope 로 호이스트 — createMainWindow 의
+// 'closed' 핸들러가 webContentsId 별 in-memory grant cleanup 호출하기 위함.
+let toolQueue: ToolQueue | null = null;
 
 interface WindowRuntime {
   election: LeaderElection;
@@ -215,6 +218,10 @@ function createMainWindow(): BrowserWindow {
     win.on('closed', () => {
       election.shutdown();
       windowRuntimes.delete(webContentsId);
+      // v1.1.2 hotfix (Codex Q8): 닫힌 창의 in-memory permission grants 제거.
+      // webContentsId 가 (이론상 거의 불가능하지만) 다른 창에 재할당될 때
+      // grant 누수 방지. toolQueue 미초기화 (테스트 등) 면 no-op.
+      toolQueue?.clearGrantsForWebContents(webContentsId);
       if (mainWindow === win) {
         mainWindow = null;
       }
@@ -338,7 +345,7 @@ app.whenReady().then(() => {
       tool_id: event.tool_id,
     });
   };
-  const queue = new ToolQueue(registry, (id) => sessionStore?.getSession(id) ?? undefined, {
+  toolQueue = new ToolQueue(registry, (id) => sessionStore?.getSession(id) ?? undefined, {
     audit_sink: toolAuditSink,
     permission_confirmer: permissionConfirmer,
     grant_persister: (sessionId, grant, duration) => {
@@ -350,6 +357,7 @@ app.whenReady().then(() => {
       sessionStore?.addPermissionGrant(grant);
     },
   });
+  const queue = toolQueue;
 
   // BrowserManager owns one WebContentsView per tab. It needs the
   // current main window (constructed below) — pass a getter so it
@@ -523,6 +531,11 @@ app.on('before-quit', () => {
     runtime.election.shutdown();
   }
   windowRuntimes.clear();
+  // v1.1.2 hotfix (Codex Q8): app 종료 시 모든 in-memory grants 제거. 정상
+  // 종료 흐름은 'closed' 가 먼저 발화하지만 강제 quit (process kill 등) 흐름
+  // 안전망. ToolQueue 자체는 GC 되므로 의미는 적지만 명시적 cleanup.
+  toolQueue?.clearSessionGrants();
+  toolQueue = null;
   // UsageStore / CompareStore 는 SessionStore 의 DB connection 을 공유하므로
   // 별도 close X. SessionStore.close() 가 connection 도 닫는다.
   usageStore = null;

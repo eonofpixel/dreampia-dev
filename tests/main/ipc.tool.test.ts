@@ -36,7 +36,9 @@ import { SessionSchema, type Session, type ToolCallId, type TurnId } from '../..
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = join(__dirname, '..', 'fixtures', 'sessions');
-const evt = {} as unknown;
+// v1.1.2 hotfix (Codex Q8): tool/execute 핸들러가 event.sender.id 를
+// webContentsId 로 ToolQueue 에 전달.
+const evt = { sender: { id: 1 } } as unknown;
 const stubApp = { getVersion: () => '0.0.1-test' } as unknown as Parameters<
   typeof registerIpcHandlers
 >[0];

@@ -1570,7 +1570,7 @@ function registerToolHandlers(tools: ToolHandlerConfig): void {
     }
   );
 
-  ipcMain.handle('tool/execute', async (_evt, raw: unknown): Promise<Result<ToolResult>> => {
+  ipcMain.handle('tool/execute', async (event, raw: unknown): Promise<Result<ToolResult>> => {
     try {
       const parsed = ToolCallArgsSchema.parse(raw);
       const call: ToolCall = {
@@ -1587,7 +1587,12 @@ function registerToolHandlers(tools: ToolHandlerConfig): void {
         ...(parsed.timeout_ms !== undefined && { timeout_ms: parsed.timeout_ms }),
         ...(parsed.priority !== undefined && { priority: parsed.priority }),
       };
-      return ok(await tools.queue.enqueue(call));
+      // v1.1.2 hotfix (Codex Q8): event.sender.id 를 webContentsId 로 전달.
+      // Electron 이 보장하는 신뢰 가능 출처 — renderer 가 spoof 불가. Queue
+      // 의 sessionGrants 가 본 ID 버킷에 격리됨.
+      return ok(
+        await tools.queue.enqueue(call, { web_contents_id: event.sender.id })
+      );
     } catch (err) {
       return fail(err);
     }
@@ -1984,8 +1989,15 @@ function registerAiHandlers(cfg: AiHandlerConfig, usage?: UsageStore): void {
 
   ipcMain.handle(
     'ai/start-stream',
-    async (_evt, args: unknown): Promise<Result<{ stream_id: string; source: string }>> => {
+    async (event, args: unknown): Promise<Result<{ stream_id: string; source: string }>> => {
       try {
+        // v1.1.2 hotfix (Codex Q8): renderer 가 spoof 할 수 없는 webContentsId.
+        // tool/execute 와 동일하게 Queue 의 sessionGrants 가 본 ID 버킷에 격리.
+        // 테스트 stub 의 evt.sender 가 number 가 아니어도 안전한 fallback.
+        const senderId =
+          typeof (event as { sender?: { id?: unknown } } | undefined)?.sender?.id === 'number'
+            ? ((event as { sender: { id: number } }).sender.id)
+            : 0;
         const { stream_id, model, turns, session_id, workspace_root, permission_level } =
           StartStreamArgsSchema.parse(args);
 
@@ -2096,7 +2108,8 @@ function registerAiHandlers(cfg: AiHandlerConfig, usage?: UsageStore): void {
           { turns, model, session_id },
           controller,
           cfg,
-          usage
+          usage,
+          senderId
         );
 
         return ok({ stream_id, source });
@@ -2129,7 +2142,10 @@ async function runStreamPump(
   input: { turns: Turn[]; model: string; session_id?: string },
   controller: AbortController,
   cfg: AiHandlerConfig,
-  usage?: UsageStore
+  usage: UsageStore | undefined,
+  // v1.1.2 hotfix (Codex Q8): tool 호출 시 Queue 에 전달할 IPC 출처 ID.
+  // ai/start-stream 핸들러의 event.sender.id. 테스트는 0 fallback.
+  webContentsId: number
 ): Promise<void> {
   const send = (channel: string, payload: unknown): void => {
     const win = cfg.getMainWindow();
@@ -2204,6 +2220,7 @@ async function runStreamPump(
           turnId: currentTurnId,
           cfg,
           send,
+          webContentsId,
         });
       }
       if (ev.type === 'message_complete' || ev.type === 'error') {
@@ -2244,6 +2261,8 @@ async function runToolCallFromStream(args: {
   turnId: TurnId | null;
   cfg: AiHandlerConfig;
   send: (channel: string, payload: unknown) => void;
+  /** v1.1.2 hotfix (Codex Q8): IPC 출처 ID — sessionGrants 격리 키. */
+  webContentsId: number;
 }): Promise<void> {
   if (args.cfg.toolQueue === undefined || args.sessionId === undefined) return;
 
@@ -2257,7 +2276,9 @@ async function runToolCallFromStream(args: {
     created_at: new Date().toISOString(),
   };
 
-  const result = await args.cfg.toolQueue.enqueue(call);
+  const result = await args.cfg.toolQueue.enqueue(call, {
+    web_contents_id: args.webContentsId,
+  });
   const event: StreamEvent = {
     type: 'tool_result',
     result: toolResultToRef(result),

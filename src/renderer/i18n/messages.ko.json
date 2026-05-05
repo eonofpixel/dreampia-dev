@@ -193,6 +193,7 @@
   "permission.danger.aria_label": "위험한 권한 승인 요청",
   "permission.danger.title": "{tool} 가 위험한 작업을 요청합니다",
   "permission.danger.body": "이 요청은 위험 패턴에 매칭되어 명시적 승인이 필요합니다. 거부하거나 이번 한 번만 허용할 수 있어요.",
+  "permission.danger.once_only_notice": "보안 위험이 높아 '이번 한 번만' 외 다른 선택지는 제공되지 않습니다. 다음에도 같은 작업이 필요하면 매번 다시 승인해야 해요.",
   "permission.danger.reason_label": "사유 (선택, audit 에 기록됨)",
   "permission.danger.reason_placeholder": "예: 디버그 시도",
   "settings.permission.grants.title": "활성 권한 grant",

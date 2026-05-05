@@ -137,9 +137,11 @@ describe('ToolQueue — SEC-2 full async pause-resume', () => {
     expect(result.status).toBe('success');
     // v1.1.1: 'session' 은 grantPersister 호출 X.
     expect(persister).not.toHaveBeenCalled();
-    // 그러나 in-memory sessionGrants 에는 추가됨 — 같은 세션의 다음 호출이
-    // 같은 capability + target 으로 confirm 거치지 않고 통과.
-    const inMemory = q.getSessionGrants(session.id);
+    // 그러나 in-memory sessionGrants 에는 추가됨 — 같은 webContents 의 다음
+    // 호출이 같은 capability + target 으로 confirm 거치지 않고 통과.
+    // v1.1.2 hotfix (Codex Q8): 키 webContentsId. enqueue 가 origin 미전달 →
+    // NO_ORIGIN(0) 버킷에 저장, getSessionGrants() 도 default NO_ORIGIN.
+    const inMemory = q.getSessionGrants();
     expect(inMemory.length).toBe(1);
     expect(inMemory[0]?.scope).toBe('session');
   });

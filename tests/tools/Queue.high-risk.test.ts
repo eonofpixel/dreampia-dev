@@ -112,7 +112,7 @@ describe('v1.1.1 hotfix — high-risk capability 강제 escalation', () => {
     expect(received.length).toBe(1);
     expect(received[0]?.is_dangerous).toBe(true);
     // session 으로 응답했지만 high-risk 라 downgrade — in-memory 추가 X.
-    expect(q.getSessionGrants(session.id).length).toBe(0);
+    expect(q.getSessionGrants().length).toBe(0);
     // persister 호출 X.
     expect(persister).not.toHaveBeenCalled();
   });
@@ -131,7 +131,7 @@ describe('v1.1.1 hotfix — high-risk capability 강제 escalation', () => {
     const result = await q.enqueue(makeCall());
     expect(result.status).toBe('success');
     expect(persister).not.toHaveBeenCalled();
-    expect(q.getSessionGrants(session.id).length).toBe(0);
+    expect(q.getSessionGrants().length).toBe(0);
   });
 
   it('high-risk + deny 응답 → permission_denied (downgrade 무관)', async () => {
@@ -174,7 +174,7 @@ describe('v1.1.1 hotfix — session grant in-memory only', () => {
 
     await q.enqueue(makeCall());
     expect(persister).not.toHaveBeenCalled();
-    const inMem = q.getSessionGrants(session.id);
+    const inMem = q.getSessionGrants();
     expect(inMem.length).toBe(1);
     expect(inMem[0]?.scope).toBe('session');
   });
@@ -195,7 +195,7 @@ describe('v1.1.1 hotfix — session grant in-memory only', () => {
     const args = persister.mock.calls[0];
     expect(args?.[2]).toBe('always');
     // in-memory 추가 X — DB 가 source of truth.
-    expect(q.getSessionGrants(session.id).length).toBe(0);
+    expect(q.getSessionGrants().length).toBe(0);
   });
 
   it("'session' grant 가 다음 호출에서 confirm 생략 (Resolver 활성)", async () => {
@@ -227,8 +227,8 @@ describe('v1.1.1 hotfix — session grant in-memory only', () => {
     const { confirmer } = makeConfirmer('session');
     const q = new ToolQueue(reg, () => session, { permission_confirmer: confirmer });
     await q.enqueue(makeCall());
-    expect(q.getSessionGrants(session.id).length).toBe(1);
+    expect(q.getSessionGrants().length).toBe(1);
     q.clearSessionGrants();
-    expect(q.getSessionGrants(session.id).length).toBe(0);
+    expect(q.getSessionGrants().length).toBe(0);
   });
 });

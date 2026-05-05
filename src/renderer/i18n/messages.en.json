@@ -193,6 +193,7 @@
   "permission.danger.aria_label": "Dangerous permission request",
   "permission.danger.title": "{tool} requests a dangerous operation",
   "permission.danger.body": "This request matched a danger pattern and requires explicit approval. You may allow once or deny.",
+  "permission.danger.once_only_notice": "Due to elevated security risk, no option beyond 'Allow once' is offered. You will be asked again next time.",
   "permission.danger.reason_label": "Reason (optional, recorded in audit)",
   "permission.danger.reason_placeholder": "e.g. debugging attempt",
   "settings.permission.grants.title": "Active permission grants",

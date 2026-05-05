@@ -196,9 +196,20 @@ export class ToolQueue {
    * 의 in-memory map 으로만 추적. 앱 재시작 시 자동 사라짐 (의도). 'always'
    * 는 grantPersister 가 DB 저장.
    *
+   * v1.1.2 hotfix (Codex Q8 blind spot): 키를 SessionId → webContentsId 로
+   * 변경. renderer 가 IPC payload 의 session_id 를 spoof 해도 다른 webContents
+   * 의 grant 를 빌릴 수 없음 — Electron 이 event.sender.id 를 신뢰할 수 있는
+   * 출처로 보장하기 때문. webContents 'closed' 시점에 cleanup 으로 누수 방지.
+   *
+   * webContentsId === NO_ORIGIN (0) 는 IPC 가 아닌 호출 (테스트, 프로그램적
+   * 경로). 같은 0 버킷에 누적 — 테스트에서 격리 필요하면 clearSessionGrants().
+   *
    * checkPermissions 가 Resolver 호출 전 session.permission.grants 와 머지.
    */
-  private readonly sessionGrants = new Map<SessionId, PermissionGrant[]>();
+  private readonly sessionGrants = new Map<number, PermissionGrant[]>();
+
+  /** v1.1.2 hotfix: IPC 출처 없는 (테스트/프로그램적) 호출의 webContentsId 센티넬. */
+  static readonly NO_ORIGIN = 0;
 
   /** 현재 실행 중인 calls. */
   private readonly active = new Map<ToolCallId, ActiveExecution>();
@@ -296,8 +307,16 @@ export class ToolQueue {
   /**
    * Tool 호출 등록. 항상 ToolResult resolve (failed/cancelled 도 resolve).
    * Throw 하지 않음 — 모든 실패가 ToolResult 로 표현됨.
+   *
+   * @param origin v1.1.2 hotfix (Codex Q8): IPC 출처. main 의 tool/execute
+   *   핸들러가 `event.sender.id` 를 webContentsId 로 전달. 미지정 시
+   *   NO_ORIGIN(0) 버킷 사용 (테스트/프로그램적 호출용).
    */
-  async enqueue(call: ToolCall): Promise<ToolResult> {
+  async enqueue(
+    call: ToolCall,
+    origin?: { web_contents_id: number }
+  ): Promise<ToolResult> {
+    const webContentsId = origin?.web_contents_id ?? ToolQueue.NO_ORIGIN;
     // ── Step 1: Tool 조회 ──
     const tool = this.registry.get(call.tool_id);
     if (!tool) {
@@ -337,7 +356,13 @@ export class ToolQueue {
 
     // ── Step 4: Permission 체크 (P4) — v1.1.0 SEC-2 full: async ──
     // requires_user_confirmation / require_modal 시 confirmer.confirm() await.
-    const permError = await this.checkPermissions(tool, validatedInput, session, call);
+    const permError = await this.checkPermissions(
+      tool,
+      validatedInput,
+      session,
+      call,
+      webContentsId
+    );
     if (permError) {
       const result = buildFailedResult({ call, status: 'failed', error: permError });
       this.emitAudit(this.resultToAuditEvent(call, result));
@@ -472,13 +497,18 @@ export class ToolQueue {
     tool: Tool,
     input: unknown,
     session: Session,
-    call: ToolCall
+    call: ToolCall,
+    webContentsId: number
   ): Promise<ToolError | null> {
     const caps = tool.required_capabilities(input);
 
     // v1.1.1 hotfix: in-memory session grants 와 머지된 session 객체.
+    // v1.1.2 hotfix: webContentsId 버킷에서 grants 조회 (sessionId X — Codex Q8).
     // Resolver 의 findActiveGrants 가 본 augmented session 의 grants 를 본다.
-    const augmentedSession = this.augmentSessionWithRuntimeGrants(session);
+    const augmentedSession = this.augmentSessionWithRuntimeGrants(
+      session,
+      webContentsId
+    );
 
     for (const cap of caps) {
       const target = this.resolveTarget(tool, input, cap, session);
@@ -507,7 +537,8 @@ export class ToolQueue {
               resolved,
               session,
               decision.hint,
-              true // is_dangerous
+              true, // is_dangerous
+              webContentsId
             );
             if (userOk) continue;
             return this.decisionToError(cap, decision);
@@ -529,7 +560,8 @@ export class ToolQueue {
           resolved,
           session,
           undefined, // hint
-          true // is_dangerous (high-risk → 강제 escalation)
+          true, // is_dangerous (high-risk → 강제 escalation)
+          webContentsId
         );
         if (userOk) continue;
         const denyDecision: GrantDecision = {
@@ -566,7 +598,8 @@ export class ToolQueue {
           resolved,
           session,
           decision.hint,
-          false // is_dangerous
+          false, // is_dangerous
+          webContentsId
         );
         if (userOk) continue;
         return this.decisionToError(cap, decision);
@@ -593,7 +626,8 @@ export class ToolQueue {
     resolved: ResolvedTarget,
     _session: Session,
     hint: string | undefined,
-    isDangerous: boolean
+    isDangerous: boolean,
+    webContentsId: number
   ): Promise<boolean> {
     if (this.confirmer === undefined) return false;
     // v1.1.1 hotfix: high-risk capability 는 강제 dangerous → center modal.
@@ -684,7 +718,9 @@ export class ToolQueue {
           // v1.1.1 hotfix: 'session' grant 는 in-memory only — DB 영속 X.
           // Queue 의 sessionGrants 가 다음 호출에 augmenting. 앱 재시작 =
           // 사라짐 (의도). grantPersister 호출 X.
-          this.appendSessionGrant(call.session_id, grant);
+          // v1.1.2 hotfix: webContentsId 버킷에 저장 — Codex Q8 (sessionId
+          // spoof 방지). 같은 webContents 의 다음 enqueue 만 augmenting.
+          this.appendSessionGrant(webContentsId, grant);
         } else if (this.grantPersister !== undefined) {
           // 'always' → DB 영속.
           try {
@@ -703,20 +739,25 @@ export class ToolQueue {
   /**
    * v1.1.1 hotfix: in-memory session grant 추가. checkPermissions 의 Resolver
    * 호출 전 session.permission.grants 와 머지된다.
+   * v1.1.2 hotfix: webContentsId 버킷 키 (sessionId X — Codex Q8).
    */
-  private appendSessionGrant(sessionId: SessionId, grant: PermissionGrant): void {
-    const list = this.sessionGrants.get(sessionId) ?? [];
+  private appendSessionGrant(webContentsId: number, grant: PermissionGrant): void {
+    const list = this.sessionGrants.get(webContentsId) ?? [];
     list.push(grant);
-    this.sessionGrants.set(sessionId, list);
+    this.sessionGrants.set(webContentsId, list);
   }
 
   /**
    * v1.1.1 hotfix: Resolver 호출 전 augmented session 빌드. session 자체는
    * SessionStore.getSession 결과 (DB-backed) — mutation 하지 X. shallow copy
    * + permission.grants 만 머지.
+   * v1.1.2 hotfix: webContentsId 버킷에서 grants 조회.
    */
-  private augmentSessionWithRuntimeGrants(session: Session): Session {
-    const runtime = this.sessionGrants.get(session.id) ?? [];
+  private augmentSessionWithRuntimeGrants(
+    session: Session,
+    webContentsId: number
+  ): Session {
+    const runtime = this.sessionGrants.get(webContentsId) ?? [];
     if (runtime.length === 0) return session;
     return {
       ...session,
@@ -733,10 +774,22 @@ export class ToolQueue {
   }
 
   /**
-   * Test inspection — 특정 세션의 in-memory grant 목록 (read-only).
+   * v1.1.2 hotfix (Codex Q8): 특정 webContents 의 in-memory grants 만 제거.
+   * BrowserWindow 'closed' 이벤트에서 호출 — 닫힌 창의 grant 가 다음 창에서
+   * 같은 webContentsId 가 (이론상 거의 불가능하지만) 재할당될 때 누수 방지.
    */
-  getSessionGrants(sessionId: SessionId): ReadonlyArray<PermissionGrant> {
-    return this.sessionGrants.get(sessionId) ?? [];
+  clearGrantsForWebContents(webContentsId: number): void {
+    this.sessionGrants.delete(webContentsId);
+  }
+
+  /**
+   * Test inspection — 특정 webContents 의 in-memory grant 목록 (read-only).
+   * v1.1.2 hotfix: 키 변경. 미지정 시 NO_ORIGIN(0) 버킷 — 테스트 호환.
+   */
+  getSessionGrants(
+    webContentsId: number = ToolQueue.NO_ORIGIN
+  ): ReadonlyArray<PermissionGrant> {
+    return this.sessionGrants.get(webContentsId) ?? [];
   }
 
   /**

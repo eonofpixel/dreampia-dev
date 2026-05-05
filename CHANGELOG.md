@@ -2,6 +2,99 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.2] — 2026-05-06
+
+**v1.1.1 SEC-2 hotfix 의 외부 검토 후속 — Codex Q8 strict blind spot 청산.**
+
+Codex Q8 외부 검토 strict 발견:
+
+1. **`sessionId` IPC trust 미검증** — `tool/execute` / `ai/start-stream` 핸들러가
+   renderer payload 의 `session_id` 를 그대로 ToolQueue 에 전달. v1.1.1 의
+   `sessionGrants: Map<SessionId, ...>` 가 이 값을 키로 사용 → renderer 가
+   임의 sessionId 를 spoof 하면 다른 세션의 in-memory grant 를 빌릴 수 있음.
+   "session in-memory 전환이 보안 경계가 아니라 캐시" — Codex 정확한 표현.
+2. **`sessionGrants` cleanup 부재** — `clearSessionGrants()` 가 test/shutdown
+   helper 만, production 호출 위치 0. 세션 close / window destroy / TTL 모두
+   미연결 → 앱 생애 동안 grant 메모리 누적.
+3. **`permission.high_risk_downgrade` 침묵 정책** — audit event 는 emit 되지만
+   사용자 UI 에 "이 권한은 high-risk 라 1회만 적용" 명시 없음. DangerModal 이
+   이미 'once'/'deny' 만 노출하지만 그 이유가 보이지 않음.
+
+### Fixed (Security)
+
+- **`sessionGrants` 키 SessionId → webContentsId 전환** (Codex Q8 핵심 fix):
+  - `ToolQueue.sessionGrants: Map<number, PermissionGrant[]>` — Electron 이
+    보장하는 신뢰 가능 출처 `event.sender.id` 가 격리 키. renderer 가 IPC
+    payload 의 session_id 를 spoof 해도 다른 webContents 의 grant 절도 불가.
+  - `enqueue(call, origin?: { web_contents_id: number })` — main 의
+    `tool/execute` IPC 핸들러가 `event.sender.id` 를 두 번째 arg 로 전달.
+    `ai/start-stream` 의 streaming tool_call 도 `runStreamPump` →
+    `runToolCallFromStream` 으로 webContentsId 스레딩.
+  - origin 미전달 (테스트/프로그램적 호출) 은 `ToolQueue.NO_ORIGIN(0)` 버킷
+    으로 격리 — 별도 세션처럼 동작 (테스트 호환).
+  - **API 정리**: `appendSessionGrant`, `augmentSessionWithRuntimeGrants`,
+    `getSessionGrants` 모두 webContentsId 키. `getSessionGrants` 는 default
+    `NO_ORIGIN` 으로 기존 unit 테스트 패턴 유지.
+
+- **`sessionGrants` cleanup hook 추가**:
+  - `ToolQueue.clearGrantsForWebContents(webContentsId): void` — 신규 public API.
+    BrowserWindow `'closed'` 이벤트가 호출 → 닫힌 창의 grants 즉시 제거.
+    webContentsId 가 (이론상 거의 불가능하지만) 다른 창에 재할당될 때 grant
+    누수 방지.
+  - `app.on('before-quit')` — 강제 종료 흐름 안전망. 모든 grants `clearSessionGrants()`.
+  - `toolQueue` 변수 module scope 호이스트 — `createMainWindow()` 의 `'closed'`
+    핸들러가 접근하기 위함.
+
+- **High-risk downgrade UI 명시 고지**:
+  - `permission.danger.once_only_notice` 신규 i18n key (ko/en).
+  - `PermissionDangerModal` 에 빨간 배너 추가 — "보안 위험이 높아 '이번 한 번
+    만' 외 다른 선택지는 제공되지 않습니다. 다음에도 같은 작업이 필요하면
+    매번 다시 승인해야 해요." `data-testid="permission-danger-once-only-notice"`.
+  - audit event `permission.high_risk_downgrade` (v1.1.1) + UI 고지가 한 짝.
+
+### Added (Tests)
+
+- **`tests/tools/Queue.web-contents-binding.test.ts`** — 6 시나리오:
+  - 다른 webContents 호출에서 grant 격리 (가장 중요).
+  - 같은 webContents 의 다음 호출은 grant 활성 (confirm 생략).
+  - `clearGrantsForWebContents` 해당 버킷만 제거, 다른 버킷 유지.
+  - `clearSessionGrants` 모든 버킷 제거 (shutdown).
+  - origin 미전달 호출은 `NO_ORIGIN` 버킷 격리.
+  - `NO_ORIGIN === 0` 상수 검증.
+
+- **`tests/tools/Queue.high-risk.test.ts`** + **`Queue.permission.confirm.test.ts`**
+  갱신: `getSessionGrants(session.id)` → `getSessionGrants()` (default NO_ORIGIN).
+  의미는 동일 — origin 미전달 호출의 grant 검증.
+
+- **`tests/main/ipc.tool.test.ts`** + **`ipc.ai.test.ts`** evt stub 갱신:
+  `{ sender: { id: 1 } }` — IPC 핸들러가 `event.sender.id` 접근하므로.
+
+### Verified
+
+- typecheck clean
+- lint: 4 errors + 2 warnings — 모두 v1.1.1 사전 존재, 신규 0.
+- unit (tools+main): 440/445 — 5 fail 모두 v1.1.1 baseline 동일 (ipc.workspace
+  pre-existing). 회귀 0.
+- 신규 6 unit (Queue.web-contents-binding) 통과.
+- drive harness: 변경 범위 (Queue API ctx + cleanup + i18n+modal banner) 가
+  drive flow 의 happy path 미영향 (drive13 testid `permission-danger-modal`
+  보존). 본 hotfix 는 drive 신규 X — Real CLI e2e 슬롯 (v1.1.3) 에서 권한
+  IPC bind 회귀 시나리오 추가 예정.
+
+### Notes
+
+- **슬롯 재배열**: 본 hotfix 가 v1.1.2 슬롯 차지. Codex Q8 권고 슬롯 한 칸씩
+  밀림. 새 plan: v1.1.3 Real CLI e2e / v1.1.4 Workspace UX / v1.1.5 Plugin
+  Loader / v1.1.6 Loading-Error-Empty + visual polish.
+- **option B 채택** (full server-side session-binding + 신규 IPC 채널 vs
+  webContentsId 격리): 동일한 spoof 방어 효과를 ½ surgery 로 — sidebar session
+  전환 IPC 신규 추가 / sessionRegistry 인프라 신규 같은 architectural 변경은
+  v1.2.x 멀티-window 슬롯에 어울림. 본 hotfix 는 minimal blast radius.
+- **'session' grant 의미 변화**: 사용자 인식 ("이 chat session 동안") 과 실제
+  ("이 webContents 생애") 불일치 — 다만 같은 webContents 안의 모든 chat
+  session 이 같은 사용자/프로세스이므로 보안상 OK. 멀티-window v1.2.x 에서
+  chat session 별 grant 격리 가 진짜 필요해지면 그때 신규 슬롯.
+
 ## [1.1.1] — 2026-05-05
 
 **v1.1.0 SEC-2 full hotfix — Codex Q7 외부 검토 발견 두 blind spot 청산.**

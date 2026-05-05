@@ -70,7 +70,9 @@ import type { ToolCallId, Turn } from '../../src/types';
 import { newTurnId, nowIso } from '../../src/types';
 import type { ToolQueue, ToolResult } from '../../src/tools';
 
-const evt = {} as unknown;
+// v1.1.2 hotfix (Codex Q8): IPC 핸들러가 event.sender.id 를 webContentsId 로
+// Queue 에 전달. 테스트에서도 stub sender 제공.
+const evt = { sender: { id: 1 } } as unknown;
 
 async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
   const handler = handlers.get(channel);
@@ -405,7 +407,10 @@ describe('IPC ai handlers', () => {
         id: callId,
         tool_id: 'shell.run',
         session_id: '019d0003-0000-7000-8000-000000000003',
-      })
+      }),
+      // v1.1.2 hotfix (Codex Q8): runToolCallFromStream 가 ipc 핸들러의
+      // event.sender.id 를 두 번째 arg 로 전달. evt stub 의 sender.id=1.
+      { web_contents_id: 1 }
     );
     const toolEvents = sent.filter(
       (s) =>
