@@ -15,6 +15,9 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import path from 'node:path';
+import { mkdtempSync, mkdirSync, symlinkSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   checkUserDataConflict,
   classifyUserDataConflict,
@@ -149,3 +152,102 @@ describe('Codex blind spot regression — saved settings 우회', () => {
 
 // __resetSettingsCache 는 main/settings.ts — 본 테스트는 pure 함수만.
 void vi;
+
+// ────────────────────────────────────────────────────────────
+// v1.0.15 (Codex Q6): symlink / junction / long-path bypass 차단
+//
+// 진짜 fs realpath 호출이 필요해 통합-style 테스트. tmpdir 에 실제 폴더 +
+// symlink 생성 후 검사. Windows 의 symlink 는 admin 권한 필요라 platform
+// 검사 후 skip.
+// ────────────────────────────────────────────────────────────
+
+describe('v1.0.15 — realpath bypass 차단 (Codex Q6)', () => {
+  it('symlink 가 userData 를 가리키면 차단 (정확 일치)', () => {
+    // POSIX 또는 Windows admin 만 symlink 생성 가능. Windows non-admin 은 skip.
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'wc-realpath-'));
+    const fakeUd = join(tmpRoot, 'userData');
+    mkdirSync(fakeUd, { recursive: true });
+    const linkPath = join(tmpRoot, 'evil-link');
+
+    let symlinkOk = true;
+    try {
+      symlinkSync(fakeUd, linkPath, 'dir');
+    } catch {
+      symlinkOk = false;
+    }
+
+    try {
+      if (!symlinkOk) {
+        // Windows non-admin — symlink 못 만들면 검증 skip (사용자도 못 만듦
+        // → 우회 자체 불가능).
+        return;
+      }
+      // 사용자가 symlink 를 workspace 로 picked. lexical 로는 다른 path 지만
+      // realpath 정규화로 정확 일치 → 'exact' 차단되어야 함 (v1.0.15).
+      const kind = classifyUserDataConflict(linkPath, fakeUd);
+      expect(kind).toBe('exact');
+
+      // 차단 메시지도 함께 검증.
+      const msg = checkUserDataConflict(linkPath, fakeUd);
+      expect(msg).not.toBeNull();
+      expect(msg ?? '').toContain('정확히 같');
+    } finally {
+      try {
+        rmSync(tmpRoot, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
+    }
+  });
+
+  it('symlink 가 userData 의 자식을 가리키면 child 로 차단', () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'wc-realpath-'));
+    const fakeUd = join(tmpRoot, 'userData');
+    const childInside = join(fakeUd, 'inside');
+    mkdirSync(childInside, { recursive: true });
+    const linkPath = join(tmpRoot, 'sneaky-link');
+
+    let symlinkOk = true;
+    try {
+      symlinkSync(childInside, linkPath, 'dir');
+    } catch {
+      symlinkOk = false;
+    }
+
+    try {
+      if (!symlinkOk) return;
+      // sneaky-link → userData/inside (자식). realpath 거치면 child 로 분류.
+      expect(classifyUserDataConflict(linkPath, fakeUd)).toBe('child');
+    } finally {
+      try {
+        rmSync(tmpRoot, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
+    }
+  });
+
+  it.runIf(process.platform === 'win32')(
+    '`\\\\?\\` long-path prefix 가 같은 path 를 가리켜도 차단',
+    () => {
+      // Windows 만. `\\?\C:\foo` 는 lexical 로는 `C:\foo` 와 다르지만 같은 path.
+      // 실제 파일이 없어도 prefix strip 로직은 동작 — realpath 실패 fallback
+      // 에서 stripLongPathPrefix 가 적용됨.
+      const ud = 'C:\\Users\\u\\AppData\\Roaming\\Dreampia-Dev';
+      const longPathPicked = `\\\\?\\${ud}`;
+      // realpath 실패 (path 미존재) 시 fallback 의 lexical 비교 — strip 후
+      // 같은 lower-cased path → exact.
+      expect(classifyUserDataConflict(longPathPicked, ud)).toBe('exact');
+    }
+  );
+
+  it('미존재 path 는 lexical fallback (회귀 0)', () => {
+    // realpath 실패 → lexical resolve fallback. 기존 동작 유지.
+    const ud =
+      process.platform === 'win32'
+        ? 'C:\\Users\\u\\AppData\\Roaming\\Dreampia-Dev'
+        : '/home/u/.config/Dreampia-Dev';
+    const evil = ud; // 둘 다 존재 X — lexical 만으로도 잡혀야 함.
+    expect(classifyUserDataConflict(evil, ud)).toBe('exact');
+  });
+});

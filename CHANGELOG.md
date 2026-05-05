@@ -2,6 +2,52 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.0.15] — 2026-05-05
+
+**META-4 두 번째 hotfix — Codex Q6 의 lexical 우회 차단.**
+
+v1.0.14 의 META-4 hotfix 가 picker / saved settings 두 경로를 다 닫았지만,
+`workspaceConflict.ts` 가 `path.resolve` 만 사용한 lexical 비교라 다음 경로
+들로 우회 가능했음 (Codex 외부 검토 Q6 발견):
+
+- **Symlink / junction**: workspace 외부의 symlink 가 userData 를 가리키면
+  lexical 비교는 다른 path 로 봄.
+- **`subst`** (Windows): 사용자가 drive letter alias 를 만들면 같은 효과.
+- **`\\?\` long-path prefix** (Windows): `\\?\C:\foo` 와 `C:\foo` 는 같은
+  path 지만 lexical 비교는 다름.
+
+### Fixed (Security)
+
+- `src/main/workspaceConflict.ts` — `fs.realpathSync.native` 정규화 추가.
+  - 두 path 모두 realpath 통해 정규화 후 비교.
+  - realpath 실패 (path 미존재) 시 lexical fallback (picker UX 보호).
+  - `\\?\` prefix strip (`\\?\UNC\server\share` 도 `\\server\share` 로):
+    - `stripLongPathPrefix()` helper 추가.
+    - realpath 결과 + lexical fallback 양쪽 모두 적용.
+  - Windows case-insensitive 비교 그대로 유지.
+
+### Added (Tests)
+
+- `tests/main/workspaceConflict.test.ts` — 4 신규 시나리오 (총 16):
+  - **Symlink → userData 정확 일치**: tmpdir 에 실제 symlink 생성 후 차단
+    검증. POSIX + Windows admin 만; non-admin 은 자동 skip (사용자도 못 만듦).
+  - **Symlink → userData 자식**: child kind 로 분류.
+  - **Windows `\\?\` long-path prefix**: realpath 실패 fallback + strip 으로
+    exact 일치 검증 (Windows 만, runIf).
+  - **미존재 path lexical fallback**: 기존 동작 회귀 0.
+
+### Verified
+
+- typecheck clean
+- lint: pre-existing 4 issues only — 새 추가 0
+- 16/16 workspaceConflict + drive 54/54 회귀 0
+
+### Notes
+
+- v1.0.14 에서 분리된 `release/1.0.x` branch 에 cherry-pick 예정 — 두 branch
+  보안 동등 유지.
+- Codex 권고 그대로 main 은 v1.1.0 (SEC-2 full) 진입.
+
 ## [1.0.14] — 2026-05-05
 
 **META-4 hotfix — Codex 외부 검토 (Q5) 에서 발견된 P0 closure blind spot.**
