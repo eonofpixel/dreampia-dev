@@ -2,6 +2,62 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.14] — 2026-05-06
+
+**Plugin Loader MVP — manifest discovery (Sidebar 'Plugin' 활성화 prep).**
+
+P1 v1.1.x Plugin Loader 슬롯의 첫 단계. `~/.dreampia/plugins/<name>/manifest.json`
+discovery + schema 검증. 본 commit 은 manifest 만 — hook runtime / sandbox /
+capability grant 는 후속.
+
+### Added
+
+- **`src/main/plugins/PluginManager.ts`**:
+  - `scan()` — `~/.dreampia/plugins` (또는 옵션 rootDir) 의 각 디렉토리에서
+    `manifest.json` 검증. 정상 → `loaded[]`. 잘못 / 누락 → `issues[]` +
+    audit event.
+  - `list()` — 캐시된 결과.
+  - `getRootDir()` — UI 가 사용자에게 안내할 path.
+  - `auditSink` 옵션 — `plugin.loaded` / `plugin.invalid_manifest` /
+    `plugin.missing_manifest` 이벤트.
+
+- **Manifest schema**:
+  - `name: string` (required) — plugin 식별자.
+  - `version: string` (required) — semver.
+  - `description?: string`.
+  - `hooks?: { pre_turn?, post_turn? }` — relative path to JS file.
+  - `capabilities?: string[]` — SEC-2 인프라 활용 prep (사용자 승인 대상).
+
+- **`tests/main/plugins/PluginManager.test.ts`** — 12 시나리오:
+  - rootDir 미존재 → 빈 결과.
+  - manifest.json 누락 → issue + audit.
+  - JSON parse 실패 → invalid.
+  - name / version 누락 → invalid.
+  - hooks 잘못된 type → invalid.
+  - valid manifest → loaded + audit.
+  - 디렉토리 아닌 entry skip.
+  - 혼합 (valid + invalid) — valid 만 loaded, 둘 다 audit.
+  - 캐시 (list 후 같은 결과).
+  - scan 전 list() 빈 결과.
+  - getRootDir 생성자 옵션 반환.
+
+### Verified
+
+- typecheck clean
+- 12/12 plugin unit 통과
+
+### Notes
+
+- **다음 commit (v1.1.15+)**:
+  - `main/index.ts` 에서 `PluginManager` 인스턴스 + boot 시 scan.
+  - IPC `plugin/list` — 사이드바 panel 이 fetch.
+  - 사이드바 `[플러그인]` "준비 중" 해체 + 실제 list view.
+  - 첫 example plugin: `cost-limit-hook` (post_turn — 사용량 한도 알림).
+- **Hook runtime / Sandbox / Capability grant** 는 v1.1.16+ — sandbox 는
+  Node `vm` module + capability 는 SEC-2 의 PermissionConfirmer 재사용.
+- 본 commit 으로 사이드바 '플러그인' 가짜 완성 (FAKE) 의 backend 절반 해소.
+  UI 활성화는 다음.
+
 ## [1.1.13] — 2026-05-06
 
 **Workspace UX 셋째 단계 — App.tsx 의 sticky lock wire-up.**
