@@ -2,6 +2,18 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.2.2] — 2026-05-06
+
+**SSE parser — Direct API stream 파싱 인프라.**
+
+WHATWG SSE 명세 구현. AnthropicProvider / OpenAIProvider 가 후속 commit
+에서 fetch + 본 parser 연결.
+
+- `src/providers/api/sseParser.ts` — `SseParser` class. push(chunk) generator
+  + flush(). event/data/id/retry/comment 처리. CRLF 정규화. multi-line data.
+- 11 unit (single / event+data / multi-line / chunked / CRLF / comment / id /
+  field-only / leading space / 연속 / flush).
+
 ## [1.2.1] — 2026-05-06
 
 **Direct API mode 인프라 stub — Anthropic / OpenAI provider class.**
