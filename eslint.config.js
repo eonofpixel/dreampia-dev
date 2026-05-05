@@ -86,9 +86,10 @@ export default [
     },
   },
   {
-    // Build-time CJS scripts (scripts/*.cjs) — Node CommonJS globals only.
-    // No TypeScript / React rules, but enforce Node-aware global recognition.
-    files: ['scripts/**/*.cjs'],
+    // Build-time CJS scripts (scripts/*.cjs) + v1.1.5 VCR fake CLI fixtures
+    // (tests/fixtures/*.cjs) — Node CommonJS globals only. No TypeScript /
+    // React rules, but enforce Node-aware global recognition.
+    files: ['scripts/**/*.cjs', 'tests/fixtures/**/*.cjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'commonjs',

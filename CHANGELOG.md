@@ -2,6 +2,85 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.5] — 2026-05-06
+
+**Real CLI integration e2e 인프라 — Codex Q10 권고 (VCR fixture format +
+fake CLI + provider env override).**
+
+Tier 2 / Tier 3 CLI integration 의 기반. Tier 1 vi.mock 은 unit 으로 이미
+존재 (CliProvider.test.ts), Tier 2 fake binary integration 이 본 commit 의
+새 인프라. Tier 3 nightly real CLI 는 ANTHROPIC_API_KEY 가 있는 CI 에서만
+드라이브.
+
+### Added (Infrastructure)
+
+- **VCR fixture format** (`src/providers/cli/vcr.ts`):
+  - `VcrFixture` 인터페이스 — `version` / `fixture_id` / `provider` /
+    `recorded_at` / `spawn{argv, cwd, env_keys}` / `stdin_chunks` /
+    `stdout_chunks{delay_ms, data}` / `stderr_chunks` / `exit{code, signal}` /
+    `expected_events_hash` / `timing` / `argv_assert{prompt_last, model_arg}`.
+  - Codex Q10 권고 그대로 — fake CLI replay 와 translator 검증을 분리하면서
+    argv-last + KR cwd 회귀 고정.
+  - `getVcrMode()` — `DREAMPIA_VCR_MODE=replay|record|live` 파싱. default replay.
+  - `getCliCommandOverride()` — `DREAMPIA_CLI_COMMAND` + `DREAMPIA_CLI_PREARGS`
+    파싱. drive harness 가 fake CLI 사용. `DREAMPIA_TEST=1` (mock 조기
+    반환) 보다 먼저 적용.
+
+- **`tests/fixtures/fake-claude-cli.cjs`** — pure Node CJS replay (Codex Q10
+  picking):
+  - `argv-last` 검증 (fixture 의 `argv_assert.prompt_last` 와 일치).
+  - `model_arg` 검증 (선택).
+  - `stdout_chunks` + `stderr_chunks` 를 `delay_ms` timing 으로 emit.
+  - `exit.code` 로 종료 (signal 종료는 별도 fixture).
+  - `DREAMPIA_VCR_FIXTURE` env 가 fixture path. 미지정 시 stderr + exit 2.
+  - `.cjs` 확장자 — `package.json` `"type":"module"` 충돌 회피.
+
+- **`tests/fixtures/cli-vcr/claude/text-happy.json`** — 첫 fixture (drive14
+  prep): Claude CLI text-only happy stream, 한국어 prompt "안녕".
+
+- **`CliProvider.preArgs` 옵션**:
+  - binary 앞에 prepend 할 args. fake CLI replay 시 사용.
+  - 예: `binaryPath = process.execPath`, `preArgs = ['fake-cli.cjs']` →
+    `spawn(node, ['fake-cli.cjs', ...args])`.
+  - production 에선 `auto.ts` 의 env override 가 set.
+
+- **`auto.ts` `DREAMPIA_CLI_COMMAND` env override**:
+  - `getCliCommandOverride()` 가 non-null 이면 model prefix 로 provider
+    결정 (claude / codex) → fake CliProvider 반환.
+  - `DREAMPIA_TEST=1` mock 조기 반환 보다 **먼저** 적용 (Codex Q10 picking).
+  - test-only IPC 회피.
+
+- **ESLint flat config** `tests/fixtures/**/*.cjs` 추가 — Node CJS globals.
+
+### Added (Tests)
+
+- **`tests/providers/cli/vcr.test.ts`** — 10 시나리오:
+  - `getVcrMode` 5: 미지정 / replay / record / live / 알 수 없는 fallback.
+  - `getCliCommandOverride` 5: 미지정 / 빈 문자열 / COMMAND only / single
+    PREARGS / 다중 토큰 PREARGS.
+
+- **`tests/providers/cli/fakeCliReplay.test.ts`** — Tier 2 integration 2:
+  - `process.execPath` + fake CLI + fixture replay → CliProvider 가 message_start
+    + text_delta + message_complete emit. 누적 텍스트 검증.
+  - `argv_assert.prompt_last` mismatch → fake CLI exit 5 → CliProvider error event.
+
+### Verified
+
+- typecheck clean
+- lint pre-existing 4 errors + 2 warnings only — 신규 0
+- unit: 1576/1583 — 7 fail 모두 v1.1.4 baseline 동일 (회귀 0)
+- 신규 12 unit (vcr 10 + fakeCliReplay 2) 통과
+
+### Notes
+
+- 본 commit 은 v1.1.4 슬롯 (Real CLI integration e2e) 의 인프라 단계.
+  다음 commit 은 drive14 (Claude CLI tool_use round-trip + permission flow
+  + saved tool turn).
+- **fake CLI 작동 검증**: `DREAMPIA_VCR_FIXTURE=...path... node
+  tests/fixtures/fake-claude-cli.cjs --print --output-format stream-json
+  --bare --verbose --model claude-sonnet-4-6 "안녕"` → fixture 의 stdout
+  chunks 를 정상 emit. 한국어 prompt + Windows + Node CJS 호환 확인.
+
 ## [1.1.4] — 2026-05-06
 
 **Real CLI integration e2e 슬롯 첫 commit — Codex Q10 권고 보안 prep.**

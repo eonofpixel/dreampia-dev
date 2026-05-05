@@ -1,0 +1,47 @@
+{
+  "version": "1",
+  "fixture_id": "claude/text-happy",
+  "provider": "claude",
+  "recorded_at": "2026-05-06T00:00:00.000Z",
+  "encoding": "utf8",
+  "spawn": {
+    "argv": [
+      "--print",
+      "--output-format",
+      "stream-json",
+      "--bare",
+      "--verbose",
+      "--model",
+      "claude-sonnet-4-6",
+      "안녕"
+    ],
+    "cwd": ".",
+    "env_keys": ["ANTHROPIC_API_KEY"]
+  },
+  "stdin_chunks": [],
+  "stdout_chunks": [
+    {
+      "delay_ms": 5,
+      "data": "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"vcr-fake\"}\n"
+    },
+    {
+      "delay_ms": 10,
+      "data": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"안녕하세요! \"}],\"usage\":{\"input_tokens\":5,\"output_tokens\":3,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0}}}\n"
+    },
+    {
+      "delay_ms": 10,
+      "data": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"무엇을 도와드릴까요?\"}],\"usage\":{\"input_tokens\":5,\"output_tokens\":8,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0}}}\n"
+    },
+    {
+      "delay_ms": 5,
+      "data": "{\"type\":\"result\",\"result\":\"안녕하세요! 무엇을 도와드릴까요?\",\"usage\":{\"input_tokens\":5,\"output_tokens\":8,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0},\"total_cost_usd\":0.0001}\n"
+    }
+  ],
+  "stderr_chunks": [],
+  "exit": { "code": 0, "signal": null },
+  "timing": { "spawn_to_first_chunk_ms": 5, "total_ms": 30 },
+  "argv_assert": {
+    "prompt_last": "안녕",
+    "model_arg": { "index": 6, "value": "claude-sonnet-4-6" }
+  }
+}

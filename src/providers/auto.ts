@@ -19,6 +19,7 @@ import { CliProvider } from './cli/CliProvider';
 import { detectCli, type CliDetectionResult, type CliInfo } from './cli/detect';
 import { translateClaudeJsonl } from './cli/translateClaudeJsonl';
 import { translateCodexJsonl } from './cli/translateCodexJsonl';
+import { getCliCommandOverride } from './cli/vcr';
 import { MockProvider } from './MockProvider';
 import type { StreamingProvider } from './types';
 
@@ -64,6 +65,30 @@ export async function getDefaultProvider(
   permissionLevel?: PermissionLevel,
   userDefaultProvider?: DefaultProviderOverride
 ): Promise<AutoProviderResult> {
+  // ★ v1.1.5 (Codex Q10): CLI command override — DREAMPIA_TEST 보다 먼저.
+  // drive harness 가 fake CLI replay 를 위해 사용. test-only IPC 회피.
+  //   DREAMPIA_CLI_COMMAND=node DREAMPIA_CLI_PREARGS="tests/fixtures/fake-claude-cli.js"
+  // model prefix 로 provider 결정 (claude / codex). detected 는 빈 결과.
+  const cliOverride = getCliCommandOverride();
+  if (cliOverride !== null) {
+    const lower = model.toLowerCase();
+    const codexFamily = ['gpt-', 'o1-', 'o3-', 'codex-'].some((p) => lower.startsWith(p));
+    const provider: 'claude' | 'codex' = codexFamily ? 'codex' : 'claude';
+    return {
+      provider: new CliProvider({
+        binaryPath: cliOverride.command,
+        provider,
+        translate: provider === 'claude' ? translateClaudeJsonl : translateCodexJsonl,
+        ...(signal !== undefined && { signal }),
+        ...(cwd !== undefined && { cwd }),
+        ...(permissionLevel !== undefined && { permissionLevel }),
+        preArgs: cliOverride.pre_args,
+      }),
+      source: provider === 'claude' ? 'claude-cli' : 'codex-cli',
+      detected: { claude: null, codex: null },
+    };
+  }
+
   // ★ E2E test 환경 (DREAMPIA_TEST=1) 에선 CLI 감지/사용 강제 disable.
   // 이유: 실제 CLI 가 설치돼 있으면 인증 안 된 상태로 stream 실패하여
   // assistant turn 이 'failed' 상태로 끝남 (실제 e2e 실행 중 발견).

@@ -45,6 +45,15 @@ export interface CliProviderOptions {
   cwd?: string;
   /** CLI 추가 인자. */
   extraArgs?: string[];
+  /**
+   * v1.1.5 (Codex Q10): binary 앞에 prepend 할 args. fake CLI replay 시 사용.
+   *
+   * 예: `binaryPath = process.execPath` (node), `preArgs = ['fake-cli.js']`
+   *   → spawn(node, ['fake-cli.js', ...args])
+   *
+   * production 에선 unused — `auto.ts` 의 env override 만 set.
+   */
+  preArgs?: string[];
   /** JSONL 한 줄 → StreamEvent 배열. provider 별로 다른 함수 사용. */
   translate: CliTranslate;
   /** Mid-stream 취소용 (MAIN process 가 IPC 'ai/stop-stream' 에서 사용). */
@@ -106,7 +115,13 @@ export class CliProvider implements StreamingProvider {
     const lastUserTurn = [...input.turns].reverse().find((t) => t.role === 'user');
     const userText = lastUserTurn ? CliProvider.renderTurnAsPrompt(lastUserTurn) : '';
 
-    const args = this.buildArgs({ model: input.model, prompt: userText });
+    const builtArgs = this.buildArgs({ model: input.model, prompt: userText });
+    // v1.1.5 (Codex Q10): preArgs 가 있으면 binary 앞에 prepend — fake CLI
+    // replay (binaryPath=node, preArgs=['fake-cli.js']) 시 사용.
+    const args =
+      this.opts.preArgs !== undefined && this.opts.preArgs.length > 0
+        ? [...this.opts.preArgs, ...builtArgs]
+        : builtArgs;
 
     // v1.0.6 — Windows 한국어/비-ASCII 폴더 → 8.3 short path 변환. Codex CLI 가
     // cwd 를 HTTP header (x-codex-turn-metadata) 에 그대로 넣어 server 가 reject
