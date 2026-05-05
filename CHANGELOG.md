@@ -2,6 +2,31 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.2.0] — 2026-05-06
+
+**P2 진입 — Image/PDF media 정책 상수 (mediaConstants.ts 부활).**
+
+v1.0.1 에서 revert 됐던 mediaConstants 의 부활 + 검증 helper. DnD / 영속화
+/ vision API routing 은 후속 v1.2.x.
+
+### Added
+
+- `src/types/mediaConstants.ts`:
+  - IMAGE_MIME_TYPES (png/jpeg/webp/gif), PDF_MIME_TYPE.
+  - IMAGE_MAX_BYTES (10MB), PDF_MAX_BYTES (20MB).
+  - TURN_MEDIA_TOTAL_MAX_BYTES (50MB), IMAGE_MAX_PER_TURN (8), PDF_MAX_PER_TURN (4).
+  - `isImageMime` / `isPdfMime`.
+  - `checkAttachment(mime, size)` — single attachment 검증.
+  - `checkTurnAttachments(arr)` — turn 단위 통계 검증 (합계 + per-kind count).
+
+- `tests/types/mediaConstants.test.ts` — 9 시나리오 (mime helpers / image
+  size / pdf size / unsupported mime / 0 attachments / image too many /
+  pdf too many / total exceeded).
+
+### Verified
+
+- typecheck clean / 9/9 unit 통과
+
 ## [1.1.28] — 2026-05-06
 
 **Visual polish — Provider badge 색상 paradigm 통일.**
