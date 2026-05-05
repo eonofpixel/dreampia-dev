@@ -2,6 +2,17 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.3.5] — 2026-05-06
+
+**Dark mode system theme detection.**
+
+`useSystemTheme()` hook + `resolveEffectiveTheme()` helper.
+matchMedia('(prefers-color-scheme: dark)') 변경 listener — OS toggle 시 즉시
+반응. settings.theme === 'system' (또는 undefined) 일 때 system 값 사용.
+
+- `src/renderer/hooks/useSystemTheme.ts`.
+- 5 unit (light/dark override / system / undefined / unknown fallback).
+
 ## [1.3.4] — 2026-05-06
 
 **A11y — aria-live announcer.**
