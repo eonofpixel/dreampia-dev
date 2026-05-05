@@ -2,6 +2,17 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.21] — 2026-05-06
+
+**Workspace UX — drift menu (popover).**
+
+ChatHeader 의 ⚠ icon 을 단순 tooltip 에서 hover/focus popover 로 발전.
+session/current workspace 이름 + [이 채팅을 현재 폴더에 고정] action.
+
+- `ChatPanel.tsx` driftDetected JSX 가 button + group focus-within popover.
+- `data-testid="workspace-drift-menu"` + `data-testid="workspace-drift-menu-lock"`.
+- i18n ko/en `chat.header.drift_menu_*` 3 keys.
+
 ## [1.1.20] — 2026-05-06
 
 **Workspace UX — auto-new-chat prompt (drift 발생 시 toast).**

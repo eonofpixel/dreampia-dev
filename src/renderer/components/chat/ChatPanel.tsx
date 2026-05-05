@@ -426,16 +426,45 @@ function ChatHeader({
       <h1 className="min-w-0 truncate text-sm font-semibold">{session.title}</h1>
       <div className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs text-text-tertiary">
         {driftDetected && (
-          // v1.0.7 — 짧은 형태 (⚠ icon only). 자세한 설명은 tooltip + aria.
-          // 이전 v1.0.6 의 "다른 폴더에서 시작됨" 라벨은 너무 길어 layout 깨뜨림.
-          <span
-            className="shrink-0 rounded bg-yellow-900/30 px-1.5 py-0.5 text-[11px] leading-none text-yellow-400"
-            title={t('chat.header.drift_tooltip', { name: sessionWorkspaceName })}
-            aria-label={t('chat.header.drift_aria', { name: sessionWorkspaceName })}
-            data-testid="workspace-drift-badge"
-          >
-            ⚠
-          </span>
+          // v1.1.21 (Workspace UX): drift menu — 짧은 ⚠ icon 을 click 시
+          // popover (group focus-within) 로 detail + 액션 노출. v1.0.7 의
+          // tooltip 만 으론 사용자가 정확히 무슨 의미인지 모름.
+          <div className="relative shrink-0 group">
+            <button
+              type="button"
+              className="rounded bg-yellow-900/30 px-1.5 py-0.5 text-[11px] leading-none text-yellow-400 hover:bg-yellow-900/50"
+              title={t('chat.header.drift_tooltip', { name: sessionWorkspaceName })}
+              aria-label={t('chat.header.drift_aria', { name: sessionWorkspaceName })}
+              data-testid="workspace-drift-badge"
+            >
+              ⚠
+            </button>
+            <div
+              className="invisible absolute right-0 top-full z-20 mt-1 w-72 rounded-md border border-yellow-600/50 bg-bg-primary p-3 text-xs shadow-lg group-focus-within:visible group-hover:visible"
+              role="menu"
+              data-testid="workspace-drift-menu"
+            >
+              <p className="mb-2 font-semibold text-yellow-300">
+                {t('chat.header.drift_menu_title')}
+              </p>
+              <p className="mb-2 text-text-secondary leading-snug">
+                {t('chat.header.drift_menu_body', {
+                  session: sessionWorkspaceName ?? '',
+                  current: workspaceName ?? '',
+                })}
+              </p>
+              {onToggleWorkspaceLock !== undefined && (
+                <button
+                  type="button"
+                  onClick={onToggleWorkspaceLock}
+                  className="w-full rounded border border-border-primary bg-bg-secondary px-2 py-1 text-left hover:bg-bg-tertiary"
+                  data-testid="workspace-drift-menu-lock"
+                >
+                  🔒 {t('chat.header.drift_menu_lock')}
+                </button>
+              )}
+            </div>
+          </div>
         )}
         {workspaceName !== undefined && onPickWorkspace !== undefined && (
           <button
