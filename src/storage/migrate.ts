@@ -22,6 +22,9 @@ import sql005 from './migrations/005_compare_runs.sql?raw';
 import sql006 from './migrations/006_cost_v1_0_12.sql?raw';
 import sql007 from './migrations/007_workspace_locked.sql?raw';
 import sql008 from './migrations/008_workspace_id_deterministic.sql?raw';
+import sql009 from './migrations/009_grants_id_text.sql?raw';
+import sql010 from './migrations/010_json_columns_promote.sql?raw';
+import sql011 from './migrations/011_down_migration_marker.sql?raw';
 
 // ────────────────────────────────────────────────────────────
 // Migration registry
@@ -54,6 +57,21 @@ const MIGRATIONS: readonly Migration[] = [
     version: 8,
     description: 'v1.3.0 — workspace_id deterministic marker (B-1)',
     up: sql008,
+  },
+  {
+    version: 9,
+    description: 'v1.3.1 — permission_grants.id TEXT promote marker (B-2)',
+    up: sql009,
+  },
+  {
+    version: 10,
+    description: 'v1.3.2 — JSON-wrapped columns promote marker (B-3)',
+    up: sql010,
+  },
+  {
+    version: 11,
+    description: 'v1.3.3 — down-migration marker (B-4)',
+    up: sql011,
   },
 ] as const;
 

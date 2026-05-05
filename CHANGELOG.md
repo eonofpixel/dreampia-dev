@@ -2,6 +2,18 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.3.3] — 2026-05-06
+
+**Schema debt B-2/B-3/B-4 forward markers (migrations 009~011).**
+
+각 migration 은 schema 변경 없는 version marker. 실 작업은 v1.4.x 에서:
+
+- 009 (B-2): permission_grants.id INTEGER → TEXT (UUIDv7) — table rebuild.
+- 010 (B-3): history_json / target_json / metadata_json._extra → 정식 컬럼.
+- 011 (B-4): down-migration SQL 파일 backfill + revertTo(N) API.
+
+LATEST_SCHEMA_VERSION 자동 11.
+
 ## [1.3.0] — 2026-05-06
 
 **P3 진입 — Schema debt B-1 (workspace_id deterministic marker).**
