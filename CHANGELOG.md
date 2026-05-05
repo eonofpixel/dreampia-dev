@@ -2,6 +2,15 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.2.4] — 2026-05-06
+
+**PreviewPanel Annotation overlay skeleton.**
+
+- `AnnotationOverlay` 컴포넌트 — active toggle + toolbar (📐 + 종료 버튼).
+  data-annotation-mode 속성 노출. 실제 element pick / bounding box 는 v1.2.5
+  의 Screenshot/DOM dump 와 통합.
+- 4 unit (active off/on / onToggle / 미지정).
+
 ## [1.2.3] — 2026-05-06
 
 **Direct API key 저장 (settings storage layer).**
