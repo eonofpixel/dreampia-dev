@@ -125,6 +125,16 @@ export interface AppSettings {
    * 미설정 시 'ko'. renderer 가 부팅 시 한 번 fetch + locale 적용.
    */
   language?: LanguageChoice;
+  /**
+   * v1.2.3 — Direct API mode API key 저장 (Anthropic / OpenAI).
+   * 본 commit 은 storage 만 — UI 입력 + auto-routing 은 후속.
+   *
+   * 보안 주의: settings.json 은 OS 의 userData 에 plain text. 사용자가
+   * 인지하고 입력하는 게 전제. 향후 OS keychain (electron-store w/ keytar)
+   * 으로 마이그레이션 권고.
+   */
+  api_key_anthropic?: string;
+  api_key_openai?: string;
 }
 
 let cached: AppSettings | null = null;
@@ -201,6 +211,13 @@ export function readSettings(): AppSettings {
       // v0.11.0 (B2) — language. 알 수 없는 값은 silent drop.
       if (isLanguageChoice(obj['language'])) {
         next.language = obj['language'];
+      }
+      // v1.2.3 — Direct API key. plain string. 빈 문자열은 미설정으로 취급.
+      if (typeof obj['api_key_anthropic'] === 'string' && obj['api_key_anthropic'].length > 0) {
+        next.api_key_anthropic = obj['api_key_anthropic'];
+      }
+      if (typeof obj['api_key_openai'] === 'string' && obj['api_key_openai'].length > 0) {
+        next.api_key_openai = obj['api_key_openai'];
       }
       // v0.10.0 — keyboard_shortcut_overrides. plain Record<string,string>.
       // string 키 / string 값만 보존, 그 외 (number / object / null) 은 drop.

@@ -2,6 +2,17 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.2.3] — 2026-05-06
+
+**Direct API key 저장 (settings storage layer).**
+
+`AppSettings.api_key_anthropic` / `api_key_openai` 추가. readSettings 가
+빈 문자열은 silent drop. 본 commit 은 storage 만 — UI 입력 + auto-routing
+은 후속.
+
+보안: settings.json 은 plain text. 향후 OS keychain (electron-store/keytar)
+권고 (별도 슬롯).
+
 ## [1.2.2] — 2026-05-06
 
 **SSE parser — Direct API stream 파싱 인프라.**
