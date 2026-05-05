@@ -57,6 +57,12 @@ export interface SidebarProps {
    */
   onOpenCompare?: () => void;
 
+  /**
+   * v1.1.15 (Plugin Loader UI): [플러그인] 항목 클릭 — Plugin modal 열기.
+   * 미지정 시 nav item 을 'coming-soon' 으로 유지 (legacy 동작).
+   */
+  onOpenPlugins?: () => void;
+
   // ── v0.7.0 (F-026 Chat Search) ────────────────────────────
   /**
    * 검색 입력 컨트롤드 value. App.tsx 가 set + debounce 후 IPC 호출.
@@ -85,6 +91,7 @@ export function Sidebar({
   onOpenMcpSettings,
   onPickWorkspace,
   onOpenCompare,
+  onOpenPlugins,
   searchQuery = '',
   onSearchQueryChange,
   searchResults,
@@ -160,8 +167,9 @@ export function Sidebar({
         <SidebarNavItem
           icon={<Puzzle className="h-4 w-4" />}
           label={t('sidebar.nav.plugins')}
-          comingSoon
-          comingSoonHint={t('sidebar.coming_soon')}
+          {...(onOpenPlugins !== undefined
+            ? { onClick: onOpenPlugins, testId: 'sidebar-open-plugins' }
+            : { comingSoon: true, comingSoonHint: t('sidebar.coming_soon') })}
         />
         <SidebarNavItem
           icon={<Bot className="h-4 w-4" />}

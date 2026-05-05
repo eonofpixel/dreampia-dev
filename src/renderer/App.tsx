@@ -21,6 +21,7 @@ import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { SettingsModal, applyTheme, type SettingsTabId } from './components/settings/SettingsModal';
 import { SlashHelpModal } from './components/chat/SlashHelpModal';
 import { CompareModal } from './components/chat/CompareModal';
+import { PluginsModal } from './components/plugins/PluginsModal';
 import {
   CostLimitModal,
   parseCostLimitError,
@@ -179,6 +180,8 @@ export function App(): React.JSX.Element {
   const [slashHelpOpen, setSlashHelpOpen] = useState(false);
   // v0.12.0 (I) — `/compare <prompt>` 슬래시 명령으로 여는 cross-AI 비교 모달.
   const [compareModalOpen, setCompareModalOpen] = useState(false);
+  // v1.1.15 — Plugin Loader UI: Sidebar [플러그인] 클릭 시 mount.
+  const [pluginsModalOpen, setPluginsModalOpen] = useState(false);
   // v1.0.12 (COST-2): main 의 ai/start-stream 이 COST_LIMIT_EXCEEDED 로 차단
   // 시 본 state 가 채워져 modal 이 mount. parseCostLimitError 가 JSON 파싱.
   const [costLimitError, setCostLimitError] = useState<ParsedCostLimitError | null>(null);
@@ -605,6 +608,9 @@ export function App(): React.JSX.Element {
     return () => {
       cancelled = true;
     };
+    // 본 effect 는 활성 session 의 id 가 바뀔 때만 재실행. activeSession 객체
+    // 자체는 streaming chunk 마다 새 reference 라 dep 으로 넣으면 fetch 폭주.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSession?.id]);
 
   const handleToggleWorkspaceLock = useCallback((): void => {
@@ -628,6 +634,8 @@ export function App(): React.JSX.Element {
         setWorkspaceLocked(!next);
       }
     })();
+    // 같은 이유로 activeSession 객체 전체가 아닌 id 만 dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSession?.id, workspaceLocked]);
 
   // v0.8.0 — App 부팅 시 settings.theme 을 한 번 fetch + data-theme 적용.
@@ -1168,6 +1176,7 @@ export function App(): React.JSX.Element {
               compareHook.reset();
               setCompareModalOpen(true);
             }}
+            onOpenPlugins={() => setPluginsModalOpen(true)}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
             searchResults={searchResults}
@@ -1266,6 +1275,10 @@ export function App(): React.JSX.Element {
           void compareHook.cancel();
         }}
         onAccept={handleAcceptCompare}
+      />
+      <PluginsModal
+        open={pluginsModalOpen}
+        onClose={() => setPluginsModalOpen(false)}
       />
       {/* v1.1.0 SEC-2 full: 비-dangerous 권한 요청 inline approval card.
           Codex (5c) — chat panel 문맥. 위치는 fixed bottom-right 으로 chat

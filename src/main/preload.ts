@@ -119,6 +119,19 @@ interface AiStreamEndPayload {
   stream_id: string;
 }
 
+/**
+ * v1.1.15 (Plugin Loader UI) — preload boundary 가 노출하는 plugin manifest
+ * shape. main 의 src/main/plugins/PluginManager.ts 의 PluginManifest 와 동일
+ * 구조 (preload 는 별도 정의 — main types 직접 import 하면 boundary 깨짐).
+ */
+interface PluginManifestShape {
+  name: string;
+  version: string;
+  description?: string;
+  hooks?: { pre_turn?: string; post_turn?: string };
+  capabilities?: string[];
+}
+
 interface ToolCallShape {
   id: string;
   tool_id: string;
@@ -539,6 +552,9 @@ const ALLOWED_INVOKE_CHANNELS = [
   // v1.1.11 (Workspace UX) — sticky workspace lock toggle.
   'session/set-workspace-locked',
   'session/get-workspace-locked',
+  // v1.1.15 (Plugin Loader UI) — Sidebar 의 [플러그인] 가 fetch.
+  'plugin/list',
+  'plugin/rescan',
   'lock/acquire',
   'lock/release',
   'lock/get',
@@ -889,6 +905,41 @@ const api = {
     ): Promise<Result<{ locked: boolean }>> =>
       ipcRenderer.invoke('session/get-workspace-locked', sessionId) as Promise<
         Result<{ locked: boolean }>
+      >,
+  },
+
+  /**
+   * v1.1.15 (Plugin Loader UI) — Sidebar 의 [플러그인] panel 이 사용.
+   * main 의 PluginManager 가 boot 시 scan 한 결과 + rescan 트리거.
+   */
+  plugin: {
+    list: (): Promise<
+      Result<{
+        loaded: Array<{ dir: string; manifest: PluginManifestShape }>;
+        issues: Array<{ path: string; reason: string }>;
+        rootDir: string;
+      }>
+    > =>
+      ipcRenderer.invoke('plugin/list') as Promise<
+        Result<{
+          loaded: Array<{ dir: string; manifest: PluginManifestShape }>;
+          issues: Array<{ path: string; reason: string }>;
+          rootDir: string;
+        }>
+      >,
+    rescan: (): Promise<
+      Result<{
+        loaded: Array<{ dir: string; manifest: PluginManifestShape }>;
+        issues: Array<{ path: string; reason: string }>;
+        rootDir: string;
+      }>
+    > =>
+      ipcRenderer.invoke('plugin/rescan') as Promise<
+        Result<{
+          loaded: Array<{ dir: string; manifest: PluginManifestShape }>;
+          issues: Array<{ path: string; reason: string }>;
+          rootDir: string;
+        }>
       >,
   },
 

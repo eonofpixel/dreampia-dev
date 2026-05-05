@@ -5,7 +5,7 @@
  * Spec: docs/session/_index.md, docs/performance/electron-tuning.md
  */
 
-import { app, BrowserWindow, dialog, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -31,6 +31,7 @@ import { CostGate, type CostLimits, type CostAuditEvent } from './CostGate';
 import { readSettings, writeSettings } from './settings';
 import { classifyUserDataConflict } from './workspaceConflict';
 import { IpcPermissionConfirmer } from './IpcPermissionConfirmer';
+import { PluginManager } from './plugins/PluginManager';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -50,6 +51,8 @@ let auditLogStore: AuditLogStore | null = null;
 // v1.1.2 hotfix (Codex Q8): module scope 로 호이스트 — createMainWindow 의
 // 'closed' 핸들러가 webContentsId 별 in-memory grant cleanup 호출하기 위함.
 let toolQueue: ToolQueue | null = null;
+// v1.1.15 (Plugin Loader UI): boot 시 한 번 scan, IPC handler 가 list 반환.
+let pluginManager: PluginManager | null = null;
 
 interface WindowRuntime {
   election: LeaderElection;
@@ -349,6 +352,54 @@ app.whenReady().then(() => {
       tool_id: event.tool_id,
     });
   };
+  // v1.1.15 (Plugin Loader UI): boot 시 한 번 plugin discovery. IPC handler 가
+  // 본 결과를 사이드바 가 fetch 시 그대로 반환. 로드 실패 (manifest 누락 / 잘못된
+  // schema) 는 audit log + console — 다른 plugin 또는 앱 자체 차단 X.
+  pluginManager = new PluginManager({
+    auditSink: (event) => {
+      auditLogStore?.recordEvent({
+        timestamp: event.timestamp,
+        session_id: 'plugin-loader',
+        event: event.event,
+        capability: 'PLUGIN',
+        target_json: JSON.stringify({ plugin_dir: event.plugin_dir }),
+        decision_reason:
+          event.event === 'plugin.loaded' ? 'loaded' : 'invalid',
+        ...(event.event !== 'plugin.loaded' && {
+          outcome: 'skipped',
+          ...(event.reason !== undefined && { error: event.reason }),
+        }),
+      });
+    },
+  });
+  void pluginManager.scan();
+
+  // v1.1.15: plugin/* IPC handlers — preload bridge 가 호출.
+  // (registerIpcHandlers 와 별개로 단순 — args 없는 read-only IPC.)
+  ipcMain.handle('plugin/list', () => {
+    if (pluginManager === null) {
+      return { ok: true, value: { loaded: [], issues: [], rootDir: '' } };
+    }
+    return {
+      ok: true,
+      value: {
+        ...pluginManager.list(),
+        rootDir: pluginManager.getRootDir(),
+      },
+    };
+  });
+
+  ipcMain.handle('plugin/rescan', async () => {
+    if (pluginManager === null) {
+      return { ok: true, value: { loaded: [], issues: [], rootDir: '' } };
+    }
+    const result = await pluginManager.scan();
+    return {
+      ok: true,
+      value: { ...result, rootDir: pluginManager.getRootDir() },
+    };
+  });
+
   toolQueue = new ToolQueue(registry, (id) => sessionStore?.getSession(id) ?? undefined, {
     audit_sink: toolAuditSink,
     permission_confirmer: permissionConfirmer,

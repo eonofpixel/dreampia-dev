@@ -2,6 +2,62 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.15] — 2026-05-06
+
+**Plugin Loader UI 활성화 — Sidebar [플러그인] '준비 중' 해체.**
+
+v1.1.14 의 `PluginManager` 위에 IPC + Sidebar UI 연결. 사용자가 사이드바
+의 [플러그인] 항목 클릭 시 `~/.dreampia/plugins` 의 manifest 결과를
+modal 로 확인. Hook runtime 은 v1.1.16+.
+
+### Added
+
+- **Main process integration** (`src/main/index.ts`):
+  - Module-scope `pluginManager: PluginManager | null`.
+  - `app.whenReady()` 에서 instance 생성 + `void scan()` (boot-time discovery).
+  - Audit sink 가 `auditLogStore` 에 `plugin.loaded` / `plugin.invalid_manifest`
+    / `plugin.missing_manifest` 영속 (capability `'PLUGIN'`).
+  - IPC `plugin/list` (sync read) + `plugin/rescan` (async re-discovery).
+
+- **Preload bridge** (`src/main/preload.ts`):
+  - `'plugin/list'` + `'plugin/rescan'` 채널 화이트리스트.
+  - `window.dreampia.plugin.list()` + `.rescan()` API.
+  - `PluginManifestShape` interface (preload boundary 정의).
+
+- **Renderer UI** (`src/renderer/components/plugins/PluginsModal.tsx`):
+  - Modal 디자인 — header / loaded section / issues section / footer.
+  - Plugin root path 안내 (사용자 수동 설치 가이드).
+  - 각 plugin 의 name / version / description / hooks (pre_turn/post_turn) /
+    capabilities 표시.
+  - Issues 는 yellow 경고 박스 — manifest 누락 / 잘못된 schema 등.
+  - Rescan 버튼.
+  - testid: `plugins-modal` / `plugins-modal-loaded-item` /
+    `plugins-modal-issue-item` / `plugins-modal-rescan` / 등.
+
+- **Sidebar 통합** (`src/renderer/components/sidebar/Sidebar.tsx`):
+  - `onOpenPlugins?: () => void` prop 추가.
+  - [플러그인] nav item 이 onOpenPlugins 지정 시 `comingSoon` 해체 + 클릭
+    핸들러 활성. 미지정 시 legacy 'coming-soon' 동작 유지 (test 호환).
+
+- **App.tsx wire-up**: `pluginsModalOpen` state + `onOpenPlugins` →
+  `setPluginsModalOpen(true)`. `<PluginsModal />` mount.
+
+- **i18n** ko/en — `plugins.modal.*` + `plugins.error.*` 14 keys.
+
+### Verified
+
+- typecheck clean
+- lint pre-existing 4 + 2 only — 신규 0
+- unit: 1609/1616 — 7 fail 모두 v1.1.14 baseline 동일 (회귀 0)
+
+### Notes
+
+- **본 commit 으로 사이드바 [플러그인] 가짜 완성 (FAKE) 해소**. 사용자가
+  실제 plugin 설치 가이드와 manifest 결과를 본다.
+- **다음 (v1.1.16+)**: Hook runtime 실행 (Node `vm` sandbox + `pre_turn` /
+  `post_turn`) + Capability grant (manifest.capabilities 를 `IpcPermissionConfirmer`
+  통해 사용자 승인) + 첫 example plugin (`cost-limit-hook`).
+
 ## [1.1.14] — 2026-05-06
 
 **Plugin Loader MVP — manifest discovery (Sidebar 'Plugin' 활성화 prep).**
