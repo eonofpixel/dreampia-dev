@@ -2,6 +2,33 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.23] — 2026-05-06
+
+**Plugin capability grant — IpcPermissionConfirmer 통합 (SEC-2 인프라 재사용).**
+
+Plugin manifest.capabilities 를 사용자 1회 승인. `~/.dreampia/plugins/<name>/.granted.json`
+영속은 후속 (현재는 process 생애 in-memory cache).
+
+### Added
+
+- `src/main/plugins/PluginCapabilityGate.ts`:
+  - `ensureGranted(pluginName, caps)` — 미승인 cap 마다 confirmer.confirm()
+    호출. once/session/always → granted set. deny → denied set (재요청 X).
+  - `isGranted(name, cap)` — test inspection.
+  - `clearAll()` — process restart 시뮬레이션.
+  - confirmer 미설정 시 fail-closed (모든 cap 거절) + audit 'cap_no_confirmer'.
+  - is_dangerous=true 강제 → DangerModal 노출.
+
+- `tests/main/plugins/PluginCapabilityGate.test.ts` — 9 시나리오:
+  - confirmer 없음 / once/session/always grant / deny + 재요청 X /
+    cache hit / 다른 plugin 별도 / throw → denied / 부분 deny → 전체 false /
+    clearAll.
+
+### Verified
+
+- typecheck clean
+- 28/28 plugin unit (manager 12 + hook 7 + capability 9)
+
 ## [1.1.22] — 2026-05-06
 
 **Plugin Hook runtime — vm sandbox + pre/post turn.**
