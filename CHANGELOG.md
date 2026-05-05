@@ -2,6 +2,38 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.1.13] — 2026-05-06
+
+**Workspace UX 셋째 단계 — App.tsx 의 sticky lock wire-up.**
+
+v1.1.12 의 ChatHeader UI 를 실제 IPC 와 연결. 활성 session 변경 시 lock
+상태 자동 동기화 + toggle 시 optimistic UI + IPC 영속.
+
+### Added (Renderer integration)
+
+- **`App.tsx`**:
+  - `workspaceLocked` state — 활성 session 의 lock 상태.
+  - `useEffect(activeSession?.id)` — IPC `session/get-workspace-locked`
+    호출 후 동기화. 활성 session null 이면 false 리셋.
+  - `handleToggleWorkspaceLock` — optimistic UI + IPC
+    `session/set-workspace-locked` 호출. 실패 시 원복.
+  - `<ChatPanel workspaceLocked onToggleWorkspaceLock>` props 전달.
+
+### Verified
+
+- typecheck clean
+- lint pre-existing 4 + 2 only
+- unit: 1597/1604 — 회귀 0
+
+### Notes
+
+- **다음 commits (Workspace UX 마무리)**:
+  - drift 검사 분기 (잠긴 세션은 drift dialog 비활성).
+  - Auto-new-chat prompt (폴더 변경 시 dialog).
+  - drift menu (현재 ⚠ icon 에서 짧은 설명 popover 로).
+- 이상까지가 P1 v1.1.x **Workspace UX 슬롯 완료**.
+- 그 다음 v1.1.14 = Plugin Loader MVP / v1.1.15 = L/E/E + visual polish.
+
 ## [1.1.12] — 2026-05-06
 
 **Workspace UX 둘째 단계 — sticky lock UI (preload bridge + ChatHeader toggle).**

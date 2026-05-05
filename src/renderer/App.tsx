@@ -578,6 +578,58 @@ export function App(): React.JSX.Element {
     [activeSession, persistUpdatePermission]
   );
 
+  // v1.1.13 (Workspace UX): per-session sticky workspace lock state.
+  // 활성 session 이 바뀔 때마다 IPC `session/get-workspace-locked` 동기화.
+  // toggle 시 IPC `session/set-workspace-locked` 호출 + local 갱신.
+  const [workspaceLocked, setWorkspaceLocked] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (activeSession === null) {
+      setWorkspaceLocked(false);
+      return;
+    }
+    const sessionApi = typeof window !== 'undefined' ? window.dreampia?.session : undefined;
+    if (sessionApi?.getWorkspaceLocked === undefined) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await sessionApi.getWorkspaceLocked(activeSession.id as SessionId);
+        if (cancelled) return;
+        if (result.ok) {
+          setWorkspaceLocked(result.value.locked);
+        }
+      } catch {
+        // ignore — UI 가 default false 그대로
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSession?.id]);
+
+  const handleToggleWorkspaceLock = useCallback((): void => {
+    if (activeSession === null) return;
+    const sessionApi = typeof window !== 'undefined' ? window.dreampia?.session : undefined;
+    if (sessionApi?.setWorkspaceLocked === undefined) return;
+    const next = !workspaceLocked;
+    // Optimistic — UI 즉시 반응.
+    setWorkspaceLocked(next);
+    void (async () => {
+      try {
+        const result = await sessionApi.setWorkspaceLocked(
+          activeSession.id as SessionId,
+          next
+        );
+        if (!result.ok) {
+          // IPC 실패 → 원복.
+          setWorkspaceLocked(!next);
+        }
+      } catch {
+        setWorkspaceLocked(!next);
+      }
+    })();
+  }, [activeSession?.id, workspaceLocked]);
+
   // v0.8.0 — App 부팅 시 settings.theme 을 한 번 fetch + data-theme 적용.
   // SettingsModal 의 ThemePanel 도 mount 시 동일 fetch 를 하지만, 모달이 한
   // 번도 안 열렸을 때도 사용자 선호가 즉시 적용되도록 root 에서도 호출.
@@ -1174,6 +1226,8 @@ export function App(): React.JSX.Element {
             onChangePermission={(next) => {
               void handleChangePermission(next);
             }}
+            workspaceLocked={workspaceLocked}
+            onToggleWorkspaceLock={handleToggleWorkspaceLock}
           />
         }
         preview={
