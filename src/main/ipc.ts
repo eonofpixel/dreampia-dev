@@ -1820,8 +1820,10 @@ function registerSessionHandlers(store: SessionStore): void {
       // Zod validates AND brands the ids — so the SessionStore call below
       // receives a fully-typed Session even though `raw` came from IPC.
       const session = SessionSchema.parse(raw);
-      store.createSession(session);
-      return ok(session);
+      // v1.4.10 — root UNIQUE 충돌 시 createSession 이 기존 workspace_id 채택해
+      // 반환. effective session 을 caller 에 돌려 줘 stale id 사용 방지.
+      const effective = store.createSession(session);
+      return ok(effective);
     } catch (err) {
       return fail(err);
     }

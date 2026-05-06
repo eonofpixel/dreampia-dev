@@ -597,23 +597,35 @@ export class SessionStore {
   // Public API — write
   // ────────────────────────────────────────────────────────────
 
-  createSession(session: Session): void {
+  /**
+   * v1.4.10 — 같은 root 의 workspace 가 다른 workspace_id 로 이미 존재하는
+   * 경우 (e.g. legacy FNV row + sha256 row), createSession 은 conflict 를
+   * fatal error 로 던지지 않고 기존 id 를 그대로 채택 (graceful fallback).
+   * 반환된 Session 의 `workspace_id` 가 입력과 다르면 caller (IPC) 가
+   * "기존 workspace 와 통합됨" toast 를 띄울 수 있다.
+   */
+  createSession(session: Session): Session {
     // Validate before persisting (fail fast).
     SessionSchema.parse(session);
 
-    const tx = this.db.transaction((s: Session) => {
-      this.upsertWorkspace(s);
-      this.insertSessionRow(s);
-      this.insertWorktrees(s);
-      this.insertTurns(s);
-      this.insertGrants(s);
-      this.insertBrowserTabs(s);
-      this.insertTerminalPanes(s);
-      this.insertPlanItems(s);
-      this.insertTurnAnnotations(s);
+    const tx = this.db.transaction((s: Session): Session => {
+      const resolvedWorkspaceId = this.upsertWorkspace(s);
+      const next: Session =
+        resolvedWorkspaceId === s.workspace_id
+          ? s
+          : { ...s, workspace_id: resolvedWorkspaceId };
+      this.insertSessionRow(next);
+      this.insertWorktrees(next);
+      this.insertTurns(next);
+      this.insertGrants(next);
+      this.insertBrowserTabs(next);
+      this.insertTerminalPanes(next);
+      this.insertPlanItems(next);
+      this.insertTurnAnnotations(next);
+      return next;
     });
 
-    tx(session);
+    return tx(session);
   }
 
   /**
@@ -1175,8 +1187,26 @@ export class SessionStore {
   // Internal — insert helpers
   // ────────────────────────────────────────────────────────────
 
-  private upsertWorkspace(s: Session): void {
+  /**
+   * Workspace upsert. v1.4.10: root UNIQUE 제약과 id-derivation (sha256)
+   * 사이의 미스매치 (legacy FNV row 가 같은 root 로 먼저 차지) 를 graceful
+   * 처리. 같은 root 에 다른 id 의 row 가 이미 있으면 INSERT 시도하지 않고
+   * 기존 id 를 채택해 반환. 같은 id 면 종전과 동일하게 ON CONFLICT(id) DO
+   * UPDATE.
+   *
+   * @returns 영속에 사용된 effective workspace_id. caller 는 입력
+   *   `s.workspace_id` 와 다르면 후속 INSERT (sessions FK) 를 그 값으로
+   *   patch 해야 한다.
+   */
+  private upsertWorkspace(s: Session): WorkspaceId {
     const ws = s.workspace;
+    // v1.4.10 — 같은 root 가 다른 id 로 이미 존재? 그러면 그 id 채택.
+    const existing = this.db
+      .prepare('SELECT id FROM workspaces WHERE root = ?')
+      .get(ws.root) as { id: string } | undefined;
+    if (existing !== undefined && existing.id !== s.workspace_id) {
+      return existing.id as WorkspaceId;
+    }
     if (!this.stmts.insertWorkspace) {
       this.stmts.insertWorkspace = this.db.prepare(
         `INSERT INTO workspaces
@@ -1204,6 +1234,7 @@ export class SessionStore {
       created_at: s.created_at, // synthesize from session
       is_temporary: boolToInt(ws.is_temporary),
     });
+    return s.workspace_id as WorkspaceId;
   }
 
   private insertSessionRow(s: Session): void {

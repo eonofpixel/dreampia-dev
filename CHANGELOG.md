@@ -2,6 +2,43 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.4.10] — 2026-05-07
+
+**Workspace UNIQUE(root) 충돌 graceful 처리.**
+
+v1.4.8 이후 workspace_id 가 sha256(root) 로 derived 되지만, legacy FNV
+row 가 같은 root 를 먼저 차지한 경우 새 sha256 id 로 INSERT 시 UNIQUE
+constraint 위반 → fatal SQLITE_CONSTRAINT 에러. v1.4.10 은 이 충돌을
+"기존 id 채택" 으로 graceful 하게 흡수 — 사용자에게는 새 세션이 자연
+스럽게 생성되고, 두 row 사이의 incompatibility 가 사라진다.
+
+### Changed
+- `SessionStore.upsertWorkspace(s): WorkspaceId` — 반환 타입을 void →
+  effective workspace_id 로. 같은 root 의 다른 id row 가 이미 존재하면
+  INSERT skip + 기존 id 반환 (graceful fallback). 같은 id 면 종전 ON
+  CONFLICT(id) DO UPDATE 경로 유지.
+- `SessionStore.createSession(s): Session` — 반환 타입을 void →
+  effective Session 로. transaction 안에서 upsertWorkspace 가 다른 id 를
+  반환하면 session 객체를 spread 로 patch (`workspace_id` 만 변경) 후
+  insertSessionRow / insertWorktrees / ... 에 전달. 입력 Session 은
+  mutate 되지 않음 (immutable).
+- IPC `session/create` — store.createSession 의 반환값을 그대로 ok() 로
+  돌려준다. caller (renderer) 가 입력 workspace_id 와 다른지 비교해
+  "기존 workspace 와 통합됨" toast 노출 가능.
+
+### Added
+- `tests/storage/sessionStore.workspaceConflict.test.ts` 신규 4 cases:
+  - legacy id 가 root 차지 → 새 sha256 id session 이 legacy id 채택.
+  - 같은 id → ON CONFLICT(id) DO UPDATE 경로 유지.
+  - 다른 root → 정상 새 row INSERT.
+  - 두 세션 모두 listSessions() 에 보임 (FK 유효).
+
+### 회귀
+- 0. typecheck clean.
+- 신규 4 tests PASS. SessionStore + storage 전체 (18 파일) 회귀 0
+  (pre-existing migration 2 fail 은 v=5 expect baseline 그대로 유지).
+- baseline 2021 → 2025 (+4).
+
 ## [1.7.29] — 2026-05-07
 
 **Automation audit viewer panel — recent runs in modal.**
