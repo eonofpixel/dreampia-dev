@@ -2,6 +2,32 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.10] — 2026-05-06
+
+**PreviewPanel — AnnotationOverlay 통합 + onAnnotation wiring (v1.6.0/v1.6.9 결합).**
+
+PreviewPanel 이 AnnotationOverlay 를 mount + onMark 결과를 `AnnotationBlock`
+으로 변환해 부모 (App.tsx) 로 forward.
+
+PreviewPanel 변경:
+- `onAnnotation?: (block: AnnotationBlock) => void` prop 추가. 미지정 시
+  toggle button 자체 미노출 (기능 hidden).
+- `annotationActive` state + 우상단 [📐] 토글 버튼 (annotation off 일 때).
+- AnnotationOverlay 가 webview 위에 absolute mount — pointer-events 는
+  active 일 때만 활성 → webview 클릭 그대로 통과.
+- onMark 콜백: `AnnotationBlock` 객체 (url=activeTab.url + bbox + 빈 comment)
+  생성 후 `onAnnotation` forward.
+
+App.tsx 변경:
+- PreviewPanel 에 onAnnotation 전달 — 캡처된 block 의 text summary 를
+  `pendingPrompt` 에 prepend (`setPendingPrompt(prev => prev + summary)`).
+- toast info "영역이 캡처됐어요 — 다음 메시지에 함께 전송돼요".
+
+후속 — ChatInput 에 `pendingBlocks` API 추가하여 정식 typed-block prepend 로
+교체 (현재는 text 형식 fallback).
+
+unit suite: 1904 pass / 7 baseline. 회귀 0.
+
 ## [1.7.13] — 2026-05-06
 
 **main/index.ts 부팅에 `bootstrapTelemetry` 호출 (v1.7.12 wiring).**

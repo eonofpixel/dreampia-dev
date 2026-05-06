@@ -32,15 +32,30 @@ import { ArrowLeft, ArrowRight, RotateCw, Plus, Maximize2, X } from 'lucide-reac
 import type { BrowserState, SessionId } from '@/types';
 import { useBrowser, type BrowserTabUI } from '../../hooks/useBrowser';
 import { useT } from '../../i18n';
+import {
+  AnnotationOverlay,
+  type AnnotationBox,
+} from './AnnotationOverlay';
+import type { AnnotationBlock } from '@/types/conversation';
 
 const DEMO_URL = 'https://example.com';
 
 export interface PreviewPanelProps {
   sessionId: SessionId | null;
   browser: BrowserState | null;
+  /**
+   * v1.6.9 wiring — Annotation 캡처 시 호출. 부모 (App.tsx) 가 ChatInput 의
+   * pendingBlocks 에 prepend 하거나 즉시 chat 에 inject. 미지정 시 annotation
+   * 모드 자체 비활성 (기능 hidden).
+   */
+  onAnnotation?: (block: AnnotationBlock) => void;
 }
 
-export function PreviewPanel({ sessionId, browser }: PreviewPanelProps): React.JSX.Element {
+export function PreviewPanel({
+  sessionId,
+  browser,
+  onAnnotation,
+}: PreviewPanelProps): React.JSX.Element {
   const {
     tabs,
     activeTabId,
@@ -64,9 +79,34 @@ export function PreviewPanel({ sessionId, browser }: PreviewPanelProps): React.J
     void open(DEMO_URL);
   }, [open]);
 
+  // v1.6.9 wiring — Annotation 모드 + 마지막 box draft.
+  const [annotationActive, setAnnotationActive] = useState(false);
+  const [pendingBoxes, setPendingBoxes] = useState<AnnotationBox[]>([]);
+
+  const handleAnnotationToggle = useCallback(() => {
+    setAnnotationActive((v) => !v);
+  }, []);
+
+  const handleAnnotationMark = useCallback(
+    (box: AnnotationBox): void => {
+      setPendingBoxes((prev) => [...prev, box]);
+      if (onAnnotation === undefined || activeTab === null) return;
+      // 즉시 부모에 forward — App.tsx 가 ChatInput 에 prepend.
+      const block: AnnotationBlock = {
+        type: 'annotation_block',
+        url: activeTab.url,
+        bounding_box: { x: box.x, y: box.y, w: box.w, h: box.h },
+        comment: '',
+        captured_at: box.captured_at,
+      };
+      onAnnotation(block);
+    },
+    [onAnnotation, activeTab]
+  );
+
   return (
     <aside
-      className="flex h-full flex-1 flex-col border-l border-border-primary bg-bg-primary"
+      className="relative flex h-full flex-1 flex-col border-l border-border-primary bg-bg-primary"
       aria-label="미리보기"
     >
       <PreviewTabs
@@ -106,14 +146,44 @@ export function PreviewPanel({ sessionId, browser }: PreviewPanelProps): React.J
         </div>
       )}
 
-      <BrowserPaneAnchor
-        activeTabId={activeTabId}
-        activeTab={activeTab}
-        hasTabs={tabs.length > 0}
-        sessionPanelVisible={browser?.panel_visible ?? true}
-        setBounds={setBounds}
-        onOpenDemo={handleNewTab}
-      />
+      <div className="relative flex flex-1 min-h-0">
+        <BrowserPaneAnchor
+          activeTabId={activeTabId}
+          activeTab={activeTab}
+          hasTabs={tabs.length > 0}
+          sessionPanelVisible={browser?.panel_visible ?? true}
+          setBounds={setBounds}
+          onOpenDemo={handleNewTab}
+        />
+        {/*
+         * v1.6.9 wiring — webview 위에 absolute overlay. annotationActive 가
+         * false 일 때 pointer-events: none 이라 webview 클릭 그대로 통과.
+         * onAnnotation prop 미지정 시 toggle button 자체가 미노출 → 기능 hidden.
+         */}
+        {onAnnotation !== undefined && (
+          <AnnotationOverlay
+            active={annotationActive}
+            onToggle={handleAnnotationToggle}
+            onMark={handleAnnotationMark}
+            boxes={pendingBoxes}
+          />
+        )}
+      </div>
+      {/*
+       * Annotation 모드 진입 토글 — 우상단 corner 의 작은 버튼. 우측 panel 하단
+       * 에 별도 toolbar 두지 않아 layout 영향 0.
+       */}
+      {onAnnotation !== undefined && !annotationActive && (
+        <button
+          type="button"
+          onClick={handleAnnotationToggle}
+          className="absolute right-3 top-12 z-20 rounded-md border border-border-primary bg-bg-primary/90 px-2 py-1 text-xs text-text-secondary hover:bg-bg-tertiary"
+          aria-label="Annotation 모드 시작"
+          data-testid="preview-annotation-start"
+        >
+          📐
+        </button>
+      )}
     </aside>
   );
 }

@@ -1334,6 +1334,17 @@ export function App(): React.JSX.Element {
           <PreviewPanel
             sessionId={(activeSession?.id ?? null) as SessionId | null}
             browser={activeSession?.browser ?? null}
+            onAnnotation={(block) => {
+              // v1.6.9 wiring — Annotation 캡처 시 ChatInput 의 pendingPrompt
+              // 에 text 형태로 prepend. 정식 typed-block prepend 는 ChatInput
+              // 의 pendingBlocks API 필요 (별도 슬롯).
+              const bb = block.bounding_box;
+              const summary =
+                `[Annotation] ${block.url} ` +
+                `(bbox ${bb.x},${bb.y},${bb.w}×${bb.h})\n`;
+              setPendingPrompt((prev) => (prev !== undefined ? `${prev}\n${summary}` : summary));
+              toasts.info('영역이 캡처됐어요 — 다음 메시지에 함께 전송돼요.');
+            }}
           />
         }
       />
