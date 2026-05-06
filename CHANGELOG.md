@@ -2,6 +2,45 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.8.1] — 2026-05-07
+
+**`_extra` column promote (B-3 2단계).**
+
+v1.8.0 audit 의 P1 권고에 따라 `metadata_json._extra` 의 hot-path
+스칼라 2개를 정식 컬럼으로 승격. dual-write 로 transition — column +
+JSON 양쪽 유지, 다음 슬롯에서 _extra 측 read 제거 후 _extra 필드 제거
+예정.
+
+### Added
+- Migration `015_extra_promote_v1.sql` + `down_015_*` —
+  - `sessions.permission_default_level TEXT` (NULL 허용, legacy fallback).
+  - `sessions.plan_active INTEGER NOT NULL DEFAULT 0`.
+  - 기존 row 의 `metadata_json._extra.{permission.default_level,
+    plan.active}` 에서 `json_extract` 로 backfill.
+- `LATEST_SCHEMA_VERSION` 14 → 15.
+- `tests/storage/extraColumnPromote.test.ts` 신규 7 cases — schema
+  version / dual-write / column 우선 read (default_level + plan_active
+  각각) / JSON fallback / updatePermission column 갱신 / backfill
+  re-execution.
+
+### Changed
+- `SessionStore.SessionRow` interface: `permission_default_level: string |
+  null`, `plan_active: number` 필드 추가.
+- `SessionStore.insertSessionRow`: 새 SQL 에 두 컬럼 포함, INSERT 시
+  `s.permission.default_level` + `boolToInt(s.plan.active)` dual-write.
+- `SessionStore.assembleSession`: `permission`/`plan` 빌드 시 column
+  우선, JSON `_extra` fallback (마이그레이션 직후 legacy row 호환).
+- `SessionStore.updatePermission`: UPDATE 문에
+  `permission_default_level` 컬럼 dual-write 추가.
+
+### 회귀
+- 0. typecheck clean.
+- 신규 7 tests PASS.
+- 기존 storage 252 tests 회귀 0 (pre-existing migration v=5 expect 2개
+  fail 은 baseline 그대로 — schema version 변경 따라 5 → 15 가 됐을
+  뿐, 이번 작업이 새 fail 도입 X).
+- baseline 2032 → 2039 (+7).
+
 ## [1.8.0] — 2026-05-07
 
 **`_extra` namespace usage audit — read-only deliverable.**

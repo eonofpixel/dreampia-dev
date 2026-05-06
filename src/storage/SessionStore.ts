@@ -85,6 +85,10 @@ interface SessionRow {
   current_model: string | null;
   current_effort: string | null;
   current_mode: string | null;
+  // v1.8.1 (B-3 2단계) — promoted from metadata_json._extra.{permission, plan}.
+  // dual-write transition. 향후 슬롯에서 _extra 측 read 제거 예정.
+  permission_default_level: string | null;
+  plan_active: number;
 }
 
 interface WorkspaceRow {
@@ -1011,9 +1015,14 @@ export class SessionStore {
       },
     };
     const now = new Date().toISOString();
+    // v1.8.1 — dual-write: column + metadata_json 동시 갱신.
     this.db
-      .prepare(`UPDATE sessions SET metadata_json = ?, updated_at = ? WHERE id = ?`)
-      .run(JSON.stringify(next), now, id);
+      .prepare(
+        `UPDATE sessions
+         SET metadata_json = ?, permission_default_level = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(JSON.stringify(next), patch.default_level, now, id);
   }
 
   updateSessionMeta(
@@ -1240,14 +1249,17 @@ export class SessionStore {
   private insertSessionRow(s: Session): void {
     if (!this.stmts.insertSession) {
       // v1.4.2 (B-3 1단계) — current_model/effort/mode 컬럼 dual-write.
+      // v1.8.1 (B-3 2단계) — permission_default_level + plan_active 추가.
       this.stmts.insertSession = this.db.prepare(
         `INSERT INTO sessions
          (id, schema_version, provider, workspace_id, title, pinned, archived,
           parent_session_id, created_at, updated_at, metadata_json,
-          current_model, current_effort, current_mode)
+          current_model, current_effort, current_mode,
+          permission_default_level, plan_active)
          VALUES (@id, @schema_version, @provider, @workspace_id, @title, @pinned, @archived,
                  @parent_session_id, @created_at, @updated_at, @metadata_json,
-                 @current_model, @current_effort, @current_mode)`
+                 @current_model, @current_effort, @current_mode,
+                 @permission_default_level, @plan_active)`
       );
     }
 
@@ -1268,6 +1280,8 @@ export class SessionStore {
       current_model: s.conversation.current_model,
       current_effort: s.conversation.current_effort,
       current_mode: s.conversation.current_mode,
+      permission_default_level: s.permission.default_level,
+      plan_active: boolToInt(s.plan.active),
     });
   }
 
@@ -1548,8 +1562,17 @@ export class SessionStore {
     const workspace = this.buildWorkspace(wsRow, worktrees, meta._extra.workspace);
     const terminal = this.buildTerminalState(panes, meta._extra.terminal);
     const browser = this.buildBrowserState(tabs, meta._extra.browser);
-    const plan = this.buildPlanState(planItems, meta._extra.plan);
-    const permission = this.buildPermissionState(grants, meta._extra.permission);
+    // v1.8.1 (B-3 2단계) — column 우선, JSON fallback.
+    const plan = this.buildPlanState(planItems, {
+      ...meta._extra.plan,
+      active: row.plan_active === 1 ? true : meta._extra.plan.active,
+    });
+    const permission = this.buildPermissionState(grants, {
+      ...meta._extra.permission,
+      default_level:
+        (row.permission_default_level as PermissionState['default_level'] | null) ??
+        meta._extra.permission.default_level,
+    });
 
     const session: Record<string, unknown> = {
       id: row.id,
