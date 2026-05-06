@@ -257,6 +257,18 @@
   "automation.error_handler_config_invalid_json": "Handler config must be valid JSON object.",
   "automation.handler_label": "handler",
 
+  "workspace_backfill.title": "Workspace ID upgrade recommended",
+  "workspace_backfill.body": "{count} workspace records use the legacy FNV ID format. Upgrading to SHA-256 keeps your data identifiable across platforms and backups.",
+  "workspace_backfill.warning_conflicts": "{n} workspaces would conflict during upgrade. They will be skipped (no data loss).",
+  "workspace_backfill.run": "Upgrade now",
+  "workspace_backfill.later": "Later",
+  "workspace_backfill.dismiss": "Don't ask again",
+  "workspace_backfill.running": "Upgrading…",
+  "workspace_backfill.done_title": "Upgrade complete",
+  "workspace_backfill.done_summary": "{updated} workspaces upgraded, {skipped} skipped, {conflicts} conflicts.",
+  "workspace_backfill.error": "Upgrade failed: {reason}",
+  "workspace_backfill.close": "Close",
+
   "mcp.title": "MCP Servers",
   "mcp.subtitle": "Register Model Context Protocol servers so AI can call external tools.",
   "mcp.modal_aria": "MCP server settings",

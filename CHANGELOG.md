@@ -2,6 +2,55 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.4.8] — 2026-05-07
+
+**Workspace ID sha256 default 전환 + 부팅 시 backfill prompt modal.**
+
+v1.4.0 의 `workspaceIdForSha256` helper 와 `backfillWorkspaceIdsToSha256`
+는 갖춰져 있었지만 application code 의 default 호출은 여전히 FNV
+(`workspaceIdFor`) 를 사용했음. 본 슬롯에서 default 를 sha256 으로
+전환 + 기존 FNV row 보유 사용자에게 부팅 시 1회 모달 안내.
+
+### Added
+- `src/storage/workspaceBackfill.ts` 에 `detectLegacyWorkspaceIds(db)`
+  read-only 추가 — `{ total, legacy_fnv, target_conflicts }` 반환.
+  data 변경 X. 부팅 시 modal 표시 여부 판단에 사용.
+- IPC `app:check-workspace-backfill` — settings.flag + DB 통계 동봉.
+  store 미로드 (preboot) 환경에선 legacy=0 으로 안전 fallback.
+- IPC `app:dismiss-workspace-backfill` — backfill 미실행 + flag 만 set.
+- `src/renderer/components/workspace/BackfillPromptModal.tsx` 신규.
+  - count + conflict 경고 표시.
+  - [지금 업그레이드] → `runWorkspaceBackfill` IPC + 결과 표시.
+  - [나중에] → modal 만 닫음 (다음 부팅 재표시).
+  - [다시 묻지 않기] → `dismissWorkspaceBackfill` IPC + flag set.
+- `App.tsx` 부팅 useEffect — `checkWorkspaceBackfill` 호출 → flag 가
+  false 이고 legacy_fnv > 0 이면 modal mount.
+- preload `app.checkWorkspaceBackfill` / `app.dismissWorkspaceBackfill`
+  노출.
+
+### Changed
+- `src/renderer/App.tsx` 의 `createDemoSession` 이 `workspaceIdFor`
+  (FNV-1a) → `workspaceIdForSha256` 로 전환. 새 세션 생성은 이제
+  sha256 derived id 만 사용.
+- IPC `app:run-workspace-backfill` 성공 시 settings.workspace_backfill_done
+  를 `true` 로 자동 설정 — modal 재표시 차단.
+- `AppSettings.workspace_backfill_done?: boolean` 추가. read 측에서
+  boolean 만 인정.
+
+### 회귀
+- 0. typecheck clean. lint clean.
+- 신규 12 tests (`detectLegacyWorkspaceIds` 6 cases + IPC 6 cases) PASS.
+- 기존 backfill 6 tests + storage tests 회귀 0.
+- baseline 1976 → 1988 (+12 신규, 7 baseline fail 유지).
+
+### 호환성
+- 기존 데이터 무결성 보존: 사용자가 [지금 업그레이드] / [다시 묻지
+  않기] 을 클릭해야 sha256 으로 마이그레이션. legacy FNV row 가 있는
+  채로 새 세션 (sha256) 을 추가해도 두 row 가 공존 (root 가 같으면
+  UNIQUE(root) 위반 — 단, INSERT OR CONFLICT 가 처리하지 않으므로 새
+  세션 생성 시 backfill 미진행 사용자에게는 충돌 가능). 권장 흐름:
+  부팅 시 modal → [지금 업그레이드] 후 새 세션 생성.
+
 ## [1.7.25] — 2026-05-06
 
 **IPC trigger handler + AutomationModal handler picker UI.**

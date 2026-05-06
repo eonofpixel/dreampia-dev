@@ -836,6 +836,31 @@ const api = {
           conflicts: number;
         }>
       >,
+    /**
+     * v1.4.8 — Boot 시 backfill 필요 여부 확인. read-only.
+     * legacy_fnv > 0 + flag_done=false → modal 표시 권장.
+     */
+    checkWorkspaceBackfill: (): Promise<
+      Result<{
+        total: number;
+        legacy_fnv: number;
+        target_conflicts: number;
+        flag_done: boolean;
+      }>
+    > =>
+      ipcRenderer.invoke('app:check-workspace-backfill') as Promise<
+        Result<{
+          total: number;
+          legacy_fnv: number;
+          target_conflicts: number;
+          flag_done: boolean;
+        }>
+      >,
+    /**
+     * v1.4.8 — Modal 의 [다시 묻지 않기]. backfill 미실행 + flag 만 set.
+     */
+    dismissWorkspaceBackfill: (): Promise<Result<void>> =>
+      ipcRenderer.invoke('app:dismiss-workspace-backfill') as Promise<Result<void>>,
   },
 
   /**

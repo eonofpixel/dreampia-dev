@@ -116,3 +116,46 @@ export function backfillWorkspaceIdsToSha256(db: Database): BackfillResult {
 
   return result;
 }
+
+// ────────────────────────────────────────────────────────────
+// v1.4.8 — Detection (read-only)
+// ────────────────────────────────────────────────────────────
+
+export interface BackfillDetectionResult {
+  /** workspaces 테이블의 row 총 개수. */
+  total: number;
+  /** id 가 path 의 FNV 와 일치하는 row 수 — backfill 대상. */
+  legacy_fnv: number;
+  /** target sha256 id 가 이미 다른 row 차지 — backfill 시 conflict 예상. */
+  target_conflicts: number;
+}
+
+/**
+ * v1.4.8 — DB 의 workspaces 를 읽어 backfill 대상 통계를 반환.
+ * 데이터 변경 X. 부팅 시 modal 표시 여부 결정에 사용.
+ */
+export function detectLegacyWorkspaceIds(
+  db: Database
+): BackfillDetectionResult {
+  const rows = db.prepare<unknown[], { id: string; root: string }>(
+    'SELECT id, root FROM workspaces'
+  ).all() as Array<{ id: string; root: string }>;
+  const total = rows.length;
+  let legacy = 0;
+  let conflicts = 0;
+  const checkExisting = db.prepare('SELECT 1 FROM workspaces WHERE id = ?');
+  for (const row of rows) {
+    if (!isLegacyFnvWorkspaceId(row.id as WorkspaceId, row.root)) continue;
+    const target = workspaceIdForSha256(row.root);
+    if (target === row.id) continue;
+    legacy += 1;
+    if (checkExisting.get(target) !== undefined) {
+      conflicts += 1;
+    }
+  }
+  return {
+    total,
+    legacy_fnv: legacy,
+    target_conflicts: conflicts,
+  };
+}

@@ -12,7 +12,10 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SessionStore } from '../../src/storage';
-import { backfillWorkspaceIdsToSha256 } from '../../src/storage/workspaceBackfill';
+import {
+  backfillWorkspaceIdsToSha256,
+  detectLegacyWorkspaceIds,
+} from '../../src/storage/workspaceBackfill';
 import {
   workspaceIdFor,
   workspaceIdForSha256,
@@ -127,5 +130,81 @@ describe('v1.4.0 — backfillWorkspaceIdsToSha256', () => {
       foreign_keys?: number;
     };
     expect(row.foreign_keys).toBe(1);
+  });
+});
+
+describe('v1.4.8 — detectLegacyWorkspaceIds', () => {
+  let store: SessionStore;
+
+  beforeEach(() => {
+    store = new SessionStore(':memory:');
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  function insert(id: string, root: string): void {
+    store
+      .getDb()
+      .prepare(
+        `INSERT INTO workspaces
+         (id, root, name, git_state_json, index_status, file_count, indexed_at, created_at, is_temporary)
+         VALUES (?, ?, 'ws', NULL, 'idle', NULL, NULL, '2026-05-07T00:00:00.000Z', 0)`
+      )
+      .run(id, root);
+  }
+
+  it('빈 DB → total=0, legacy_fnv=0, conflicts=0', () => {
+    const r = detectLegacyWorkspaceIds(store.getDb());
+    expect(r.total).toBe(0);
+    expect(r.legacy_fnv).toBe(0);
+    expect(r.target_conflicts).toBe(0);
+  });
+
+  it('FNV row 1개 → legacy_fnv=1', () => {
+    const root = '/proj/a';
+    insert(workspaceIdFor(root), root);
+    const r = detectLegacyWorkspaceIds(store.getDb());
+    expect(r.total).toBe(1);
+    expect(r.legacy_fnv).toBe(1);
+    expect(r.target_conflicts).toBe(0);
+  });
+
+  it('이미 sha256 row 는 legacy 에 포함 X', () => {
+    const root = '/proj/b';
+    insert(workspaceIdForSha256(root), root);
+    const r = detectLegacyWorkspaceIds(store.getDb());
+    expect(r.total).toBe(1);
+    expect(r.legacy_fnv).toBe(0);
+  });
+
+  it('random UUIDv7 row 는 legacy 에 포함 X', () => {
+    insert('ws-deadbeef00000000', '/proj/c');
+    const r = detectLegacyWorkspaceIds(store.getDb());
+    expect(r.total).toBe(1);
+    expect(r.legacy_fnv).toBe(0);
+  });
+
+  it('FNV + 충돌 sha256 → target_conflicts=1', () => {
+    const root = '/proj/d';
+    insert(workspaceIdFor(root), root);
+    insert(workspaceIdForSha256(root), '/proj/d-other');
+    const r = detectLegacyWorkspaceIds(store.getDb());
+    expect(r.total).toBe(2);
+    expect(r.legacy_fnv).toBe(1);
+    expect(r.target_conflicts).toBe(1);
+  });
+
+  it('데이터 변경 X (read-only)', () => {
+    const root = '/proj/e';
+    const fnvId = workspaceIdFor(root);
+    insert(fnvId, root);
+    detectLegacyWorkspaceIds(store.getDb());
+    const row = store
+      .getDb()
+      .prepare<unknown[], { id: string }>('SELECT id FROM workspaces')
+      .get() as { id: string };
+    expect(row.id).toBe(fnvId);
   });
 });

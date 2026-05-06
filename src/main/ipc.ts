@@ -967,6 +967,7 @@ export function registerIpcHandlers(
 
   // v1.4.0 follow-up — 사용자가 [DB 진단] 패널에서 trigger. workspace_id
   // FNV → sha256 backfill 을 명시 호출. 결과 통계 반환.
+  // v1.4.8 — 성공 시 settings.workspace_backfill_done = true 자동 설정.
   ipcMain.handle(
     'app:run-workspace-backfill',
     async (): Promise<
@@ -986,6 +987,12 @@ export function registerIpcHandlers(
           '../storage/workspaceBackfill'
         );
         const r = backfillWorkspaceIdsToSha256(store.getDb());
+        // v1.4.8 — 마이그레이션 완료 → flag set.
+        try {
+          writeSettings({ workspace_backfill_done: true });
+        } catch {
+          // settings write 실패는 다음 부팅에서 다시 시도하므로 noop.
+        }
         return ok({
           scanned: r.scanned,
           updated: r.updated,
@@ -993,6 +1000,58 @@ export function registerIpcHandlers(
           cascade_sessions: r.cascade_sessions,
           conflicts: r.conflicts.length,
         });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  // v1.4.8 — Boot detection. 데이터 변경 X. legacy FNV row 가 있는지 확인 +
+  // settings flag 동봉. renderer 가 부팅 시 호출 — flag true 면 modal skip.
+  ipcMain.handle(
+    'app:check-workspace-backfill',
+    async (): Promise<
+      Result<{
+        total: number;
+        legacy_fnv: number;
+        target_conflicts: number;
+        flag_done: boolean;
+      }>
+    > => {
+      try {
+        const flagDone = readSettings().workspace_backfill_done === true;
+        if (store === undefined) {
+          // DB 미로드 — flag 만 반환. legacy 0 으로 안전 fallback.
+          return ok({
+            total: 0,
+            legacy_fnv: 0,
+            target_conflicts: 0,
+            flag_done: flagDone,
+          });
+        }
+        const { detectLegacyWorkspaceIds } = await import(
+          '../storage/workspaceBackfill'
+        );
+        const r = detectLegacyWorkspaceIds(store.getDb());
+        return ok({
+          total: r.total,
+          legacy_fnv: r.legacy_fnv,
+          target_conflicts: r.target_conflicts,
+          flag_done: flagDone,
+        });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  // v1.4.8 — Dismiss. modal 의 [다시 묻지 않기] — backfill 미실행 + flag 만 set.
+  ipcMain.handle(
+    'app:dismiss-workspace-backfill',
+    (): Result<void> => {
+      try {
+        writeSettings({ workspace_backfill_done: true });
+        return ok(undefined);
       } catch (err) {
         return fail(err);
       }

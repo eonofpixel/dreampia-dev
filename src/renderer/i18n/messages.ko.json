@@ -257,6 +257,18 @@
   "automation.error_handler_config_invalid_json": "Handler 설정은 유효한 JSON 객체여야 해요.",
   "automation.handler_label": "handler",
 
+  "workspace_backfill.title": "워크스페이스 ID 업그레이드 권장",
+  "workspace_backfill.body": "기존 FNV 형식 ID 를 사용하는 워크스페이스가 {count}개 있어요. SHA-256 으로 업그레이드하면 플랫폼/백업 간에 ID 가 안정적으로 유지됩니다.",
+  "workspace_backfill.warning_conflicts": "업그레이드 중 {n}개 워크스페이스에서 충돌이 발생할 수 있어요. 해당 항목은 건너뛰며 데이터 손실은 없습니다.",
+  "workspace_backfill.run": "지금 업그레이드",
+  "workspace_backfill.later": "나중에",
+  "workspace_backfill.dismiss": "다시 묻지 않기",
+  "workspace_backfill.running": "업그레이드 중…",
+  "workspace_backfill.done_title": "업그레이드 완료",
+  "workspace_backfill.done_summary": "{updated}개 업그레이드, {skipped}개 스킵, {conflicts}개 충돌.",
+  "workspace_backfill.error": "업그레이드 실패: {reason}",
+  "workspace_backfill.close": "닫기",
+
   "mcp.title": "MCP 서버",
   "mcp.subtitle": "Model Context Protocol 서버를 등록하면 AI 가 외부 도구를 호출할 수 있어요.",
   "mcp.modal_aria": "MCP 서버 설정",

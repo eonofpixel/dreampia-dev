@@ -153,6 +153,15 @@ export interface AppSettings {
    * 활성화해야 자동화 rule 의 shell command 가 실행됨 (보안상).
    */
   automation_shell_enabled?: boolean;
+  /**
+   * v1.4.8 — Workspace ID backfill (FNV-1a → sha256) 완료 또는 dismiss
+   * 플래그. 부팅 시 이 값이 false/undefined 면 workspace/check-backfill
+   * 호출해 legacy FNV row 가 있는지 확인. 사용자가 [실행] / [다시 묻지
+   * 않기] 둘 중 하나 선택 시 true 로 설정.
+   * - undefined → 처음 부팅 또는 아직 결정 안함 (modal 가능).
+   * - true → 이미 완료 또는 dismiss → 부팅 시 modal skip.
+   */
+  workspace_backfill_done?: boolean;
 }
 
 /**
@@ -262,6 +271,10 @@ export function readSettings(): AppSettings {
       // v1.7.24 — automation_shell_enabled. boolean 만 인정.
       if (typeof obj['automation_shell_enabled'] === 'boolean') {
         next.automation_shell_enabled = obj['automation_shell_enabled'];
+      }
+      // v1.4.8 — workspace_backfill_done. boolean 만 인정.
+      if (typeof obj['workspace_backfill_done'] === 'boolean') {
+        next.workspace_backfill_done = obj['workspace_backfill_done'];
       }
       // v1.7.14 — automation_rules. 손상된 항목 silent drop.
       if (Array.isArray(obj['automation_rules'])) {

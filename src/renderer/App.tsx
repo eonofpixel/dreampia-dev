@@ -23,6 +23,7 @@ import { SlashHelpModal } from './components/chat/SlashHelpModal';
 import { CompareModal } from './components/chat/CompareModal';
 import { PluginsModal } from './components/plugins/PluginsModal';
 import { AutomationModal } from './components/automation/AutomationModal';
+import { BackfillPromptModal } from './components/workspace/BackfillPromptModal';
 import { ToastContainer } from './components/toast/ToastContainer';
 import { useToasts, ToastsProvider } from './hooks/useToasts';
 import {
@@ -39,7 +40,8 @@ import {
   SessionSchema,
   newSessionId,
   newTurnId,
-  workspaceIdFor,
+  // v1.4.8 — sha256 가 default. legacy FNV (workspaceIdFor) 는 backfill 검사용.
+  workspaceIdForSha256,
   partitionIdFor,
   nowIso,
   type ContentBlock,
@@ -92,7 +94,7 @@ function createDemoSession(
 ): Session {
   const id = newSessionId();
   const now = nowIso();
-  const workspaceId = workspaceIdFor(workspace.root);
+  const workspaceId = workspaceIdForSha256(workspace.root);
 
   return SessionSchema.parse({
     id,
@@ -189,6 +191,12 @@ export function App(): React.JSX.Element {
   const [pluginsModalOpen, setPluginsModalOpen] = useState(false);
   // v1.7.4 — Automation modal (Sidebar [자동화] 클릭 시 mount).
   const [automationModalOpen, setAutomationModalOpen] = useState(false);
+  // v1.4.8 — Workspace ID backfill prompt modal. 부팅 시 main 이 legacy
+  // FNV row 를 발견하면 자동 표시. flag set 되면 다시 안 뜸.
+  const [backfillModal, setBackfillModal] = useState<{
+    legacyCount: number;
+    targetConflicts: number;
+  } | null>(null);
   // v1.1.16 — 통일된 toast 알림 (error / warning / info / success).
   const toasts = useToasts();
 
@@ -202,6 +210,31 @@ export function App(): React.JSX.Element {
     });
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // v1.4.8 — Boot 시 1회: legacy FNV workspace_id row 가 있으면 modal 띄움.
+  // settings.workspace_backfill_done === true 면 skip.
+  useEffect(() => {
+    const api = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+    if (api?.checkWorkspaceBackfill === undefined) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await api.checkWorkspaceBackfill();
+        if (cancelled || !r.ok) return;
+        if (r.value.flag_done) return;
+        if (r.value.legacy_fnv === 0) return;
+        setBackfillModal({
+          legacyCount: r.value.legacy_fnv,
+          targetConflicts: r.value.target_conflicts,
+        });
+      } catch {
+        // boot-time check 실패는 silent — 사용자는 [DB 진단] 패널에서 수동 trigger.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
   // v1.0.12 (COST-2): main 의 ai/start-stream 이 COST_LIMIT_EXCEEDED 로 차단
   // 시 본 state 가 채워져 modal 이 mount. parseCostLimitError 가 JSON 파싱.
@@ -1453,6 +1486,13 @@ export function App(): React.JSX.Element {
       <AutomationModal
         open={automationModalOpen}
         onClose={() => setAutomationModalOpen(false)}
+      />
+      {/* v1.4.8 — Workspace ID backfill prompt (boot effect 가 trigger). */}
+      <BackfillPromptModal
+        open={backfillModal !== null}
+        legacyCount={backfillModal?.legacyCount ?? 0}
+        targetConflicts={backfillModal?.targetConflicts ?? 0}
+        onDone={() => setBackfillModal(null)}
       />
       {/* v1.1.16 — 통일된 toast container. fixed top-right. */}
       <ToastContainer toasts={toasts.list} onDismiss={toasts.dismiss} />
