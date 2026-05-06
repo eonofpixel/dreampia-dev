@@ -140,7 +140,7 @@ export function App(): React.JSX.Element {
   // v0.11.0 — locale 변경 시 App 가 직접 사용하는 fallback 문자열도 갱신.
   const t = useT();
   const {
-    state: { sessions, error: storeError },
+    state: { sessions, error: storeError, loading: sessionsLoading },
     create: createSession,
     get: getSession,
     appendTurn: persistTurn,
@@ -1231,6 +1231,7 @@ export function App(): React.JSX.Element {
               setCompareModalOpen(true);
             }}
             onOpenPlugins={() => setPluginsModalOpen(true)}
+            isLoadingSessions={sessionsLoading}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
             searchResults={searchResults}

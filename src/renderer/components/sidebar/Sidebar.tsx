@@ -22,6 +22,7 @@ import {
 import { SearchSection, type SearchResultEntry } from './SearchSection';
 import { useMcp } from '../../hooks/useMcp';
 import { useT } from '../../i18n';
+import { SidebarSessionsSkeleton } from '../skeleton/Skeleton';
 
 export interface SidebarProps {
   sessions: ReadonlyArray<Pick<Session, 'id' | 'title' | 'pinned'>>;
@@ -63,6 +64,12 @@ export interface SidebarProps {
    */
   onOpenPlugins?: () => void;
 
+  /**
+   * v1.7.5 — sessions list loading 중. true 면 chats 영역에
+   * SidebarSessionsSkeleton 표시 (sessions.length === 0 의 empty text 대신).
+   */
+  isLoadingSessions?: boolean;
+
   // ── v0.7.0 (F-026 Chat Search) ────────────────────────────
   /**
    * 검색 입력 컨트롤드 value. App.tsx 가 set + debounce 후 IPC 호출.
@@ -92,6 +99,7 @@ export function Sidebar({
   onPickWorkspace,
   onOpenCompare,
   onOpenPlugins,
+  isLoadingSessions = false,
   searchQuery = '',
   onSearchQueryChange,
   searchResults,
@@ -196,7 +204,9 @@ export function Sidebar({
       <nav className="flex-1 overflow-y-auto p-2" aria-label={t('sidebar.chats.aria_label')}>
         <SectionHeader>{t('sidebar.section.chats')}</SectionHeader>
 
-        {sessions.length === 0 ? (
+        {isLoadingSessions && sessions.length === 0 ? (
+          <SidebarSessionsSkeleton />
+        ) : sessions.length === 0 ? (
           <p className="px-3 py-2 text-xs text-text-tertiary">{t('sidebar.chats.empty')}</p>
         ) : (
           <>

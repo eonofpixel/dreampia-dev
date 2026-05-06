@@ -2,6 +2,20 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.5] — 2026-05-06
+
+**L/E/E wire-up — Sidebar Skeleton 실 사용.**
+
+`Sidebar` 의 chats 섹션에서 `isLoadingSessions && sessions.length === 0`
+조건일 때 `SidebarSessionsSkeleton` 표시 (5 placeholder). 사용자가 앱
+시작 직후 sessions 가 fetch 중인 짧은 시간 동안 빈 텍스트 대신 시각적
+피드백.
+
+- `SidebarProps.isLoadingSessions?: boolean` 추가.
+- App.tsx 가 `useSessionStore().state.loading` 을 prop 으로 전달.
+
+EmptyState wire-up + Chat hydration skeleton 은 후속.
+
 ## [1.6.6] — 2026-05-06
 
 **cost-limit-hook 실 ctx 데이터 — mtd_total_usd + limit_usd 전달.**
