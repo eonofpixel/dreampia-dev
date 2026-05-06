@@ -1,12 +1,20 @@
 # Bootstrap Prompt — 다음 세션 시작용
 
 > **사용법**: 새 Claude Code 세션에서 본 문서의 § 2 또는 § 3 의
-> **그대로 복사 붙여넣기**. 모드별 옵션 3가지 제공.
+> **그대로 복사 붙여넣기**. 모드별 옵션 제공.
 >
 > **위치**: `docs/bootstrap-prompt.md`
 > **참조 문서**:
-> - `docs/status-2026-05-07.md` — 현재 작업 현황
-> - `docs/v1.x-next-batch.md` — 다음 batch 슬롯 정의 + WHY
+> - `docs/status-2026-05-07-v2.md` — Batch #1~#3 완료 시점 스냅샷 (최신)
+> - `docs/v1.x-next-batch.md` — 다음 batch (#4) 슬롯 정의 + WHY
+> - `docs/extra-namespace-audit.md` — v1.8 트랙 audit 결과
+> - `docs/extra-namespace-schema.md` — v1.8.2 canonical schema reference
+
+> **현 상태 (2026-05-07 저녁)**: Batch #1~#3 모두 완료. 마지막 commit
+> `8a02d6f`, baseline 2045/7, package.json 1.8.3.
+>
+> **다음 권장 작업**: § 2 (Batch #4 ulw — column-only 마무리 + 비정규화
+> + baseline 7 fail 정리, 약 120분).
 
 ---
 
@@ -35,7 +43,75 @@ npx vitest run 2>&1 | tail -3
 
 ---
 
-## 2. **권장 Prompt** — Batch #1 ultrapilot (병렬 5 슬롯)
+## 2. **권장 Prompt** — Batch #4 ulw (4 슬롯, 정리 트랙)
+
+> **시간**: ~120분 / **모드**: ulw (메인 세션 직렬) / **리스크**: 중
+>
+> v1.8.4 column-only 마무리 + 비정규화 정리 (v1.4.12, v1.4.13) +
+> baseline 7 fail 정리. Batch #1~#3 의 후속.
+
+```
+Dreampia-Dev 작업 재개. 작업 디렉토리: C:\Dev\분석\dreampia-dev
+
+## 현재 상태
+- 마지막 commit: 8a02d6f (status v2 snapshot)
+- package.json: 1.8.3
+- baseline: 2045 passed / 7 failed (workspace pick 5 + SessionStore migration 2)
+- 자세한 현황: docs/status-2026-05-07-v2.md
+- 다음 batch 정의: docs/v1.x-next-batch.md § 4 (Batch #4)
+
+## 이번 세션 목표 — Batch #4 4 슬롯 (ulw 직렬)
+
+1. v1.8.4 — _extra write 제거 (column-only transition 마무리)
+   - buildStoredMetadata 의 _extra.permission.default_level / _extra.plan.active 직렬화 stop
+   - MetadataExtraSchema 의 두 필드 optional 또는 제거
+   - 신규 unit: insert 후 metadata_json._extra 에 두 필드 부재 검증
+   - 기존 테스트의 _extra assertion 업데이트
+   - 파일: src/storage/SessionStore.ts, src/storage/metadataExtraSchema.ts, tests
+
+2. v1.4.12 — permission.grants 비정규화 정리
+   - buildStoredMetadata 가 _extra.permission.grants 더이상 직렬화 X
+   - assembleSession 은 loadGrants 만 사용 (이미 그러함, 재확인)
+   - MetadataExtraSchema.permission.grants 제거 또는 optional
+   - 신규 unit: round-trip 시 _extra.permission.grants 가 metadata 에 없어도 정상
+
+3. v1.4.13 — plan.checklist 비정규화 정리
+   - buildStoredMetadata 의 _extra.plan.checklist 직렬화 stop
+   - plan_items 테이블만 source of truth
+   - 신규 unit
+
+4. baseline-7-fix — pre-existing 7 fail 정리
+   - tests/main/sessions.workspace-pick.* 5 fail (Win path) — 분석 + 수정
+   - tests/storage/SessionStore.test.ts:73,82 의 toBe(5) → toBe(LATEST_SCHEMA_VERSION)
+   - 모두 pass 후 baseline 0/0 달성
+
+## 진행 방식 (각 슬롯)
+1. typecheck clean
+2. 신규 unit (mock + assertion)
+3. 회귀 0
+4. lint 변경 파일 clean
+5. CHANGELOG.md entry + package.json bump
+6. commit: feat(domain): vN.N.N — 한 줄 요약 + 본문
+7. 다음 슬롯
+
+## 환경 주의
+- 베이스라인 2045/7. 슬롯 4 (baseline-7-fix) 후 0/0 목표.
+- 현재 16 commits ahead of origin/main (push 직후라 0).
+- pre-existing dirty:
+  - tests/storage/permissionGrants.idText.test.ts (이번 batch 무관)
+  - settings.json untracked (build artifact)
+
+## 진행 후
+- batch 완료 시 docs/v1.x-next-batch.md § 4 에 ✅ 마킹 + 실제 시간.
+- docs/status-{date}.md 새로 작성 (스냅샷 패턴).
+- git push origin main 권장 (사용자 승인 후).
+
+자동 진행 시작.
+```
+
+---
+
+## 2-legacy. **이전 Batch 시작 prompt** — Batch #1 ultrapilot (병렬 5 슬롯)
 
 > **시간**: ~90분 / **모드**: ultrapilot / **리스크**: 낮음 / **가시성**: 높음
 >
