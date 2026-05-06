@@ -87,6 +87,14 @@
   "permission.dropdown.tooltip": "현재 권한: {label}. 클릭하여 변경.",
   "permission.dropdown.label": "권한",
 
+  "provider.dropdown.label": "Provider",
+  "provider.dropdown.aria": "기본 Provider",
+  "provider.dropdown.tooltip": "현재 Provider: {label}. 다음 메시지부터 적용.",
+  "provider.dropdown.option.auto": "자동",
+  "provider.dropdown.option.claude": "Claude",
+  "provider.dropdown.option.codex": "Codex",
+  "provider.dropdown.option.mock": "Mock",
+
   "settings.title": "설정",
   "settings.close": "닫기",
   "settings.aria.categories": "설정 카테고리",

@@ -25,6 +25,7 @@ import { SessionReferenceChip } from './SessionReferenceChip';
 import { ToolCallCard } from './ToolCallCard';
 import { findToolResult } from './toolDisplayHelpers';
 import { PermissionDropdown } from './PermissionDropdown';
+import { ProviderDropdown } from './ProviderDropdown';
 import type { SlashCommandId } from '../../commands/registry';
 import type { ResolverContext } from '../../mentions/resolver';
 import { useT } from '../../i18n';
@@ -512,6 +513,13 @@ function ChatHeader({
           }}
           disabled={permissionDisabled || onChangePermission === undefined}
         />
+        {/*
+         * v1.5.2 — global default_provider 의 quick-access dropdown. settings
+         * → Provider 탭과 동일 IPC. self-managed 라 ChatPanel 에 추가 state X.
+         * CliStatusBadge (실제 감지 결과 표시) 는 그대로 유지 — dropdown 은
+         * 사용자 선택, badge 는 실제 routing source 결과.
+         */}
+        <ProviderDropdown />
         <CliStatusBadge status={cliStatus} />
         <span className="shrink-0">
           {session.conversation.current_model}

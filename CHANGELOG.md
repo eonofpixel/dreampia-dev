@@ -2,6 +2,36 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.5.2] — 2026-05-06
+
+**ProviderDropdown — ChatHeader 에 default_provider quick-access dropdown.**
+
+기존 [Settings → Provider] 탭까지 들어가지 않고 채팅 헤더에서 한 번 클릭으로
+provider 전환. v1.5.1 의 routing layer 위에 사용자 직접 가시 진입점.
+
+UX:
+- ChatHeader 의 PermissionDropdown 다음, CliStatusBadge 앞에 위치.
+- Cpu icon + native `<select>` (PermissionDropdown 와 동일 paradigm —
+  z-index/IME 안전).
+- 4 옵션: 자동 (auto) / Claude / Codex / Mock.
+- title 속성으로 현재 선택 라벨 hover 시 노출.
+- CliStatusBadge 와 공존 — dropdown 은 사용자 의도, badge 는 실제 routing
+  source 결과 (Direct API key 있으면 자동으로 Direct provider 로 routed).
+
+구현:
+- `ProviderDropdown` self-contained — controlled prop 으로 testable, 미지정
+  시 IPC `getDefaultProvider`/`setDefaultProvider` 자가 관리.
+- IPC 미가용 (preload 깨짐 / dev 환경) 시 disabled.
+- onChange 는 optimistic update — IPC 실패해도 UI 반응 유지 (다음 fetch 가
+  진실 단일 소스).
+
+i18n: ko/en `provider.dropdown.*` 7개 키 (label/aria/tooltip + 4 options).
+
+테스트: 10개 신규 — controlled (6: render/options/labels/onChange/disabled/
+title) + self-managed (3: getDefaultProvider on mount, setDefaultProvider on
+change, disabled when IPC absent) + enabled-default. 회귀 0 (1752 pass /
+baseline 7 fail).
+
 ## [1.5.0] — 2026-05-06
 
 **SettingsModal [Direct API] 탭 — Anthropic / OpenAI API key 입력 UI.**

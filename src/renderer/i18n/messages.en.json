@@ -87,6 +87,14 @@
   "permission.dropdown.tooltip": "Current permission: {label}. Click to change.",
   "permission.dropdown.label": "Permission",
 
+  "provider.dropdown.label": "Provider",
+  "provider.dropdown.aria": "Default provider",
+  "provider.dropdown.tooltip": "Current provider: {label}. Applies to the next message.",
+  "provider.dropdown.option.auto": "Auto",
+  "provider.dropdown.option.claude": "Claude",
+  "provider.dropdown.option.codex": "Codex",
+  "provider.dropdown.option.mock": "Mock",
+
   "settings.title": "Settings",
   "settings.close": "Close",
   "settings.aria.categories": "Settings categories",
