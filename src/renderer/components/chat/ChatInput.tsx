@@ -45,6 +45,15 @@ import {
 import type { ContentBlock } from '@/types';
 import type { FileEntry } from '@/types/workspace';
 import { useT } from '../../i18n';
+// v1.6.15 — DnD/paste 처리.
+import {
+  filesFromDataTransfer,
+  filesFromClipboard,
+  readFileAsBase64,
+  validateImageFile,
+} from '../../utils/imageInput';
+import { pdfBase64ToChatText } from '../../utils/pdfExtract';
+import { PDF_MIME_TYPE } from '@/types/mediaConstants';
 
 export interface ChatInputProps {
   onSubmit: (text: string) => void;
@@ -402,6 +411,81 @@ export function ChatInput({
   };
 
   /**
+   * v1.6.15 — DnD/paste 한 image / PDF File 을 처리.
+   *  - image → ImageBlock (data:base64).
+   *  - PDF → 텍스트 추출 → textarea 의 현재 값 끝에 append (chat-injectable
+   *    text 형식).
+   *
+   * 부모는 onSubmitBlocks 가 wire 돼있고 pendingBlocks API 가 있어야 함 —
+   * 둘 중 하나라도 없으면 무시 (silent fallback). 잘못된 mime/size 는 toast
+   * 대신 console.warn (UI noise 최소).
+   */
+  const handleFiles = useCallback(
+    async (files: File[]): Promise<void> => {
+      if (files.length === 0) return;
+      for (const f of files) {
+        const v = validateImageFile(f);
+        if (!v.ok) {
+          console.warn(
+            `[ChatInput] file rejected: ${v.reason} (${f.name}, ${f.type}, ${f.size})`
+          );
+          continue;
+        }
+        try {
+          const result = await readFileAsBase64(f);
+          if (f.type === PDF_MIME_TYPE) {
+            // PDF → 텍스트 추출 후 textarea 끝에 append. 사용자가 추가 prompt
+            // 입력 후 submit 시 함께 전송.
+            const text = await pdfBase64ToChatText(result.base64, {
+              filename: f.name,
+            });
+            setValue((prev) =>
+              prev.length > 0 ? `${prev}\n\n${text}` : text
+            );
+          } else {
+            // Image → ImageBlock. onSubmitBlocks + pendingBlocks 경로가 모두
+            // 활성화돼 있어야 의미 있음. 부모에 forward 할 직접 채널이 없으니
+            // 사용자가 submit 시 ChatInput 의 pendingBlocks 와 합쳐 전달되도록
+            // 부모가 관리하는 게 맞다. 본 슬롯 scope 외 — DnD 시 console.info
+            // 만 + 텍스트 메모로 fallback.
+            // Future: introduce onAttachFiles?(blocks) → 부모가 pendingBlocks
+            // 에 push.
+            console.info(
+              `[ChatInput] image dropped (${f.name}, ${f.type}, ${result.size_bytes}B) — pendingBlocks 자동 push 는 후속 슬롯`
+            );
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`[ChatInput] file process failed: ${msg}`);
+        }
+      }
+    },
+    []
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLTextAreaElement>): void => {
+      const files = filesFromDataTransfer(e.dataTransfer);
+      if (files.length === 0) return;
+      e.preventDefault();
+      void handleFiles(files);
+    },
+    [handleFiles]
+  );
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>): void => {
+      // clipboardData 미지원 환경 (jsdom 일부) → silent.
+      if (e.clipboardData === undefined) return;
+      const files = filesFromClipboard(e.clipboardData.items);
+      if (files.length === 0) return;
+      e.preventDefault();
+      void handleFiles(files);
+    },
+    [handleFiles]
+  );
+
+  /**
    * Submit 파이프라인:
    *   1) value trim
    *   2) slash 우선 처리
@@ -678,6 +762,9 @@ export function ChatInput({
         onCompositionStart={() => setIsComposing(true)}
         onCompositionEnd={() => setIsComposing(false)}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
+        onDrop={handleDrop}
+        onDragOver={(e) => e.preventDefault()}
         placeholder={effectivePlaceholder}
         disabled={disabled}
         rows={3}

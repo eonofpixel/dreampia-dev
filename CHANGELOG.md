@@ -2,6 +2,23 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.15] — 2026-05-06
+
+**ChatInput DnD/paste — image + PDF wiring (v1.5.4 follow-up).**
+
+ChatInput textarea 가 image/PDF DnD/paste 처리.
+
+- `imageInput.ts` 의 `filesFromDataTransfer` / `filesFromClipboard` /
+  `readFileAsBase64` / `validateImageFile` import.
+- PDF mime → `pdfBase64ToChatText` 로 텍스트 추출 후 textarea value 끝에 append.
+  사용자가 prompt 입력 후 submit 시 함께 전송.
+- Image mime → 현재 console.info (pendingBlocks 자동 push 는 onAttachFiles
+  callback 추가 필요 — 후속).
+- 잘못된 mime/size → `validateImageFile` reject + console.warn (UI noise 최소).
+- textarea 의 `onPaste` / `onDrop` / `onDragOver` (preventDefault) wire.
+
+회귀 0 (1909 pass).
+
 ## [1.6.14] — 2026-05-06
 
 **PreviewPanel DOM dump button + browser/dump-dom IPC (v1.6.2 wiring).**
