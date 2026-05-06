@@ -1099,7 +1099,8 @@ export function registerIpcHandlers(
   if (audit) registerAuditHandlers(audit);
   if (permission) registerPermissionHandlers(permission, store);
   // v1.7.4 — Automation IPC. 부팅 시 1회 등록 (singleton instance).
-  registerAutomationHandlers();
+  // v1.7.26 — audit store 를 전달해 automation events 가 DB 에 영구 저장됨.
+  registerAutomationHandlers(audit);
 }
 
 // ────────────────────────────────────────────────────────────
@@ -1136,7 +1137,33 @@ function persistAutomationRules(rules: ReadonlyArray<AutomationRuleSummary>): vo
   }
 }
 
-function registerAutomationHandlers(): void {
+function registerAutomationHandlers(audit?: AuditLogStore): void {
+  // v1.7.26 — audit sink closure: automation events → AuditLogStore.recordEvent.
+  // getAutomationManager 는 singleton — 첫 호출 시에만 auditSink 가 적용됨.
+  if (audit !== undefined) {
+    getAutomationManager((event): void => {
+      try {
+        audit.recordEvent({
+          timestamp: event.timestamp,
+          session_id: 'automation',
+          event: event.event,
+          capability: 'AUTOMATION',
+          target_json: JSON.stringify({
+            rule_name: event.rule_name,
+            handler_name: event.handler_name,
+            duration_ms: event.duration_ms,
+            output: event.output,
+          }),
+          decision_reason: event.event === 'automation.fired' ? 'fired' : 'error',
+          outcome: event.event === 'automation.fired' ? 'ok' : 'failed',
+          error: event.error,
+        });
+      } catch (err) {
+        console.error('[automation.audit] failed to persist event:', err);
+      }
+    });
+  }
+
   ipcMain.handle(
     'automation/list',
     (): Result<AutomationRuleSummary[]> => {
@@ -1284,6 +1311,32 @@ function registerAutomationHandlers(): void {
       }
     }
   );
+
+  // v1.7.26 — Automation audit log 최근 N개 조회. rule_name 필터 지원.
+  ipcMain.handle('automation/audit-log', (_evt, opts: unknown): Result<AuditEvent[]> => {
+    try {
+      const { rule_name, limit } =
+        opts !== null && typeof opts === 'object'
+          ? (opts as { rule_name?: string; limit?: number })
+          : ({} as { rule_name?: string; limit?: number });
+      if (audit === undefined) return ok([]);
+      const lim = typeof limit === 'number' && limit > 0 ? Math.min(limit, 1000) : 100;
+      let rows = audit.getRecent(lim, { capability: 'AUTOMATION' });
+      if (typeof rule_name === 'string' && rule_name.length > 0) {
+        rows = rows.filter((r) => {
+          try {
+            const target = JSON.parse(r.target_json) as { rule_name?: string };
+            return target.rule_name === rule_name;
+          } catch {
+            return false;
+          }
+        });
+      }
+      return ok(rows);
+    } catch (err) {
+      return fail(err);
+    }
+  });
 }
 
 // ────────────────────────────────────────────────────────────

@@ -279,9 +279,11 @@ let _instance: AutomationManager | null = null;
  * handler 는 직렬화 불가라 default 'no-op log' 사용. 사용자가 register/
  * unregister 시 자동 영속 (write-through).
  */
-export function getAutomationManager(): AutomationManager {
+export function getAutomationManager(
+  auditSink?: (event: AutomationAuditEvent) => void
+): AutomationManager {
   if (_instance === null) {
-    _instance = new AutomationManager();
+    _instance = new AutomationManager({ ...(auditSink !== undefined && { auditSink }) });
     // v1.7.23 — Builtin handler registry 부팅 (idempotent).
     registerBuiltinHandlers();
     // v1.7.14 — Hydrate from persisted settings (test 환경에선 readSettings

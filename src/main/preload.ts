@@ -1487,6 +1487,14 @@ const api = {
     /** v1.7.25 — Registered handler 이름 목록. */
     listHandlers: (): Promise<Result<string[]>> =>
       ipcRenderer.invoke('automation/list-handlers') as Promise<Result<string[]>>,
+    /** v1.7.26 — Automation audit log 최근 N개 조회. rule_name 필터 지원. */
+    auditLog: (opts?: {
+      rule_name?: string;
+      limit?: number;
+    }): Promise<Result<AuditEventShape[]>> =>
+      ipcRenderer.invoke('automation/audit-log', opts) as Promise<
+        Result<AuditEventShape[]>
+      >,
   },
 };
 
@@ -1513,6 +1521,19 @@ export interface AutomationRuleRegisterShape {
   webhook_path?: string;
   handler_name?: string;
   handler_config?: Record<string, unknown>;
+}
+
+/** v1.7.26 — automation/audit-log 조회 결과 row shape. */
+export interface AutomationAuditLogShape {
+  id: number;
+  timestamp: string;
+  session_id: string;
+  event: string;
+  capability: string;
+  target_json: string;
+  decision_reason: string;
+  outcome?: string;
+  error?: string;
 }
 
 contextBridge.exposeInMainWorld('dreampia', api);

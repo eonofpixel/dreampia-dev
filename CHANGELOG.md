@@ -2,6 +2,41 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.26] — 2026-05-07
+
+**Automation audit log DB persistence + IPC 조회.**
+
+v1.7.23~25 에서 자동화 handler 가 결과를 `AutomationAuditEvent` 로
+emit 하지만 default sink 는 console.error 만이었음. 본 슬롯에서
+`AuditLogStore` (v1.0.x 부터 존재) 와 wire-up — automation events 가
+audit_log 테이블에 영구 저장되어 디버깅/모니터링이 실용적으로 가능.
+
+### Added
+- `getAutomationManager(auditSink?)` — optional auditSink 인자. 기존
+  호출 backward compat.
+- `registerAutomationHandlers(audit?: AuditLogStore)` — audit store 가
+  주입되면 첫 호출 시 sink closure 를 manager 에 wire. closure 는
+  AutomationAuditEvent → AuditEventInput 변환 (capability='AUTOMATION',
+  session_id='automation', target_json=JSON.stringify({rule_name,
+  handler_name, duration_ms, output})).
+- IPC `automation/audit-log` — `{ rule_name?, limit? }` 입력. limit
+  clamp 1000. capability='AUTOMATION' filter 적용 후 rule_name 옵션
+  추가 필터 (target_json.rule_name 일치).
+- preload `automation.auditLog({ rule_name?, limit? })` 노출 +
+  `AutomationAuditLogShape` 타입.
+- `tests/main/automation.audit.test.ts` 신규 3 cases — fired event
+  insert / target_json round-trip / rule_name filter.
+
+### Changed
+- `src/main/ipc.ts` 의 `registerIpcHandlers` 가 `audit` store 를
+  `registerAutomationHandlers` 에 전달. 부팅 시 sink wire-up 자동.
+
+### 회귀
+- 0. typecheck clean.
+- 신규 3 tests PASS. automation 전체 (handlers / shellExec / ipcTrigger
+  / ipc.automation) 회귀 0.
+- baseline 1998 → 2001 (+3).
+
 ## [1.6.20] — 2026-05-07
 
 **ChatPanel 잔여 i18n — embedded card label + CLI provider badge.**
