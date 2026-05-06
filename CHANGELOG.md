@@ -2,6 +2,20 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.18] — 2026-05-06
+
+**AnnotationOverlay + PreviewPanel 잔여 hardcoded 한국어 i18n.**
+
+v1.7.8 의 PreviewPanel i18n 후속. 새로 추가된 (v1.6.10/v1.6.12/v1.6.14)
+button/aside 의 aria-label / 텍스트 가 hardcoded 였던 것을 useT 기반.
+
+- AnnotationOverlay: overlay_aria / toolbar_aria / toolbar_label / exit_aria.
+- PreviewPanel: aside_aria / annotation_start_aria / screenshot_capture_aria /
+  dom_dump_capture_aria.
+- i18n: ko/en `preview.*` 8 키.
+
+회귀 0.
+
 ## [1.6.17] — 2026-05-06
 
 **ChatInput chip [×] — 개별 첨부 제거 (UX polish).**

@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useRef, useState } from 'react';
+import { useT } from '../../i18n';
 
 export interface AnnotationBox {
   /** Overlay-relative pixel coordinates. */
@@ -48,6 +49,7 @@ export function AnnotationOverlay({
   onMark,
   boxes = [],
 }: AnnotationOverlayProps): React.JSX.Element {
+  const t = useT();
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
 
@@ -115,7 +117,7 @@ export function AnnotationOverlay({
     <div
       ref={overlayRef}
       role={active ? 'application' : 'presentation'}
-      aria-label={active ? '주석 영역 선택' : undefined}
+      aria-label={active ? t('preview.annotation.overlay_aria') : undefined}
       className={
         active
           ? 'absolute inset-0 cursor-crosshair pointer-events-auto'
@@ -161,21 +163,21 @@ export function AnnotationOverlay({
       {active && (
         <div
           role="toolbar"
-          aria-label="주석 도구"
+          aria-label={t('preview.annotation.toolbar_aria')}
           className="pointer-events-auto absolute top-2 right-2 z-10 flex items-center gap-2 rounded border border-border-primary bg-bg-primary/90 px-2 py-1 text-xs"
           data-testid="annotation-overlay-toolbar"
           // toolbar 영역에서는 drag 시작 안 되도록 stopPropagation.
           onMouseDown={(e) => e.stopPropagation()}
         >
           <span aria-hidden>📐</span>
-          <span>Annotation 모드 — 드래그로 영역 선택</span>
+          <span>{t('preview.annotation.toolbar_label')}</span>
           {onToggle !== undefined && (
             <button
               type="button"
               onClick={onToggle}
               className="rounded px-1 hover:bg-bg-tertiary"
               data-testid="annotation-overlay-toggle-off"
-              aria-label="Annotation 종료"
+              aria-label={t('preview.annotation.exit_aria')}
             >
               ✕
             </button>

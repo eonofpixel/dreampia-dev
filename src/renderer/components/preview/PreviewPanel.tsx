@@ -68,6 +68,7 @@ export function PreviewPanel({
   onScreenshot,
   onDomDump,
 }: PreviewPanelProps): React.JSX.Element {
+  const t = useT();
   const {
     tabs,
     activeTabId,
@@ -174,7 +175,7 @@ export function PreviewPanel({
   return (
     <aside
       className="relative flex h-full flex-1 flex-col border-l border-border-primary bg-bg-primary"
-      aria-label="미리보기"
+      aria-label={t('preview.aside_aria')}
     >
       <PreviewTabs
         tabs={tabs}
@@ -245,7 +246,7 @@ export function PreviewPanel({
           type="button"
           onClick={handleAnnotationToggle}
           className="absolute right-3 top-12 z-20 rounded-md border border-border-primary bg-bg-primary/90 px-2 py-1 text-xs text-text-secondary hover:bg-bg-tertiary"
-          aria-label="Annotation 모드 시작"
+          aria-label={t('preview.annotation.start_aria')}
           data-testid="preview-annotation-start"
         >
           📐
@@ -260,7 +261,7 @@ export function PreviewPanel({
           }}
           disabled={capturing}
           className="absolute right-12 top-12 z-20 rounded-md border border-border-primary bg-bg-primary/90 px-2 py-1 text-xs text-text-secondary hover:bg-bg-tertiary disabled:opacity-50"
-          aria-label="현재 페이지 스크린샷 캡처"
+          aria-label={t('preview.screenshot_capture_aria')}
           data-testid="preview-screenshot-capture"
         >
           <Camera className="h-3 w-3" />
@@ -274,7 +275,7 @@ export function PreviewPanel({
             void handleDumpDom();
           }}
           className="absolute right-[5.25rem] top-12 z-20 rounded-md border border-border-primary bg-bg-primary/90 px-2 py-1 text-xs text-text-secondary hover:bg-bg-tertiary"
-          aria-label="현재 페이지 DOM 구조 캡처"
+          aria-label={t('preview.dom_dump_capture_aria')}
           data-testid="preview-dom-dump"
         >
           <Code className="h-3 w-3" />
