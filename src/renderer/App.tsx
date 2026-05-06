@@ -1328,6 +1328,32 @@ export function App(): React.JSX.Element {
             }}
             workspaceLocked={workspaceLocked}
             onToggleWorkspaceLock={handleToggleWorkspaceLock}
+            onForkSession={async () => {
+              // v1.6.11 — Session fork. parent_session_id 자동 설정 + 모든
+              // turn 복사 (v1.6.3 backend). 새 session 활성화 + 사용자 toast.
+              if (activeSession === null) return;
+              const sessionApi =
+                typeof window !== 'undefined' ? window.dreampia?.session : undefined;
+              if (sessionApi?.fork === undefined) {
+                toasts.warning('IPC 채널이 없어 fork 가 불가합니다.');
+                return;
+              }
+              try {
+                const r = await sessionApi.fork(activeSession.id);
+                if (r.ok === false) {
+                  toasts.error('세션 분기 실패', {
+                    detail: typeof r.error === 'string' ? r.error : undefined,
+                  });
+                  return;
+                }
+                setActiveSessionId(r.value.id);
+                toasts.success('새 가지가 만들어졌어요.');
+              } catch (err) {
+                toasts.error('세션 분기 실패', {
+                  detail: err instanceof Error ? err.message : String(err),
+                });
+              }
+            }}
           />
         }
         preview={

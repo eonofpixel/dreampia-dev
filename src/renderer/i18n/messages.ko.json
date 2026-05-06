@@ -89,6 +89,8 @@
   "chat.header.preview_show_tooltip": "미리보기 패널 표시 (Ctrl+\\)",
   "chat.header.preview_hide_aria": "미리보기 패널 숨기기",
   "chat.header.preview_show_aria": "미리보기 패널 표시",
+  "chat.header.fork_tooltip": "이 시점에서 새 가지로 분기",
+  "chat.header.fork_aria": "세션 분기 (fork)",
   "chat.header.more": "더보기",
   "chat.ipc.banner_strong": "⚠ AI 통신 채널이 비어있습니다.",
   "chat.ipc.banner_detail": "앱을 재시작하거나 dev tools 에서",

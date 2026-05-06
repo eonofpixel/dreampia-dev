@@ -89,6 +89,8 @@
   "chat.header.preview_show_tooltip": "Show preview panel (Ctrl+\\)",
   "chat.header.preview_hide_aria": "Hide preview panel",
   "chat.header.preview_show_aria": "Show preview panel",
+  "chat.header.fork_tooltip": "Fork from this point",
+  "chat.header.fork_aria": "Fork session",
   "chat.header.more": "More",
   "chat.ipc.banner_strong": "⚠ AI channel unavailable.",
   "chat.ipc.banner_detail": "Restart the app or check",

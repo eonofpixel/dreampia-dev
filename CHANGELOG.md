@@ -2,6 +2,22 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.11] — 2026-05-06
+
+**ChatHeader [fork] 버튼 — `session/fork` UI 진입점 (v1.6.3/v1.6.8 wiring).**
+
+ChatHeader 우측에 🌿 fork 버튼 신설. 클릭 시 `session/fork` IPC 호출 → 새
+session 활성화 + toast 안내.
+
+- `ChatPanelProps.onForkSession?` + ChatHeader prop forwarding.
+- 미지정 시 버튼 미노출 (legacy 호환).
+- App.tsx 핸들러 — `window.dreampia.session.fork(activeSession.id)` 호출,
+  성공 시 `setActiveSessionId(newId)` + `toasts.success`. 실패 시 `toasts.error`.
+- IPC 미가용 시 `toasts.warning`.
+- i18n: ko/en 의 `chat.header.fork_tooltip` / `fork_aria` 추가.
+
+unit suite: 1904 pass / 7 baseline. 회귀 0.
+
 ## [1.6.10] — 2026-05-06
 
 **PreviewPanel — AnnotationOverlay 통합 + onAnnotation wiring (v1.6.0/v1.6.9 결합).**

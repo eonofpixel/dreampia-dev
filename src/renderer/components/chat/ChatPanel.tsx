@@ -132,6 +132,11 @@ export interface ChatPanelProps {
    * `session/set-workspace-locked` 호출 후 state 갱신.
    */
   onToggleWorkspaceLock?: () => void;
+  /**
+   * v1.6.11 — 채팅 header [fork] 버튼 클릭. App.tsx 가 IPC `session/fork`
+   * 호출 + 새 session 활성화 + 사용자 toast.
+   */
+  onForkSession?: () => void;
 }
 
 interface MessagesAreaProps {
@@ -180,6 +185,7 @@ export function ChatPanel({
   onPickSession,
   workspaceLocked = false,
   onToggleWorkspaceLock,
+  onForkSession,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -204,6 +210,7 @@ export function ChatPanel({
         permissionDisabled={ipcUnavailable}
         workspaceLocked={workspaceLocked}
         onToggleWorkspaceLock={onToggleWorkspaceLock}
+        onForkSession={onForkSession}
       />
       {ipcUnavailable && <IpcUnavailableBanner />}
       <MessagesArea
@@ -389,6 +396,7 @@ function ChatHeader({
   permissionDisabled = false,
   workspaceLocked = false,
   onToggleWorkspaceLock,
+  onForkSession,
 }: {
   session: Session;
   cliStatus: CliStatus;
@@ -406,6 +414,11 @@ function ChatHeader({
   workspaceLocked?: boolean;
   /** Toggle handler. App 이 IPC `session/set-workspace-locked` 호출 후 state 갱신. */
   onToggleWorkspaceLock?: () => void;
+  /**
+   * v1.6.11 — Session fork. App.tsx 가 `session/fork` IPC 호출 + 새 session
+   * 활성화. 미지정 시 [fork] 버튼 미노출 (legacy 동작).
+   */
+  onForkSession?: () => void;
 }): React.JSX.Element {
   const t = useT();
   // v1.0.6 — drift detection: 이 세션이 만들어진 폴더 이름과 현재 작업 폴더 이름이
@@ -552,10 +565,21 @@ function ChatHeader({
           </button>
         )}
         {/*
-         * v1.0.7 — FAKE-3 청산: ··· (more) 가 핸들러 없는 장식이었음. 진짜
-         * dropdown menu 는 v1.1.0 에 별도 작업 — 일단 제거해서 사용자 기대와
-         * 동작 mismatch 해소.
+         * v1.6.11 — Session fork 버튼. 클릭 시 부모가 session/fork IPC 호출.
+         * onForkSession 미지정 시 노출 X (legacy 동작 유지).
          */}
+        {onForkSession !== undefined && (
+          <button
+            type="button"
+            onClick={onForkSession}
+            className="shrink-0 rounded px-1.5 py-0.5 text-[14px] leading-none hover:bg-bg-tertiary"
+            title={t('chat.header.fork_tooltip')}
+            aria-label={t('chat.header.fork_aria')}
+            data-testid="chat-fork-button"
+          >
+            🌿
+          </button>
+        )}
       </div>
     </div>
   );
