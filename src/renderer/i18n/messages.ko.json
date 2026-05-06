@@ -1,6 +1,21 @@
 {
   "app.title": "Dreampia-Dev",
 
+  "preview.tabs.untitled": "새 탭",
+  "preview.tabs.select_aria": "{title} 탭으로 전환",
+  "preview.tabs.close_aria": "{title} 닫기",
+  "preview.tabs.new_aria": "새 탭",
+  "preview.controls.back_aria": "뒤로",
+  "preview.controls.forward_aria": "앞으로",
+  "preview.controls.reload_aria": "새로고침",
+  "preview.controls.url_aria": "URL",
+  "preview.controls.url_placeholder": "URL 입력 또는 검색",
+  "preview.controls.fullscreen_aria": "전체화면",
+  "preview.controls.fullscreen_tooltip": "전체화면 (P2)",
+  "preview.empty.title": "미리보기할 페이지가 없어요",
+  "preview.empty.hint": "AI가 띄운 서버 또는 직접 URL 입력",
+  "preview.empty.open_demo": "예시 URL 열기",
+
   "sidebar.aria_label": "사이드바",
   "sidebar.search.aria_label": "메시지 검색",
   "sidebar.search.placeholder": "메시지 검색…",

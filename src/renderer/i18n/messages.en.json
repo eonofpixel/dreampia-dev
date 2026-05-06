@@ -1,6 +1,21 @@
 {
   "app.title": "Dreampia-Dev",
 
+  "preview.tabs.untitled": "New tab",
+  "preview.tabs.select_aria": "Switch to {title}",
+  "preview.tabs.close_aria": "Close {title}",
+  "preview.tabs.new_aria": "New tab",
+  "preview.controls.back_aria": "Back",
+  "preview.controls.forward_aria": "Forward",
+  "preview.controls.reload_aria": "Reload",
+  "preview.controls.url_aria": "URL",
+  "preview.controls.url_placeholder": "Type a URL or search",
+  "preview.controls.fullscreen_aria": "Fullscreen",
+  "preview.controls.fullscreen_tooltip": "Fullscreen (P2)",
+  "preview.empty.title": "No page to preview yet",
+  "preview.empty.hint": "AI-launched server or type a URL above",
+  "preview.empty.open_demo": "Open example URL",
+
   "sidebar.aria_label": "Sidebar",
   "sidebar.search.aria_label": "Search messages",
   "sidebar.search.placeholder": "Search messages…",

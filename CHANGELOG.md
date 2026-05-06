@@ -2,6 +2,32 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.8] — 2026-05-06
+
+**a11y / i18n — PreviewPanel aria-label + 가시 텍스트 i18n 화.**
+
+PreviewPanel 의 모든 interactive element 의 aria-label / placeholder /
+visible text 를 hardcoded 한국어 → `useT()` 기반 i18n 으로 교체. 영문
+locale 사용자가 미리보기 패널만 한국어로 보이는 문제 해소.
+
+대상 요소:
+- BrowserControls — 뒤로 / 앞으로 / 새로고침 / URL 입력 / 전체화면 (5개
+  aria-label + URL placeholder + tooltip).
+- PreviewTabs — 탭 select / 닫기 (template `{title}` 변수) + 새 탭 + 미정 탭
+  default 라벨.
+- EmptyPreview — 안내 문구 + [예시 URL 열기] 버튼.
+
+i18n: ko/en 양쪽에 `preview.*` 14 키 추가. 기존 `axe-core/playwright` (v1.7.7)
+가 잡지 못했던 hardcoded text 제거 — 향후 axe-i18n 검사 통과 가능.
+
+기존 테스트 호환: PreviewPanel.test.tsx 가 검사하는 aria-label 형식 유지
+(`{title} 닫기` / `새 탭`) — 회귀 0.
+
+unit suite: 1844 pass / 7 baseline fail. 회귀 0.
+
+후속 — Sidebar / ChatPanel / SettingsModal 의 hardcoded 한국어 visible text
+i18n 화는 별도 슬롯 (현재 그 위치들은 useT 사용 중이지만 일부 혼재).
+
 ## [1.5.4] — 2026-05-06
 
 **PDF 텍스트 추출 — `pdfjs-dist` 통합.**
