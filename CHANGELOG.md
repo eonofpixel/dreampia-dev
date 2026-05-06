@@ -2,6 +2,40 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.4.0] — 2026-05-06
+
+**Schema debt B-1 — workspace_id sha256 backfill foundation.**
+
+v1.3.0 (migration 008) marker 의 application 후속. workspace_id 가 cryptographic
+sha256 기반 deterministic id 로 점진 전환 가능하도록 utility + 백필 helper +
+migration 12 추가.
+
+신규 utility (src/types/helpers.ts):
+- `workspaceIdForSha256(absolutePath)` — `sha256(normalized)[:16]` 기반.
+  same-path 정규화 (lowercase + 백슬래시 → 슬래시) 는 기존 `workspaceIdFor`
+  와 호환. node:crypto 사용.
+- `isLegacyFnvWorkspaceId(id, path)` — 백필 대상 판별 (FNV 매칭 시 true).
+
+Backfill helper (src/storage/workspaceBackfill.ts):
+- `backfillWorkspaceIdsToSha256(db) → BackfillResult` — opt-in 명시 호출.
+- 동작: PRAGMA foreign_keys 일시 OFF (transaction 외) → 모든 workspace 순회 →
+  FNV id 매칭만 sha256 으로 UPDATE + cascade `sessions.workspace_id` UPDATE →
+  conflict (target 이미 차지) skip + 기록 → FK ON 복원.
+- 결과: scanned / updated / skipped / conflicts / cascade_sessions 통계.
+
+Migration:
+- 012_workspace_id_sha256_marker.sql — schema 변경 0, version bump 11→12.
+
+기존 `workspaceIdFor` (FNV) 는 변경 X — production code path 영향 없음.
+Backfill 은 사용자 / 부팅 코드가 explicit 호출 (settings 진단 panel 또는
+migration 도구 후속).
+
+테스트: 13 신규 unit (sha256 utility 4 + isLegacyFnv 3 + backfill helper 6).
+회귀 0 (1810 pass / 7 baseline).
+
+후속 — application code default 를 sha256 으로 전환 + 부팅 자동 backfill
+prompt UI 는 별도 슬롯.
+
 ## [1.7.2] — 2026-05-06
 
 **Automation HTTP listener — webhook trigger localhost server.**

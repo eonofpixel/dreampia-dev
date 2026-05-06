@@ -9,6 +9,8 @@ import {
   newSessionId,
   newTurnId,
   workspaceIdFor,
+  workspaceIdForSha256,
+  isLegacyFnvWorkspaceId,
   partitionIdFor,
   nowIso,
   SessionIdSchema,
@@ -104,5 +106,51 @@ describe('nowIso', () => {
     const iso = nowIso();
     expect(iso).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     expect(new Date(iso).toISOString()).toBe(iso);
+  });
+});
+
+describe('v1.4.0 — workspaceIdForSha256', () => {
+  it('returns ws-<16 hex>', () => {
+    const id = workspaceIdForSha256('/some/path');
+    expect(id).toMatch(/^ws-[0-9a-f]{16}$/);
+  });
+
+  it('deterministic — 같은 path 반복 호출 동일', () => {
+    const a = workspaceIdForSha256('/a/b');
+    const b = workspaceIdForSha256('/a/b');
+    expect(a).toBe(b);
+  });
+
+  it('대소문자 / 백슬래시 정규화 — Windows/Unix 동일', () => {
+    expect(workspaceIdForSha256('C:\\Dev\\foo')).toBe(
+      workspaceIdForSha256('c:/dev/foo')
+    );
+  });
+
+  it('FNV id 와 다른 결과 (sha256 명시 분리)', () => {
+    const fnv = workspaceIdFor('/foo');
+    const sha = workspaceIdForSha256('/foo');
+    expect(sha).not.toBe(fnv);
+  });
+});
+
+describe('v1.4.0 — isLegacyFnvWorkspaceId', () => {
+  it('FNV id 매칭 → true', () => {
+    const fnv = workspaceIdFor('/x/y');
+    expect(isLegacyFnvWorkspaceId(fnv, '/x/y')).toBe(true);
+  });
+
+  it('sha256 id 는 FNV 가 아님 → false', () => {
+    const sha = workspaceIdForSha256('/x/y');
+    expect(isLegacyFnvWorkspaceId(sha, '/x/y')).toBe(false);
+  });
+
+  it('random UUIDv7 같은 id → false', () => {
+    expect(
+      isLegacyFnvWorkspaceId(
+        '019d-zzzz-1111-2222-3333' as ReturnType<typeof workspaceIdFor>,
+        '/anything'
+      )
+    ).toBe(false);
   });
 });

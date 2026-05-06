@@ -76,6 +76,35 @@ export function workspaceIdFor(absolutePath: string): WorkspaceId {
 }
 
 // ────────────────────────────────────────────────────────────
+// v1.4.0 — sha256-based deterministic workspace_id
+//
+// 이전 FNV-1a 64-bit 는 collision 위험이 무시할 수 있는 수준이지만 cryptographic
+// 검증 / 서명 / 외부 시스템과의 ID 교환에는 부적합. v1.4.0 부터 sha256 기반으로
+// 점진 전환 — 본 commit 은 "병행 utility + 백필 helper" 까지. application code
+// 의 default 전환은 후속 (v1.4.0.x).
+//
+// Same-path 정규화는 `workspaceIdFor` 와 동일 — 대소문자 무시 + 백슬래시 →
+// 슬래시. sha256 의 16-hex prefix (= 64-bit) 사용 → FNV 와 같은 길이 보존.
+// ────────────────────────────────────────────────────────────
+
+import { createHash } from 'node:crypto';
+
+export function workspaceIdForSha256(absolutePath: string): WorkspaceId {
+  const normalized = absolutePath.toLowerCase().replace(/\\/g, '/');
+  const full = createHash('sha256').update(normalized, 'utf8').digest('hex');
+  return `ws-${full.slice(0, 16)}` as WorkspaceId;
+}
+
+/**
+ * v1.4.0 — 주어진 path 가 FNV-1a 기반 legacy id 와 매칭되는지 검사.
+ * Backfill helper 가 "FNV-기반인지" 판단할 때 사용 (random UUIDv7 인 row 는
+ * 건드리지 않도록).
+ */
+export function isLegacyFnvWorkspaceId(id: WorkspaceId, absolutePath: string): boolean {
+  return id === workspaceIdFor(absolutePath);
+}
+
+// ────────────────────────────────────────────────────────────
 // Browser partition id (Codex codex-browser-app pattern)
 // ────────────────────────────────────────────────────────────
 

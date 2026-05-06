@@ -25,6 +25,7 @@ import sql008 from './migrations/008_workspace_id_deterministic.sql?raw';
 import sql009 from './migrations/009_grants_id_text.sql?raw';
 import sql010 from './migrations/010_json_columns_promote.sql?raw';
 import sql011 from './migrations/011_down_migration_marker.sql?raw';
+import sql012 from './migrations/012_workspace_id_sha256_marker.sql?raw';
 
 // ────────────────────────────────────────────────────────────
 // Migration registry
@@ -72,6 +73,11 @@ const MIGRATIONS: readonly Migration[] = [
     version: 11,
     description: 'v1.3.3 — down-migration marker (B-4)',
     up: sql011,
+  },
+  {
+    version: 12,
+    description: 'v1.4.0 — workspace_id sha256 backfill foundation (B-1 후속)',
+    up: sql012,
   },
 ] as const;
 
