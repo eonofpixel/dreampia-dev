@@ -2,6 +2,19 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.13] — 2026-05-06
+
+**main/index.ts 부팅에 `bootstrapTelemetry` 호출 (v1.7.12 wiring).**
+
+`app.whenReady` 의 첫 step 으로 telemetry bootstrap 호출. SENTRY_DSN env 있으면
+SentrySink 교체, 없으면 ConsoleSink fallback. dynamic import + try/catch 로
+non-fatal — bootstrap 실패 시 console.warn 만 + main 계속.
+
+`enabled=false` default — 실제 settings.telemetry_enabled 와 연동은 후속 슬롯
+(settings 읽기 + setEnabled 호출).
+
+회귀 0 (1904 pass / 7 baseline).
+
 ## [1.6.9] — 2026-05-06
 
 **AnnotationBlock typed block + provider 직렬화 (v1.6.0 follow-up).**

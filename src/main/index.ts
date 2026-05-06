@@ -237,7 +237,30 @@ function createMainWindow(): BrowserWindow {
   return win;
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // v1.7.13 — Telemetry bootstrap. SENTRY_DSN env 가 있으면 SentrySink 교체,
+  // 없으면 ConsoleSink fallback. settings.telemetry_enabled 는 후속 wiring 에서.
+  // dynamic import 라 await — main bootstrap 순서에 영향 없도록 fail-soft.
+  try {
+    const { bootstrapTelemetry } = await import('./telemetry/bootstrap');
+    const { getTelemetry } = await import('./telemetry/Telemetry');
+    const result = await bootstrapTelemetry({
+      telemetry: getTelemetry(),
+      // enabled 는 settings 에서 읽도록 후속 — 현재는 DSN 만 있으면 client 준비
+      // (실제 emit 은 Telemetry.enabled=true 일 때만, 그건 settings 와 연동 필요).
+      enabled: false,
+    });
+    if (result.sentry) {
+      console.info('[main] Sentry telemetry initialized');
+    } else {
+      // SENTRY_DSN 미정 / SDK import 실패 — 사용자 환경에서 정상 (선택사항).
+      console.debug(`[main] Telemetry: ${result.reason ?? 'console fallback'}`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[main] Telemetry bootstrap failed (non-fatal): ${msg}`);
+  }
+
   // Open session DB at OS-specific user data dir.
   //   Windows: %APPDATA%/Dreampia-Dev/sessions.sqlite
   //   macOS:   ~/Library/Application Support/Dreampia-Dev/sessions.sqlite
