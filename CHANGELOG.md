@@ -2,6 +2,30 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.9] — 2026-05-06
+
+**AnnotationBlock typed block + provider 직렬화 (v1.6.0 follow-up).**
+
+`AnnotationOverlay` (v1.6.0) 의 drag-to-mark 결과를 chat 으로 prepend 가능한
+typed block 추가. `Annotation` (per-turn metadata) 와 별개로 `annotation_block`
+(ContentBlock 의 일원).
+
+Schema (`src/types/conversation.ts`):
+- `AnnotationBlockSchema` — `{ type: 'annotation_block', url, bounding_box,
+  comment, screenshot_uri?, captured_at }`. discriminated union 합류.
+
+Provider 직렬화:
+- `ClaudeAdapter.toClaudeContent` — `[Annotation] {url} (bbox a,b,c×d)` +
+  optional 주석 / 스크린샷 line.
+- `CodexAdapter.formatAnnotationBlockText` static + 4곳 switch case 추가
+  (blockToText / fallbackBlockToText / toOpenAIContentPart).
+
+테스트: 6 신규 unit (schema valid / 필수 missing fail / 음수 wh fail /
+formatText with all fields / comment 빈 line skip / screenshot 미지정 skip).
+회귀 0 (1904 pass / 7 baseline).
+
+후속 — AnnotationOverlay onMark → ChatInput typed block prepend wiring (별도).
+
 ## [1.7.12] — 2026-05-06
 
 **Telemetry bootstrap — Sentry init 부팅 wiring (v1.7.0 follow-up).**

@@ -114,6 +114,34 @@ const SessionReferenceBlockSchema = z.object({
 //  - `dump_json` 은 stringified DomDumpNode tree. SQLite 에 그대로 저장 가능.
 //  - `summary` 는 chip footer 표시용 (예: "div#root, 12 children, 47 nodes").
 //  - `node_count` 는 chip 에서 정량 hint.
+// v1.6.0 follow-up — Annotation typed block.
+//
+// AnnotationOverlay 가 사용자 영역 캡처 시 본 block 으로 ChatInput 에 prepend.
+// 기존 `Annotation` schema 는 per-turn metadata (DOM Inspector 결과 + selector
+// + dom_meta) 인 반면, 본 block 은 chat-injectable summary — bbox + 페이지 URL
+// + optional screenshot URI + optional comment.
+const AnnotationBlockSchema = z.object({
+  type: z.literal('annotation_block'),
+  /** 캡처된 페이지의 URL (preview tab 의 src). */
+  url: z.string(),
+  /** Overlay-relative pixel coordinates (AnnotationOverlay 가 capture). */
+  bounding_box: z.object({
+    x: z.number(),
+    y: z.number(),
+    w: z.number().nonnegative(),
+    h: z.number().nonnegative(),
+  }),
+  /** 사용자 메모. 빈 string 허용 (UI 가 placeholder 분기). */
+  comment: z.string(),
+  /**
+   * Optional — 해당 영역 screenshot URI. v1.6.1 의 capture-tab 결과를
+   * userData/screenshots/<id>.png 로 저장 후 파일 URI.
+   */
+  screenshot_uri: z.string().optional(),
+  /** 캡처 시각 (ISO 8601). */
+  captured_at: z.string(),
+});
+
 const DomDumpBlockSchema = z.object({
   type: z.literal('dom_dump'),
   /** 캡처 시점의 page URL (webview 의 src 또는 location.href). */
@@ -142,12 +170,14 @@ export const ContentBlockSchema = z.discriminatedUnion('type', [
   FileReferenceBlockSchema,
   SessionReferenceBlockSchema,
   DomDumpBlockSchema,
+  AnnotationBlockSchema,
 ]);
 
 export type ContentBlock = z.infer<typeof ContentBlockSchema>;
 export type FileReferenceBlock = z.infer<typeof FileReferenceBlockSchema>;
 export type SessionReferenceBlock = z.infer<typeof SessionReferenceBlockSchema>;
 export type DomDumpBlock = z.infer<typeof DomDumpBlockSchema>;
+export type AnnotationBlock = z.infer<typeof AnnotationBlockSchema>;
 export type MentionRef = z.infer<typeof MentionRefSchema>;
 export type EmbeddedCard = z.infer<typeof EmbeddedCardSchema>;
 

@@ -164,6 +164,8 @@ export class CodexAdapter implements ProviderAdapter {
       case 'dom_dump':
         // v1.6.2 — DOM dump. fenced JSON 으로 plain text 직렬화.
         return CodexAdapter.formatDomDumpText(block);
+      case 'annotation_block':
+        return CodexAdapter.formatAnnotationBlockText(block);
     }
   }
 
@@ -180,6 +182,9 @@ export class CodexAdapter implements ProviderAdapter {
     }
     if (block.type === 'dom_dump') {
       return CodexAdapter.formatDomDumpText(block);
+    }
+    if (block.type === 'annotation_block') {
+      return CodexAdapter.formatAnnotationBlockText(block);
     }
     return '';
   }
@@ -214,6 +219,8 @@ export class CodexAdapter implements ProviderAdapter {
         };
       case 'dom_dump':
         return { type: 'text', text: CodexAdapter.formatDomDumpText(block) };
+      case 'annotation_block':
+        return { type: 'text', text: CodexAdapter.formatAnnotationBlockText(block) };
     }
   }
 
@@ -268,6 +275,24 @@ export class CodexAdapter implements ProviderAdapter {
         : '';
     const header = `[DOM] ${block.url}${sel} — ${block.summary}`;
     return `${header}\n\`\`\`json\n${block.dump_json}\n\`\`\``;
+  }
+
+  /**
+   * v1.6.0 follow-up — annotation block 을 plain text 로. URL + bbox +
+   * 사용자 주석 + screenshot URI. ClaudeAdapter 의 dom_dump case 와 동일 형식.
+   */
+  static formatAnnotationBlockText(block: {
+    url: string;
+    bounding_box: { x: number; y: number; w: number; h: number };
+    comment: string;
+    screenshot_uri?: string;
+  }): string {
+    const bb = block.bounding_box;
+    const head = `[Annotation] ${block.url} (bbox ${bb.x},${bb.y},${bb.w}×${bb.h})`;
+    const cmt = block.comment.length > 0 ? `\n주석: ${block.comment}` : '';
+    const shot =
+      block.screenshot_uri !== undefined ? `\n스크린샷: ${block.screenshot_uri}` : '';
+    return `${head}${cmt}${shot}`;
   }
 
   private toOpenAIFunctionCall(call: ToolCall): Record<string, unknown> {

@@ -150,6 +150,16 @@ export class ClaudeAdapter implements ProviderAdapter {
         const fenced = '```json\n' + block.dump_json + '\n```';
         return { type: 'text', text: `${header}\n${fenced}` };
       }
+      case 'annotation_block': {
+        // v1.6.0 follow-up — bbox + comment + optional screenshot URI.
+        const bb = block.bounding_box;
+        const head = `[Annotation] ${block.url} (bbox ${bb.x},${bb.y},${bb.w}×${bb.h})`;
+        const cmt = block.comment.length > 0 ? `\n주석: ${block.comment}` : '';
+        const shot = block.screenshot_uri !== undefined
+          ? `\n스크린샷: ${block.screenshot_uri}`
+          : '';
+        return { type: 'text', text: `${head}${cmt}${shot}` };
+      }
     }
   }
 
