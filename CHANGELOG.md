@@ -2,6 +2,28 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.11] — 2026-05-06
+
+**Toast context + settings 패널 silent fail 마이그레이션.**
+
+`useToasts` 에 `ToastsProvider` + `useToastsContext` / `useOptionalToasts`
+추가. App.tsx 가 Provider 로 감싸 깊이 nested 한 settings 패널에서도 같은
+toast 시스템 접근 가능.
+
+silent → toast 마이그레이션 (5곳):
+- `ProviderPanel` setDefaultProvider — 실패 시 이전 값으로 revert + 토스트.
+- `PermissionPanel` setDefaultPermissionLevel — 동일.
+- `PermissionGrantsBlock` revokeGrant — 실패 시 토스트 (revert 불필요 — reload).
+- `ThemePanel` setTheme — 실패 시 prev theme 으로 revert + applyTheme 복원.
+- `LanguageSettings` setLanguage — 실패 시 prev locale 로 revert.
+
+각각 IPC 미가용 (warning) vs 저장 실패 (error) 분리. i18n ko/en 양쪽에
+`settings.<panel>.error.no_ipc` + `.save_failed` 12개 키 추가.
+
+테스트: 5개 신규 unit (`tests/renderer/ToastsContext.test.tsx` — 자식 push
+공유 / 두 자식 인스턴스 공유 / Provider 밖 throw / useOptionalToasts null /
+present 검증). 회귀 0 (1769 pass / baseline 7 fail).
+
 ## [1.6.7] — 2026-05-06
 
 **Plugin .granted.json 영속 — `'always'` decision 파일로.**

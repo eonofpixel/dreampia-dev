@@ -47,6 +47,7 @@ import { DiagnoseSettings } from './DiagnoseSettings';
 import { AboutPanel } from './AboutPanel';
 import { type PermissionLevel } from '@/types';
 import { useT } from '../../i18n';
+import { useOptionalToasts } from '../../hooks/useToasts';
 import { localizedPermissionLabel } from './permissionLabels';
 
 export type SettingsTabId =
@@ -241,6 +242,7 @@ const PROVIDER_OPTIONS: ReadonlyArray<ProviderOption> = [
 
 function ProviderPanel(): React.JSX.Element {
   const t = useT();
+  const toasts = useOptionalToasts();
   const [choice, setChoice] = useState<DefaultProviderChoice>('auto');
   const [loading, setLoading] = useState(true);
 
@@ -266,16 +268,33 @@ function ProviderPanel(): React.JSX.Element {
     };
   }, []);
 
-  const handleChange = useCallback(async (next: DefaultProviderChoice): Promise<void> => {
-    setChoice(next);
-    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
-    if (appApi === undefined || typeof appApi.setDefaultProvider !== 'function') return;
-    try {
-      await appApi.setDefaultProvider(next);
-    } catch {
-      // ignore — 다음 fetch 에서 stale 가능성 작음
-    }
-  }, []);
+  const handleChange = useCallback(
+    async (next: DefaultProviderChoice): Promise<void> => {
+      const prev = choice;
+      setChoice(next); // optimistic
+      const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+      if (appApi === undefined || typeof appApi.setDefaultProvider !== 'function') {
+        // IPC 미가용 — UI 만 바뀌고 영속 X. 사용자에게 명확히 알림.
+        toasts?.warning(t('settings.provider.error.no_ipc'));
+        return;
+      }
+      try {
+        const r = await appApi.setDefaultProvider(next);
+        if (r.ok === false) {
+          setChoice(prev); // revert
+          toasts?.error(t('settings.provider.error.save_failed'), {
+            detail: typeof r.error === 'string' ? r.error : undefined,
+          });
+        }
+      } catch (err) {
+        setChoice(prev);
+        toasts?.error(t('settings.provider.error.save_failed'), {
+          detail: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+    [choice, toasts, t]
+  );
 
   return (
     <section className="flex-1 overflow-y-auto p-6" data-testid="settings-provider-panel">
@@ -566,6 +585,7 @@ interface GrantSummary {
 
 function PermissionGrantsBlock(): React.JSX.Element {
   const t = useT();
+  const toasts = useOptionalToasts();
   const [grants, setGrants] = useState<GrantSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -607,16 +627,26 @@ function PermissionGrantsBlock(): React.JSX.Element {
   const handleRevoke = useCallback(
     async (grantId: string): Promise<void> => {
       const w = typeof window !== 'undefined' ? window : undefined;
-      const permApi = (w?.dreampia as { permission?: { revokeGrant: (id: string) => Promise<{ ok: boolean }> } } | undefined)?.permission;
-      if (permApi === undefined) return;
+      const permApi = (w?.dreampia as { permission?: { revokeGrant: (id: string) => Promise<{ ok: boolean; error?: unknown }> } } | undefined)?.permission;
+      if (permApi === undefined) {
+        toasts?.warning(t('settings.permission.grants.error.no_ipc'));
+        return;
+      }
       try {
-        await permApi.revokeGrant(grantId);
-      } catch {
-        // ignore
+        const r = await permApi.revokeGrant(grantId);
+        if (r.ok === false) {
+          toasts?.error(t('settings.permission.grants.error.revoke_failed'), {
+            detail: typeof r.error === 'string' ? r.error : undefined,
+          });
+        }
+      } catch (err) {
+        toasts?.error(t('settings.permission.grants.error.revoke_failed'), {
+          detail: err instanceof Error ? err.message : String(err),
+        });
       }
       void reload();
     },
-    [reload]
+    [reload, toasts, t]
   );
 
   return (
@@ -738,6 +768,7 @@ function shortTarget(targetJson: string): string {
 
 function PermissionPanel(): React.JSX.Element {
   const t = useT();
+  const toasts = useOptionalToasts();
   const [level, setLevel] = useState<PermissionLevel>('workspace_write');
   const [capabilities, setCapabilities] = useState<
     Record<PermissionLevel, string[]> | null
@@ -772,16 +803,35 @@ function PermissionPanel(): React.JSX.Element {
     };
   }, []);
 
-  const handleChange = useCallback(async (next: PermissionLevel): Promise<void> => {
-    setLevel(next);
-    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
-    if (appApi === undefined || typeof appApi.setDefaultPermissionLevel !== 'function') return;
-    try {
-      await appApi.setDefaultPermissionLevel(next);
-    } catch {
-      // ignore
-    }
-  }, []);
+  const handleChange = useCallback(
+    async (next: PermissionLevel): Promise<void> => {
+      const prev = level;
+      setLevel(next); // optimistic
+      const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+      if (
+        appApi === undefined ||
+        typeof appApi.setDefaultPermissionLevel !== 'function'
+      ) {
+        toasts?.warning(t('settings.permission.error.no_ipc'));
+        return;
+      }
+      try {
+        const r = await appApi.setDefaultPermissionLevel(next);
+        if (r.ok === false) {
+          setLevel(prev);
+          toasts?.error(t('settings.permission.error.save_failed'), {
+            detail: typeof r.error === 'string' ? r.error : undefined,
+          });
+        }
+      } catch (err) {
+        setLevel(prev);
+        toasts?.error(t('settings.permission.error.save_failed'), {
+          detail: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+    [level, toasts, t]
+  );
 
   const currentCapabilities = capabilities?.[level] ?? [];
 
@@ -921,6 +971,7 @@ export function applyTheme(choice: ThemeChoice): void {
 
 function ThemePanel(): React.JSX.Element {
   const t = useT();
+  const toasts = useOptionalToasts();
   const [choice, setChoice] = useState<ThemeChoice>('system');
   const [loading, setLoading] = useState(true);
 
@@ -949,17 +1000,35 @@ function ThemePanel(): React.JSX.Element {
     };
   }, []);
 
-  const handleChange = useCallback(async (next: ThemeChoice): Promise<void> => {
-    setChoice(next);
-    applyTheme(next);
-    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
-    if (appApi === undefined || typeof appApi.setTheme !== 'function') return;
-    try {
-      await appApi.setTheme(next);
-    } catch {
-      // ignore
-    }
-  }, []);
+  const handleChange = useCallback(
+    async (next: ThemeChoice): Promise<void> => {
+      const prev = choice;
+      setChoice(next);
+      applyTheme(next);
+      const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+      if (appApi === undefined || typeof appApi.setTheme !== 'function') {
+        toasts?.warning(t('settings.theme.error.no_ipc'));
+        return;
+      }
+      try {
+        const r = await appApi.setTheme(next);
+        if (r.ok === false) {
+          setChoice(prev);
+          applyTheme(prev);
+          toasts?.error(t('settings.theme.error.save_failed'), {
+            detail: typeof r.error === 'string' ? r.error : undefined,
+          });
+        }
+      } catch (err) {
+        setChoice(prev);
+        applyTheme(prev);
+        toasts?.error(t('settings.theme.error.save_failed'), {
+          detail: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+    [choice, toasts, t]
+  );
 
   return (
     <section className="flex-1 overflow-y-auto p-6" data-testid="settings-theme-panel">

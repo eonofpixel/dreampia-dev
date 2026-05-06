@@ -17,9 +17,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { setLocale, useT, type Locale } from '../../i18n';
+import { useOptionalToasts } from '../../hooks/useToasts';
 
 export function LanguageSettings(): React.JSX.Element {
   const t = useT();
+  const toasts = useOptionalToasts();
   const [choice, setChoice] = useState<Locale>('ko');
   const [loading, setLoading] = useState(true);
 
@@ -48,20 +50,36 @@ export function LanguageSettings(): React.JSX.Element {
     };
   }, []);
 
-  const handleChange = useCallback(async (next: Locale): Promise<void> => {
-    setChoice(next);
-    // 1) 즉시 locale 적용 — useT subscribers 가 re-render.
-    setLocale(next);
-    // 2) IPC persist. 실패해도 in-memory state 는 유지 — 다음 부팅 시
-    //    한국어로 fallback 되므로 UX 가 silently degraded 되지 않는다.
-    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
-    if (appApi === undefined || typeof appApi.setLanguage !== 'function') return;
-    try {
-      await appApi.setLanguage(next);
-    } catch {
-      // ignore
-    }
-  }, []);
+  const handleChange = useCallback(
+    async (next: Locale): Promise<void> => {
+      // 1) 즉시 locale 적용 — useT subscribers 가 re-render. 실패 시 prev 로 revert.
+      const prev = choice;
+      setChoice(next);
+      setLocale(next);
+      const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+      if (appApi === undefined || typeof appApi.setLanguage !== 'function') {
+        toasts?.warning(t('settings.language.error.no_ipc'));
+        return;
+      }
+      try {
+        const r = await appApi.setLanguage(next);
+        if (r.ok === false) {
+          setChoice(prev);
+          setLocale(prev);
+          toasts?.error(t('settings.language.error.save_failed'), {
+            detail: typeof r.error === 'string' ? r.error : undefined,
+          });
+        }
+      } catch (err) {
+        setChoice(prev);
+        setLocale(prev);
+        toasts?.error(t('settings.language.error.save_failed'), {
+          detail: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+    [choice, toasts, t]
+  );
 
   const options: ReadonlyArray<{ value: Locale; label: string; hint: string }> = [
     {

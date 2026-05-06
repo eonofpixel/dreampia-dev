@@ -23,7 +23,7 @@ import { SlashHelpModal } from './components/chat/SlashHelpModal';
 import { CompareModal } from './components/chat/CompareModal';
 import { PluginsModal } from './components/plugins/PluginsModal';
 import { ToastContainer } from './components/toast/ToastContainer';
-import { useToasts } from './hooks/useToasts';
+import { useToasts, ToastsProvider } from './hooks/useToasts';
 import {
   CostLimitModal,
   parseCostLimitError,
@@ -1197,7 +1197,9 @@ export function App(): React.JSX.Element {
   }
 
   return (
-    <>
+    // v1.7.11 — Toast context provider. 깊이 nested 한 settings panel 등에서
+    // 같은 toast 시스템 접근 가능. ToastContainer 는 여전히 App 내부에 mount.
+    <ToastsProvider value={toasts}>
       {showOnboarding && (
         <OnboardingWizard
           onComplete={handleOnboardingComplete}
@@ -1418,6 +1420,6 @@ export function App(): React.JSX.Element {
         })}
         {...(costLimitError?.message !== undefined && { hint: costLimitError.message })}
       />
-    </>
+    </ToastsProvider>
   );
 }

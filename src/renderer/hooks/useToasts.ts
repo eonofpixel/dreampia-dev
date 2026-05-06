@@ -15,7 +15,14 @@
  *   <ToastContainer toasts={toasts.list} onDismiss={toasts.dismiss} />
  */
 
-import { useCallback, useState } from 'react';
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useState,
+  type ReactNode,
+} from 'react';
 
 export type ToastKind = 'error' | 'warning' | 'info' | 'success';
 
@@ -128,4 +135,56 @@ export function useToasts(): ToastsApi {
   }, []);
 
   return { list, push, error, warning, info, success, dismiss, clear };
+}
+
+// ────────────────────────────────────────────────────────────
+// v1.7.11 — Toast context provider
+//
+// useToasts 는 단일 인스턴스 (App.tsx 가 owner) 가 ToastContainer 를 mount.
+// 깊이 nested 한 컴포넌트 (SettingsModal 의 panel 들 등) 에서도 같은 toast
+// 시스템을 쓰려면 prop drilling 대신 context 가 필요.
+//
+// 사용:
+//   App.tsx 안:
+//     const toasts = useToasts();
+//     <ToastsContext.Provider value={toasts}>...</ToastsContext.Provider>
+//
+//   하위 컴포넌트:
+//     const toasts = useToastsContext(); // throws if outside provider
+//     // 또는
+//     const toasts = useOptionalToasts(); // null if outside provider
+// ────────────────────────────────────────────────────────────
+
+const ToastsContext = createContext<ToastsApi | null>(null);
+
+export interface ToastsProviderProps {
+  value: ToastsApi;
+  children: ReactNode;
+}
+
+export function ToastsProvider({ value, children }: ToastsProviderProps): React.JSX.Element {
+  return createElement(ToastsContext.Provider, { value }, children);
+}
+
+/**
+ * Provider 안에서만 사용. 미설정이면 throw — 누락 디버깅 명확화.
+ * 옵션이 필요하면 `useOptionalToasts` 사용.
+ */
+export function useToastsContext(): ToastsApi {
+  const ctx = useContext(ToastsContext);
+  if (ctx === null) {
+    throw new Error(
+      'useToastsContext must be used within a ToastsProvider. ' +
+        'Wrap the app (or test) with <ToastsProvider value={useToasts()}>.'
+    );
+  }
+  return ctx;
+}
+
+/**
+ * Provider 가 없는 환경 (테스트 / 분리 mount) 에서 사용 가능. null 이면
+ * caller 가 silent fallback 결정.
+ */
+export function useOptionalToasts(): ToastsApi | null {
+  return useContext(ToastsContext);
 }
