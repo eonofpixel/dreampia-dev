@@ -2,6 +2,36 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.8.2] — 2026-05-07
+
+**`_extra` schema canonical 문서 + strict contract test.**
+
+새 PR 에서 `metadata_json._extra` 에 미등록 필드를 무성의하게 추가하면
+contract test 가 실패하도록 strict zod schema 등록. lint rule 보다
+가벼우면서 같은 강제 효과 — schema 갱신 + interface 갱신을 한 commit
+안에서 동기화하지 않으면 CI 가 막는다.
+
+### Added
+- `src/storage/metadataExtraSchema.ts` — `MetadataExtraSchema` strict
+  zod object. namespace 6개 (conversation/workspace/terminal/browser/
+  plan/permission) + 각 namespace 의 leaf 필드 모두 등록. existing
+  `FileRefSchema` 재사용. `permission.default_level` 은 enum 강제.
+- `docs/extra-namespace-schema.md` — canonical reference + PR 추가 시
+  체크리스트 + promote 패턴 (mig 014/015 참고).
+- `tests/storage/extraSchemaContract.test.ts` 신규 6 cases:
+  - fixture sample list 통과.
+  - SessionStore round-trip metadata_json._extra 가 schema 통과
+    (parent_session_id 있는 fixture 는 FK 사유로 skip).
+  - 미등록 namespace key 거부.
+  - 등록 namespace 안의 미등록 leaf 거부.
+  - 필수 필드 누락 거부.
+  - default_level enum 잘못된 값 거부.
+
+### 회귀
+- 0. typecheck clean.
+- 신규 6 tests PASS.
+- baseline 2039 → 2045 (+6).
+
 ## [1.8.1] — 2026-05-07
 
 **`_extra` column promote (B-3 2단계).**
