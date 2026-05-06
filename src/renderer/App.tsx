@@ -585,16 +585,21 @@ export function App(): React.JSX.Element {
               permission: { ...prev.permission, default_level: next },
             }
       );
-      // 2) IPC 영속. 실패해도 optimistic state 가 그대로 — 다음 fetch 에서
-      //    reconcile (또는 사용자가 다시 변경). p2 toast UI 추가 가능.
+      // 2) IPC 영속. v1.7.6: 실패 시 toast 알림. optimistic 그대로 유지 —
+      //    다음 fetch 에서 reconcile.
       const updated = await persistUpdatePermission(activeSession.id, {
         default_level: next,
       });
       if (updated !== null) {
         setActiveSession(updated);
+      } else {
+        toasts.error('권한 변경 저장 실패', {
+          detail: '잠시 후 다시 시도하세요.',
+        });
       }
     },
-    [activeSession, persistUpdatePermission]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeSession?.id, persistUpdatePermission]
   );
 
   // v1.1.13 (Workspace UX): per-session sticky workspace lock state.

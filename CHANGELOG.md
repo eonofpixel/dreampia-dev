@@ -2,6 +2,16 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.6] — 2026-05-06
+
+**toast 마이그레이션 — handleChangePermission silent fail 해소.**
+
+`persistUpdatePermission` 가 null 반환 (실패) 시 `toasts.error('권한 변경
+저장 실패')` + 재시도 안내. 이전엔 silent (사용자 모름).
+
+남은 silent fail 들 (search / IPC unavailable / streaming error)도 점진
+적으로. 각각의 위치 + UX 정확성 검토 후 별도 commit.
+
 ## [1.7.5] — 2026-05-06
 
 **L/E/E wire-up — Sidebar Skeleton 실 사용.**
