@@ -238,22 +238,23 @@ function createMainWindow(): BrowserWindow {
 }
 
 app.whenReady().then(async () => {
-  // v1.7.13 — Telemetry bootstrap. SENTRY_DSN env 가 있으면 SentrySink 교체,
-  // 없으면 ConsoleSink fallback. settings.telemetry_enabled 는 후속 wiring 에서.
-  // dynamic import 라 await — main bootstrap 순서에 영향 없도록 fail-soft.
+  // v1.7.13 / v1.7.15 — Telemetry bootstrap.
+  //  - SENTRY_DSN env 있으면 SentrySink, 없으면 ConsoleSink.
+  //  - settings.telemetry_enabled (default false) 가 setEnabled 반영.
   try {
     const { bootstrapTelemetry } = await import('./telemetry/bootstrap');
     const { getTelemetry } = await import('./telemetry/Telemetry');
+    const { readSettings } = await import('./settings');
+    const enabled = readSettings().telemetry_enabled === true;
     const result = await bootstrapTelemetry({
       telemetry: getTelemetry(),
-      // enabled 는 settings 에서 읽도록 후속 — 현재는 DSN 만 있으면 client 준비
-      // (실제 emit 은 Telemetry.enabled=true 일 때만, 그건 settings 와 연동 필요).
-      enabled: false,
+      enabled,
     });
     if (result.sentry) {
-      console.info('[main] Sentry telemetry initialized');
+      console.info(
+        `[main] Sentry telemetry initialized (enabled=${String(enabled)})`
+      );
     } else {
-      // SENTRY_DSN 미정 / SDK import 실패 — 사용자 환경에서 정상 (선택사항).
       console.debug(`[main] Telemetry: ${result.reason ?? 'console fallback'}`);
     }
   } catch (err) {

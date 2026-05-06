@@ -149,3 +149,50 @@ describe('IPC app:get-theme + app:set-theme + app:get-permission-capabilities (v
     expect(result.value.custom).toEqual([]);
   });
 });
+
+describe('IPC app:get-telemetry-enabled + app:set-telemetry-enabled (v1.7.15)', () => {
+  let tmpUserData = '';
+  const stubApp = {
+    getVersion: () => '0.0.1-test',
+    getPath: (_n: string) => themeUserDataRef.current,
+    isPackaged: false,
+  } as unknown as Parameters<typeof registerIpcHandlers>[0];
+
+  beforeEach(() => {
+    handlers.clear();
+    tmpUserData = mkdtempSync(join(tmpdir(), 'dreampia-ipc-tel-'));
+    themeUserDataRef.current = tmpUserData;
+    __resetSettingsCache();
+    registerIpcHandlers(stubApp);
+  });
+
+  afterEach(() => {
+    if (tmpUserData.length > 0 && existsSync(tmpUserData)) {
+      rmSync(tmpUserData, { recursive: true, force: true });
+    }
+  });
+
+  it('default false when settings missing', async () => {
+    const r = await call<Result<boolean>>('app:get-telemetry-enabled');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value).toBe(false);
+  });
+
+  it('set true → next get returns true', async () => {
+    const setResult = await call<Result<void>>('app:set-telemetry-enabled', true);
+    expect(setResult.ok).toBe(true);
+    __resetSettingsCache();
+    const getResult = await call<Result<boolean>>('app:get-telemetry-enabled');
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) return;
+    expect(getResult.value).toBe(true);
+  });
+
+  it('set non-boolean → fail', async () => {
+    const r = await call<Result<void>>('app:set-telemetry-enabled', 'yes');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/boolean/);
+  });
+});

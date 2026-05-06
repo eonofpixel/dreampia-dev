@@ -141,6 +141,12 @@ export interface AppSettings {
    * default 로 hydrate.
    */
   automation_rules?: AutomationRulePersisted[];
+  /**
+   * v1.7.15 — Telemetry opt-in 플래그. true 일 때만 SentrySink/ConsoleSink
+   * 가 emit. default false (사용자가 명시 opt-in). bootstrapTelemetry 가 본
+   * 값을 읽어 setEnabled.
+   */
+  telemetry_enabled?: boolean;
 }
 
 /**
@@ -236,6 +242,10 @@ export function readSettings(): AppSettings {
       }
       if (typeof obj['api_key_openai'] === 'string' && obj['api_key_openai'].length > 0) {
         next.api_key_openai = obj['api_key_openai'];
+      }
+      // v1.7.15 — telemetry_enabled. boolean 만 인정.
+      if (typeof obj['telemetry_enabled'] === 'boolean') {
+        next.telemetry_enabled = obj['telemetry_enabled'];
       }
       // v1.7.14 — automation_rules. 손상된 항목 silent drop.
       if (Array.isArray(obj['automation_rules'])) {

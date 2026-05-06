@@ -806,6 +806,15 @@ const api = {
       ipcRenderer.invoke('app:diagnose') as Promise<Result<AppDiagnoseShape>>,
 
     /**
+     * v1.7.15 — Telemetry opt-in 상태. default false. true 면 Telemetry
+     * (SentrySink/ConsoleSink) 가 emit.
+     */
+    getTelemetryEnabled: (): Promise<Result<boolean>> =>
+      ipcRenderer.invoke('app:get-telemetry-enabled') as Promise<Result<boolean>>,
+    setTelemetryEnabled: (enabled: boolean): Promise<Result<void>> =>
+      ipcRenderer.invoke('app:set-telemetry-enabled', enabled) as Promise<Result<void>>,
+
+    /**
      * v1.4.0 follow-up — workspace_id FNV → sha256 backfill 을 사용자가 명시
      * trigger. 결과 통계 반환. transaction 안 — 원자적.
      */

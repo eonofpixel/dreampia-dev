@@ -96,9 +96,100 @@ export function DiagnoseSettings(): React.JSX.Element {
       {/* v1.4.0 follow-up — workspace_id FNV → sha256 backfill 사용자 trigger. */}
       <WorkspaceBackfillSection t={t} />
 
+      {/* v1.7.15 — Telemetry opt-in toggle. */}
+      <TelemetrySection t={t} />
+
       {/* v1.0.11 SEC-3 — Audit log viewer. 별도 IPC 호출이라 위 진단 섹션과
           독립적으로 fetch + error. */}
       <AuditLogSection t={t} />
+    </section>
+  );
+}
+
+// ────────────────────────────────────────────────────────────
+// v1.7.15 — Telemetry opt-in section
+// ────────────────────────────────────────────────────────────
+
+function TelemetrySection({ t }: SubProps): React.JSX.Element {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+    if (appApi === undefined || typeof appApi.getTelemetryEnabled !== 'function') {
+      setEnabled(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await appApi.getTelemetryEnabled();
+        if (!cancelled) {
+          setEnabled(r.ok ? r.value : false);
+        }
+      } catch {
+        if (!cancelled) setEnabled(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleToggle = useCallback(async (): Promise<void> => {
+    if (enabled === null) return;
+    const next = !enabled;
+    setEnabled(next); // optimistic
+    setError(null);
+    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+    if (appApi === undefined || typeof appApi.setTelemetryEnabled !== 'function') {
+      setEnabled(!next);
+      setError(t('error.ipc_unavailable'));
+      return;
+    }
+    try {
+      const r = await appApi.setTelemetryEnabled(next);
+      if (r.ok === false) {
+        setEnabled(!next);
+        setError(r.error);
+      }
+    } catch (e) {
+      setEnabled(!next);
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [enabled, t]);
+
+  return (
+    <section
+      className="mt-6 rounded-md border border-border-primary p-4"
+      data-testid="settings-telemetry-section"
+    >
+      <h4 className="mb-1 text-sm font-semibold">
+        {t('settings.diagnose.telemetry.title')}
+      </h4>
+      <p className="mb-3 text-xs text-text-secondary">
+        {t('settings.diagnose.telemetry.description')}
+      </p>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={enabled === true}
+          disabled={enabled === null}
+          onChange={() => {
+            void handleToggle();
+          }}
+          data-testid="settings-telemetry-toggle"
+        />
+        <span>{t('settings.diagnose.telemetry.toggle_label')}</span>
+      </label>
+      {error !== null && (
+        <p
+          className="mt-3 break-words rounded border border-red-600/40 bg-red-900/20 p-2 font-mono text-[11px] text-red-300"
+          data-testid="settings-telemetry-error"
+        >
+          {error}
+        </p>
+      )}
     </section>
   );
 }

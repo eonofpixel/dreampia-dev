@@ -2,6 +2,33 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.15] — 2026-05-06
+
+**Telemetry opt-in toggle — `settings.telemetry_enabled` UI + bootstrap 연동.**
+
+v1.7.13 의 enabled hard-coded false 를 settings 와 연동.
+
+Settings:
+- `AppSettings.telemetry_enabled?: boolean` (default false).
+- readSettings parse 시 boolean 만 인정.
+
+IPC:
+- `app:get-telemetry-enabled` → `Result<boolean>` (default false).
+- `app:set-telemetry-enabled(boolean)` → settings 영속 + Telemetry singleton
+  의 setEnabled 즉시 반영.
+- preload `getTelemetryEnabled` / `setTelemetryEnabled`.
+
+main 부팅 wiring:
+- `bootstrapTelemetry` 호출 시 `readSettings().telemetry_enabled` 읽어 enabled
+  파라미터 전달.
+
+UI (`DiagnoseSettings.TelemetrySection`):
+- 체크박스 toggle + description (PII 미전송 명시) + IPC 미가용/실패 시 inline error.
+- optimistic update + revert on fail.
+
+테스트: 3 신규 unit (default false / set+get round-trip / non-boolean fail).
+회귀 0 (1914 pass).
+
 ## [1.4.7] — 2026-05-06
 
 **DiagnoseSettings — Workspace ID backfill 버튼 (v1.4.0 wiring).**

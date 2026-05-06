@@ -924,6 +924,41 @@ export function registerIpcHandlers(
   // v0.14.0 (A ABI Hardening) — 사용자 자가 진단 IPC. Settings 모달의 진단 탭이
   // 호출. SessionStore 가 없는 환경 (테스트 / pre-init) 에서도 platform / process
   // 정보는 반환. DB 쪽 정보는 store 가 있을 때만 채움.
+  // v1.7.15 — telemetry_enabled get/set. settings.json 에 영속 + 즉시
+  // Telemetry singleton 의 setEnabled 반영.
+  ipcMain.handle(
+    'app:get-telemetry-enabled',
+    (): Result<boolean> => {
+      try {
+        return ok(readSettings().telemetry_enabled === true);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'app:set-telemetry-enabled',
+    async (_evt, raw: unknown): Promise<Result<void>> => {
+      try {
+        if (typeof raw !== 'boolean') {
+          throw new Error('telemetry_enabled must be boolean');
+        }
+        writeSettings({ telemetry_enabled: raw });
+        // Telemetry singleton 도 즉시 반영 (다음 emit 부터 적용).
+        try {
+          const tel = (await import('./telemetry/Telemetry')).getTelemetry();
+          tel.setEnabled(raw);
+        } catch {
+          // singleton 미초기화 — 다음 부팅에서 settings 가 적용됨.
+        }
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
   // v1.4.0 follow-up — 사용자가 [DB 진단] 패널에서 trigger. workspace_id
   // FNV → sha256 backfill 을 명시 호출. 결과 통계 반환.
   ipcMain.handle(
