@@ -2,6 +2,31 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.5.4] — 2026-05-06
+
+**PDF 텍스트 추출 — `pdfjs-dist` 통합.**
+
+`pdfjs-dist` (^5.7) dependency 추가. v1.5.3 의 imageInput 이 PDF mime 만
+허용하던 것 위에 텍스트 추출 utility 신설.
+
+설계 (`src/renderer/utils/pdfExtract.ts`):
+- `extractPdfText(source, options?)` — ArrayBuffer / Uint8Array / `{ data }`
+  세 입력 모두 받음. legacy build 사용 (worker 비활성, 메인 스레드 동기).
+- `extractPdfTextFromBase64(base64, options?)` — base64 input → 동일 결과.
+- 결과: `{ pages: [{ index, text }], text (합본), page_count }`.
+- 옵션:
+  - `maxPages` — 추출 페이지 상한 (default 무제한). 대용량 PDF 폭주 방지.
+  - `perPageMaxChars` — 한 페이지 텍스트 길이 cap. 잘림 시 `…` suffix.
+- 손상된 PDF / 암호화된 PDF → throw (caller 가 toast 처리).
+- pdfjs page / document cleanup 자동 호출 (메모리 회수).
+
+테스트: 6 신규 unit (단일 페이지 추출 / base64 input / 손상 PDF throw /
+maxPages=0 / perPageMaxChars 잘림 + … suffix / Uint8Array 와 `{ data }`
+양쪽 input). 회귀 0 (1844 pass / 7 baseline).
+
+후속 — DnD/paste 한 PDF 의 추출 텍스트를 `dom_dump` 와 유사한 typed block
+으로 ChatInput 에 prepend (별도 슬롯).
+
 ## [1.7.0] — 2026-05-06
 
 **Sentry SDK 통합 — `@sentry/node` adapter for SentrySink.**
