@@ -1371,6 +1371,18 @@ export function App(): React.JSX.Element {
               setPendingPrompt((prev) => (prev !== undefined ? `${prev}\n${summary}` : summary));
               toasts.info('영역이 캡처됐어요 — 다음 메시지에 함께 전송돼요.');
             }}
+            onScreenshot={(data) => {
+              // v1.6.12 wiring — Screenshot 캡처 시 ImageBlock prepend 가
+              // 정식이지만 (별도 슬롯), 현재는 사용자에게 toast 안내 +
+              // pendingPrompt 에 메모만. base64 자체는 여기 보관.
+              setPendingPrompt((prev) => {
+                const note = `[Screenshot] ${data.width}×${data.height}px (PNG ${Math.round(
+                  data.png_base64.length * 0.75
+                )} bytes)\n`;
+                return prev !== undefined ? `${prev}\n${note}` : note;
+              });
+              toasts.info('스크린샷이 캡처됐어요. 다음 메시지에 함께 전송됩니다.');
+            }}
           />
         }
       />

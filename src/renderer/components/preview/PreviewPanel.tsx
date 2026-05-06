@@ -28,7 +28,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, RotateCw, Plus, Maximize2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCw, Plus, Maximize2, X, Camera } from 'lucide-react';
 import type { BrowserState, SessionId } from '@/types';
 import { useBrowser, type BrowserTabUI } from '../../hooks/useBrowser';
 import { useT } from '../../i18n';
@@ -49,12 +49,18 @@ export interface PreviewPanelProps {
    * 모드 자체 비활성 (기능 hidden).
    */
   onAnnotation?: (block: AnnotationBlock) => void;
+  /**
+   * v1.6.12 — Screenshot 캡처 시 호출. base64 PNG + 크기. 부모가 chat 으로
+   * 전송하거나 ImageBlock 으로 prepend. 미지정 시 카메라 버튼 미노출.
+   */
+  onScreenshot?: (data: { png_base64: string; width: number; height: number }) => void;
 }
 
 export function PreviewPanel({
   sessionId,
   browser,
   onAnnotation,
+  onScreenshot,
 }: PreviewPanelProps): React.JSX.Element {
   const {
     tabs,
@@ -82,6 +88,22 @@ export function PreviewPanel({
   // v1.6.9 wiring — Annotation 모드 + 마지막 box draft.
   const [annotationActive, setAnnotationActive] = useState(false);
   const [pendingBoxes, setPendingBoxes] = useState<AnnotationBox[]>([]);
+  const [capturing, setCapturing] = useState(false);
+
+  const handleCapture = useCallback(async (): Promise<void> => {
+    if (onScreenshot === undefined || activeTab === null || capturing) return;
+    setCapturing(true);
+    try {
+      const api = typeof window !== 'undefined' ? window.dreampia?.browser : undefined;
+      if (api?.captureTab === undefined) return;
+      const r = await api.captureTab(activeTab.tab_id);
+      if (r.ok && r.value !== null) {
+        onScreenshot(r.value);
+      }
+    } finally {
+      setCapturing(false);
+    }
+  }, [activeTab, capturing, onScreenshot]);
 
   const handleAnnotationToggle = useCallback(() => {
     setAnnotationActive((v) => !v);
@@ -182,6 +204,21 @@ export function PreviewPanel({
           data-testid="preview-annotation-start"
         >
           📐
+        </button>
+      )}
+      {/* v1.6.12 — Screenshot 캡처 버튼. annotation 버튼 옆. */}
+      {onScreenshot !== undefined && activeTab !== null && (
+        <button
+          type="button"
+          onClick={() => {
+            void handleCapture();
+          }}
+          disabled={capturing}
+          className="absolute right-12 top-12 z-20 rounded-md border border-border-primary bg-bg-primary/90 px-2 py-1 text-xs text-text-secondary hover:bg-bg-tertiary disabled:opacity-50"
+          aria-label="현재 페이지 스크린샷 캡처"
+          data-testid="preview-screenshot-capture"
+        >
+          <Camera className="h-3 w-3" />
         </button>
       )}
     </aside>

@@ -2,6 +2,24 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.12] — 2026-05-06
+
+**PreviewPanel screenshot capture button (v1.6.1 IPC wiring).**
+
+PreviewPanel 우측 상단에 📷 캡처 버튼. 클릭 시 `browser/capture-tab` IPC →
+base64 PNG + 크기 → 부모 callback.
+
+- `PreviewPanelProps.onScreenshot?: ({png_base64, width, height}) => void` 추가.
+- `handleCapture` — `window.dreampia.browser.captureTab(activeTab.tab_id)` 호출.
+  capturing state 로 동시 클릭 방지.
+- 카메라 버튼 absolute 위치 (annotation 버튼 옆), `onScreenshot` 미지정 시
+  미노출.
+- App.tsx wiring — `pendingPrompt` 에 `[Screenshot] WxHpx` 메모 prepend +
+  toasts.info 안내. 정식 ImageBlock prepend 는 ChatInput pendingBlocks API
+  추가 후 별도 슬롯.
+
+회귀 0 (1904 pass).
+
 ## [1.6.11] — 2026-05-06
 
 **ChatHeader [fork] 버튼 — `session/fork` UI 진입점 (v1.6.3/v1.6.8 wiring).**
