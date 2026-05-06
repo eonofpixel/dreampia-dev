@@ -2,6 +2,26 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.5.7] — 2026-05-06
+
+**PDF 추출 → chat-injectable text 포맷 utility (v1.5.4 follow-up).**
+
+`pdfjs-dist` 추출 결과를 ChatInput 에 그대로 prepend 가능한 multi-line string
+으로 포맷.
+
+API:
+- `formatPdfExtractAsText(result, { filename? })` — header `[PDF: name, N pages]`
+  + per-page `--- Page N ---` sections. 빈 페이지 skip. 모든 페이지가 빈
+  텍스트면 "이미지 PDF 일 가능성" 안내 문구.
+- `pdfBase64ToChatText(base64, options?)` — convenience: extractFromBase64 +
+  format 한 번에. ChatInput drop handler 가 직접 호출 가능.
+
+테스트: 5 신규 unit (header+sections / default filename / 모두 빈 → 안내 /
+일부 빈 → skip / base64 라운드트립). 회귀 0 (1878 pass / 7 baseline).
+
+후속 — ChatInput 의 DnD/paste handler 가 PDF 인식 시 본 utility 호출 +
+prepend (별도 슬롯 — 현재 ChatInput 에 DnD wiring 자체 미구현).
+
 ## [1.6.0] — 2026-05-06
 
 **AnnotationOverlay drag-to-mark — 영역 캡처 + 시각화.**

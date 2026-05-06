@@ -131,3 +131,62 @@ function base64ToUint8Array(base64: string): Uint8Array {
   // Node fallback.
   return new Uint8Array(Buffer.from(base64, 'base64'));
 }
+
+// ────────────────────────────────────────────────────────────
+// v1.5.4 follow-up — chat-injectable formatting
+// ────────────────────────────────────────────────────────────
+
+/**
+ * 추출된 PDF 텍스트를 ChatInput 에 주입 가능한 단일 string 으로 포맷.
+ * Header (filename + page count) + per-page section markers.
+ *
+ * 예시 결과:
+ *   [PDF: report.pdf, 3 pages]
+ *
+ *   --- Page 1 ---
+ *   ...본문...
+ *
+ *   --- Page 2 ---
+ *   ...본문...
+ *
+ * 빈 페이지는 skip (header 만 있으면 의미 없으므로). page count 는 실제 텍스트
+ * 가 추출된 페이지만.
+ */
+export function formatPdfExtractAsText(
+  result: PdfExtractResult,
+  options: { filename?: string } = {}
+): string {
+  const filename = options.filename ?? 'document.pdf';
+  const nonEmpty = result.pages.filter((p) => p.text.length > 0);
+  if (nonEmpty.length === 0) {
+    return `[PDF: ${filename}, ${result.page_count} pages — text 추출 안 됨 (이미지 PDF 일 가능성)]`;
+  }
+  const header = `[PDF: ${filename}, ${result.page_count} pages]`;
+  const body = nonEmpty
+    .map((p) => `--- Page ${p.index} ---\n${p.text}`)
+    .join('\n\n');
+  return `${header}\n\n${body}`;
+}
+
+/**
+ * Convenience — base64 PDF 를 받아 추출 + 포맷 한 번에. ChatInput drop handler
+ * 가 직접 호출 가능. 옵션은 extractPdfText 와 formatPdfExtractAsText 의 합집합.
+ */
+export async function pdfBase64ToChatText(
+  base64: string,
+  options: {
+    filename?: string;
+    maxPages?: number;
+    perPageMaxChars?: number;
+  } = {}
+): Promise<string> {
+  const extractOptions: { maxPages?: number; perPageMaxChars?: number } = {};
+  if (options.maxPages !== undefined) extractOptions.maxPages = options.maxPages;
+  if (options.perPageMaxChars !== undefined) {
+    extractOptions.perPageMaxChars = options.perPageMaxChars;
+  }
+  const result = await extractPdfTextFromBase64(base64, extractOptions);
+  const formatOptions: { filename?: string } = {};
+  if (options.filename !== undefined) formatOptions.filename = options.filename;
+  return formatPdfExtractAsText(result, formatOptions);
+}

@@ -16,6 +16,9 @@ import { describe, it, expect } from 'vitest';
 import {
   extractPdfText,
   extractPdfTextFromBase64,
+  formatPdfExtractAsText,
+  pdfBase64ToChatText,
+  type PdfExtractResult,
 } from '../../src/renderer/utils/pdfExtract';
 
 /**
@@ -80,5 +83,75 @@ describe('v1.5.4 — pdfExtract', () => {
     const r3 = await extractPdfText({ data: bytes2 });
     expect(r2.page_count).toBe(1);
     expect(r3.page_count).toBe(1);
+  });
+});
+
+describe('v1.5.4 follow-up — formatPdfExtractAsText / pdfBase64ToChatText', () => {
+  it('formatPdfExtractAsText — header + per-page sections', () => {
+    const result: PdfExtractResult = {
+      page_count: 2,
+      pages: [
+        { index: 1, text: '안녕' },
+        { index: 2, text: '두번째 페이지' },
+      ],
+      text: '안녕\n\n두번째 페이지',
+    };
+    const text = formatPdfExtractAsText(result, { filename: 'doc.pdf' });
+    expect(text).toContain('[PDF: doc.pdf, 2 pages]');
+    expect(text).toContain('--- Page 1 ---');
+    expect(text).toContain('--- Page 2 ---');
+    expect(text).toContain('안녕');
+    expect(text).toContain('두번째 페이지');
+  });
+
+  it('formatPdfExtractAsText — filename 미지정 → default', () => {
+    const result: PdfExtractResult = {
+      page_count: 1,
+      pages: [{ index: 1, text: 'x' }],
+      text: 'x',
+    };
+    const text = formatPdfExtractAsText(result);
+    expect(text).toContain('document.pdf');
+  });
+
+  it('formatPdfExtractAsText — 모든 페이지 빈 텍스트 → 안내 message', () => {
+    const result: PdfExtractResult = {
+      page_count: 3,
+      pages: [
+        { index: 1, text: '' },
+        { index: 2, text: '' },
+        { index: 3, text: '' },
+      ],
+      text: '',
+    };
+    const text = formatPdfExtractAsText(result, { filename: 'scan.pdf' });
+    expect(text).toContain('이미지 PDF');
+    expect(text).toContain('scan.pdf');
+    expect(text).toContain('3 pages');
+  });
+
+  it('formatPdfExtractAsText — 일부 페이지만 빈 텍스트 → skip', () => {
+    const result: PdfExtractResult = {
+      page_count: 3,
+      pages: [
+        { index: 1, text: 'first' },
+        { index: 2, text: '' },
+        { index: 3, text: 'third' },
+      ],
+      text: 'first\n\nthird',
+    };
+    const text = formatPdfExtractAsText(result);
+    expect(text).toContain('--- Page 1 ---');
+    expect(text).not.toContain('--- Page 2 ---'); // 빈 페이지 skip
+    expect(text).toContain('--- Page 3 ---');
+  });
+
+  it('pdfBase64ToChatText — 라운드트립', async () => {
+    const text = await pdfBase64ToChatText(MINIMAL_PDF_BASE64, {
+      filename: 'minimal.pdf',
+    });
+    expect(text).toContain('[PDF: minimal.pdf');
+    expect(text).toContain('--- Page 1 ---');
+    expect(text.toLowerCase()).toContain('hello');
   });
 });
