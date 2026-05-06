@@ -2,6 +2,24 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.17] — 2026-05-06
+
+**App.tsx 의 toast 메시지들 i18n 화.**
+
+App.tsx 의 9개 hardcoded 한국어 toast 메시지를 useT 기반으로 교체.
+
+대상 toast:
+- 권한 변경 저장 실패 + retry hint.
+- workspace 고정 상태 저장/IPC 실패 (× 2).
+- N개 첨부됐어요 (template `{n}`).
+- fork no_ipc / failed (× 2) / success.
+- preview annotation/screenshot/dom captured (× 3).
+
+i18n: ko/en `toast.*` 11 키 추가 (retry_hint / permission / workspace_lock /
+attached / fork / preview).
+
+회귀 0.
+
 ## [1.6.18] — 2026-05-06
 
 **AnnotationOverlay + PreviewPanel 잔여 hardcoded 한국어 i18n.**

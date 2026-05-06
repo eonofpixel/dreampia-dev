@@ -605,8 +605,8 @@ export function App(): React.JSX.Element {
       if (updated !== null) {
         setActiveSession(updated);
       } else {
-        toasts.error('권한 변경 저장 실패', {
-          detail: '잠시 후 다시 시도하세요.',
+        toasts.error(t('toast.permission.save_failed'), {
+          detail: t('toast.retry_hint'),
         });
       }
     },
@@ -662,13 +662,13 @@ export function App(): React.JSX.Element {
         if (!result.ok) {
           // IPC 실패 → 원복 + 사용자 알림 (v1.1.25 — silent fail X).
           setWorkspaceLocked(!next);
-          toasts.error('작업 폴더 고정 상태 저장 실패', {
+          toasts.error(t('toast.workspace_lock.save_failed'), {
             detail: typeof result.error === 'string' ? result.error : undefined,
           });
         }
       } catch (err) {
         setWorkspaceLocked(!next);
-        toasts.error('작업 폴더 고정 IPC 호출 실패', {
+        toasts.error(t('toast.workspace_lock.ipc_failed'), {
           detail: err instanceof Error ? err.message : String(err),
         });
       }
@@ -1334,7 +1334,7 @@ export function App(): React.JSX.Element {
             onConsumePendingBlocks={() => setPendingBlocks([])}
             onAttachBlocks={(blocks) => {
               setPendingBlocks((prev) => [...prev, ...blocks]);
-              toasts.info(`${blocks.length}개 첨부됐어요. 다음 메시지에 함께 전송돼요.`);
+              toasts.info(t('toast.attached.n_added', { n: blocks.length }));
             }}
             onRemovePendingBlock={(index) => {
               setPendingBlocks((prev) => prev.filter((_, i) => i !== index));
@@ -1346,21 +1346,21 @@ export function App(): React.JSX.Element {
               const sessionApi =
                 typeof window !== 'undefined' ? window.dreampia?.session : undefined;
               if (sessionApi?.fork === undefined) {
-                toasts.warning('IPC 채널이 없어 fork 가 불가합니다.');
+                toasts.warning(t('toast.fork.no_ipc'));
                 return;
               }
               try {
                 const r = await sessionApi.fork(activeSession.id);
                 if (r.ok === false) {
-                  toasts.error('세션 분기 실패', {
+                  toasts.error(t('toast.fork.failed'), {
                     detail: typeof r.error === 'string' ? r.error : undefined,
                   });
                   return;
                 }
                 setActiveSessionId(r.value.id);
-                toasts.success('새 가지가 만들어졌어요.');
+                toasts.success(t('toast.fork.success'));
               } catch (err) {
-                toasts.error('세션 분기 실패', {
+                toasts.error(t('toast.fork.failed'), {
                   detail: err instanceof Error ? err.message : String(err),
                 });
               }
@@ -1374,7 +1374,7 @@ export function App(): React.JSX.Element {
             onAnnotation={(block) => {
               // v1.6.13 — typed block 으로 정식 prepend.
               setPendingBlocks((prev) => [...prev, block]);
-              toasts.info('영역이 캡처됐어요 — 다음 메시지에 함께 전송돼요.');
+              toasts.info(t('toast.preview.annotation_captured'));
             }}
             onScreenshot={(data) => {
               // v1.6.13 — image block 으로 정식 prepend.
@@ -1385,12 +1385,12 @@ export function App(): React.JSX.Element {
                 alt: `Screenshot ${data.width}×${data.height}px`,
               };
               setPendingBlocks((prev) => [...prev, block]);
-              toasts.info('스크린샷이 캡처됐어요. 다음 메시지에 함께 전송됩니다.');
+              toasts.info(t('toast.preview.screenshot_captured'));
             }}
             onDomDump={(block) => {
               // v1.6.14 — DomDumpBlock 정식 prepend.
               setPendingBlocks((prev) => [...prev, block]);
-              toasts.info('DOM 구조가 캡처됐어요. 다음 메시지에 함께 전송됩니다.');
+              toasts.info(t('toast.preview.dom_captured'));
             }}
           />
         }
