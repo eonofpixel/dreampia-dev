@@ -137,6 +137,13 @@ export interface ChatPanelProps {
    * 호출 + 새 session 활성화 + 사용자 toast.
    */
   onForkSession?: () => void;
+  /**
+   * v1.6.13 — Pending typed blocks (PreviewPanel 캡처 결과 등). ChatInput
+   * 의 chip 미리보기 + 다음 submit 시 함께 prepend.
+   */
+  pendingBlocks?: ReadonlyArray<ContentBlock>;
+  /** Submit 직후 부모가 reset 하도록 callback. */
+  onConsumePendingBlocks?: () => void;
 }
 
 interface MessagesAreaProps {
@@ -186,6 +193,8 @@ export function ChatPanel({
   workspaceLocked = false,
   onToggleWorkspaceLock,
   onForkSession,
+  pendingBlocks,
+  onConsumePendingBlocks,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -233,6 +242,8 @@ export function ChatPanel({
         mentionSessions={mentionSessions}
         mentionResolverContext={mentionResolverContext}
         onSubmitBlocks={onSubmitBlocks}
+        pendingBlocks={pendingBlocks}
+        onConsumePendingBlocks={onConsumePendingBlocks}
       />
     </main>
   );
@@ -337,6 +348,9 @@ interface InputAreaProps {
   mentionResolverContext?: ResolverContext;
   /** v0.13.0 — typed-block submit callback (forwarded from ChatPanel). */
   onSubmitBlocks?: (text: string, blocks: ContentBlock[]) => void;
+  /** v1.6.13 — pending typed blocks (forwarded). */
+  pendingBlocks?: ReadonlyArray<ContentBlock>;
+  onConsumePendingBlocks?: () => void;
 }
 
 function InputArea({
@@ -351,6 +365,8 @@ function InputArea({
   mentionSessions,
   mentionResolverContext,
   onSubmitBlocks,
+  pendingBlocks,
+  onConsumePendingBlocks,
 }: InputAreaProps): React.JSX.Element {
   const t = useT();
   return (
@@ -379,6 +395,8 @@ function InputArea({
           resolverContext: mentionResolverContext,
         })}
         {...(onSubmitBlocks !== undefined && { onSubmitBlocks })}
+        {...(pendingBlocks !== undefined && { pendingBlocks })}
+        {...(onConsumePendingBlocks !== undefined && { onConsumePendingBlocks })}
       />
     </div>
   );

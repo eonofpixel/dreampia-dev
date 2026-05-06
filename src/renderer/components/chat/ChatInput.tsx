@@ -95,6 +95,20 @@ export interface ChatInputProps {
    * 위해 제공한다.
    */
   onSubmitBlocks?: (text: string, blocks: ContentBlock[]) => void;
+
+  /**
+   * v1.6.13 — Pending typed blocks (annotation / dom_dump / image / pdf 등).
+   * 부모 (App.tsx) 가 PreviewPanel 의 캡처 결과를 여기 push. 사용자가 다음
+   * 메시지 submit 할 때 user-typed mentions 와 함께 prepend.
+   *
+   * 주의: array reference 가 변할 때마다 chip 미리보기 업데이트.
+   */
+  pendingBlocks?: ReadonlyArray<ContentBlock>;
+  /**
+   * Submit 직후 호출 — 부모가 pendingBlocks state 를 reset 하도록.
+   * 미지정 시 부모가 쌓인 blocks 를 직접 정리해야 함 (이중 전송 위험).
+   */
+  onConsumePendingBlocks?: () => void;
 }
 
 const SLASH_POPOVER_PREFIX = 'slash-command';
@@ -123,6 +137,8 @@ export function ChatInput({
   sessions,
   resolverContext,
   onSubmitBlocks,
+  pendingBlocks,
+  onConsumePendingBlocks,
 }: ChatInputProps): React.JSX.Element {
   const t = useT();
   // 사용자가 명시 placeholder 를 넘기지 않으면 locale-aware default.
@@ -407,6 +423,20 @@ export function ChatInput({
     // v0.6.0 — 멘션 resolve. resolverContext 미지정 시 plain 전송.
     const mentions = findAllMentions(text);
     if (mentions.length === 0 || resolverContext === undefined) {
+      // v1.6.13 — mention 이 없어도 pendingBlocks 가 있으면 typed-block 경로
+      // 사용 (그래야 attached blocks 도 함께 전달).
+      if (
+        onSubmitBlocks !== undefined &&
+        pendingBlocks !== undefined &&
+        pendingBlocks.length > 0
+      ) {
+        onSubmitBlocks(text, [...pendingBlocks]);
+        onConsumePendingBlocks?.();
+        setValue('');
+        cursorPosRef.current = 0;
+        setCursorPos(0);
+        return;
+      }
       onSubmit(text);
       setValue('');
       cursorPosRef.current = 0;
@@ -435,8 +465,17 @@ export function ChatInput({
         // 로 fallback — 외부에서 onSubmit 만 wire 한 통합/UI 테스트와의 호환성.
         if (onSubmitBlocks !== undefined) {
           const stripped = stripMentionTokens(text, mentions);
-          const blocks = resolveMentionsToTypedBlocks(resolved);
+          const mentionBlocks = resolveMentionsToTypedBlocks(resolved);
+          // v1.6.13 — pendingBlocks (PreviewPanel 캡처 등) 를 mention blocks
+          // 앞에 prepend. mention 은 기존 위치 유지.
+          const blocks =
+            pendingBlocks !== undefined && pendingBlocks.length > 0
+              ? [...pendingBlocks, ...mentionBlocks]
+              : mentionBlocks;
           onSubmitBlocks(stripped, blocks);
+          if (pendingBlocks !== undefined && pendingBlocks.length > 0) {
+            onConsumePendingBlocks?.();
+          }
         } else {
           const augmented = formatMentionsAsContext(text, resolved);
           onSubmit(augmented);
@@ -609,6 +648,24 @@ export function ChatInput({
           data-testid="chat-input-mention-exclusion"
         >
           {mentionExclusion}
+        </div>
+      )}
+      {pendingBlocks !== undefined && pendingBlocks.length > 0 && (
+        <div
+          className="mb-1 flex flex-wrap items-center gap-1 rounded border border-blue-700/40 bg-blue-900/15 px-2 py-1 text-[11px] text-blue-200"
+          role="status"
+          data-testid="chat-input-pending-blocks"
+        >
+          <span className="text-text-tertiary">첨부:</span>
+          {pendingBlocks.map((b, i) => (
+            <span
+              key={`${b.type}-${i}`}
+              className="rounded bg-bg-tertiary px-1.5 py-0.5 font-mono text-[10px] text-text-secondary"
+              data-testid={`chat-input-pending-block-${i}`}
+            >
+              {b.type}
+            </span>
+          ))}
         </div>
       )}
       <textarea

@@ -169,6 +169,8 @@ export function App(): React.JSX.Element {
   // 식별 가능하도록 Date.now() 같은 monotonic 값으로 들고 다닐 수 있지만,
   // ChatInput 의 useEffect 가 빈 문자열 무시하므로 string 자체로 충분.
   const [pendingPrompt, setPendingPrompt] = useState<string | undefined>(undefined);
+  // v1.6.13 — PreviewPanel 캡처 결과 등 typed-block prepend buffer.
+  const [pendingBlocks, setPendingBlocks] = useState<ContentBlock[]>([]);
   // launchWorkspace 는 main 이 보내준 default. packaged 에서 settings 없으면
   // null 이 반환되므로 nullable. dev/e2e 에선 process.cwd() 가 들어옴.
   const [launchWorkspace, setLaunchWorkspace] = useState<WorkspaceInfo | null>(null);
@@ -1328,6 +1330,8 @@ export function App(): React.JSX.Element {
             }}
             workspaceLocked={workspaceLocked}
             onToggleWorkspaceLock={handleToggleWorkspaceLock}
+            pendingBlocks={pendingBlocks}
+            onConsumePendingBlocks={() => setPendingBlocks([])}
             onForkSession={async () => {
               // v1.6.11 — Session fork. parent_session_id 자동 설정 + 모든
               // turn 복사 (v1.6.3 backend). 새 session 활성화 + 사용자 toast.
@@ -1361,26 +1365,19 @@ export function App(): React.JSX.Element {
             sessionId={(activeSession?.id ?? null) as SessionId | null}
             browser={activeSession?.browser ?? null}
             onAnnotation={(block) => {
-              // v1.6.9 wiring — Annotation 캡처 시 ChatInput 의 pendingPrompt
-              // 에 text 형태로 prepend. 정식 typed-block prepend 는 ChatInput
-              // 의 pendingBlocks API 필요 (별도 슬롯).
-              const bb = block.bounding_box;
-              const summary =
-                `[Annotation] ${block.url} ` +
-                `(bbox ${bb.x},${bb.y},${bb.w}×${bb.h})\n`;
-              setPendingPrompt((prev) => (prev !== undefined ? `${prev}\n${summary}` : summary));
+              // v1.6.13 — typed block 으로 정식 prepend.
+              setPendingBlocks((prev) => [...prev, block]);
               toasts.info('영역이 캡처됐어요 — 다음 메시지에 함께 전송돼요.');
             }}
             onScreenshot={(data) => {
-              // v1.6.12 wiring — Screenshot 캡처 시 ImageBlock prepend 가
-              // 정식이지만 (별도 슬롯), 현재는 사용자에게 toast 안내 +
-              // pendingPrompt 에 메모만. base64 자체는 여기 보관.
-              setPendingPrompt((prev) => {
-                const note = `[Screenshot] ${data.width}×${data.height}px (PNG ${Math.round(
-                  data.png_base64.length * 0.75
-                )} bytes)\n`;
-                return prev !== undefined ? `${prev}\n${note}` : note;
-              });
+              // v1.6.13 — image block 으로 정식 prepend.
+              const block: ContentBlock = {
+                type: 'image',
+                mime: 'image/png',
+                data: data.png_base64,
+                alt: `Screenshot ${data.width}×${data.height}px`,
+              };
+              setPendingBlocks((prev) => [...prev, block]);
               toasts.info('스크린샷이 캡처됐어요. 다음 메시지에 함께 전송됩니다.');
             }}
           />

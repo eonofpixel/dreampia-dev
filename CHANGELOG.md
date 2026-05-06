@@ -2,6 +2,32 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.13] — 2026-05-06
+
+**ChatInput pendingBlocks API — 정식 typed-block prepend.**
+
+이전 v1.6.10 / v1.6.12 의 text-fallback (pendingPrompt 에 text 메모) 을
+정식 ContentBlock prepend 로 교체.
+
+ChatInput 변경:
+- `pendingBlocks?: ReadonlyArray<ContentBlock>` prop — 입력 위 chip 미리보기
+  + submit 시 자동 prepend.
+- `onConsumePendingBlocks?: () => void` — submit 직후 부모 reset.
+- mention 없는 경로 + mention 있는 경로 양쪽 모두 pendingBlocks 합침.
+- Chip preview: `[첨부] image dom_dump annotation_block ...` 형식.
+
+ChatPanel 변경:
+- `ChatPanelProps.pendingBlocks` / `onConsumePendingBlocks` forward.
+- `InputAreaProps` + `<ChatInput>` 에 spread.
+
+App.tsx 변경:
+- `pendingBlocks` state (ContentBlock[]).
+- PreviewPanel `onAnnotation` → `setPendingBlocks([...prev, block])`.
+- PreviewPanel `onScreenshot` → ImageBlock 생성 후 push.
+- ChatPanel 에 `pendingBlocks` + `onConsumePendingBlocks={() => setPendingBlocks([])}`.
+
+회귀 0 (1904 pass).
+
 ## [1.6.12] — 2026-05-06
 
 **PreviewPanel screenshot capture button (v1.6.1 IPC wiring).**
