@@ -3,7 +3,14 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { dumpElement } from '../../src/renderer/utils/domDump';
+import {
+  countDumpNodes,
+  dumpElement,
+  dumpToBlock,
+  summarizeDump,
+  type DomDumpNode,
+} from '../../src/renderer/utils/domDump';
+import { ContentBlockSchema } from '../../src/types/conversation';
 
 beforeEach(() => {
   document.body.innerHTML = '';
@@ -90,5 +97,94 @@ describe('v1.2.5 — domDump', () => {
     expect(dump.tag).toBe('br');
     expect(dump.children).toBeUndefined();
     expect(dump.text).toBeUndefined();
+  });
+});
+
+describe('v1.6.2 — DomDumpBlock conversion', () => {
+  it('countDumpNodes — single node = 1', () => {
+    const node: DomDumpNode = { tag: 'div' };
+    expect(countDumpNodes(node)).toBe(1);
+  });
+
+  it('countDumpNodes — nested children counted', () => {
+    const node: DomDumpNode = {
+      tag: 'div',
+      children: [
+        { tag: 'span' },
+        { tag: 'p', children: [{ tag: 'b' }, { tag: 'i' }] },
+      ],
+    };
+    // div + span + p + b + i = 5
+    expect(countDumpNodes(node)).toBe(5);
+  });
+
+  it('summarizeDump — tag + id + classes + child counts', () => {
+    const node: DomDumpNode = {
+      tag: 'div',
+      id: 'root',
+      classes: ['a', 'b'],
+      children: [{ tag: 'span' }, { tag: 'p' }],
+    };
+    expect(summarizeDump(node)).toBe('div#root.a.b > 2 children, 3 nodes');
+  });
+
+  it('summarizeDump — class overflow shows +N', () => {
+    const node: DomDumpNode = {
+      tag: 'div',
+      classes: ['a', 'b', 'c', 'd', 'e'],
+    };
+    // .a.b+3
+    expect(summarizeDump(node)).toContain('.a.b+3');
+  });
+
+  it('dumpToBlock — produces a valid dom_dump ContentBlock', () => {
+    const node: DomDumpNode = {
+      tag: 'div',
+      id: 'root',
+      children: [{ tag: 'span', text: 'hi' }],
+    };
+    const block = dumpToBlock(node, 'https://example.com/page');
+    expect(block.type).toBe('dom_dump');
+    expect(block.url).toBe('https://example.com/page');
+    expect(block.node_count).toBe(2);
+    expect(block.summary).toContain('div#root');
+    expect(block.dump_json).toContain('"span"');
+    expect(block.captured_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    // Schema validation — 새 block 이 discriminated union 의 일원으로 인정되는지.
+    const result = ContentBlockSchema.safeParse(block);
+    expect(result.success).toBe(true);
+  });
+
+  it("dumpToBlock — selector option preserved", () => {
+    const node: DomDumpNode = { tag: 'main' };
+    const block = dumpToBlock(node, 'https://x', { selector: 'main#m' });
+    expect(block.selector).toBe('main#m');
+  });
+
+  it("dumpToBlock — empty selector is omitted (not a stored '')", () => {
+    const node: DomDumpNode = { tag: 'body' };
+    const block = dumpToBlock(node, 'https://x', { selector: '' });
+    expect(block.selector).toBeUndefined();
+  });
+
+  it('dumpToBlock — capturedAt option overrides default', () => {
+    const node: DomDumpNode = { tag: 'div' };
+    const block = dumpToBlock(node, 'u', { capturedAt: '2026-05-06T00:00:00Z' });
+    expect(block.captured_at).toBe('2026-05-06T00:00:00Z');
+  });
+
+  it('dumpElement → dumpToBlock 라운드트립 — schema valid', () => {
+    document.body.innerHTML =
+      '<section id="s"><h1>제목</h1><p class="x y">본문</p></section>';
+    const el = document.getElementById('s');
+    if (el === null) throw new Error('not found');
+    const dump = dumpElement(el);
+    const block = dumpToBlock(dump, 'https://test.local/');
+    const parsed = ContentBlockSchema.safeParse(block);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.type).toBe('dom_dump');
+    }
+    expect(block.node_count).toBeGreaterThanOrEqual(3); // section, h1, p
   });
 });

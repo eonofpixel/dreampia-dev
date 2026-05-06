@@ -2,6 +2,37 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.2] — 2026-05-06
+
+**DomDumpBlock typed block + provider 직렬화.**
+
+v1.2.5 의 DOM dump utility 위에 typed conversation block 추가. 후속 PreviewPanel
+[DOM 캡처] 버튼 (별도 슬롯) 이 본 block 을 ChatInput 에 prepend 할 수 있도록
+foundation 확보.
+
+Schema (src/types/conversation.ts):
+- `DomDumpBlockSchema` — `type: 'dom_dump'` 추가 (discriminated union 합류).
+- 필드: `url` / `selector?` / `dump_json` (stringified DomDumpNode tree) /
+  `summary` (chip footer 한 줄) / `node_count` / `captured_at`.
+
+Renderer utility (src/renderer/utils/domDump.ts):
+- `countDumpNodes(node)` — tree 안 element 노드 총 수.
+- `summarizeDump(node)` — `tag#id.class > N children, M nodes`.
+- `dumpToBlock(node, url, options?)` — DomDumpNode → DomDumpBlock 변환 +
+  자동 captured_at + selector 옵션.
+
+Provider 직렬화:
+- ClaudeAdapter `toClaudeContent` — `[DOM] {url} selector="..." — {summary}`
+  header + fenced JSON.
+- CodexAdapter `formatDomDumpText` static + 4곳 switch case 추가
+  (blockToText / fallbackBlockToText / toOpenAIContentPart).
+
+테스트: 8개 신규 unit (countDumpNodes / summarizeDump 기본 + class overflow /
+dumpToBlock schema valid / selector preserved + empty 무시 / capturedAt 옵션
+override / dumpElement → dumpToBlock 라운드트립).
+
+회귀 0 (1778 pass / baseline 7 fail).
+
 ## [1.7.7] — 2026-05-06
 
 **axe-core/playwright a11y baseline (drive18).**

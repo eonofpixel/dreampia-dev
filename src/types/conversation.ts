@@ -104,6 +104,35 @@ const SessionReferenceBlockSchema = z.object({
   turn_count: z.number().int().nonnegative(),
 });
 
+// v1.6.2 — DOM dump typed block.
+//
+// 사용자가 PreviewPanel 에서 [DOM 캡처] 클릭 → renderer 가 페이지 DOM 을
+// `dumpElement` 로 직렬화 + 본 block 으로 ChatInput 에 prepend. AI 가 페이지
+// 구조를 정확히 파악하도록.
+//
+// 저장 정책:
+//  - `dump_json` 은 stringified DomDumpNode tree. SQLite 에 그대로 저장 가능.
+//  - `summary` 는 chip footer 표시용 (예: "div#root, 12 children, 47 nodes").
+//  - `node_count` 는 chip 에서 정량 hint.
+const DomDumpBlockSchema = z.object({
+  type: z.literal('dom_dump'),
+  /** 캡처 시점의 page URL (webview 의 src 또는 location.href). */
+  url: z.string(),
+  /**
+   * 선택된 element 의 CSS selector — 전체 페이지 캡처 시 'body' 또는 ''.
+   * Annotation pick 결과를 그대로 받을 수 있음.
+   */
+  selector: z.string().optional(),
+  /** Stringified DomDumpNode tree (JSON). renderer 의 domDump.ts 와 호환. */
+  dump_json: z.string(),
+  /** Chip footer 표시용 한 줄 요약. */
+  summary: z.string(),
+  /** Tree 안 element 노드 총 수 — chip 에 정량 표시. */
+  node_count: z.number().int().nonnegative(),
+  /** 캡처 시점 timestamp (ISO 8601). */
+  captured_at: z.string(),
+});
+
 export const ContentBlockSchema = z.discriminatedUnion('type', [
   TextBlockSchema,
   ImageBlockSchema,
@@ -112,11 +141,13 @@ export const ContentBlockSchema = z.discriminatedUnion('type', [
   EmbeddedCardBlockSchema,
   FileReferenceBlockSchema,
   SessionReferenceBlockSchema,
+  DomDumpBlockSchema,
 ]);
 
 export type ContentBlock = z.infer<typeof ContentBlockSchema>;
 export type FileReferenceBlock = z.infer<typeof FileReferenceBlockSchema>;
 export type SessionReferenceBlock = z.infer<typeof SessionReferenceBlockSchema>;
+export type DomDumpBlock = z.infer<typeof DomDumpBlockSchema>;
 export type MentionRef = z.infer<typeof MentionRefSchema>;
 export type EmbeddedCard = z.infer<typeof EmbeddedCardSchema>;
 

@@ -161,6 +161,9 @@ export class CodexAdapter implements ProviderAdapter {
       case 'session_reference':
         // v0.13.0 — typed session_reference. quote block 으로 직렬화.
         return CodexAdapter.formatSessionReferenceText(block);
+      case 'dom_dump':
+        // v1.6.2 — DOM dump. fenced JSON 으로 plain text 직렬화.
+        return CodexAdapter.formatDomDumpText(block);
     }
   }
 
@@ -174,6 +177,9 @@ export class CodexAdapter implements ProviderAdapter {
     }
     if (block.type === 'session_reference') {
       return CodexAdapter.formatSessionReferenceText(block);
+    }
+    if (block.type === 'dom_dump') {
+      return CodexAdapter.formatDomDumpText(block);
     }
     return '';
   }
@@ -206,6 +212,8 @@ export class CodexAdapter implements ProviderAdapter {
           type: 'text',
           text: CodexAdapter.formatSessionReferenceText(block),
         };
+      case 'dom_dump':
+        return { type: 'text', text: CodexAdapter.formatDomDumpText(block) };
     }
   }
 
@@ -242,6 +250,24 @@ export class CodexAdapter implements ProviderAdapter {
       .map((l) => `> ${l}`)
       .join('\n');
     return `${header}\n${body}`;
+  }
+
+  /**
+   * v1.6.2 — DOM dump block 을 plain text 로 직렬화. URL + selector +
+   * summary header + JSON fenced. AI 가 페이지 구조를 정확히 파악하도록.
+   */
+  static formatDomDumpText(block: {
+    url: string;
+    selector?: string;
+    dump_json: string;
+    summary: string;
+  }): string {
+    const sel =
+      block.selector !== undefined && block.selector.length > 0
+        ? ` selector="${block.selector}"`
+        : '';
+    const header = `[DOM] ${block.url}${sel} — ${block.summary}`;
+    return `${header}\n\`\`\`json\n${block.dump_json}\n\`\`\``;
   }
 
   private toOpenAIFunctionCall(call: ToolCall): Record<string, unknown> {

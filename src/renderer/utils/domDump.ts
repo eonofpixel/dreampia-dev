@@ -112,3 +112,77 @@ function directTextOf(el: Element): string {
   }
   return text;
 }
+
+// ────────────────────────────────────────────────────────────
+// v1.6.2 — DomDumpNode → DomDumpBlock (typed conversation block) 변환
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Tree 안 element 노드 총 수. truncated 표시는 카운트 X (실제 dump 안 된 노드).
+ */
+export function countDumpNodes(node: DomDumpNode): number {
+  let n = 1;
+  if (node.children !== undefined) {
+    for (const c of node.children) n += countDumpNodes(c);
+  }
+  return n;
+}
+
+/**
+ * Chip footer 한 줄 요약 — `tag#id.class > N children, M nodes`.
+ * id / class 가 없으면 생략. children 수는 직접 자식, nodes 수는 전체 tree.
+ */
+export function summarizeDump(node: DomDumpNode): string {
+  let head = node.tag;
+  if (node.id !== undefined && node.id.length > 0) head += `#${node.id}`;
+  if (node.classes !== undefined && node.classes.length > 0) {
+    head += `.${node.classes.slice(0, 2).join('.')}`;
+    if (node.classes.length > 2) head += `+${node.classes.length - 2}`;
+  }
+  const childCount = node.children?.length ?? 0;
+  const total = countDumpNodes(node);
+  return `${head} > ${childCount} children, ${total} nodes`;
+}
+
+/**
+ * Convert a DomDumpNode tree (renderer-side capture) to a `DomDumpBlock` ready
+ * to prepend into a chat turn's content blocks. `url` 은 callers 가 결정 (webview
+ * 의 src / location.href 등).
+ */
+export function dumpToBlock(
+  node: DomDumpNode,
+  url: string,
+  options: { selector?: string; capturedAt?: string } = {}
+): {
+  type: 'dom_dump';
+  url: string;
+  selector?: string;
+  dump_json: string;
+  summary: string;
+  node_count: number;
+  captured_at: string;
+} {
+  const summary = summarizeDump(node);
+  const node_count = countDumpNodes(node);
+  const captured_at = options.capturedAt ?? new Date().toISOString();
+  const block: {
+    type: 'dom_dump';
+    url: string;
+    selector?: string;
+    dump_json: string;
+    summary: string;
+    node_count: number;
+    captured_at: string;
+  } = {
+    type: 'dom_dump',
+    url,
+    dump_json: JSON.stringify(node),
+    summary,
+    node_count,
+    captured_at,
+  };
+  if (options.selector !== undefined && options.selector.length > 0) {
+    block.selector = options.selector;
+  }
+  return block;
+}

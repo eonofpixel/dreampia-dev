@@ -140,6 +140,16 @@ export class ClaudeAdapter implements ProviderAdapter {
           .join('\n');
         return { type: 'text', text: `${header}\n${body}` };
       }
+      case 'dom_dump': {
+        // v1.6.2 — DOM dump. Claude 에는 페이지 URL + structured JSON dump 를
+        // fenced code block 으로 전달. node_count / summary 는 사용자 hint.
+        const sel = block.selector !== undefined && block.selector.length > 0
+          ? ` selector="${block.selector}"`
+          : '';
+        const header = `[DOM] ${block.url}${sel} — ${block.summary}`;
+        const fenced = '```json\n' + block.dump_json + '\n```';
+        return { type: 'text', text: `${header}\n${fenced}` };
+      }
     }
   }
 
