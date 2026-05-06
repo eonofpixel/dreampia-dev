@@ -2,6 +2,26 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.8.0] — 2026-05-07
+
+**`_extra` namespace usage audit — read-only deliverable.**
+
+v1.0.0 부터 도입된 `metadata_json._extra.{workspace|terminal|browser|plan|
+permission}` 는 schema-less JSON 으로 부분 promote 만 진행 (v1.4.2 의
+conversation 만). 본 슬롯은 다음 promote 슬롯 (v1.8.1) 의 input 으로
+사용할 audit 문서 작성. 코드 변경 0.
+
+### Added
+- `docs/extra-namespace-audit.md` 신규.
+  - 5 namespace 의 모든 read/write 진입점 + 빈도 분류.
+  - 필드별 권고 (column promote vs JSON 유지) + 근거.
+  - v1.8.1 P1 promote 대상 2개 (`permission.default_level`,
+    `plan.active`) 제안 + 마이그레이션 SQL 예시 + 위험 요소.
+  - P2 보류 + 비정규화 정리 (grants/checklist) 별도 트랙 분리.
+
+### 회귀
+- 0. 코드 변경 X. 신규 test 도 X (deliverable = doc).
+
 ## [1.4.11] — 2026-05-07
 
 **Backfill conflict resolution — modal 에서 row 별 [legacy 삭제].**
