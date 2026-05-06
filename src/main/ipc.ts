@@ -1608,6 +1608,27 @@ function registerBrowserHandlers(browser: BrowserManager): void {
     }
   });
 
+  // v1.6.1 — Screenshot capture. capturePage() 의 NativeImage 를 base64 PNG
+  // 로 직렬화해 renderer 에 반환. 파일 저장은 renderer / 후속 슬롯에서.
+  ipcMain.handle(
+    'browser/capture-tab',
+    async (_evt, tabId: unknown): Promise<Result<{
+      png_base64: string;
+      width: number;
+      height: number;
+    } | null>> => {
+      try {
+        if (typeof tabId !== 'string') {
+          throw new Error('tab id must be string');
+        }
+        const result = await browser.captureTab(tabId);
+        return ok(result);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
   ipcMain.handle('browser/reload', (_evt, tabId: unknown): Result<void> => {
     try {
       if (typeof tabId !== 'string') {

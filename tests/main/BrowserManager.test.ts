@@ -25,6 +25,7 @@ interface FakeWebContents {
   isDestroyed: ReturnType<typeof vi.fn>;
   close: ReturnType<typeof vi.fn>;
   reload: ReturnType<typeof vi.fn>;
+  capturePage: ReturnType<typeof vi.fn>;
   navigationHistory: {
     canGoBack: ReturnType<typeof vi.fn>;
     canGoForward: ReturnType<typeof vi.fn>;
@@ -87,6 +88,10 @@ function makeFakeWebContents(initialUrl: string): FakeWebContents {
     isDestroyed: vi.fn(() => false),
     close: vi.fn(),
     reload: vi.fn(),
+    capturePage: vi.fn(async () => ({
+      toPNG: () => Buffer.from('fake-png-bytes', 'utf-8'),
+      getSize: () => ({ width: 800, height: 600 }),
+    })),
     navigationHistory: {
       canGoBack: vi.fn(() => false),
       canGoForward: vi.fn(() => false),
@@ -466,5 +471,42 @@ describe('BrowserManager', () => {
     expect(mgr.getTab('b1')).toBeNull();
     expect(fakeViewsCreated[0]?.webContents.close).toHaveBeenCalled();
     expect(fakeViewsCreated[1]?.webContents.close).toHaveBeenCalled();
+  });
+
+  // ── v1.6.1 — captureTab ─────────────────────────────────────
+
+  it('captureTab returns base64 PNG + size from webContents.capturePage', async () => {
+    mgr.openTab({ session_id: SID_A, tab_id: 'cap1', url: 'https://e' });
+    const result = await mgr.captureTab('cap1');
+    expect(result).not.toBeNull();
+    if (result === null) return;
+    expect(result.png_base64).toBe(Buffer.from('fake-png-bytes', 'utf-8').toString('base64'));
+    expect(result.width).toBe(800);
+    expect(result.height).toBe(600);
+    expect(fakeViewsCreated[0]?.webContents.capturePage).toHaveBeenCalledTimes(1);
+  });
+
+  it('captureTab returns null for unknown tab', async () => {
+    const result = await mgr.captureTab('does-not-exist');
+    expect(result).toBeNull();
+  });
+
+  it('captureTab returns null when webContents is destroyed', async () => {
+    mgr.openTab({ session_id: SID_A, tab_id: 'cap2', url: 'https://e' });
+    fakeViewsCreated[0]!.webContents.isDestroyed.mockReturnValue(true);
+    const result = await mgr.captureTab('cap2');
+    expect(result).toBeNull();
+  });
+
+  it('captureTab returns null when capturePage throws', async () => {
+    mgr.openTab({ session_id: SID_A, tab_id: 'cap3', url: 'https://e' });
+    fakeViewsCreated[0]!.webContents.capturePage.mockRejectedValue(
+      new Error('capture failed')
+    );
+    // console.warn 을 잠시 차단해 테스트 출력 깨끗.
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = await mgr.captureTab('cap3');
+    expect(result).toBeNull();
+    warnSpy.mockRestore();
   });
 });

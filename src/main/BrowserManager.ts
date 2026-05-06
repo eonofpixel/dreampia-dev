@@ -375,6 +375,46 @@ export class BrowserManager {
     }
   }
 
+  /**
+   * v1.6.1 — Capture the visible page as a PNG. Returns base64-encoded PNG
+   * bytes (no `data:` prefix — caller decides whether to embed or save).
+   *
+   * - Tab 미존재 / 파괴된 webContents → null.
+   * - capturePage() 실패 → null + console.warn (사용자 액션이라 silent fail
+   *   허용; renderer 가 toast 처리).
+   *
+   * Electron NativeImage 의 `toPNG()` 는 Buffer 반환. base64 변환은 caller
+   * 가 결정 가능하지만 IPC 직렬화 호환을 위해 본 메서드는 base64 string 반환.
+   */
+  async captureTab(tab_id: string): Promise<{ png_base64: string; width: number; height: number } | null> {
+    const tab = this.tabs.get(tab_id);
+    if (!tab) return null;
+    const wc = tab.view.webContents as {
+      isDestroyed(): boolean;
+      capturePage?: () => Promise<{
+        toPNG(): Buffer | Uint8Array;
+        getSize(): { width: number; height: number };
+      }>;
+    };
+    if (wc.isDestroyed()) return null;
+    if (typeof wc.capturePage !== 'function') return null;
+    try {
+      const image = await wc.capturePage();
+      const png = image.toPNG();
+      const buf = png instanceof Buffer ? png : Buffer.from(png);
+      const size = image.getSize();
+      return {
+        png_base64: buf.toString('base64'),
+        width: size.width,
+        height: size.height,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[BrowserManager] captureTab(${tab_id}) failed: ${msg}`);
+      return null;
+    }
+  }
+
   // ── geometry ──────────────────────────────────────────────
 
   /** Renderer reports where the placeholder div lives so the WebContentsView

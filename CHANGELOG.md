@@ -2,6 +2,27 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.1] — 2026-05-06
+
+**Screenshot capture IPC — `browser/capture-tab`.**
+
+PreviewPanel 의 webview tab 을 PNG 로 capture 하는 IPC. Annotation 의
+`screenshot_uri` (v0.x 부터 schema 만 있던) 와 v1.6.0 의 element pick 결과를
+실제 이미지로 백업.
+
+구현:
+- `BrowserManager.captureTab(tabId)` async — `webContents.capturePage()` 호출 +
+  `image.toPNG()` 를 base64 로 직렬화. 반환: `{ png_base64, width, height }`
+  또는 `null` (tab 미존재 / 파괴된 webContents / capturePage 실패).
+- `browser/capture-tab` IPC handler.
+- preload `window.dreampia.browser.captureTab(tabId)`.
+- 파일 저장은 renderer 가 결정 (별도 슬롯에서 userData/screenshots/ 영속).
+
+테스트: 4개 신규 unit (성공 round-trip / 미존재 tab null / destroyed null /
+capturePage throw silent fallback). FakeWebContents 에 `capturePage` mock 추가.
+
+회귀 0 (1782 pass / baseline 7 fail).
+
 ## [1.6.2] — 2026-05-06
 
 **DomDumpBlock typed block + provider 직렬화.**

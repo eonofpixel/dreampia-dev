@@ -1056,6 +1056,17 @@ const api = {
     reload: (tabId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('browser/reload', tabId) as Promise<Result<void>>,
 
+    /**
+     * v1.6.1 — Tab 의 visible page 를 PNG 로 capture. base64 string 반환
+     * (no `data:` prefix) + 실제 이미지 크기. tab 미존재 / 파괴 시 value=null.
+     */
+    captureTab: (
+      tabId: string
+    ): Promise<Result<{ png_base64: string; width: number; height: number } | null>> =>
+      ipcRenderer.invoke('browser/capture-tab', tabId) as Promise<
+        Result<{ png_base64: string; width: number; height: number } | null>
+      >,
+
     setBounds: (tabId: string, bounds: BrowserBoundsShape): Promise<Result<void>> =>
       ipcRenderer.invoke('browser/set-bounds', tabId, bounds) as Promise<Result<void>>,
 
