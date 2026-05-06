@@ -2,6 +2,28 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.20] — 2026-05-06
+
+**SlashHelpModal hardcoded 한국어 → useT i18n.**
+
+`src/renderer/components/chat/SlashHelpModal.tsx` 의 hardcoded 한국어 →
+`useT()` 기반 교체.
+
+- Modal aria/title/close.
+- Subtitle 의 `<kbd>/</kbd>` 를 사이에 두는 문장 → before/after 두 키로 분할
+  하여 시각적 kbd 보존.
+- Section 헤더 ('슬래시 명령' / '키보드 단축키').
+- Table 컬럼 ('명령' / '키' / '설명').
+- Footer hint 4개 (탐색 / 선택 / 자동완성 / 닫기).
+
+i18n: ko/en `slash_help.*` 14개 키 추가.
+
+기존 testid 보존 (slash-help-modal / slash-help-close /
+slash-help-shortcuts-heading / slash-help-row-* / slash-help-shortcut-*).
+App.shortcuts.test.tsx 의 testid 기반 query 그대로 매칭 → 63 tests PASS.
+
+회귀 0.
+
 ## [1.7.19] — 2026-05-06
 
 **UsageSettings 모달 hardcoded 한국어 → useT i18n.**

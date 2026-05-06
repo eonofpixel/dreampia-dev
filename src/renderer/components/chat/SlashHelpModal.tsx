@@ -21,6 +21,7 @@ import {
   formatShortcut,
   type ShortcutAction,
 } from '../../keyboard/shortcuts';
+import { useT } from '../../i18n';
 
 export interface SlashHelpModalProps {
   open: boolean;
@@ -31,6 +32,7 @@ export function SlashHelpModal({
   open,
   onClose,
 }: SlashHelpModalProps): React.JSX.Element | null {
+  const t = useT();
   // v0.10.0 — 사용자가 지정한 keyboard overrides 를 IPC 에서 fetch 해 표시.
   // 미존재 / 실패 시 default 만 보여줌 (graceful).
   const [overrides, setOverrides] = useState<Record<string, string>>({});
@@ -77,23 +79,24 @@ export function SlashHelpModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       role="dialog"
       aria-modal="true"
-      aria-label="슬래시 명령 도움말"
+      aria-label={t('slash_help.modal_aria')}
       data-testid="slash-help-modal"
     >
       <div className="flex max-h-[90vh] w-[640px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border-primary p-4">
           <div>
-            <h2 className="text-lg font-semibold">슬래시 명령 & 단축키</h2>
+            <h2 className="text-lg font-semibold">{t('slash_help.title')}</h2>
             <p className="text-xs text-text-secondary">
-              채팅 입력창에서 <kbd className="rounded bg-bg-tertiary px-1">/</kbd> 를 입력하면
-              명령 목록이 자동으로 표시돼요.
+              {t('slash_help.subtitle.before')}
+              <kbd className="rounded bg-bg-tertiary px-1">/</kbd>
+              {t('slash_help.subtitle.after')}
             </p>
           </div>
           <button
             onClick={onClose}
             className="rounded-md p-2 hover:bg-bg-tertiary"
-            aria-label="닫기"
+            aria-label={t('slash_help.close')}
             data-testid="slash-help-close"
           >
             <X className="h-4 w-4" />
@@ -103,13 +106,13 @@ export function SlashHelpModal({
         {/* Body — 명령 목록 + 단축키 */}
         <div className="flex-1 overflow-y-auto p-4">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-            슬래시 명령
+            {t('slash_help.section.commands')}
           </h3>
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-text-tertiary">
               <tr>
-                <th className="pb-2 font-medium">명령</th>
-                <th className="pb-2 font-medium">설명</th>
+                <th className="pb-2 font-medium">{t('slash_help.col.command')}</th>
+                <th className="pb-2 font-medium">{t('slash_help.col.description')}</th>
               </tr>
             </thead>
             <tbody>
@@ -140,13 +143,13 @@ export function SlashHelpModal({
             className="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide text-text-tertiary"
             data-testid="slash-help-shortcuts-heading"
           >
-            키보드 단축키
+            {t('slash_help.section.shortcuts')}
           </h3>
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-text-tertiary">
               <tr>
-                <th className="pb-2 font-medium">키</th>
-                <th className="pb-2 font-medium">설명</th>
+                <th className="pb-2 font-medium">{t('slash_help.col.key')}</th>
+                <th className="pb-2 font-medium">{t('slash_help.col.description')}</th>
               </tr>
             </thead>
             <tbody>
@@ -177,13 +180,13 @@ export function SlashHelpModal({
         {/* Footer hint */}
         <div className="border-t border-border-primary px-4 py-2 text-xs text-text-tertiary">
           <kbd className="rounded bg-bg-tertiary px-1">↑</kbd>
-          <kbd className="ml-0.5 rounded bg-bg-tertiary px-1">↓</kbd> 탐색
+          <kbd className="ml-0.5 rounded bg-bg-tertiary px-1">↓</kbd> {t('slash_help.footer.navigate')}
           <span className="mx-2">·</span>
-          <kbd className="rounded bg-bg-tertiary px-1">Enter</kbd> 선택
+          <kbd className="rounded bg-bg-tertiary px-1">Enter</kbd> {t('slash_help.footer.select')}
           <span className="mx-2">·</span>
-          <kbd className="rounded bg-bg-tertiary px-1">Tab</kbd> 자동완성
+          <kbd className="rounded bg-bg-tertiary px-1">Tab</kbd> {t('slash_help.footer.autocomplete')}
           <span className="mx-2">·</span>
-          <kbd className="rounded bg-bg-tertiary px-1">Esc</kbd> 닫기
+          <kbd className="rounded bg-bg-tertiary px-1">Esc</kbd> {t('slash_help.footer.close')}
         </div>
       </div>
     </div>

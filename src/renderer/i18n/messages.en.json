@@ -486,5 +486,20 @@
   "compare.diff.empty": "Both responses are empty — nothing to diff.",
   "compare.accept": "Use this response",
   "compare.cancel": "Cancel",
-  "compare.close": "Close"
+  "compare.close": "Close",
+
+  "slash_help.modal_aria": "Slash command help",
+  "slash_help.title": "Slash commands & shortcuts",
+  "slash_help.subtitle.before": "Type ",
+  "slash_help.subtitle.after": " in the chat input to bring up the command list.",
+  "slash_help.close": "Close",
+  "slash_help.section.commands": "Slash commands",
+  "slash_help.section.shortcuts": "Keyboard shortcuts",
+  "slash_help.col.command": "Command",
+  "slash_help.col.key": "Key",
+  "slash_help.col.description": "Description",
+  "slash_help.footer.navigate": "Navigate",
+  "slash_help.footer.select": "Select",
+  "slash_help.footer.autocomplete": "Autocomplete",
+  "slash_help.footer.close": "Close"
 }
