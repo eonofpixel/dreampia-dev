@@ -2,6 +2,26 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.21] — 2026-05-06
+
+**Sidebar `t_label_coming_soon` helper 제거 — useT 기반.**
+
+`src/renderer/components/sidebar/Sidebar.tsx` 의 `t_label_coming_soon()`
+helper function (hardcoded `'준비 중'` 반환) 을 제거. `SidebarNavItem` 안에서
+직접 `useT()` 호출 후 신규 키 `sidebar.coming_soon_badge` 를 사용. nested
+function 에선 hook 호출 불가 → component 레벨에서 호출하도록 인라인.
+
+i18n: ko/en `sidebar.coming_soon_badge` 1개 키 추가 (기존 `sidebar.coming_soon`
+hint 와 별개의 짧은 badge label).
+
+PluginsModal / CompareModal audit 결과 — 두 컴포넌트 모두 이미 fully i18n
+(aria/title/section heading/error 모두 t() 통과). 추가 작업 없음.
+
+기존 testid 보존. Sidebar.test.tsx (15) + mcp-status (5) + settings (3) +
+search (7) = 30 tests PASS.
+
+회귀 0.
+
 ## [1.7.20] — 2026-05-06
 
 **SlashHelpModal hardcoded 한국어 → useT i18n.**

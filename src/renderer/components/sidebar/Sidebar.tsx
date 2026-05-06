@@ -387,6 +387,7 @@ function SidebarNavItem({
   comingSoon?: boolean;
   comingSoonHint?: string;
 }): React.JSX.Element {
+  const t = useT();
   // onClick 이 없거나 comingSoon 이면 button 비활성화. 사용자 혼란 방지.
   const isDisabled = comingSoon === true || (onClick === undefined && !comingSoon);
   return (
@@ -406,7 +407,7 @@ function SidebarNavItem({
       <span className="flex-1 truncate">{label}</span>
       {comingSoon === true ? (
         <span className="rounded-sm bg-bg-tertiary px-1 py-0.5 text-[9px] uppercase tracking-wide text-text-tertiary">
-          {t_label_coming_soon()}
+          {t('sidebar.coming_soon_badge')}
         </span>
       ) : (
         shortcut && (
@@ -417,13 +418,6 @@ function SidebarNavItem({
       )}
     </button>
   );
-}
-
-/** Tiny helper — useT() 는 hook 이라 nested function 에선 호출 불가, 위치 기반
- *  static label 로 충당. i18n key 는 caller 가 comingSoonHint 로 전달. */
-function t_label_coming_soon(): string {
-  // 우선순위 한국어 default, 영어는 미세하게 다름. caller hint 가 우선.
-  return '준비 중';
 }
 
 function ChatItem({

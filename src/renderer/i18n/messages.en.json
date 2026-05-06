@@ -39,6 +39,7 @@
   "sidebar.nav.automation": "Automation",
   "sidebar.nav.compare": "Compare (Cross-AI)",
   "sidebar.coming_soon": "Coming soon — feature planned for v1.x",
+  "sidebar.coming_soon_badge": "Coming soon",
   "sidebar.section.projects": "Projects",
   "sidebar.section.chats": "Chats",
   "sidebar.chats.aria_label": "Chat list",
