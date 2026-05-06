@@ -2,6 +2,22 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.6] — 2026-05-06
+
+**cost-limit-hook 실 ctx 데이터 — mtd_total_usd + limit_usd 전달.**
+
+`runStreamPump` 의 post_turn payload 확장:
+- `mtd_total_usd`: `usage.getMonthToDateCostUsd(now)` (UsageStore 누적).
+- `limit_usd`: `settings.usage_cost_limit_usd` (사용자 설정).
+- `cost_usd`: 이번 turn 비용 (이미 v1.6.5).
+
+cost-limit-hook plugin 이 ratio = mtd / limit 계산:
+- ≥80% → toast warning.
+- ≥100% → toast error.
+
+best-effort try/catch — usage store schema mismatch 또는 settings 읽기 실패
+시 silently skip.
+
 ## [1.6.5] — 2026-05-06
 
 **Plugin Hook integration — runStreamPump 의 pre/post_turn 호출.**

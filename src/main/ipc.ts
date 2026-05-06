@@ -2340,9 +2340,8 @@ async function runStreamPump(
     // 가 갱신된 durable 합계 + (이번 stream 미반영) reserved 0 으로 정확.
     cfg.costGate?.release(streamId);
 
-    // v1.6.5 — Plugin post_turn hook (best-effort). v1.6.6 의 cost-limit-hook
-    // 이 본 ctx.payload.mtd_total_usd 등을 검사 → 사용자에게 toast 알림 위해
-    // hooks runtime 의 ctx.notify 가 main → renderer IPC 로 전달 (별도 IPC).
+    // v1.6.5/v1.6.6 — Plugin post_turn hook (best-effort). cost-limit-hook
+    // 이 본 ctx.payload.mtd_total_usd / limit_usd 검사 → 한도 초과 시 toast.
     if (
       cfg.pluginManager !== undefined &&
       cfg.pluginHookRunner !== undefined
@@ -2357,11 +2356,27 @@ async function runStreamPump(
         if (latestUsage !== null) {
           payload['cost_usd'] = latestUsage.data.total_cost_usd;
         }
+        // v1.6.6: usage store 가 있으면 month-to-date 합계 + settings 한도.
+        if (usage !== undefined) {
+          try {
+            payload['mtd_total_usd'] = usage.getMonthToDateCostUsd(new Date());
+          } catch {
+            // ignore — usage store 가 schema mismatch 등으로 throw 가능.
+          }
+        }
+        try {
+          const settings = readSettings();
+          if (typeof settings.usage_cost_limit_usd === 'number') {
+            payload['limit_usd'] = settings.usage_cost_limit_usd;
+          }
+        } catch {
+          // test 환경 등.
+        }
         try {
           await cfg.pluginHookRunner.runHook(plugins, 'post_turn', {
             kind: 'post_turn',
             payload,
-            // v1.6.6: ctx.notify 가 renderer 의 toast 로 forward.
+            // ctx.notify 가 renderer 의 toast 로 forward.
             notify: (message, kind): void => {
               send('plugin/notify', { message, kind: kind ?? 'info' });
             },
