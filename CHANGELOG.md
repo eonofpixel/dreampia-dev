@@ -2,6 +2,29 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.7] — 2026-05-06
+
+**Plugin .granted.json 영속 — `'always'` decision 파일로.**
+
+v1.1.23 PluginCapabilityGate MVP 의 후속 — `<storageDir>/<plugin>/.granted.json`
+에 'always' grants 영속. 다음 process 시작 시 자동 로드 → 사용자 재승인 X.
+
+설계:
+- `PluginCapabilityGateOptions.storageDir?: string` 추가. 미지정 시 기존
+  in-memory only 동작 그대로 (backwards compat).
+- 생성자에서 `loadAllPersisted(storageDir)` 호출 → 모든 `<plugin>/.granted.json`
+  스캔 + granted+persisted set 채움. 손상된 JSON 은 silent skip.
+- 'always' decision 마다 `persistAlways` 호출 → 디렉터리 mkdir + JSON write.
+  같은 cap 재요청은 idempotent (persisted set 으로 dedup).
+- 'once' / 'session' 은 영속 X — 의도된 한정 grant.
+- `clearAll` 은 in-memory 만 reset (file 보존). 다음 인스턴스가 자동 복원.
+
+테스트: 8개 신규 unit (always 영속 / session·once 비영속 / 새 인스턴스 자동
+로드 / 다중 plugin / 같은 plugin 누적 / idempotent / 손상 JSON skip /
+storageDir 미지정 backwards compat / 비존재 경로 안전).
+
+회귀 0 (1764 pass / baseline 7 fail).
+
 ## [1.7.9] — 2026-05-06
 
 **Onboarding step 5 추천 prompt 클릭 e2e.**
