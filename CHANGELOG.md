@@ -2,6 +2,38 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.0] — 2026-05-06
+
+**Sentry SDK 통합 — `@sentry/node` adapter for SentrySink.**
+
+v1.7.1 의 SentryClientLike interface 위에 실제 `@sentry/node` (^10.51) 어댑터
+완성. `SENTRY_DSN` env var 가 set 되어 있으면 부팅 시 자동 init.
+
+설계 (`src/main/telemetry/SentryAdapter.ts`):
+- `SentryNamespaceLike` — `init` / `captureException` / `captureMessage` /
+  optional `metrics.distribution` 만 의존하는 narrow interface (전체 SDK
+  import 필요 없음 — caller 가 namespace 전달).
+- `wrapSentryClient(Sentry)` — namespace → SentryClientLike 변환. metrics
+  존재 시 metricsDistribution 자동 wrap.
+- `initSentry(Sentry, options)` — DSN + environment + release + tracesSampleRate
+  옵션. Sentry.init 호출 후 wrapped client 반환.
+- `initSentryFromEnv(Sentry, env?)` — `SENTRY_DSN` (필수) + `SENTRY_ENVIRONMENT`
+  / `NODE_ENV` fallback / `SENTRY_RELEASE` 자동 매핑. DSN 없으면 null.
+
+Production 부팅 (main/index.ts) 에 통합:
+```ts
+import * as Sentry from '@sentry/node';
+const client = initSentryFromEnv(Sentry);
+const sink = client !== null ? new SentrySink(client) : undefined;
+const tel = new Telemetry({ sink });
+tel.setEnabled(settings.telemetry_enabled === true);
+```
+(실제 wiring 은 별도 슬롯에서 — 본 commit 은 어댑터 + 테스트만.)
+
+테스트: 9 신규 unit (init DSN 전달 / 빈 DSN throw / FromEnv null /
+ENVIRONMENT+RELEASE 매핑 / NODE_ENV fallback / wrap 위임 / metrics wrap /
+metrics 미정 / SentrySink 통합 round-trip). 회귀 0 (1838 pass / 7 base).
+
 ## [1.4.3] — 2026-05-06
 
 **Schema debt B-4 — down migration backfill + `revertTo` API.**
