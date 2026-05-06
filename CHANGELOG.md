@@ -2,6 +2,22 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.17] — 2026-05-06
+
+**ChatInput chip [×] — 개별 첨부 제거 (UX polish).**
+
+v1.6.13 의 chip preview 가 read-only 였던 것을 mutation 가능하게.
+
+- `ChatInputProps.onRemovePendingBlock?: (index: number) => void` 추가.
+- 미지정 시 X 버튼 미노출 (legacy 호환).
+- chip 안의 `<button aria-label>` — i18n 키 `chat.input.attached_remove_aria`.
+- ChatPanel + InputArea forward.
+- App.tsx 핸들러 `setPendingBlocks(prev => prev.filter((_, i) => i !== index))`.
+- i18n: `chat.input.attached_label` (이전 hardcoded "첨부:") + `attached_remove_aria`
+  ko/en.
+
+회귀 0.
+
 ## [1.7.16] — 2026-05-06
 
 **AutomationModal i18n — 모든 hardcoded 한국어 → useT.**

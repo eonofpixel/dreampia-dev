@@ -124,6 +124,11 @@ export interface ChatInputProps {
    * drop 은 console.info 만 (silent fallback).
    */
   onAttachBlocks?: (blocks: ContentBlock[]) => void;
+  /**
+   * v1.6.17 — Chip 의 [×] 버튼이 호출. 부모가 pendingBlocks 에서 해당
+   * index 제거. 미지정 시 X 버튼 미노출 (legacy).
+   */
+  onRemovePendingBlock?: (index: number) => void;
 }
 
 const SLASH_POPOVER_PREFIX = 'slash-command';
@@ -155,6 +160,7 @@ export function ChatInput({
   pendingBlocks,
   onConsumePendingBlocks,
   onAttachBlocks,
+  onRemovePendingBlock,
 }: ChatInputProps): React.JSX.Element {
   const t = useT();
   // 사용자가 명시 placeholder 를 넘기지 않으면 locale-aware default.
@@ -754,14 +760,27 @@ export function ChatInput({
           role="status"
           data-testid="chat-input-pending-blocks"
         >
-          <span className="text-text-tertiary">첨부:</span>
+          <span className="text-text-tertiary">{t('chat.input.attached_label')}</span>
           {pendingBlocks.map((b, i) => (
             <span
               key={`${b.type}-${i}`}
-              className="rounded bg-bg-tertiary px-1.5 py-0.5 font-mono text-[10px] text-text-secondary"
+              className="inline-flex items-center gap-1 rounded bg-bg-tertiary px-1.5 py-0.5 font-mono text-[10px] text-text-secondary"
               data-testid={`chat-input-pending-block-${i}`}
             >
-              {b.type}
+              <span>{b.type}</span>
+              {onRemovePendingBlock !== undefined && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onRemovePendingBlock(i);
+                  }}
+                  className="rounded text-text-tertiary hover:bg-bg-primary hover:text-text-primary"
+                  aria-label={t('chat.input.attached_remove_aria', { type: b.type })}
+                  data-testid={`chat-input-pending-block-remove-${i}`}
+                >
+                  ×
+                </button>
+              )}
             </span>
           ))}
         </div>

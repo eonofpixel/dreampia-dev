@@ -146,6 +146,8 @@ export interface ChatPanelProps {
   onConsumePendingBlocks?: () => void;
   /** v1.6.16 — DnD/paste image → 부모가 pendingBlocks 에 push. */
   onAttachBlocks?: (blocks: ContentBlock[]) => void;
+  /** v1.6.17 — chip [×] 클릭 시 부모가 제거. */
+  onRemovePendingBlock?: (index: number) => void;
 }
 
 interface MessagesAreaProps {
@@ -198,6 +200,7 @@ export function ChatPanel({
   pendingBlocks,
   onConsumePendingBlocks,
   onAttachBlocks,
+  onRemovePendingBlock,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -248,6 +251,7 @@ export function ChatPanel({
         pendingBlocks={pendingBlocks}
         onConsumePendingBlocks={onConsumePendingBlocks}
         onAttachBlocks={onAttachBlocks}
+        onRemovePendingBlock={onRemovePendingBlock}
       />
     </main>
   );
@@ -357,6 +361,8 @@ interface InputAreaProps {
   onConsumePendingBlocks?: () => void;
   /** v1.6.16 — DnD/paste image push (forwarded). */
   onAttachBlocks?: (blocks: ContentBlock[]) => void;
+  /** v1.6.17 — chip [×] 클릭 시 부모가 제거 (forwarded). */
+  onRemovePendingBlock?: (index: number) => void;
 }
 
 function InputArea({
@@ -374,6 +380,7 @@ function InputArea({
   pendingBlocks,
   onConsumePendingBlocks,
   onAttachBlocks,
+  onRemovePendingBlock,
 }: InputAreaProps): React.JSX.Element {
   const t = useT();
   return (
@@ -405,6 +412,7 @@ function InputArea({
         {...(pendingBlocks !== undefined && { pendingBlocks })}
         {...(onConsumePendingBlocks !== undefined && { onConsumePendingBlocks })}
         {...(onAttachBlocks !== undefined && { onAttachBlocks })}
+        {...(onRemovePendingBlock !== undefined && { onRemovePendingBlock })}
       />
     </div>
   );

@@ -51,6 +51,8 @@
 
   "chat.input.placeholder": "Type a message",
   "chat.input.aria_label": "Chat input",
+  "chat.input.attached_label": "Attached:",
+  "chat.input.attached_remove_aria": "Remove {type} attachment",
   "chat.input.hint.enter_send": "Send",
   "chat.input.hint.shift_enter_newline": "New line",
   "chat.input.hint.slash_commands": "Commands",
