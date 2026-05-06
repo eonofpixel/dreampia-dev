@@ -2,6 +2,20 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.5.5] — 2026-05-06
+
+**MediaStore — `~/.dreampia/media/<sha256>/<filename>` 영속화 + LRU.**
+
+- `MediaStore.store({originalName, mime, base64})` → StoredMedia.
+- sha256 기반 dedup — 같은 bytes 두 번 저장하면 같은 path.
+- meta sidecar `<sha256>.meta.json`.
+- LRU eviction — cap (default 50GB) 초과 시 oldest mtime 부터.
+  meta sidecar 는 evict 대상 X.
+- 확장자 sanitize (alpha-num 1-6자).
+- `store()` 종료 전 `enforceCap()` await — deterministic.
+
+7 unit.
+
 ## [1.5.3] — 2026-05-06
 
 **Image/PDF input utility — DnD / paste / file → base64.**
