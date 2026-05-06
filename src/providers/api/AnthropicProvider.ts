@@ -106,16 +106,48 @@ interface AnthropicMessageBody {
   model: string;
   max_tokens: number;
   stream: true;
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  messages: Array<AnthropicMessage>;
 }
 
+interface AnthropicMessage {
+  role: 'user' | 'assistant';
+  content: string | AnthropicContentBlock[];
+}
+
+interface AnthropicContentBlock {
+  type: 'text';
+  text: string;
+  cache_control?: { type: 'ephemeral' };
+}
+
+/**
+ * v1.4.6: Prompt caching — `cache_control: { type: 'ephemeral' }` 를 turns
+ * 의 처음 N 개 (default 모든 user/assistant pair 의 첫 user) 에 마킹. Anthropic
+ * 의 5분 ephemeral cache 가 동일 prefix 의 다음 호출에서 cache_read_input_tokens
+ * 으로 비용 절감.
+ *
+ * 정책 (Codex 권고):
+ *  - cache breakpoint 는 system prompt + 첫 user message 만 (large prefix).
+ *  - 본 commit MVP: 첫 user message 만 캐시. system 은 추후.
+ */
 function buildAnthropicBody(turns: Turn[], model: string): AnthropicMessageBody {
-  const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+  const messages: AnthropicMessage[] = [];
+  let firstUserCached = false;
   for (const t of turns) {
     if (t.role !== 'user' && t.role !== 'assistant') continue;
     const text = renderTurnTextOnly(t);
     if (text.length === 0) continue;
-    messages.push({ role: t.role, content: text });
+    if (t.role === 'user' && !firstUserCached && text.length >= 1024) {
+      // 1024 chars+ 의 첫 user → cache_control. 짧은 prompt 는 캐시 비용보다
+      // 손해 — Anthropic 권고대로 large prefix 만.
+      messages.push({
+        role: 'user',
+        content: [{ type: 'text', text, cache_control: { type: 'ephemeral' } }],
+      });
+      firstUserCached = true;
+    } else {
+      messages.push({ role: t.role, content: text });
+    }
   }
   return { model, max_tokens: 4096, stream: true, messages };
 }
@@ -157,6 +189,15 @@ function* translateAnthropicEvent(
       if (usage !== undefined) {
         const inputTokens = typeof usage.input_tokens === 'number' ? usage.input_tokens : 0;
         const outputTokens = typeof usage.output_tokens === 'number' ? usage.output_tokens : 0;
+        // v1.4.6: cache_creation_input_tokens / cache_read_input_tokens 도 emit.
+        const cacheCreate =
+          typeof usage.cache_creation_input_tokens === 'number'
+            ? usage.cache_creation_input_tokens
+            : 0;
+        const cacheRead =
+          typeof usage.cache_read_input_tokens === 'number'
+            ? usage.cache_read_input_tokens
+            : 0;
         yield {
           type: 'usage',
           data: {
@@ -165,8 +206,8 @@ function* translateAnthropicEvent(
             turn_id: turnId,
             input_tokens: inputTokens,
             output_tokens: outputTokens,
-            cache_creation_input_tokens: 0,
-            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: cacheCreate,
+            cache_read_input_tokens: cacheRead,
             total_cost_usd: 0,
             recorded_at: nowIso(),
             unknown_pricing: true,

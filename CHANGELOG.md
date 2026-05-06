@@ -2,6 +2,16 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.4.6] — 2026-05-06
+
+**Anthropic prompt caching support.**
+
+- 첫 user message (≥1024 chars) 에 `cache_control: { type: 'ephemeral' }`
+  마킹 → Anthropic 5분 cache 활용 → 같은 prefix 의 다음 호출에서
+  cache_read_input_tokens 으로 비용 절감.
+- usage event 에 `cache_creation_input_tokens` / `cache_read_input_tokens`
+  emit (이전엔 0 hardcoded).
+
 ## [1.4.5] — 2026-05-06
 
 **OpenAIProvider 실 SSE 구현 (Chat Completions API).**
