@@ -62,13 +62,14 @@ describe('v1.4.3 — revertTo / down-migration', () => {
     expect(store.getSchemaVersion()).toBe(target);
   });
 
-  it('revertTo(8) — 모든 marker down 적용 (12→8 = 4 step)', () => {
+  it('revertTo(8) — 모든 marker down 적용 (LATEST→8)', () => {
     const result = revertTo(store.getDb(), 8);
     expect(result.from).toBe(LATEST_SCHEMA_VERSION);
     expect(result.to).toBe(8);
-    // 12 → 11 → 10 → 9 → version 마다 down 1번씩 (target+1=9 까지).
-    // 즉 12, 11, 10, 9 의 down 이 실행됨 → schema_version=8 이 됨.
-    expect(result.reverted).toEqual([12, 11, 10, 9]);
+    // LATEST → 8: target+1=9 까지의 down 이 실행. descending 순서.
+    const expected: number[] = [];
+    for (let v = LATEST_SCHEMA_VERSION; v > 8; v -= 1) expected.push(v);
+    expect(result.reverted).toEqual(expected);
     expect(store.getSchemaVersion()).toBe(8);
   });
 

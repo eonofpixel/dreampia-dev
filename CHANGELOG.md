@@ -2,6 +2,39 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.4.1] — 2026-05-06
+
+**Schema debt B-2 — `permission_grants.id` INTEGER → TEXT rebuild.**
+
+v1.3.1 (migration 009) marker 의 application 후속. SQLite `ALTER COLUMN type`
+미지원이라 table rebuild 패턴.
+
+Migration 013:
+- `CREATE TABLE permission_grants_new (id TEXT PRIMARY KEY, ...)`
+- `INSERT ... SELECT COALESCE(json_extract(target_json, '$.id'), CAST(id AS TEXT))`
+  — application UUIDv7 보존 / 옛 INTEGER 가 string 으로 cast fallback.
+- `DROP TABLE permission_grants` + `ALTER TABLE ... RENAME` + indexes 재생성.
+- atomic transaction.
+
+Application 코드 변경:
+- `PermissionGrantRow.id: number` → `string`.
+- `addPermissionGrant` / `insertGrants` — `INSERT (id, ...) VALUES (@id, ...)`.
+  application UUIDv7 직접 PK 로.
+- `revokePermissionGrant` — `WHERE id = ?` 직접 매칭 (이전 `json_extract` 대비
+  index hit 가능 + 성능 향상).
+- `loadGrants` — `r.id || wrap.id` (마이그레이션 동안의 backwards compat).
+
+Down migration 013 — TEXT id → INTEGER AUTOINCREMENT (비상 수단, prod 권장 X).
+
+테스트:
+- 4 신규 unit (`permissionGrants.idText.test.ts`): table_info type=TEXT /
+  INSERT id 보존 / revoke WHERE id 매칭 / 미존재 id false / 두 번 revoke false.
+- 1 update (`revertTo.test.ts`): LATEST 기반 dynamic expected.
+- 회귀 0 (1848 pass / 7 baseline).
+
+후속 — `target_json.id` 중복 필드 제거는 별도 슬롯 (app 코드가 r.id 만 의존
+하도록 점진).
+
 ## [1.7.8] — 2026-05-06
 
 **a11y / i18n — PreviewPanel aria-label + 가시 텍스트 i18n 화.**

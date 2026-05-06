@@ -119,7 +119,8 @@ interface TurnRow {
 }
 
 interface PermissionGrantRow {
-  id: number;
+  // v1.4.1 (B-2) — INTEGER → TEXT promote. application UUIDv7 직접.
+  id: string;
   session_id: string;
   capability: string;
   target_json: string;
@@ -617,14 +618,19 @@ export class SessionStore {
    */
   addPermissionGrant(grant: import('../types/permission').PermissionGrant): void {
     if (!this.stmts.insertGrant) {
+      // v1.4.1 (B-2) — id 컬럼 직접 명시. 이전엔 INTEGER AUTOINCREMENT 라
+      // application UUIDv7 가 target_json 안에만 있었지만 이제 PK 로 승격.
       this.stmts.insertGrant = this.db.prepare(
         `INSERT INTO permission_grants
-         (session_id, capability, target_json, granted_at, granted_by, expires_at, revoked_at, reason, scope)
-         VALUES (@session_id, @capability, @target_json, @granted_at, @granted_by, @expires_at, @revoked_at, @reason, @scope)`
+         (id, session_id, capability, target_json, granted_at, granted_by, expires_at, revoked_at, reason, scope)
+         VALUES (@id, @session_id, @capability, @target_json, @granted_at, @granted_by, @expires_at, @revoked_at, @reason, @scope)`
       );
     }
+    // target_json 은 backwards compat 으로 id 를 계속 포함 (기존 read path 가
+    // json_extract 으로 의존). 후속 슬롯에서 점진 제거.
     const targetJson = JSON.stringify({ id: grant.id, target: grant.target });
     this.stmts.insertGrant.run({
+      id: grant.id,
       session_id: grant.session_id,
       capability: grant.capability,
       target_json: targetJson,
@@ -665,14 +671,14 @@ export class SessionStore {
    * @returns true 면 1개 row update, false 면 미발견.
    */
   revokePermissionGrant(grantId: string, revokedAt: string): boolean {
-    // target_json LIKE '%"id":"<uuid>"%' — JSON1 extension 사용 가능하면 더 정교.
-    // 기본 SQLite 빌드의 JSON1 가 켜져 있으므로 json_extract 사용.
+    // v1.4.1 (B-2) — id 가 PK 로 승격 → `WHERE id = ?` 직접 매칭. 이전엔
+    // json_extract(target_json, '$.id') 였음. 동일 결과 + 인덱스 활용.
     const result = this.db
       .prepare(
         `UPDATE permission_grants
          SET revoked_at = @revoked_at
          WHERE revoked_at IS NULL
-           AND json_extract(target_json, '$.id') = @grant_id`
+           AND id = @grant_id`
       )
       .run({ revoked_at: revokedAt, grant_id: grantId });
     return result.changes > 0;
@@ -1197,16 +1203,18 @@ export class SessionStore {
     if (grants.length === 0) return;
 
     if (!this.stmts.insertGrant) {
+      // v1.4.1 (B-2) — id 컬럼 직접.
       this.stmts.insertGrant = this.db.prepare(
         `INSERT INTO permission_grants
-         (session_id, capability, target_json, granted_at, granted_by, expires_at, revoked_at, reason, scope)
-         VALUES (@session_id, @capability, @target_json, @granted_at, @granted_by, @expires_at, @revoked_at, @reason, @scope)`
+         (id, session_id, capability, target_json, granted_at, granted_by, expires_at, revoked_at, reason, scope)
+         VALUES (@id, @session_id, @capability, @target_json, @granted_at, @granted_by, @expires_at, @revoked_at, @reason, @scope)`
       );
     }
 
     for (const g of grants) {
       const targetJson = JSON.stringify({ id: g.id, target: g.target });
       this.stmts.insertGrant.run({
+        id: g.id,
         session_id: s.id,
         capability: g.capability,
         target_json: targetJson,
@@ -1644,8 +1652,11 @@ export class SessionStore {
         id: string;
         target: GrantTarget;
       };
+      // v1.4.1 (B-2) — `r.id` 가 이제 application id (TEXT). 기존 row 는
+      // migration 이 target_json.id 로 backfill 했으므로 둘이 동일. 안전망:
+      // r.id 가 falsy 한 경우 wrap.id 로 fallback.
       const g: Record<string, unknown> = {
-        id: wrap.id,
+        id: r.id || wrap.id,
         session_id: sessionId,
         capability: r.capability,
         target: wrap.target,

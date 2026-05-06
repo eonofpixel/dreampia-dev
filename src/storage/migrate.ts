@@ -26,6 +26,7 @@ import sql009 from './migrations/009_grants_id_text.sql?raw';
 import sql010 from './migrations/010_json_columns_promote.sql?raw';
 import sql011 from './migrations/011_down_migration_marker.sql?raw';
 import sql012 from './migrations/012_workspace_id_sha256_marker.sql?raw';
+import sql013 from './migrations/013_permission_grants_id_text.sql?raw';
 
 // v1.4.3 — down migrations. 일부 (markers 8-12) 만 backfill, 1-7 은 후속.
 import down008 from './migrations/down_008_workspace_id_deterministic.sql?raw';
@@ -33,6 +34,7 @@ import down009 from './migrations/down_009_grants_id_text.sql?raw';
 import down010 from './migrations/down_010_json_columns_promote.sql?raw';
 import down011 from './migrations/down_011_down_migration_marker.sql?raw';
 import down012 from './migrations/down_012_workspace_id_sha256_marker.sql?raw';
+import down013 from './migrations/down_013_permission_grants_id_text.sql?raw';
 
 // ────────────────────────────────────────────────────────────
 // Migration registry
@@ -96,6 +98,12 @@ const MIGRATIONS: readonly Migration[] = [
     description: 'v1.4.0 — workspace_id sha256 backfill foundation (B-1 후속)',
     up: sql012,
     down: down012,
+  },
+  {
+    version: 13,
+    description: 'v1.4.1 — permission_grants.id INTEGER → TEXT rebuild (B-2)',
+    up: sql013,
+    down: down013,
   },
 ] as const;
 
