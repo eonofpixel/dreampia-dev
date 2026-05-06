@@ -2,6 +2,31 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.1] — 2026-05-06
+
+**SentrySink — Telemetry 의 Sentry-호환 sink (DI 기반).**
+
+v1.3.6 의 Telemetry stub 위에 Sentry SDK 와 호환되는 sink 구현. 실제
+`@sentry/electron` 설치는 v1.7.0 후속 — 본 슬롯은 narrow `SentryClientLike`
+interface 만 의존해 SDK-free 환경에서도 unit test 가능.
+
+설계:
+- `SentryClientLike` interface — `captureException` / `captureMessage` /
+  `metricsDistribution?` 만 노출. SDK 변경에도 본 코드 안정.
+- `SentrySink implements TelemetrySink`:
+  - `error` → `captureException` (Error 또는 string + tags + extra).
+  - `event` → `captureMessage` (level=info).
+  - `metric` → `metricsDistribution` 있으면 그것, 없으면 `captureMessage(debug)`
+    fallback.
+- `splitContext` 헬퍼 — string ≤ 64자는 tags (Sentry indexed search), 그 외
+  (긴 string / number / boolean) 는 extra. tag 길이 가드로 SDK 거절 방지.
+
+테스트: 6개 신규 unit (error 라우팅 / event 라우팅 / metric 정상 / metric
+fallback / 긴 string extra / disabled silent). 회귀 0 (1788 pass / 7 base).
+
+후속 — v1.7.0 에서 `@sentry/electron` install + DSN env + `Sentry` 객체를
+`SentryClientLike` 로 어댑팅해 SentrySink 에 주입.
+
 ## [1.6.1] — 2026-05-06
 
 **Screenshot capture IPC — `browser/capture-tab`.**
