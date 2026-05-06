@@ -759,6 +759,71 @@ export function registerIpcHandlers(
     }
   );
 
+  // v1.5.0 — Settings 모달 [Direct API] 탭. Anthropic / OpenAI API key 입력.
+  //
+  // 보안: GET 은 raw key 반환 X. presence + 마지막 4글자 preview 만 노출 →
+  //       renderer 가 화면에 ‘설정됨 (...abcd)’ 표시. SET 은 빈 문자열로 clear.
+  //
+  // 저장 위치: settings.json (userData/settings.json) — plain text. 향후 OS
+  //           keychain 마이그레이션 권고 (settings.ts 의 주석 참고).
+  ipcMain.handle(
+    'app:get-direct-api-keys',
+    (): Result<{
+      anthropic: { present: boolean; preview: string | null };
+      openai: { present: boolean; preview: string | null };
+    }> => {
+      try {
+        const settings = readSettings();
+        const previewOf = (key: string | undefined): string | null => {
+          if (typeof key !== 'string' || key.length === 0) return null;
+          // 마지막 4글자만 노출. 전체 길이가 4 이하면 *** 만 표시 (key 자체 노출 금지).
+          if (key.length <= 4) return '****';
+          return key.slice(-4);
+        };
+        return ok({
+          anthropic: {
+            present: typeof settings.api_key_anthropic === 'string' && settings.api_key_anthropic.length > 0,
+            preview: previewOf(settings.api_key_anthropic),
+          },
+          openai: {
+            present: typeof settings.api_key_openai === 'string' && settings.api_key_openai.length > 0,
+            preview: previewOf(settings.api_key_openai),
+          },
+        });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'app:set-direct-api-key',
+    (_evt, rawProvider: unknown, rawKey: unknown): Result<void> => {
+      try {
+        if (rawProvider !== 'anthropic' && rawProvider !== 'openai') {
+          throw new Error("provider must be 'anthropic' or 'openai'");
+        }
+        if (typeof rawKey !== 'string') {
+          throw new Error('key must be a string (empty string clears)');
+        }
+        // 길이 상한 — 의도치 않은 거대 payload / 붙여넣기 사고 차단. 실제 API key 는
+        // 100~256 정도이지만 여유 있게 1024 까지 허용.
+        if (rawKey.length > 1024) {
+          throw new Error('key too long (max 1024 chars)');
+        }
+        const trimmed = rawKey.trim();
+        if (rawProvider === 'anthropic') {
+          writeSettings({ api_key_anthropic: trimmed.length === 0 ? undefined : trimmed });
+        } else {
+          writeSettings({ api_key_openai: trimmed.length === 0 ? undefined : trimmed });
+        }
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
   // v0.10.0 — Settings 모달 [단축키] 탭. 사용자 지정 매핑 (action → combo).
   // GET 은 settings.json 의 keyboard_shortcut_overrides 를 그대로 반환 — 미설정
   // 시 빈 object. Renderer 의 useKeyboardShortcuts 가 default 와 merge.

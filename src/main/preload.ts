@@ -771,6 +771,33 @@ const api = {
       ipcRenderer.invoke('app:set-language', language) as Promise<Result<void>>,
 
     /**
+     * v1.5.0 — Settings 모달 [Direct API] 탭. raw key 노출 X — presence +
+     * 마지막 4글자 preview 만 반환. 미설정 시 preview=null.
+     */
+    getDirectApiKeys: (): Promise<
+      Result<{
+        anthropic: { present: boolean; preview: string | null };
+        openai: { present: boolean; preview: string | null };
+      }>
+    > =>
+      ipcRenderer.invoke('app:get-direct-api-keys') as Promise<
+        Result<{
+          anthropic: { present: boolean; preview: string | null };
+          openai: { present: boolean; preview: string | null };
+        }>
+      >,
+
+    /**
+     * v1.5.0 — Direct API key 설정. 빈 문자열을 보내면 해당 provider key 삭제.
+     * provider 는 'anthropic' | 'openai' enum. main 측에서 zod-less 수동 검증.
+     */
+    setDirectApiKey: (
+      provider: 'anthropic' | 'openai',
+      key: string
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('app:set-direct-api-key', provider, key) as Promise<Result<void>>,
+
+    /**
      * v0.14.0 (A ABI Hardening) — Settings → 진단 탭이 호출.
      * 항상 `Result<AppDiagnoseShape>` 반환 (DB 로드 실패해도 platform/version
      * 정보는 채워짐 → renderer 가 분기 가능).

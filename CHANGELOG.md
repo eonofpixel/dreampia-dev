@@ -2,6 +2,36 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.5.0] — 2026-05-06
+
+**SettingsModal [Direct API] 탭 — Anthropic / OpenAI API key 입력 UI.**
+
+v1.2.3 의 storage layer + v1.5.1 의 auto-routing 위에 사용자 입력 UI 추가
+(deferred 슬롯 회수). 설정 모달의 [Provider] 탭 다음에 [Direct API] 탭 신설
+(KeyRound 아이콘).
+
+보안 동선:
+- IPC `app:get-direct-api-keys` — raw key 반환 X. presence + 마지막 4글자
+  preview 만 노출. 4글자 이하 키는 `****` 로 마스킹.
+- IPC `app:set-direct-api-key (provider, key)` — 빈 문자열 / 공백만 →
+  해당 provider key 삭제. 1024자 초과 거절. provider enum 검증.
+- 입력 필드 `type="password"` + `autoComplete="off"` + `spellCheck=false`.
+- 패널 상단에 "settings.json 에 plain text 저장" 보안 경고 banner.
+
+UX:
+- 각 provider 행: [저장] 버튼 (입력값 trim 후 저장) + 설정된 경우 [삭제].
+  저장 후 입력 필드 자동 비우기 (다음 표시는 preview 로만).
+- 설정됨 / 미설정 상태 badge.
+
+i18n: ko/en 양쪽에 `settings.tab.direct_api` + `settings.direct_api.*` 12개
+키 추가.
+
+테스트: 11개 신규 unit (registers / get-default / set-anthropic / independent
+providers / empty-clear / whitespace-clear / short-key-mask / invalid-provider
+/ non-string-key / oversize-key / preview-len-invariant). 회귀 0.
+
+향후: OS keychain (electron-store + keytar) 마이그레이션.
+
 ## [1.7.6] — 2026-05-06
 
 **toast 마이그레이션 — handleChangePermission silent fail 해소.**

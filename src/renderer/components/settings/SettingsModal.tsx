@@ -37,6 +37,7 @@ import {
   Languages,
   Stethoscope,
   Info,
+  KeyRound,
 } from 'lucide-react';
 import { McpSettingsPanel } from './McpSettings';
 import { UsageSettingsPanel } from './UsageSettings';
@@ -52,6 +53,7 @@ export type SettingsTabId =
   | 'mcp'
   | 'usage'
   | 'provider'
+  | 'direct_api'
   | 'permission'
   | 'theme'
   | 'keyboard'
@@ -86,6 +88,9 @@ const TAB_ORDER: ReadonlyArray<TabSpec> = [
   { id: 'mcp', labelKey: 'settings.tab.mcp', icon: <Server className="h-4 w-4" /> },
   { id: 'usage', labelKey: 'settings.tab.usage', icon: <BarChart3 className="h-4 w-4" /> },
   { id: 'provider', labelKey: 'settings.tab.provider', icon: <Cpu className="h-4 w-4" /> },
+  // v1.5.0 — Direct API 탭. provider 다음에 두어 "어떤 provider 쓸지 → 어떻게
+  // 인증할지" 동선이 자연스럽게 연결되도록.
+  { id: 'direct_api', labelKey: 'settings.tab.direct_api', icon: <KeyRound className="h-4 w-4" /> },
   { id: 'permission', labelKey: 'settings.tab.permission', icon: <ShieldCheck className="h-4 w-4" /> },
   { id: 'theme', labelKey: 'settings.tab.theme', icon: <Palette className="h-4 w-4" /> },
   { id: 'keyboard', labelKey: 'settings.tab.keyboard', icon: <Keyboard className="h-4 w-4" /> },
@@ -184,6 +189,7 @@ export function SettingsModal({
             {activeTab === 'mcp' && <McpSettingsPanel />}
             {activeTab === 'usage' && <UsageSettingsPanel />}
             {activeTab === 'provider' && <ProviderPanel />}
+            {activeTab === 'direct_api' && <DirectApiPanel />}
             {activeTab === 'permission' && <PermissionPanel />}
             {activeTab === 'theme' && <ThemePanel />}
             {activeTab === 'keyboard' && <KeyboardSettings />}
@@ -313,6 +319,210 @@ function ProviderPanel(): React.JSX.Element {
             );
           })}
         </ul>
+      )}
+    </section>
+  );
+}
+
+// ────────────────────────────────────────────────────────────
+// v1.5.0 — Direct API panel
+//
+// settings.api_key_anthropic / settings.api_key_openai 의 입력 + 영속 UI.
+// 보안 동선:
+//  - GET 은 raw key 반환 X (preload `getDirectApiKeys`). presence + 마지막 4글자
+//    preview 만 표시. 실 값은 사용자가 다시 입력해야만 변경 가능 → 복사 누설
+//    리스크 차단.
+//  - SET 은 plain string. 빈 문자열을 보내면 해당 provider key 삭제.
+// ────────────────────────────────────────────────────────────
+
+interface DirectApiKeyState {
+  anthropic: { present: boolean; preview: string | null };
+  openai: { present: boolean; preview: string | null };
+}
+
+const EMPTY_KEY_STATE: DirectApiKeyState = {
+  anthropic: { present: false, preview: null },
+  openai: { present: false, preview: null },
+};
+
+function DirectApiPanel(): React.JSX.Element {
+  const t = useT();
+  const [state, setState] = useState<DirectApiKeyState>(EMPTY_KEY_STATE);
+  const [loading, setLoading] = useState(true);
+  const [anthropicInput, setAnthropicInput] = useState('');
+  const [openaiInput, setOpenaiInput] = useState('');
+  const [saving, setSaving] = useState<'anthropic' | 'openai' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = useCallback(async (): Promise<void> => {
+    setLoading(true);
+    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+    if (appApi === undefined || typeof appApi.getDirectApiKeys !== 'function') {
+      setLoading(false);
+      return;
+    }
+    try {
+      const r = await appApi.getDirectApiKeys();
+      if (r.ok) {
+        setState(r.value);
+      }
+    } catch {
+      // safe default 유지
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const handleSave = useCallback(
+    async (provider: 'anthropic' | 'openai', key: string): Promise<void> => {
+      setError(null);
+      setSaving(provider);
+      const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+      if (appApi === undefined || typeof appApi.setDirectApiKey !== 'function') {
+        setError(t('settings.direct_api.error.no_ipc'));
+        setSaving(null);
+        return;
+      }
+      try {
+        const r = await appApi.setDirectApiKey(provider, key);
+        if (!r.ok) {
+          setError(r.error);
+        } else {
+          // 입력 필드 비우기 → 다음 표시는 preview 로만.
+          if (provider === 'anthropic') setAnthropicInput('');
+          else setOpenaiInput('');
+          await reload();
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setSaving(null);
+      }
+    },
+    [reload, t]
+  );
+
+  const renderRow = (
+    provider: 'anthropic' | 'openai',
+    label: string,
+    placeholder: string,
+    current: { present: boolean; preview: string | null },
+    inputValue: string,
+    setInputValue: (v: string) => void
+  ): React.JSX.Element => {
+    const inputId = `settings-direct-api-${provider}-input`;
+    const trimmed = inputValue.trim();
+    const isSaving = saving === provider;
+    return (
+      <div className="rounded-md border border-border-primary p-3" data-testid={`settings-direct-api-${provider}`}>
+        <div className="mb-2 flex items-center justify-between">
+          <label htmlFor={inputId} className="text-sm font-medium">
+            {label}
+          </label>
+          <span
+            className={
+              current.present
+                ? 'rounded bg-accent/20 px-1.5 py-0.5 font-mono text-[11px] text-accent'
+                : 'text-[11px] text-text-tertiary'
+            }
+            data-testid={`settings-direct-api-${provider}-status`}
+          >
+            {current.present
+              ? `${t('settings.direct_api.set')} (…${current.preview ?? ''})`
+              : t('settings.direct_api.unset')}
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <input
+            id={inputId}
+            type="password"
+            placeholder={placeholder}
+            value={inputValue}
+            onChange={(e) => {
+              setInputValue(e.target.value);
+            }}
+            className="flex-1 rounded-md border border-border-primary bg-bg-secondary px-2 py-1 font-mono text-xs text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none"
+            data-testid={`settings-direct-api-${provider}-field`}
+            disabled={isSaving}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              void handleSave(provider, trimmed);
+            }}
+            disabled={isSaving || trimmed.length === 0}
+            className="rounded-md border border-border-primary bg-bg-tertiary px-3 py-1 text-xs hover:bg-bg-primary disabled:cursor-not-allowed disabled:opacity-50"
+            data-testid={`settings-direct-api-${provider}-save`}
+          >
+            {t('settings.direct_api.save')}
+          </button>
+          {current.present && (
+            <button
+              type="button"
+              onClick={() => {
+                void handleSave(provider, '');
+              }}
+              disabled={isSaving}
+              className="rounded-md border border-red-600/40 bg-red-900/20 px-3 py-1 text-xs text-red-300 hover:bg-red-900/30 disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid={`settings-direct-api-${provider}-clear`}
+            >
+              {t('settings.direct_api.clear')}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <section className="flex-1 overflow-y-auto p-6" data-testid="settings-direct-api-panel">
+      <header className="mb-4">
+        <h3 className="text-base font-semibold">{t('settings.direct_api.title')}</h3>
+        <p className="text-xs text-text-secondary">{t('settings.direct_api.description')}</p>
+      </header>
+
+      <div
+        className="mb-4 rounded-md border border-amber-600/40 bg-amber-900/20 p-3 text-xs text-amber-200"
+        data-testid="settings-direct-api-warning"
+      >
+        {t('settings.direct_api.security_warning')}
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-text-secondary">{t('settings.loading')}</p>
+      ) : (
+        <div className="space-y-3">
+          {renderRow(
+            'anthropic',
+            t('settings.direct_api.anthropic.label'),
+            t('settings.direct_api.anthropic.placeholder'),
+            state.anthropic,
+            anthropicInput,
+            setAnthropicInput
+          )}
+          {renderRow(
+            'openai',
+            t('settings.direct_api.openai.label'),
+            t('settings.direct_api.openai.placeholder'),
+            state.openai,
+            openaiInput,
+            setOpenaiInput
+          )}
+          {error !== null && (
+            <p
+              className="break-words font-mono text-[11px] text-red-400"
+              data-testid="settings-direct-api-error"
+            >
+              {error}
+            </p>
+          )}
+        </div>
       )}
     </section>
   );
