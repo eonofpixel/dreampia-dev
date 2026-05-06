@@ -1,6 +1,6 @@
 {
   "name": "dreampia-dev",
-  "version": "1.4.0",
+  "version": "1.7.3",
   "description": "Open source desktop AI coding wrapper. Claude Code + OpenAI Codex 통합 GUI.",
   "private": true,
   "type": "module",
@@ -45,6 +45,7 @@
   },
   "dependencies": {
     "better-sqlite3": "12.9.0",
+    "croner": "^10.0.1",
     "electron-updater": "^6.8.3",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",

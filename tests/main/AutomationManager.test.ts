@@ -102,3 +102,109 @@ describe('v1.3.7 — AutomationManager', () => {
     expect(m.list().length).toBe(1);
   });
 });
+
+describe('v1.7.3 — AutomationManager cron kind', () => {
+  // cron tests don't need fake timers (croner manages its own timers and we
+  // don't time-travel into them). useRealTimers 안에서 동작.
+  beforeEach(() => {
+    vi.useRealTimers();
+    audit = [];
+  });
+
+  it('register cron 가 cron_expr 검증 (빈 값 throw)', () => {
+    const m = makeManager();
+    expect(() =>
+      m.register({
+        name: 'c1',
+        kind: 'cron',
+        cron_expr: '',
+        handler: () => {},
+      })
+    ).toThrow(/cron_expr/);
+  });
+
+  it('register cron 가 invalid expression throw', () => {
+    const m = makeManager();
+    expect(() =>
+      m.register({
+        name: 'c2',
+        kind: 'cron',
+        cron_expr: 'not a cron',
+        handler: () => {},
+      })
+    ).toThrow();
+  });
+
+  it('register cron 가 valid expression 통과', () => {
+    const m = makeManager();
+    m.register({
+      name: 'c3',
+      kind: 'cron',
+      cron_expr: '0 9 * * 1-5',
+      handler: () => {},
+    });
+    expect(m.list().length).toBe(1);
+    expect(m.list()[0]!.kind).toBe('cron');
+  });
+
+  it('register cron 가 valid IANA timezone 통과', () => {
+    const m = makeManager();
+    m.register({
+      name: 'c4',
+      kind: 'cron',
+      cron_expr: '0 9 * * *',
+      cron_tz: 'Asia/Seoul',
+      handler: () => {},
+    });
+    expect(m.list()[0]!.cron_tz).toBe('Asia/Seoul');
+  });
+
+  it('start() / stop() — cron job lifecycle 안전', () => {
+    const m = makeManager();
+    m.register({
+      name: 'c6',
+      kind: 'cron',
+      cron_expr: '0 0 1 1 *',
+      handler: () => {},
+    });
+    m.start();
+    m.stop();
+    expect(m.list().length).toBe(1);
+  });
+
+  it('unregister 가 cron job 도 stop', () => {
+    const m = makeManager();
+    m.register({
+      name: 'c7',
+      kind: 'cron',
+      cron_expr: '0 0 1 1 *',
+      handler: () => {},
+    });
+    m.start();
+    expect(m.unregister('c7')).toBe(true);
+    expect(m.list().length).toBe(0);
+  });
+
+  it('AutomationManager.getNextRun — valid expr 의 ISO timestamp 반환', () => {
+    const next = AutomationManager.getNextRun('* * * * *');
+    expect(next).not.toBeNull();
+    expect(next).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+  });
+
+  it('AutomationManager.getNextRun — invalid expr → null', () => {
+    expect(AutomationManager.getNextRun('not a cron')).toBeNull();
+  });
+
+  it("'cron' kind 가 list() 에 보존", () => {
+    const m = makeManager();
+    m.register({
+      name: 'c10',
+      kind: 'cron',
+      cron_expr: '*/5 * * * *',
+      handler: vi.fn(),
+    });
+    const rules = m.list();
+    expect(rules[0]!.kind).toBe('cron');
+    expect(rules[0]!.cron_expr).toBe('*/5 * * * *');
+  });
+});

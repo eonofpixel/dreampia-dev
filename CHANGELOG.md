@@ -2,6 +2,29 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.3] — 2026-05-06
+
+**Cron expression parser — AutomationManager `'cron'` kind.**
+
+`croner` (^10.0.1) dependency 추가. AutomationManager 가 'interval' / 'webhook'
+외 'cron' kind 도 지원.
+
+설계:
+- `AutomationKind` 에 `'cron'` 추가.
+- `AutomationRule.cron_expr` (필수) + `cron_tz?` (IANA timezone, 미지정 시 local).
+- 등록 시점에 expression 검증 (croner 가 throw → register 거절).
+- `scheduleCron` — `Cron` 인스턴스 생성, 자체 timer 관리. start/stop/unregister
+  lifecycle 안전.
+- 정적 utility `AutomationManager.getNextRun(expr, tz?)` — 다음 fire ISO
+  timestamp 또는 invalid 시 null. UI 의 "다음 실행 시각" 표시용.
+
+테스트: 9 신규 unit (cron_expr 검증 빈값 / invalid expression / valid 통과 /
+IANA timezone / start+stop lifecycle / unregister cron stop / getNextRun
+valid+ISO+invalid null / list 보존). 회귀 0 (1819 pass / 7 base).
+
+후속 — v1.7.4 에서 사이드바 [자동화] 패널 + cron expression 입력 + 다음
+실행 시각 표시 wiring.
+
 ## [1.4.0] — 2026-05-06
 
 **Schema debt B-1 — workspace_id sha256 backfill foundation.**
