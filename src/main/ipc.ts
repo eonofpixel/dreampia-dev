@@ -1762,6 +1762,44 @@ function registerBrowserHandlers(browser: BrowserManager): void {
     }
   });
 
+  // v1.6.14 — DOM dump. webview 의 active page 의 DOM tree 를 stringified
+  // JSON 으로 반환. webview 가 별도 process 라 renderer 직접 접근 X →
+  // webContents.executeJavaScript 통해.
+  ipcMain.handle(
+    'browser/dump-dom',
+    async (
+      _evt,
+      tabId: unknown,
+      optionsRaw: unknown
+    ): Promise<Result<{ url: string; selector: string; dump_json: string } | null>> => {
+      try {
+        if (typeof tabId !== 'string' || tabId.length === 0) {
+          throw new Error('tab id required');
+        }
+        const opts: { selector?: string; maxDepth?: number; maxText?: number } = {};
+        if (optionsRaw !== undefined && optionsRaw !== null) {
+          if (typeof optionsRaw !== 'object' || Array.isArray(optionsRaw)) {
+            throw new Error('options must be an object');
+          }
+          const o = optionsRaw as Record<string, unknown>;
+          if (typeof o['selector'] === 'string' && o['selector'].length > 0) {
+            opts.selector = o['selector'];
+          }
+          if (typeof o['maxDepth'] === 'number' && o['maxDepth'] > 0) {
+            opts.maxDepth = o['maxDepth'];
+          }
+          if (typeof o['maxText'] === 'number' && o['maxText'] > 0) {
+            opts.maxText = o['maxText'];
+          }
+        }
+        const result = await browser.dumpTabDom(tabId, opts);
+        return ok(result);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
   // v1.6.1 — Screenshot capture. capturePage() 의 NativeImage 를 base64 PNG
   // 로 직렬화해 renderer 에 반환. 파일 저장은 renderer / 후속 슬롯에서.
   ipcMain.handle(

@@ -1380,6 +1380,11 @@ export function App(): React.JSX.Element {
               setPendingBlocks((prev) => [...prev, block]);
               toasts.info('스크린샷이 캡처됐어요. 다음 메시지에 함께 전송됩니다.');
             }}
+            onDomDump={(block) => {
+              // v1.6.14 — DomDumpBlock 정식 prepend.
+              setPendingBlocks((prev) => [...prev, block]);
+              toasts.info('DOM 구조가 캡처됐어요. 다음 메시지에 함께 전송됩니다.');
+            }}
           />
         }
       />

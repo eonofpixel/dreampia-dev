@@ -1080,6 +1080,20 @@ const api = {
         Result<{ png_base64: string; width: number; height: number } | null>
       >,
 
+    /**
+     * v1.6.14 — Tab 의 DOM 구조를 JSON-stringified DomDumpNode 로 추출.
+     * webview 가 별도 process 라 renderer 직접 접근 X — main 이
+     * `webContents.executeJavaScript` 로 호출 후 결과 반환.
+     * options.selector default 'body'. tab 미존재/파괴/script 실패 시 null.
+     */
+    dumpDom: (
+      tabId: string,
+      options?: { selector?: string; maxDepth?: number; maxText?: number }
+    ): Promise<Result<{ url: string; selector: string; dump_json: string } | null>> =>
+      ipcRenderer.invoke('browser/dump-dom', tabId, options ?? {}) as Promise<
+        Result<{ url: string; selector: string; dump_json: string } | null>
+      >,
+
     setBounds: (tabId: string, bounds: BrowserBoundsShape): Promise<Result<void>> =>
       ipcRenderer.invoke('browser/set-bounds', tabId, bounds) as Promise<Result<void>>,
 

@@ -28,7 +28,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, RotateCw, Plus, Maximize2, X, Camera } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCw, Plus, Maximize2, X, Camera, Code } from 'lucide-react';
 import type { BrowserState, SessionId } from '@/types';
 import { useBrowser, type BrowserTabUI } from '../../hooks/useBrowser';
 import { useT } from '../../i18n';
@@ -36,7 +36,7 @@ import {
   AnnotationOverlay,
   type AnnotationBox,
 } from './AnnotationOverlay';
-import type { AnnotationBlock } from '@/types/conversation';
+import type { AnnotationBlock, DomDumpBlock } from '@/types/conversation';
 
 const DEMO_URL = 'https://example.com';
 
@@ -54,6 +54,11 @@ export interface PreviewPanelProps {
    * 전송하거나 ImageBlock 으로 prepend. 미지정 시 카메라 버튼 미노출.
    */
   onScreenshot?: (data: { png_base64: string; width: number; height: number }) => void;
+  /**
+   * v1.6.14 — DOM dump 캡처 시 호출. DomDumpBlock 을 그대로 prepend.
+   * 미지정 시 DOM 캡처 버튼 미노출.
+   */
+  onDomDump?: (block: DomDumpBlock) => void;
 }
 
 export function PreviewPanel({
@@ -61,6 +66,7 @@ export function PreviewPanel({
   browser,
   onAnnotation,
   onScreenshot,
+  onDomDump,
 }: PreviewPanelProps): React.JSX.Element {
   const {
     tabs,
@@ -104,6 +110,45 @@ export function PreviewPanel({
       setCapturing(false);
     }
   }, [activeTab, capturing, onScreenshot]);
+
+  const handleDumpDom = useCallback(async (): Promise<void> => {
+    if (onDomDump === undefined || activeTab === null) return;
+    const api = typeof window !== 'undefined' ? window.dreampia?.browser : undefined;
+    if (api?.dumpDom === undefined) return;
+    const r = await api.dumpDom(activeTab.tab_id);
+    if (!r.ok || r.value === null) return;
+    // Parse 후 node_count / summary 계산 — domDump utility 의 식과 호환되는
+    // 단순 재계산.
+    let nodeCount = 0;
+    try {
+      const tree = JSON.parse(r.value.dump_json) as {
+        tag?: string;
+        children?: unknown[];
+      };
+      const count = (n: { tag?: string; children?: unknown[] }): number => {
+        let c = 1;
+        if (Array.isArray(n.children)) {
+          for (const child of n.children) {
+            c += count(child as { tag?: string; children?: unknown[] });
+          }
+        }
+        return c;
+      };
+      nodeCount = count(tree);
+    } catch {
+      // 잘못된 JSON — 0 으로 둠.
+    }
+    const block: DomDumpBlock = {
+      type: 'dom_dump',
+      url: r.value.url,
+      selector: r.value.selector,
+      dump_json: r.value.dump_json,
+      summary: `dom dump (${nodeCount} nodes)`,
+      node_count: nodeCount,
+      captured_at: new Date().toISOString(),
+    };
+    onDomDump(block);
+  }, [activeTab, onDomDump]);
 
   const handleAnnotationToggle = useCallback(() => {
     setAnnotationActive((v) => !v);
@@ -219,6 +264,20 @@ export function PreviewPanel({
           data-testid="preview-screenshot-capture"
         >
           <Camera className="h-3 w-3" />
+        </button>
+      )}
+      {/* v1.6.14 — DOM 캡처 버튼 (annotation/screenshot 옆). */}
+      {onDomDump !== undefined && activeTab !== null && (
+        <button
+          type="button"
+          onClick={() => {
+            void handleDumpDom();
+          }}
+          className="absolute right-[5.25rem] top-12 z-20 rounded-md border border-border-primary bg-bg-primary/90 px-2 py-1 text-xs text-text-secondary hover:bg-bg-tertiary"
+          aria-label="현재 페이지 DOM 구조 캡처"
+          data-testid="preview-dom-dump"
+        >
+          <Code className="h-3 w-3" />
         </button>
       )}
     </aside>

@@ -376,6 +376,83 @@ export class BrowserManager {
   }
 
   /**
+   * v1.6.14 — Capture a structural DOM dump from the active tab. webview 의
+   * 별도 process 라 renderer 가 직접 접근 불가 — webContents.executeJavaScript
+   * 를 통해 평가된 결과를 받아옴. 결과는 stringified DomDumpNode tree.
+   *
+   * 옵션:
+   *  - selector: 캡처 대상 element 의 CSS selector (default 'body').
+   *  - maxDepth / maxText: domDump.ts 와 동일 의미.
+   */
+  async dumpTabDom(
+    tab_id: string,
+    options: { selector?: string; maxDepth?: number; maxText?: number } = {}
+  ): Promise<{ url: string; selector: string; dump_json: string } | null> {
+    const tab = this.tabs.get(tab_id);
+    if (!tab) return null;
+    const wc = tab.view.webContents as {
+      isDestroyed(): boolean;
+      executeJavaScript?: (code: string, userGesture?: boolean) => Promise<unknown>;
+      getURL?: () => string;
+    };
+    if (wc.isDestroyed()) return null;
+    if (typeof wc.executeJavaScript !== 'function') return null;
+    const selector = options.selector ?? 'body';
+    const maxDepth = options.maxDepth ?? 3;
+    const maxText = options.maxText ?? 200;
+    // Self-contained snippet — renderer 의 domDump.ts 미사용 (webview process 는
+    // 별도). 단순한 inline 직렬화 — depth/text cap 만 적용.
+    const code = `(function () {
+      try {
+        var el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return null;
+        function dump(node, depth) {
+          var out = { tag: node.tagName.toLowerCase() };
+          if (node.id) out.id = node.id;
+          if (node.classList && node.classList.length > 0) out.classes = Array.prototype.slice.call(node.classList);
+          var attrs = {};
+          for (var i = 0; i < node.attributes.length; i++) {
+            var a = node.attributes[i];
+            if (a.name === 'id' || a.name === 'class' || a.name === 'style') continue;
+            attrs[a.name] = (a.value || '').slice(0, 100);
+          }
+          if (Object.keys(attrs).length > 0) out.attrs = attrs;
+          var text = '';
+          for (var j = 0; j < node.childNodes.length; j++) {
+            var c = node.childNodes[j];
+            if (c.nodeType === 3) text += c.nodeValue || '';
+          }
+          text = text.trim();
+          if (text.length > 0) out.text = text.length > ${maxText} ? text.slice(0, ${maxText}) + '…' : text;
+          if (depth < ${maxDepth}) {
+            var children = [];
+            for (var k = 0; k < node.children.length; k++) {
+              children.push(dump(node.children[k], depth + 1));
+            }
+            if (children.length > 0) out.children = children;
+          } else if (node.children.length > 0) {
+            out.truncated = true;
+          }
+          return out;
+        }
+        return JSON.stringify(dump(el, 0));
+      } catch (e) {
+        return null;
+      }
+    })();`;
+    try {
+      const result = await wc.executeJavaScript(code);
+      if (typeof result !== 'string') return null;
+      const url = typeof wc.getURL === 'function' ? wc.getURL() : '';
+      return { url, selector, dump_json: result };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[BrowserManager] dumpTabDom(${tab_id}) failed: ${msg}`);
+      return null;
+    }
+  }
+
+  /**
    * v1.6.1 — Capture the visible page as a PNG. Returns base64-encoded PNG
    * bytes (no `data:` prefix — caller decides whether to embed or save).
    *

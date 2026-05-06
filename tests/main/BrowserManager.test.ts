@@ -26,6 +26,7 @@ interface FakeWebContents {
   close: ReturnType<typeof vi.fn>;
   reload: ReturnType<typeof vi.fn>;
   capturePage: ReturnType<typeof vi.fn>;
+  executeJavaScript: ReturnType<typeof vi.fn>;
   navigationHistory: {
     canGoBack: ReturnType<typeof vi.fn>;
     canGoForward: ReturnType<typeof vi.fn>;
@@ -92,6 +93,16 @@ function makeFakeWebContents(initialUrl: string): FakeWebContents {
       toPNG: () => Buffer.from('fake-png-bytes', 'utf-8'),
       getSize: () => ({ width: 800, height: 600 }),
     })),
+    executeJavaScript: vi.fn(async (code: string) => {
+      // 가짜 webview executeJavaScript — 모든 호출이 dumpTabDom 의 inline
+      // snippet 이라 가정. 단순 success path: stringified DomDumpNode tree.
+      void code;
+      return JSON.stringify({
+        tag: 'body',
+        id: 'root',
+        children: [{ tag: 'div', text: 'hi' }],
+      });
+    }),
     navigationHistory: {
       canGoBack: vi.fn(() => false),
       canGoForward: vi.fn(() => false),
@@ -507,6 +518,54 @@ describe('BrowserManager', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const result = await mgr.captureTab('cap3');
     expect(result).toBeNull();
+    warnSpy.mockRestore();
+  });
+
+  // ── v1.6.14 — dumpTabDom ──────────────────────────────────
+
+  it('dumpTabDom — executeJavaScript 결과 wrap', async () => {
+    mgr.openTab({ session_id: SID_A, tab_id: 'dom1', url: 'https://example.com' });
+    fakeViewsCreated[0]!.webContents.getURL.mockReturnValue('https://example.com');
+    const r = await mgr.dumpTabDom('dom1');
+    expect(r).not.toBeNull();
+    if (r === null) return;
+    expect(r.url).toBe('https://example.com');
+    expect(r.selector).toBe('body');
+    expect(r.dump_json).toContain('"body"');
+  });
+
+  it('dumpTabDom — selector 옵션 전달', async () => {
+    mgr.openTab({ session_id: SID_A, tab_id: 'dom2', url: 'https://e' });
+    const r = await mgr.dumpTabDom('dom2', { selector: 'main#m' });
+    expect(r).not.toBeNull();
+    if (r === null) return;
+    expect(r.selector).toBe('main#m');
+    // executeJavaScript code 에 selector 가 인용된 형태로 들어감.
+    const calls = fakeViewsCreated[0]!.webContents.executeJavaScript.mock.calls;
+    expect(calls.length).toBe(1);
+    expect((calls[0]![0] as string)).toContain('main#m');
+  });
+
+  it('dumpTabDom — unknown tab → null', async () => {
+    const r = await mgr.dumpTabDom('does-not-exist');
+    expect(r).toBeNull();
+  });
+
+  it('dumpTabDom — destroyed webContents → null', async () => {
+    mgr.openTab({ session_id: SID_A, tab_id: 'dom3', url: 'https://e' });
+    fakeViewsCreated[0]!.webContents.isDestroyed.mockReturnValue(true);
+    const r = await mgr.dumpTabDom('dom3');
+    expect(r).toBeNull();
+  });
+
+  it('dumpTabDom — executeJavaScript throws → null', async () => {
+    mgr.openTab({ session_id: SID_A, tab_id: 'dom4', url: 'https://e' });
+    fakeViewsCreated[0]!.webContents.executeJavaScript.mockRejectedValue(
+      new Error('exec failed')
+    );
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const r = await mgr.dumpTabDom('dom4');
+    expect(r).toBeNull();
     warnSpy.mockRestore();
   });
 });

@@ -2,6 +2,32 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.14] — 2026-05-06
+
+**PreviewPanel DOM dump button + browser/dump-dom IPC (v1.6.2 wiring).**
+
+PreviewPanel `<Code>` 버튼 → `browser/dump-dom` IPC →
+`webContents.executeJavaScript` → DomDumpBlock 정식 prepend.
+
+Backend (`BrowserManager.dumpTabDom`):
+- selector / maxDepth / maxText 옵션. webview 별도 process 라 inline JS
+  snippet 으로 직렬화.
+- tab 미존재 / destroyed / executeJavaScript throw → null (fail-soft).
+
+IPC `browser/dump-dom`:
+- tabId + options shallow validation. `Result<{url, selector, dump_json} | null>`.
+- preload `window.dreampia.browser.dumpDom(tabId, options?)`.
+
+UI:
+- `PreviewPanel.onDomDump?: (block: DomDumpBlock) => void`. 미지정 시 버튼 미노출.
+- handleDumpDom — IPC 호출 + node_count 재계산 + DomDumpBlock 생성.
+- `<Code>` 아이콘 버튼 (annotation/screenshot 옆, right-[5.25rem]).
+
+App.tsx wiring: `setPendingBlocks([...prev, block])` + toast.info.
+
+테스트: 5 신규 unit (성공 round-trip / selector 옵션 / unknown tab null /
+destroyed null / executeJavaScript throw silent). 회귀 0 (1909 pass).
+
 ## [1.6.13] — 2026-05-06
 
 **ChatInput pendingBlocks API — 정식 typed-block prepend.**
