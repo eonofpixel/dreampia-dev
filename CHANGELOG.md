@@ -2,6 +2,33 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.0] — 2026-05-06
+
+**AnnotationOverlay drag-to-mark — 영역 캡처 + 시각화.**
+
+v1.2.4 stub (active toggle 만) 위에 사용자 영역 캡처 워크플로우. 사용자가
+overlay 위 마우스로 드래그해 bounding box 를 캡처하고 부모로 콜백.
+
+설계 (`AnnotationOverlay`):
+- `AnnotationBox` shape — `{ x, y, w, h, captured_at }` (overlay-relative px).
+- 새 props: `onMark?: (box) => void` / `boxes?: ReadonlyArray<AnnotationBox>`.
+- `useState<DragState>` — 시작/현재 좌표 추적.
+- `onMouseDown / Move / Up` — getBoundingClientRect 기반 좌표 변환.
+- 4px 이하 드래그는 실수 클릭 → `onMark` 호출 X.
+- 역방향 드래그 정상 처리 (Math.min/max).
+- `boxes` prop 의 기존 box 시각화 (반투명 파란 border).
+- 활성 drag 는 노란 border 로 즉시 피드백.
+- a11y: `role="application"` + aria-label / toolbar `role="toolbar"`.
+
+한계 (v1.6.0 partial scope):
+- 실제 element pick (DOM `:hover` 인식) 은 webview 내부 script 주입 필요 →
+  별도 슬롯. 본 commit 은 좌표 기반 bbox 만.
+- chat 으로의 prepend / Annotation block 생성은 부모 components / 별도 슬롯.
+
+테스트: 6 신규 unit (드래그 정방향 / 역방향 좌표 정규화 / 4px 미만 무시 /
+active=false 무시 / boxes prop 시각화 / toolbar 클릭 stopPropagation).
+회귀 0 (1873 pass / 7 baseline).
+
 ## [1.4.2] — 2026-05-06
 
 **Schema debt B-3 — `metadata_json._extra.conversation` columns promote (1단계).**
