@@ -2,6 +2,16 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.5.6] — 2026-05-06
+
+**Vision routing — provider 별 image block format 변환.**
+
+- `toAnthropicImageBlock(input)` — `{ type:'image', source:{type:'base64', media_type, data}}`.
+- `toOpenAIImageBlock(input)` — `{ type:'image_url', image_url:{ url:'data:<mime>;base64,...'}}`.
+- `toCliImagePlaceholder(input)` — CLI prompt 안 inline placeholder.
+
+3 unit. Provider 통합은 후속 commits.
+
 ## [1.5.5] — 2026-05-06
 
 **MediaStore — `~/.dreampia/media/<sha256>/<filename>` 영속화 + LRU.**
