@@ -250,6 +250,12 @@
   "automation.remove_aria": "{name} 삭제",
   "automation.error_no_ipc": "IPC 채널이 없어 자동화를 사용할 수 없어요.",
   "automation.error_name_required": "이름을 입력하세요.",
+  "automation.field_handler": "Handler",
+  "automation.handler_default_label": "(기본)",
+  "automation.field_handler_config": "Handler 설정 (JSON)",
+  "automation.field_handler_config_placeholder": "{ \"prompt\": \"오늘의 요약…\" }",
+  "automation.error_handler_config_invalid_json": "Handler 설정은 유효한 JSON 객체여야 해요.",
+  "automation.handler_label": "handler",
 
   "mcp.title": "MCP 서버",
   "mcp.subtitle": "Model Context Protocol 서버를 등록하면 AI 가 외부 도구를 호출할 수 있어요.",

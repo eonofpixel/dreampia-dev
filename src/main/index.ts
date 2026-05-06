@@ -590,6 +590,30 @@ app.whenReady().then(async () => {
   );
   mainWindow = createMainWindow();
 
+  // v1.7.25 — Automation 'ipc-trigger' handler 의 emitter 주입.
+  // mainWindow.webContents.send 로 자동화 rule 이 renderer 에 IPC 발사.
+  // window 가 destroyed 되면 silent drop (다음 fire 시 재시도).
+  void (async () => {
+    const { setIpcTriggerEmitter } = await import(
+      './automation/handlers/ipcTriggerHandler'
+    );
+    setIpcTriggerEmitter((channel, payload) => {
+      const win = mainWindow;
+      if (win === null) return;
+      try {
+        if (
+          'isDestroyed' in win &&
+          (win as { isDestroyed?: () => boolean }).isDestroyed?.()
+        ) {
+          return;
+        }
+        win.webContents.send(channel, payload);
+      } catch {
+        // ignore — window unmount race condition.
+      }
+    });
+  })();
+
   // v1.0.14 (META-4 hotfix — Codex blind spot): 저장된 workspace 가 userData
   // 와 충돌하면 사용자에게 dialog 로 알리고 picker 강제 (settings 리셋).
   // packaged build 에서만 표시 — dev/e2e 자동화 흐름 보호.

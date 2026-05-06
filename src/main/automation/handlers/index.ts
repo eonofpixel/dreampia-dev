@@ -18,6 +18,10 @@ import {
   shellExecHandler,
   SHELL_EXEC_HANDLER_NAME,
 } from './shellExecHandler';
+import {
+  ipcTriggerHandler,
+  IPC_TRIGGER_HANDLER_NAME,
+} from './ipcTriggerHandler';
 
 let registered = false;
 
@@ -30,6 +34,7 @@ export function registerBuiltinHandlers(): void {
   handlerRegistry.register(NOOP_LOG_HANDLER_NAME, noopLogHandler);
   handlerRegistry.register(LLM_PROMPT_HANDLER_NAME, llmPromptHandler);
   handlerRegistry.register(SHELL_EXEC_HANDLER_NAME, shellExecHandler);
+  handlerRegistry.register(IPC_TRIGGER_HANDLER_NAME, ipcTriggerHandler);
   registered = true;
 }
 
@@ -45,7 +50,9 @@ export {
   NOOP_LOG_HANDLER_NAME,
   LLM_PROMPT_HANDLER_NAME,
   SHELL_EXEC_HANDLER_NAME,
+  IPC_TRIGGER_HANDLER_NAME,
 };
+export { setIpcTriggerEmitter } from './ipcTriggerHandler';
 export type {
   AutomationHandler,
   HandlerContext,

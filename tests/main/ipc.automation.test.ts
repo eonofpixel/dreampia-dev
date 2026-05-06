@@ -248,4 +248,65 @@ describe('v1.7.4 — Automation IPC handlers', () => {
     const names = (settings.automation_rules ?? []).map((r) => r.name);
     expect(names).not.toContain('will-remove');
   });
+
+  // v1.7.25 — handler_name + handler_config 영속 + summary 노출.
+  it('automation/list-handlers — builtin 4개 반환', async () => {
+    const r = await call<Result<string[]>>('automation/list-handlers');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value).toContain('noop-log');
+    expect(r.value).toContain('llm-prompt');
+    expect(r.value).toContain('shell-exec');
+    expect(r.value).toContain('ipc-trigger');
+  });
+
+  it('register with handler_name + handler_config → summary 에 노출', async () => {
+    const reg = await call<Result<RuleSummary & { handler_name?: string; handler_config?: Record<string, unknown> }>>(
+      'automation/register',
+      {
+        name: 'with-handler',
+        kind: 'interval',
+        interval_ms: 60_000,
+        handler_name: 'noop-log',
+        handler_config: { foo: 'bar' },
+      }
+    );
+    expect(reg.ok).toBe(true);
+    if (!reg.ok) return;
+    expect(reg.value.handler_name).toBe('noop-log');
+    expect(reg.value.handler_config).toEqual({ foo: 'bar' });
+  });
+
+  it('register with unknown handler_name → fail-fast', async () => {
+    const r = await call<Result<RuleSummary>>('automation/register', {
+      name: 'bad-handler',
+      kind: 'interval',
+      interval_ms: 60_000,
+      handler_name: 'does-not-exist',
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/unknown handler_name/);
+  });
+
+  it('register handler_name + config → settings 영속 + 재등록 시 hydration', async () => {
+    await call('automation/register', {
+      name: 'persisted-handler',
+      kind: 'interval',
+      interval_ms: 60_000,
+      handler_name: 'noop-log',
+      handler_config: { msg: 'morning' },
+    });
+    const { readSettings, __resetSettingsCache } = await import(
+      '../../src/main/settings'
+    );
+    __resetSettingsCache();
+    const settings = readSettings();
+    const persisted = (settings.automation_rules ?? []).find(
+      (r) => r.name === 'persisted-handler'
+    );
+    expect(persisted).toBeDefined();
+    expect(persisted?.handler_name).toBe('noop-log');
+    expect(persisted?.handler_config).toEqual({ msg: 'morning' });
+  });
 });

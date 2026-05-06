@@ -43,6 +43,10 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
   const [draftIntervalMs, setDraftIntervalMs] = useState('60000');
   const [draftWebhookPath, setDraftWebhookPath] = useState('/hooks/');
   const [draftNextRun, setDraftNextRun] = useState<string | null>(null);
+  // v1.7.25 — handler picker 상태.
+  const [availableHandlers, setAvailableHandlers] = useState<string[]>([]);
+  const [draftHandlerName, setDraftHandlerName] = useState('');
+  const [draftHandlerConfig, setDraftHandlerConfig] = useState('');
 
   const reload = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -67,6 +71,21 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
   useEffect(() => {
     if (open) void reload();
   }, [open, reload]);
+
+  // v1.7.25 — Modal open 시 handler 목록 로드.
+  useEffect(() => {
+    if (!open) return;
+    const api = typeof window !== 'undefined' ? window.dreampia?.automation : undefined;
+    if (api === undefined || api.listHandlers === undefined) return;
+    void (async () => {
+      try {
+        const r = await api.listHandlers();
+        if (r.ok) setAvailableHandlers(r.value);
+      } catch {
+        // silent — handler picker 가 비어 있어도 noop-log 로 fallback.
+      }
+    })();
+  }, [open]);
 
   // cron expression 변경 시 next_run 미리보기 IPC.
   useEffect(() => {
@@ -106,8 +125,27 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
       setError(t('automation.error_name_required'));
       return;
     }
+    // v1.7.25 — handler_config 의 JSON 검증 + handler_name 통합.
+    let handlerConfigParsed: Record<string, unknown> | undefined;
+    const trimmedConfig = draftHandlerConfig.trim();
+    if (trimmedConfig.length > 0) {
+      try {
+        const parsed: unknown = JSON.parse(trimmedConfig);
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          setError(t('automation.error_handler_config_invalid_json'));
+          return;
+        }
+        handlerConfigParsed = parsed as Record<string, unknown>;
+      } catch {
+        setError(t('automation.error_handler_config_invalid_json'));
+        return;
+      }
+    }
+    const handlerNameToUse =
+      draftHandlerName.length > 0 ? draftHandlerName : undefined;
+
     try {
-      const payload =
+      const base =
         draftKind === 'interval'
           ? { name, kind: draftKind, interval_ms: parseInt(draftIntervalMs, 10) }
           : draftKind === 'cron'
@@ -118,17 +156,34 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
                 ...(draftCronTz.length > 0 && { cron_tz: draftCronTz }),
               }
             : { name, kind: draftKind, webhook_path: draftWebhookPath };
+      const payload = {
+        ...base,
+        ...(handlerNameToUse !== undefined && { handler_name: handlerNameToUse }),
+        ...(handlerConfigParsed !== undefined && { handler_config: handlerConfigParsed }),
+      };
       const r = await api.register(payload);
       if (!r.ok) {
         setError(typeof r.error === 'string' ? r.error : 'register failed');
         return;
       }
       setDraftName('');
+      setDraftHandlerConfig('');
       void reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [draftName, draftKind, draftCronExpr, draftCronTz, draftIntervalMs, draftWebhookPath, reload, t]);
+  }, [
+    draftName,
+    draftKind,
+    draftCronExpr,
+    draftCronTz,
+    draftIntervalMs,
+    draftWebhookPath,
+    draftHandlerName,
+    draftHandlerConfig,
+    reload,
+    t,
+  ]);
 
   const handleUnregister = useCallback(
     async (name: string): Promise<void> => {
@@ -273,6 +328,35 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
                   />
                 </label>
               )}
+
+              {/* v1.7.25 — Handler picker + JSON config */}
+              <label className="col-span-2 flex flex-col gap-1 text-xs">
+                <span>{t('automation.field_handler')}</span>
+                <select
+                  value={draftHandlerName}
+                  onChange={(e) => setDraftHandlerName(e.target.value)}
+                  className="rounded border border-border-primary bg-bg-secondary px-2 py-1 text-xs"
+                  data-testid="automation-draft-handler"
+                >
+                  <option value="">{t('automation.handler_default_label')}</option>
+                  {availableHandlers.map((h) => (
+                    <option key={h} value={h}>
+                      {h}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="col-span-2 flex flex-col gap-1 text-xs">
+                <span>{t('automation.field_handler_config')}</span>
+                <textarea
+                  value={draftHandlerConfig}
+                  onChange={(e) => setDraftHandlerConfig(e.target.value)}
+                  placeholder={t('automation.field_handler_config_placeholder')}
+                  rows={3}
+                  className="rounded border border-border-primary bg-bg-secondary px-2 py-1 font-mono text-[11px]"
+                  data-testid="automation-draft-handler-config"
+                />
+              </label>
             </div>
 
             <button
@@ -319,6 +403,14 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
                         <span className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px] text-text-secondary">
                           {r.kind}
                         </span>
+                        {r.handler_name !== undefined && (
+                          <span
+                            className="rounded bg-blue-900/20 px-1.5 py-0.5 font-mono text-[10px] text-blue-300"
+                            data-testid={`automation-rule-${r.name}-handler`}
+                          >
+                            {t('automation.handler_label')}: {r.handler_name}
+                          </span>
+                        )}
                       </div>
                       <div className="mt-1 text-[11px] text-text-tertiary">
                         {r.kind === 'cron' && (

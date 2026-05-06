@@ -2,6 +2,59 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.25] — 2026-05-06
+
+**IPC trigger handler + AutomationModal handler picker UI.**
+
+v1.7.23 의 registry 와 v1.7.24 의 shell-exec 에 이어 세 번째 builtin
+handler `'ipc-trigger'` 추가 + AutomationModal 에 handler 선택 dropdown
++ JSON config textarea 통합. 사용자가 UI 에서 직접 handler 를 골라
+binding 가능.
+
+### Added
+- `src/main/automation/handlers/ipcTriggerHandler.ts` 신규.
+  - Config: `channel` (required, `automation/` prefix 만 허용 — security
+    allow-list) + `payload?` (직렬화 가능한 임의 값).
+  - 동작: 부팅 시 main 에서 주입된 `IpcEmitterFn` (default
+    `mainWindow.webContents.send`) 호출.
+  - emitter 미주입 / channel 누락 / allow-list 위반 / payload circular /
+    emitter throw → ok=false + 사유.
+  - 정상 시 ok=true + `[ipc] {channel} {payload-200chars}` audit.
+  - `setIpcTriggerEmitter()` (production) /
+    `setIpcTriggerEmitterForTesting()` (test) inject.
+- `src/main/index.ts` 부팅 시 `setIpcTriggerEmitter` 주입 — mainWindow
+  생성 직후. window destroyed 시 silent drop.
+- IPC `automation/list-handlers` (v1.7.23 추가) 가 이제 4개 builtin 반환:
+  `noop-log` / `llm-prompt` / `shell-exec` / `ipc-trigger`.
+- preload `automation.listHandlers()` IPC.
+- preload `AutomationRuleSummaryShape` / `AutomationRuleRegisterShape` 에
+  `handler_name?` + `handler_config?` 추가 (직렬화 가능 shape).
+
+### Changed
+- `AutomationModal.tsx` — 새 rule form 에 두 신규 input:
+  - Handler dropdown (`<select>`) — `availableHandlers` 에서 build.
+    빈 값 = `(default)` (noop-log fallback).
+  - Handler config (`<textarea>`) — JSON. submit 시 parse + object 검증.
+    invalid → toast `error_handler_config_invalid_json`.
+  - Modal open 시 `automation.listHandlers()` 로 dropdown source 로드.
+  - Rule 목록의 각 rule 에 `handler_name` 표시 (blue badge).
+
+### i18n
+- `automation.field_handler` / `handler_default_label` /
+  `field_handler_config` / `field_handler_config_placeholder` /
+  `error_handler_config_invalid_json` / `handler_label` — 6개 키 ko/en 추가.
+
+### 회귀
+- 0. typecheck clean. lint clean.
+- 신규 `tests/main/automation.ipcTrigger.test.ts` 9 tests PASS:
+  emitter 미주입 / channel 누락 / allow-list 위반 / 정상 emit + 인자 /
+  payload undefined / circular reference / emitter throw / builtin 등록 /
+  4개 builtin 모두 등록.
+- `tests/main/ipc.automation.test.ts` 에 +4 tests:
+  `automation/list-handlers` / handler_name+config 영속 / unknown
+  handler fail-fast / settings.json 의 handler_config persistence.
+- baseline 1963 → 1976 (+13 신규, 7 baseline fail 유지).
+
 ## [1.7.24] — 2026-05-06
 
 **Shell exec automation handler (opt-in).**

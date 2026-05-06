@@ -1459,10 +1459,14 @@ const api = {
       ipcRenderer.invoke('automation/get-next-run', cronExpr, tz) as Promise<
         Result<{ next_run: string | null }>
       >,
+    /** v1.7.25 — Registered handler 이름 목록. */
+    listHandlers: (): Promise<Result<string[]>> =>
+      ipcRenderer.invoke('automation/list-handlers') as Promise<Result<string[]>>,
   },
 };
 
 // v1.7.4 — Automation IPC types (preload-exposed shape).
+// v1.7.25 — handler_name + handler_config 추가 (registry 통합).
 export type AutomationKindShape = 'interval' | 'cron' | 'webhook';
 export interface AutomationRuleSummaryShape {
   name: string;
@@ -1472,6 +1476,8 @@ export interface AutomationRuleSummaryShape {
   cron_tz?: string;
   webhook_path?: string;
   next_run: string | null;
+  handler_name?: string;
+  handler_config?: Record<string, unknown>;
 }
 export interface AutomationRuleRegisterShape {
   name: string;
@@ -1480,6 +1486,8 @@ export interface AutomationRuleRegisterShape {
   cron_expr?: string;
   cron_tz?: string;
   webhook_path?: string;
+  handler_name?: string;
+  handler_config?: Record<string, unknown>;
 }
 
 contextBridge.exposeInMainWorld('dreampia', api);

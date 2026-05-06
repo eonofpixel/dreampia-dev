@@ -250,6 +250,12 @@
   "automation.remove_aria": "Remove {name}",
   "automation.error_no_ipc": "IPC channel unavailable — automation cannot run.",
   "automation.error_name_required": "Name is required.",
+  "automation.field_handler": "Handler",
+  "automation.handler_default_label": "(default)",
+  "automation.field_handler_config": "Handler config (JSON)",
+  "automation.field_handler_config_placeholder": "{ \"prompt\": \"Daily summary…\" }",
+  "automation.error_handler_config_invalid_json": "Handler config must be valid JSON object.",
+  "automation.handler_label": "handler",
 
   "mcp.title": "MCP Servers",
   "mcp.subtitle": "Register Model Context Protocol servers so AI can call external tools.",
