@@ -2,6 +2,24 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.4.7] — 2026-05-06
+
+**DiagnoseSettings — Workspace ID backfill 버튼 (v1.4.0 wiring).**
+
+v1.4.0 의 `backfillWorkspaceIdsToSha256` helper 위에 사용자 진입점.
+
+IPC `app:run-workspace-backfill`:
+- `backfillWorkspaceIdsToSha256(store.getDb())` 위임 + 결과 통계 반환.
+
+UI (`DiagnoseSettings`):
+- 새 `WorkspaceBackfillSection` — title / description / [실행] 버튼 / running
+  state / 결과 통계 (scanned / updated / skipped / cascade_sessions / conflicts).
+- IPC 미가용 / throw 시 inline error.
+
+i18n: ko/en `settings.diagnose.workspace_backfill.*` 8개 키.
+
+회귀 0 (1911 pass).
+
 ## [1.7.14] — 2026-05-06
 
 **Automation rules 영속 (settings.json) + 부팅 hydrate.**

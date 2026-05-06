@@ -93,9 +93,108 @@ export function DiagnoseSettings(): React.JSX.Element {
         <DiagnoseDataBlock t={t} data={data} />
       ) : null}
 
+      {/* v1.4.0 follow-up — workspace_id FNV → sha256 backfill 사용자 trigger. */}
+      <WorkspaceBackfillSection t={t} />
+
       {/* v1.0.11 SEC-3 — Audit log viewer. 별도 IPC 호출이라 위 진단 섹션과
           독립적으로 fetch + error. */}
       <AuditLogSection t={t} />
+    </section>
+  );
+}
+
+// ────────────────────────────────────────────────────────────
+// v1.4.0 follow-up — Workspace ID backfill section
+// ────────────────────────────────────────────────────────────
+
+function WorkspaceBackfillSection({ t }: SubProps): React.JSX.Element {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{
+    scanned: number;
+    updated: number;
+    skipped: number;
+    cascade_sessions: number;
+    conflicts: number;
+  } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const handleRun = useCallback(async (): Promise<void> => {
+    setRunning(true);
+    setErr(null);
+    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+    if (appApi === undefined || typeof appApi.runWorkspaceBackfill !== 'function') {
+      setErr(t('error.ipc_unavailable'));
+      setRunning(false);
+      return;
+    }
+    try {
+      const r = await appApi.runWorkspaceBackfill();
+      if (r.ok) {
+        setResult(r.value);
+      } else {
+        setErr(r.error);
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRunning(false);
+    }
+  }, [t]);
+
+  return (
+    <section
+      className="mt-6 rounded-md border border-border-primary p-4"
+      data-testid="settings-workspace-backfill"
+    >
+      <h4 className="mb-1 text-sm font-semibold">
+        {t('settings.diagnose.workspace_backfill.title')}
+      </h4>
+      <p className="mb-3 text-xs text-text-secondary">
+        {t('settings.diagnose.workspace_backfill.description')}
+      </p>
+      <button
+        type="button"
+        onClick={() => {
+          void handleRun();
+        }}
+        disabled={running}
+        className="rounded-md border border-border-primary bg-bg-secondary px-3 py-1.5 text-xs hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50"
+        data-testid="settings-workspace-backfill-run"
+      >
+        {running
+          ? t('settings.diagnose.workspace_backfill.running')
+          : t('settings.diagnose.workspace_backfill.run')}
+      </button>
+      {result !== null && (
+        <ul
+          className="mt-3 space-y-1 text-xs text-text-secondary"
+          data-testid="settings-workspace-backfill-result"
+        >
+          <li>
+            {t('settings.diagnose.workspace_backfill.stat_scanned')}: {result.scanned}
+          </li>
+          <li>
+            {t('settings.diagnose.workspace_backfill.stat_updated')}: {result.updated}
+          </li>
+          <li>
+            {t('settings.diagnose.workspace_backfill.stat_skipped')}: {result.skipped}
+          </li>
+          <li>
+            {t('settings.diagnose.workspace_backfill.stat_cascade')}: {result.cascade_sessions}
+          </li>
+          <li>
+            {t('settings.diagnose.workspace_backfill.stat_conflicts')}: {result.conflicts}
+          </li>
+        </ul>
+      )}
+      {err !== null && (
+        <p
+          className="mt-3 break-words rounded border border-red-600/40 bg-red-900/20 p-2 font-mono text-[11px] text-red-300"
+          data-testid="settings-workspace-backfill-error"
+        >
+          {err}
+        </p>
+      )}
     </section>
   );
 }

@@ -924,6 +924,40 @@ export function registerIpcHandlers(
   // v0.14.0 (A ABI Hardening) — 사용자 자가 진단 IPC. Settings 모달의 진단 탭이
   // 호출. SessionStore 가 없는 환경 (테스트 / pre-init) 에서도 platform / process
   // 정보는 반환. DB 쪽 정보는 store 가 있을 때만 채움.
+  // v1.4.0 follow-up — 사용자가 [DB 진단] 패널에서 trigger. workspace_id
+  // FNV → sha256 backfill 을 명시 호출. 결과 통계 반환.
+  ipcMain.handle(
+    'app:run-workspace-backfill',
+    async (): Promise<
+      Result<{
+        scanned: number;
+        updated: number;
+        skipped: number;
+        cascade_sessions: number;
+        conflicts: number;
+      }>
+    > => {
+      try {
+        if (store === undefined) {
+          throw new Error('SessionStore not initialized');
+        }
+        const { backfillWorkspaceIdsToSha256 } = await import(
+          '../storage/workspaceBackfill'
+        );
+        const r = backfillWorkspaceIdsToSha256(store.getDb());
+        return ok({
+          scanned: r.scanned,
+          updated: r.updated,
+          skipped: r.skipped,
+          cascade_sessions: r.cascade_sessions,
+          conflicts: r.conflicts.length,
+        });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
   ipcMain.handle('app:diagnose', (): Result<AppDiagnoseResult> => {
     try {
       const out: AppDiagnoseResult = {

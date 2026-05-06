@@ -804,6 +804,29 @@ const api = {
      */
     diagnose: (): Promise<Result<AppDiagnoseShape>> =>
       ipcRenderer.invoke('app:diagnose') as Promise<Result<AppDiagnoseShape>>,
+
+    /**
+     * v1.4.0 follow-up — workspace_id FNV → sha256 backfill 을 사용자가 명시
+     * trigger. 결과 통계 반환. transaction 안 — 원자적.
+     */
+    runWorkspaceBackfill: (): Promise<
+      Result<{
+        scanned: number;
+        updated: number;
+        skipped: number;
+        cascade_sessions: number;
+        conflicts: number;
+      }>
+    > =>
+      ipcRenderer.invoke('app:run-workspace-backfill') as Promise<
+        Result<{
+          scanned: number;
+          updated: number;
+          skipped: number;
+          cascade_sessions: number;
+          conflicts: number;
+        }>
+      >,
   },
 
   /**
