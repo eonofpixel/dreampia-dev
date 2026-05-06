@@ -1332,6 +1332,10 @@ export function App(): React.JSX.Element {
             onToggleWorkspaceLock={handleToggleWorkspaceLock}
             pendingBlocks={pendingBlocks}
             onConsumePendingBlocks={() => setPendingBlocks([])}
+            onAttachBlocks={(blocks) => {
+              setPendingBlocks((prev) => [...prev, ...blocks]);
+              toasts.info(`${blocks.length}개 첨부됐어요. 다음 메시지에 함께 전송돼요.`);
+            }}
             onForkSession={async () => {
               // v1.6.11 — Session fork. parent_session_id 자동 설정 + 모든
               // turn 복사 (v1.6.3 backend). 새 session 활성화 + 사용자 toast.

@@ -144,6 +144,8 @@ export interface ChatPanelProps {
   pendingBlocks?: ReadonlyArray<ContentBlock>;
   /** Submit 직후 부모가 reset 하도록 callback. */
   onConsumePendingBlocks?: () => void;
+  /** v1.6.16 — DnD/paste image → 부모가 pendingBlocks 에 push. */
+  onAttachBlocks?: (blocks: ContentBlock[]) => void;
 }
 
 interface MessagesAreaProps {
@@ -195,6 +197,7 @@ export function ChatPanel({
   onForkSession,
   pendingBlocks,
   onConsumePendingBlocks,
+  onAttachBlocks,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -244,6 +247,7 @@ export function ChatPanel({
         onSubmitBlocks={onSubmitBlocks}
         pendingBlocks={pendingBlocks}
         onConsumePendingBlocks={onConsumePendingBlocks}
+        onAttachBlocks={onAttachBlocks}
       />
     </main>
   );
@@ -351,6 +355,8 @@ interface InputAreaProps {
   /** v1.6.13 — pending typed blocks (forwarded). */
   pendingBlocks?: ReadonlyArray<ContentBlock>;
   onConsumePendingBlocks?: () => void;
+  /** v1.6.16 — DnD/paste image push (forwarded). */
+  onAttachBlocks?: (blocks: ContentBlock[]) => void;
 }
 
 function InputArea({
@@ -367,6 +373,7 @@ function InputArea({
   onSubmitBlocks,
   pendingBlocks,
   onConsumePendingBlocks,
+  onAttachBlocks,
 }: InputAreaProps): React.JSX.Element {
   const t = useT();
   return (
@@ -397,6 +404,7 @@ function InputArea({
         {...(onSubmitBlocks !== undefined && { onSubmitBlocks })}
         {...(pendingBlocks !== undefined && { pendingBlocks })}
         {...(onConsumePendingBlocks !== undefined && { onConsumePendingBlocks })}
+        {...(onAttachBlocks !== undefined && { onAttachBlocks })}
       />
     </div>
   );

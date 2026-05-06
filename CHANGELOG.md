@@ -2,6 +2,21 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.16] — 2026-05-06
+
+**ChatInput onAttachBlocks — image DnD → ImageBlock pendingBlocks 자동 push.**
+
+v1.6.15 의 image-drop fallback (console.info) 을 정식 prepend 로 교체.
+
+- `ChatInputProps.onAttachBlocks?: (blocks) => void` 추가.
+- `handleFiles` 가 image File 들을 ImageBlock 배열로 변환 후 `onAttachBlocks`
+  호출. 미지정 시 console.info silent fallback.
+- ChatPanel + InputArea 가 prop forward.
+- App.tsx `onAttachBlocks={(blocks) => { setPendingBlocks([...prev, ...blocks]);
+  toasts.info('N개 첨부됐어요'); }}`.
+
+회귀 0 (1909 pass).
+
 ## [1.6.15] — 2026-05-06
 
 **ChatInput DnD/paste — image + PDF wiring (v1.5.4 follow-up).**

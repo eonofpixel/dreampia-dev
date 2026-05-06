@@ -118,6 +118,12 @@ export interface ChatInputProps {
    * 미지정 시 부모가 쌓인 blocks 를 직접 정리해야 함 (이중 전송 위험).
    */
   onConsumePendingBlocks?: () => void;
+  /**
+   * v1.6.16 — DnD/paste 한 image File 들이 ImageBlock 으로 변환된 결과를
+   * 부모에 forward. 부모가 pendingBlocks state 에 push. 미지정 시 image
+   * drop 은 console.info 만 (silent fallback).
+   */
+  onAttachBlocks?: (blocks: ContentBlock[]) => void;
 }
 
 const SLASH_POPOVER_PREFIX = 'slash-command';
@@ -148,6 +154,7 @@ export function ChatInput({
   onSubmitBlocks,
   pendingBlocks,
   onConsumePendingBlocks,
+  onAttachBlocks,
 }: ChatInputProps): React.JSX.Element {
   const t = useT();
   // 사용자가 명시 placeholder 를 넘기지 않으면 locale-aware default.
@@ -423,6 +430,7 @@ export function ChatInput({
   const handleFiles = useCallback(
     async (files: File[]): Promise<void> => {
       if (files.length === 0) return;
+      const imageBlocks: ContentBlock[] = [];
       for (const f of files) {
         const v = validateImageFile(f);
         if (!v.ok) {
@@ -443,24 +451,30 @@ export function ChatInput({
               prev.length > 0 ? `${prev}\n\n${text}` : text
             );
           } else {
-            // Image → ImageBlock. onSubmitBlocks + pendingBlocks 경로가 모두
-            // 활성화돼 있어야 의미 있음. 부모에 forward 할 직접 채널이 없으니
-            // 사용자가 submit 시 ChatInput 의 pendingBlocks 와 합쳐 전달되도록
-            // 부모가 관리하는 게 맞다. 본 슬롯 scope 외 — DnD 시 console.info
-            // 만 + 텍스트 메모로 fallback.
-            // Future: introduce onAttachFiles?(blocks) → 부모가 pendingBlocks
-            // 에 push.
-            console.info(
-              `[ChatInput] image dropped (${f.name}, ${f.type}, ${result.size_bytes}B) — pendingBlocks 자동 push 는 후속 슬롯`
-            );
+            // v1.6.16 — Image → ImageBlock 으로 변환 후 부모에 forward.
+            imageBlocks.push({
+              type: 'image',
+              mime: result.mime,
+              data: result.base64,
+              alt: f.name,
+            });
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.warn(`[ChatInput] file process failed: ${msg}`);
         }
       }
+      if (imageBlocks.length > 0) {
+        if (onAttachBlocks !== undefined) {
+          onAttachBlocks(imageBlocks);
+        } else {
+          console.info(
+            `[ChatInput] ${imageBlocks.length} image(s) dropped — onAttachBlocks 미지정, silent.`
+          );
+        }
+      }
     },
-    []
+    [onAttachBlocks]
   );
 
   const handleDrop = useCallback(
