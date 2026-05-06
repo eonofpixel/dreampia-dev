@@ -2,6 +2,22 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.5.3] — 2026-05-06
+
+**Image/PDF input utility — DnD / paste / file → base64.**
+
+- `validateImageFile(file)` — mime + size 검사 (mediaConstants).
+- `filesFromDataTransfer(dt)` — drop event 의 image/pdf File 추출.
+- `filesFromClipboard(items)` — paste 의 image File 추출.
+- `readFileAsBase64(file)` — base64 + meta. arrayBuffer / FileReader fallback.
+
+ChatInput DnD/paste handler wire-up 은 v1.5.5 의 영속화 와 함께.
+
+### Tests (6)
+
+- png / bmp unsupported / image too large / pdf / pdf too large /
+  bytes → base64.
+
 ## [1.5.1] — 2026-05-06
 
 **auto.ts routing — Direct API 우선 (settings 의 API key 검사).**
