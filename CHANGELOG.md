@@ -2,6 +2,27 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.8] — 2026-05-06
+
+**Session fork IPC — `session/fork` (v1.6.3 follow-up).**
+
+v1.6.3 의 backend method 위에 IPC + preload 노출. UI 는 별도 슬롯에서
+`window.dreampia.session.fork(parentId, options?)` 호출 가능.
+
+- `session/fork` IPC handler: parentId / options shallow validation,
+  `store.forkSession(...)` 위임. 반환 `{ id }`.
+- preload `session.fork(parentId, options?)` 메서드.
+
+테스트: 7 신규 unit (`ipc.session-fork.test.ts`):
+- 채널 등록.
+- 정상 fork — 새 id + parent_session_id 설정.
+- title 옵션 전달.
+- 빈 / non-string parentId fail.
+- options array fail.
+- parent 미존재 fail.
+
+회귀 0 (1892 pass / 7 baseline).
+
 ## [1.6.3] — 2026-05-06
 
 **Session fork backend — `SessionStore.forkSession`.**

@@ -864,6 +864,19 @@ const api = {
     create: (session: Session): Promise<Result<Session>> =>
       ipcRenderer.invoke('session/create', session) as Promise<Result<Session>>,
 
+    /**
+     * v1.6.3 — Session fork. parent 의 conversation 을 새 session 으로 복사
+     * (parent_session_id 설정). options.truncateAt 가 turn id 면 그 turn 까지만.
+     * 반환: 새 session id.
+     */
+    fork: (
+      parentId: SessionId,
+      options?: { title?: string; truncateAt?: string }
+    ): Promise<Result<{ id: string }>> =>
+      ipcRenderer.invoke('session/fork', parentId, options ?? {}) as Promise<
+        Result<{ id: string }>
+      >,
+
     appendTurn: (id: SessionId, turn: Turn): Promise<Result<void>> =>
       ipcRenderer.invoke('session/append-turn', id, turn) as Promise<Result<void>>,
 

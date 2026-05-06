@@ -1402,6 +1402,36 @@ function registerSessionHandlers(store: SessionStore): void {
     }
   });
 
+  // v1.6.3 — Session fork IPC. parent_session_id 필수, options 는 zod-less
+  // shallow validation (간단한 객체).
+  ipcMain.handle(
+    'session/fork',
+    (_evt, parentId: unknown, optionsRaw: unknown): Result<{ id: string }> => {
+      try {
+        if (typeof parentId !== 'string' || parentId.length === 0) {
+          throw new Error('parentId must be a non-empty string');
+        }
+        const opts: { title?: string; truncateAt?: string } = {};
+        if (optionsRaw !== undefined && optionsRaw !== null) {
+          if (typeof optionsRaw !== 'object' || Array.isArray(optionsRaw)) {
+            throw new Error('options must be an object');
+          }
+          const o = optionsRaw as Record<string, unknown>;
+          if (typeof o['title'] === 'string' && o['title'].length > 0) {
+            opts.title = o['title'];
+          }
+          if (typeof o['truncateAt'] === 'string' && o['truncateAt'].length > 0) {
+            opts.truncateAt = o['truncateAt'];
+          }
+        }
+        const newId = store.forkSession(parentId as SessionId, opts);
+        return ok({ id: newId });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
   ipcMain.handle(
     'session/append-turn',
     (_evt, sessionId: unknown, rawTurn: unknown): Result<void> => {
