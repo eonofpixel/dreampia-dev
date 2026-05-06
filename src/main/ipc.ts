@@ -76,6 +76,13 @@ import {
   detectMcpFromCodexConfig,
   type SuggestedMcpServer,
 } from './mcp/discovery';
+// v1.7.4 — Automation IPC.
+import {
+  AutomationManager,
+  getAutomationManager,
+  summarizeRule,
+  type AutomationRuleSummary,
+} from './automation/AutomationManager';
 // CLI / auto 는 Node-only — main 에서만 import. providers barrel 은
 // renderer 와 공유되므로 여기서 직접 명시적 경로로 가져온다.
 import {
@@ -957,6 +964,123 @@ export function registerIpcHandlers(
   if (compare) registerCompareHandlers(compare);
   if (audit) registerAuditHandlers(audit);
   if (permission) registerPermissionHandlers(permission, store);
+  // v1.7.4 — Automation IPC. 부팅 시 1회 등록 (singleton instance).
+  registerAutomationHandlers();
+}
+
+// ────────────────────────────────────────────────────────────
+// v1.7.4 — automation/* IPC
+// ────────────────────────────────────────────────────────────
+
+function registerAutomationHandlers(): void {
+  ipcMain.handle(
+    'automation/list',
+    (): Result<AutomationRuleSummary[]> => {
+      try {
+        const mgr = getAutomationManager();
+        return ok(mgr.list().map((r) => summarizeRule(r)));
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'automation/register',
+    (_evt, raw: unknown): Result<AutomationRuleSummary> => {
+      try {
+        if (raw === null || typeof raw !== 'object') {
+          throw new Error('rule must be an object');
+        }
+        const obj = raw as Record<string, unknown>;
+        const name = String(obj['name'] ?? '');
+        const kind = obj['kind'];
+        if (kind !== 'interval' && kind !== 'cron' && kind !== 'webhook') {
+          throw new Error("kind must be 'interval' | 'cron' | 'webhook'");
+        }
+        if (name.length === 0 || name.length > 64) {
+          throw new Error('name must be 1..64 chars');
+        }
+        const mgr = getAutomationManager();
+        // handler 는 IPC 로 못 받음 — 일단 no-op log handler 로 등록.
+        // 실 handler 는 별도 슬롯에서 (LLM call / shell script 실행 등).
+        const handler = async (): Promise<void> => {
+          console.info(`[automation] rule fired (no-op): ${name}`);
+        };
+        mgr.register({
+          name,
+          kind,
+          ...(typeof obj['interval_ms'] === 'number' && {
+            interval_ms: obj['interval_ms'],
+          }),
+          ...(typeof obj['cron_expr'] === 'string' && {
+            cron_expr: obj['cron_expr'],
+          }),
+          ...(typeof obj['cron_tz'] === 'string' && {
+            cron_tz: obj['cron_tz'],
+          }),
+          ...(typeof obj['webhook_path'] === 'string' && {
+            webhook_path: obj['webhook_path'],
+          }),
+          handler,
+        });
+        const registered = mgr.list().find((r) => r.name === name);
+        if (registered === undefined) {
+          throw new Error('register failed (rule not found after insert)');
+        }
+        return ok(summarizeRule(registered));
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'automation/unregister',
+    (_evt, raw: unknown): Result<{ removed: boolean }> => {
+      try {
+        if (typeof raw !== 'string' || raw.length === 0) {
+          throw new Error('rule name must be a non-empty string');
+        }
+        const mgr = getAutomationManager();
+        const removed = mgr.unregister(raw);
+        return ok({ removed });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'automation/fire',
+    async (_evt, raw: unknown): Promise<Result<void>> => {
+      try {
+        if (typeof raw !== 'string' || raw.length === 0) {
+          throw new Error('rule name must be a non-empty string');
+        }
+        const mgr = getAutomationManager();
+        await mgr.fire(raw);
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'automation/get-next-run',
+    (_evt, exprRaw: unknown, tzRaw: unknown): Result<{ next_run: string | null }> => {
+      try {
+        if (typeof exprRaw !== 'string' || exprRaw.length === 0) {
+          throw new Error('cron expression required');
+        }
+        const tz = typeof tzRaw === 'string' && tzRaw.length > 0 ? tzRaw : undefined;
+        return ok({ next_run: AutomationManager.getNextRun(exprRaw, tz) });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
 }
 
 // ────────────────────────────────────────────────────────────

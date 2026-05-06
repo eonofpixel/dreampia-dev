@@ -1369,7 +1369,59 @@ const api = {
         Result<{ revoked: boolean }>
       >,
   },
+
+  /**
+   * v1.7.4 — Bot Automation rules. Sidebar [자동화] panel + IPC.
+   *
+   * Rule kinds: 'interval' (ms) / 'cron' (croner expr) / 'webhook' (HTTP path).
+   * handler 는 main 이 default 'no-op log' — 실 handler 등록은 후속.
+   */
+  automation: {
+    list: (): Promise<Result<AutomationRuleSummaryShape[]>> =>
+      ipcRenderer.invoke('automation/list') as Promise<
+        Result<AutomationRuleSummaryShape[]>
+      >,
+    register: (
+      rule: AutomationRuleRegisterShape
+    ): Promise<Result<AutomationRuleSummaryShape>> =>
+      ipcRenderer.invoke('automation/register', rule) as Promise<
+        Result<AutomationRuleSummaryShape>
+      >,
+    unregister: (name: string): Promise<Result<{ removed: boolean }>> =>
+      ipcRenderer.invoke('automation/unregister', name) as Promise<
+        Result<{ removed: boolean }>
+      >,
+    fire: (name: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('automation/fire', name) as Promise<Result<void>>,
+    getNextRun: (
+      cronExpr: string,
+      tz?: string
+    ): Promise<Result<{ next_run: string | null }>> =>
+      ipcRenderer.invoke('automation/get-next-run', cronExpr, tz) as Promise<
+        Result<{ next_run: string | null }>
+      >,
+  },
 };
+
+// v1.7.4 — Automation IPC types (preload-exposed shape).
+export type AutomationKindShape = 'interval' | 'cron' | 'webhook';
+export interface AutomationRuleSummaryShape {
+  name: string;
+  kind: AutomationKindShape;
+  interval_ms?: number;
+  cron_expr?: string;
+  cron_tz?: string;
+  webhook_path?: string;
+  next_run: string | null;
+}
+export interface AutomationRuleRegisterShape {
+  name: string;
+  kind: AutomationKindShape;
+  interval_ms?: number;
+  cron_expr?: string;
+  cron_tz?: string;
+  webhook_path?: string;
+}
 
 contextBridge.exposeInMainWorld('dreampia', api);
 

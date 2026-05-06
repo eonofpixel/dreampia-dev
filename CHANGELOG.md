@@ -2,6 +2,45 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.4] — 2026-05-06
+
+**Sidebar [자동화] panel 활성화 — AutomationModal + IPC.**
+
+v1.3.7 / v1.7.2 / v1.7.3 의 backend 위에 사용자 진입점 완성. Sidebar 의
+[자동화] 항목이 coming-soon → 클릭 가능.
+
+Backend (src/main/automation/AutomationManager.ts):
+- `getAutomationManager()` singleton + `start()` 자동 호출.
+- `summarizeRule(rule)` — IPC-friendly shape (handler closure 제외 + cron 의
+  next_run 동봉).
+- `resetAutomationManagerForTesting()`.
+
+IPC (`src/main/ipc.ts` + preload):
+- `automation/list` — 등록된 rules 의 summary.
+- `automation/register` — rule 등록 (handler 는 main 의 no-op log default).
+- `automation/unregister` — name 으로 제거.
+- `automation/fire` — 즉시 1회 실행 (수동 trigger).
+- `automation/get-next-run` — cron expr + tz 의 다음 실행 미리보기.
+
+UI (src/renderer/components/automation/AutomationModal.tsx):
+- 등록된 rules 목록 — kind / cron expr / next_run / webhook path / interval ms.
+- 새 rule form — name + kind selector + kind-specific fields.
+- cron expression 입력 시 즉시 next_run 미리보기 (200ms debounce).
+- 각 row 의 [지금 실행] / [삭제] 버튼.
+- IPC 미가용 / register 실패 시 inline error.
+
+Sidebar 변경:
+- `onOpenAutomation?` prop 추가. 미지정 시 coming-soon 유지 (legacy).
+- App.tsx 가 `automationModalOpen` state + `<AutomationModal />` mount.
+
+테스트: 13 신규 unit (`tests/main/ipc.automation.test.ts`) — 5 채널 등록 /
+list 빈 / cron 등록+next_run / invalid cron fail / interval / webhook /
+빈 name fail / unregister true+false / list 다중 / get-next-run valid+invalid /
+fire / fire 빈 name fail). 회귀 0 (1861 pass / 7 baseline).
+
+후속 — rule 영속 (현재 process 생애 in-memory 만), 실 handler 등록 (LLM 호출
+/ shell 실행 / IPC 트리거), audit log 표시.
+
 ## [1.4.1] — 2026-05-06
 
 **Schema debt B-2 — `permission_grants.id` INTEGER → TEXT rebuild.**

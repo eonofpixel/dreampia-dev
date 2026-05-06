@@ -208,3 +208,60 @@ export class AutomationManager {
     }
   }
 }
+
+// ────────────────────────────────────────────────────────────
+// v1.7.4 — Singleton accessor + IPC 직렬화 helpers
+// ────────────────────────────────────────────────────────────
+
+let _instance: AutomationManager | null = null;
+
+/**
+ * Main process 전용 singleton. IPC handlers + 부팅 시 1회 instantiation.
+ * 첫 호출 시 instance 생성 + start(). 후속 호출은 동일 instance.
+ */
+export function getAutomationManager(): AutomationManager {
+  if (_instance === null) {
+    _instance = new AutomationManager();
+    _instance.start();
+  }
+  return _instance;
+}
+
+/** Test/shutdown reset. */
+export function resetAutomationManagerForTesting(): void {
+  if (_instance !== null) {
+    _instance.stop();
+  }
+  _instance = null;
+}
+
+/**
+ * IPC 직렬화 가능한 rule shape. handler 는 closure 라 보낼 수 없어 제외.
+ * 대신 next_run (cron) 같은 derived 정보를 동봉 — UI 의 [다음 실행] 표시.
+ */
+export interface AutomationRuleSummary {
+  name: string;
+  kind: AutomationKind;
+  interval_ms?: number;
+  cron_expr?: string;
+  cron_tz?: string;
+  webhook_path?: string;
+  /** kind=cron 일 때 다음 fire ISO timestamp, invalid/미정 시 null. */
+  next_run: string | null;
+}
+
+export function summarizeRule(rule: AutomationRule): AutomationRuleSummary {
+  const summary: AutomationRuleSummary = {
+    name: rule.name,
+    kind: rule.kind,
+    next_run: null,
+  };
+  if (rule.interval_ms !== undefined) summary.interval_ms = rule.interval_ms;
+  if (rule.cron_expr !== undefined) summary.cron_expr = rule.cron_expr;
+  if (rule.cron_tz !== undefined) summary.cron_tz = rule.cron_tz;
+  if (rule.webhook_path !== undefined) summary.webhook_path = rule.webhook_path;
+  if (rule.kind === 'cron' && rule.cron_expr !== undefined) {
+    summary.next_run = AutomationManager.getNextRun(rule.cron_expr, rule.cron_tz);
+  }
+  return summary;
+}

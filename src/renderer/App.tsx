@@ -22,6 +22,7 @@ import { SettingsModal, applyTheme, type SettingsTabId } from './components/sett
 import { SlashHelpModal } from './components/chat/SlashHelpModal';
 import { CompareModal } from './components/chat/CompareModal';
 import { PluginsModal } from './components/plugins/PluginsModal';
+import { AutomationModal } from './components/automation/AutomationModal';
 import { ToastContainer } from './components/toast/ToastContainer';
 import { useToasts, ToastsProvider } from './hooks/useToasts';
 import {
@@ -184,6 +185,8 @@ export function App(): React.JSX.Element {
   const [compareModalOpen, setCompareModalOpen] = useState(false);
   // v1.1.15 — Plugin Loader UI: Sidebar [플러그인] 클릭 시 mount.
   const [pluginsModalOpen, setPluginsModalOpen] = useState(false);
+  // v1.7.4 — Automation modal (Sidebar [자동화] 클릭 시 mount).
+  const [automationModalOpen, setAutomationModalOpen] = useState(false);
   // v1.1.16 — 통일된 toast 알림 (error / warning / info / success).
   const toasts = useToasts();
 
@@ -1263,6 +1266,7 @@ export function App(): React.JSX.Element {
               setCompareModalOpen(true);
             }}
             onOpenPlugins={() => setPluginsModalOpen(true)}
+            onOpenAutomation={() => setAutomationModalOpen(true)}
             isLoadingSessions={sessionsLoading}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
@@ -1366,6 +1370,11 @@ export function App(): React.JSX.Element {
       <PluginsModal
         open={pluginsModalOpen}
         onClose={() => setPluginsModalOpen(false)}
+      />
+      {/* v1.7.4 — Automation modal (Sidebar [자동화] 클릭). */}
+      <AutomationModal
+        open={automationModalOpen}
+        onClose={() => setAutomationModalOpen(false)}
       />
       {/* v1.1.16 — 통일된 toast container. fixed top-right. */}
       <ToastContainer toasts={toasts.list} onDismiss={toasts.dismiss} />

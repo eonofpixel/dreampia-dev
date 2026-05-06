@@ -65,6 +65,12 @@ export interface SidebarProps {
   onOpenPlugins?: () => void;
 
   /**
+   * v1.7.4 (Automation panel): [자동화] 항목 클릭 — AutomationModal 열기.
+   * 미지정 시 'coming-soon' legacy 동작 유지.
+   */
+  onOpenAutomation?: () => void;
+
+  /**
    * v1.7.5 — sessions list loading 중. true 면 chats 영역에
    * SidebarSessionsSkeleton 표시 (sessions.length === 0 의 empty text 대신).
    */
@@ -99,6 +105,7 @@ export function Sidebar({
   onPickWorkspace,
   onOpenCompare,
   onOpenPlugins,
+  onOpenAutomation,
   isLoadingSessions = false,
   searchQuery = '',
   onSearchQueryChange,
@@ -182,8 +189,9 @@ export function Sidebar({
         <SidebarNavItem
           icon={<Bot className="h-4 w-4" />}
           label={t('sidebar.nav.automation')}
-          comingSoon
-          comingSoonHint={t('sidebar.coming_soon')}
+          {...(onOpenAutomation !== undefined
+            ? { onClick: onOpenAutomation, testId: 'sidebar-automation' }
+            : { comingSoon: true, comingSoonHint: t('sidebar.coming_soon') })}
         />
       </nav>
 
