@@ -2,6 +2,30 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.2] — 2026-05-06
+
+**Automation HTTP listener — webhook trigger localhost server.**
+
+v1.3.7 AutomationManager 의 `webhook` kind 가 stub 이었던 부분 채움. 외부
+시스템 (curl, GitHub Actions, 다른 프로세스) 이 자동화 규칙을 트리거할 수
+있도록 작은 node `http` server 띄움.
+
+설계:
+- `AutomationHttpListener(manager, options)` — host (default `127.0.0.1`),
+  port (default 0 → OS 자동 할당), auditSink.
+- `start()` Promise — listen 완료 시 actual port 반환.
+- `stop()` — close + state 클리어. 재시작 가능.
+- 라우팅: `POST /hooks/<name>` → 매칭 `webhook_path` rule fire (200) /
+  미등록 hook 404 / 다른 method 405 / prefix 미일치 404.
+- 보안: 기본 localhost bind, body 64KB 상한 (메모리 폭탄 차단), querystring
+  무시, fail-closed (handler throw 는 500 + audit).
+
+테스트: 9개 신규 unit (실 node fetch 기반 round-trip — 200 fire / 405 / 404
+unknown / 404 prefix / querystring 무시 / handler throw / interval kind 미매칭
+/ stop+start 재가능 / no-body 정상). 회귀 0 (1797 pass / 7 base).
+
+후속 — v1.7.4 에서 사이드바 [자동화] 패널 + UI 등록 wiring.
+
 ## [1.7.1] — 2026-05-06
 
 **SentrySink — Telemetry 의 Sentry-호환 sink (DI 기반).**
