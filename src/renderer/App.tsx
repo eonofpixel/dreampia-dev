@@ -1420,6 +1420,9 @@ export function App(): React.JSX.Element {
             onForkAtTurn={(turnId) => {
               void handleForkSession(turnId);
             }}
+            onOpenAutomation={() => setAutomationModalOpen(true)}
+            onOpenPlugins={() => setPluginsModalOpen(true)}
+            onOpenHelp={() => setSlashHelpOpen(true)}
           />
         }
         preview={

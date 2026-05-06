@@ -154,6 +154,12 @@ export interface ChatPanelProps {
   onAttachBlocks?: (blocks: ContentBlock[]) => void;
   /** v1.6.17 — chip [×] 클릭 시 부모가 제거. */
   onRemovePendingBlock?: (index: number) => void;
+  /** v1.6.22 — empty state CTA: AutomationModal 열기. 미지정 시 chip 숨김. */
+  onOpenAutomation?: () => void;
+  /** v1.6.22 — empty state CTA: PluginsModal 열기. 미지정 시 chip 숨김. */
+  onOpenPlugins?: () => void;
+  /** v1.6.22 — empty state CTA: SlashHelpModal 열기. 미지정 시 chip 숨김. */
+  onOpenHelp?: () => void;
 }
 
 interface MessagesAreaProps {
@@ -177,6 +183,10 @@ interface MessagesAreaProps {
   onPickSession?: (sessionId: string) => void;
   /** v1.6.19 — per-turn fork forwarded from ChatPanel. */
   onForkAtTurn?: (turnId: string) => void;
+  /** v1.6.22 — empty state CTAs forwarded from ChatPanel. */
+  onOpenAutomation?: () => void;
+  onOpenPlugins?: () => void;
+  onOpenHelp?: () => void;
 }
 
 export function ChatPanel({
@@ -210,6 +220,9 @@ export function ChatPanel({
   onAttachBlocks,
   onRemovePendingBlock,
   onForkAtTurn,
+  onOpenAutomation,
+  onOpenPlugins,
+  onOpenHelp,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -245,6 +258,9 @@ export function ChatPanel({
         onTurnFocused={onTurnFocused}
         onPickSession={onPickSession}
         {...(onForkAtTurn !== undefined && { onForkAtTurn })}
+        {...(onOpenAutomation !== undefined && { onOpenAutomation })}
+        {...(onOpenPlugins !== undefined && { onOpenPlugins })}
+        {...(onOpenHelp !== undefined && { onOpenHelp })}
       />
       <InputArea
         onSubmit={onSubmit}
@@ -294,6 +310,9 @@ function MessagesArea({
   onTurnFocused,
   onPickSession,
   onForkAtTurn,
+  onOpenAutomation,
+  onOpenPlugins,
+  onOpenHelp,
 }: MessagesAreaProps): React.JSX.Element {
   const t = useT();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -334,6 +353,9 @@ function MessagesArea({
         <WelcomeMessage
           workspaceName={workspaceName ?? t('sidebar.workspace.fallback')}
           onPickPrompt={onPickPrompt}
+          {...(onOpenAutomation !== undefined && { onOpenAutomation })}
+          {...(onOpenPlugins !== undefined && { onOpenPlugins })}
+          {...(onOpenHelp !== undefined && { onOpenHelp })}
         />
       ) : (
         <div className="mx-auto max-w-3xl space-y-4">
@@ -745,13 +767,24 @@ export interface WelcomeMessageProps {
    * 누락으로 인한 silent no-op 을 방지.
    */
   onPickPrompt?: (prompt: string) => void;
+  /** v1.6.22 — empty state 빠른 진입 CTA. 미지정 시 해당 chip 숨김. */
+  onOpenAutomation?: () => void;
+  onOpenPlugins?: () => void;
+  onOpenHelp?: () => void;
 }
 
 export function WelcomeMessage({
   workspaceName,
   onPickPrompt,
+  onOpenAutomation,
+  onOpenPlugins,
+  onOpenHelp,
 }: WelcomeMessageProps): React.JSX.Element {
   const t = useT();
+  const hasCtas =
+    onOpenAutomation !== undefined ||
+    onOpenPlugins !== undefined ||
+    onOpenHelp !== undefined;
   return (
     <div className="mx-auto mt-16 max-w-md text-center" data-testid="welcome-message">
       <div className="text-5xl" aria-hidden="true">
@@ -775,7 +808,51 @@ export function WelcomeMessage({
           );
         })}
       </div>
+      {hasCtas && (
+        <div
+          className="mt-6 space-y-2 text-left text-sm"
+          data-testid="welcome-cta-section"
+        >
+          <p className="font-medium text-text-secondary">{t('chat.welcome.cta.label')}</p>
+          {onOpenAutomation !== undefined && (
+            <CtaChip onClick={onOpenAutomation} testId="welcome-cta-automation">
+              {t('chat.welcome.cta.automation')}
+            </CtaChip>
+          )}
+          {onOpenPlugins !== undefined && (
+            <CtaChip onClick={onOpenPlugins} testId="welcome-cta-plugins">
+              {t('chat.welcome.cta.plugins')}
+            </CtaChip>
+          )}
+          {onOpenHelp !== undefined && (
+            <CtaChip onClick={onOpenHelp} testId="welcome-cta-help">
+              {t('chat.welcome.cta.help')}
+            </CtaChip>
+          )}
+        </div>
+      )}
     </div>
+  );
+}
+
+function CtaChip({
+  children,
+  onClick,
+  testId,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  testId: string;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testId}
+      className="block w-full rounded-md border border-accent/40 bg-accent/5 px-3 py-2 text-left text-sm text-accent hover:bg-accent/10"
+    >
+      → {children}
+    </button>
   );
 }
 

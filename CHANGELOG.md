@@ -2,6 +2,34 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.22] — 2026-05-07
+
+**Chat empty state CTA — 자동화/플러그인/단축키 빠른 진입.**
+
+새 세션을 처음 열면 환영 메시지 + 추천 prompt 3개만 보여졌음. 사용자가
+플랫폼 기능 (자동화, 플러그인, 단축키) 를 발견할 진입점 없이 텅 빈
+대화창과 마주함. v1.6.22 는 WelcomeMessage 아래 "빠른 진입" 섹션을
+추가해 사용자가 첫 메시지를 보내기 전에 도구를 둘러볼 수 있도록.
+
+### Added
+- `WelcomeMessageProps` 에 3개 옵션 콜백: `onOpenAutomation?`,
+  `onOpenPlugins?`, `onOpenHelp?`. 미지정 시 해당 chip 숨김.
+- `MessagesAreaProps` + `ChatPanelProps` 에 동일 props 추가 — App 에서
+  WelcomeMessage 까지 전달.
+- `App.tsx` 의 `<ChatPanel>` 에 3개 callback wire up
+  (setAutomationModalOpen / setPluginsModalOpen / setSlashHelpOpen).
+- WelcomeMessage 의 추천 prompt 섹션 아래에 "빠른 진입" 섹션 — 새 chip
+  variant `<CtaChip>` (accent border + ` → ` prefix).
+- i18n 4 키: `chat.welcome.cta.label`, `chat.welcome.cta.automation`,
+  `chat.welcome.cta.plugins`, `chat.welcome.cta.help` (ko/en pair).
+- `tests/renderer/WelcomeMessage.cta.test.tsx` 신규 6 cases — 미지정
+  시 섹션 숨김 / 전체 / subset / 각 클릭 콜백.
+
+### 회귀
+- 0. typecheck clean.
+- 신규 6 tests PASS. i18n 44 tests 회귀 0.
+- baseline 2010 → 2016 (+6).
+
 ## [1.6.21] — 2026-05-07
 
 **Sidebar 단축키 도움말 진입점 가시화.**
