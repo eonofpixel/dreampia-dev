@@ -120,4 +120,40 @@ test.describe('onboarding wizard', () => {
     // Recommended prompts 표시
     await expect(window.getByTestId('recommended-prompts')).toBeVisible();
   });
+
+  // v1.7.9 — 추천 prompts 클릭 시나리오. 첫 chip 클릭 → wizard 닫히고
+  // onboarding_completed=true 영속. (workspace 미설정 시 새 session 은 생성되지
+  // 않지만 onboarding 종료 자체는 정상.)
+  test('recommended prompt click finishes wizard + persists settings (v1.7.9)', async ({
+    window,
+    userDataDir,
+  }) => {
+    // 5단계까지 진행.
+    await expect(window.getByTestId('onboarding-step-welcome')).toBeVisible({
+      timeout: 10_000,
+    });
+    await window.getByTestId('onboarding-start').click();
+    await window.getByTestId('onboarding-next').click(); // 2 → 3
+    await window.getByTestId('onboarding-next').click(); // 3 → 4
+    await window.getByTestId('onboarding-next').click(); // 4 → 5
+    await expect(window.getByTestId('recommended-prompts')).toBeVisible();
+
+    // 첫 추천 chip 클릭. RECOMMENDED_PROMPTS[0] = '이 프로젝트 구조 분석해줘'.
+    await window.getByTestId('prompt-이 프로젝트 구조 분석해줘').click();
+
+    // Wizard 사라짐 + 메인 앱 표시.
+    await expect(window.getByTestId('onboarding-wizard')).toBeHidden({
+      timeout: 5_000,
+    });
+    await expect(window.getByLabel('사이드바')).toBeVisible();
+
+    // settings.json 에 onboarding_completed=true 영속.
+    const settingsPath = join(userDataDir, 'settings.json');
+    expect(existsSync(settingsPath)).toBe(true);
+    const parsed = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<
+      string,
+      unknown
+    >;
+    expect(parsed['onboarding_completed']).toBe(true);
+  });
 });

@@ -2,6 +2,23 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.9] — 2026-05-06
+
+**Onboarding step 5 추천 prompt 클릭 e2e.**
+
+`e2e/onboarding.spec.ts` 에 새 테스트 추가 — 5단계까지 진행 후 첫 추천
+prompt chip ('이 프로젝트 구조 분석해줘') 클릭 → wizard 닫힘 + 메인 앱
+표시 + `settings.json` 의 `onboarding_completed=true` 영속.
+
+기존 spec 은 [skip] / [next×4] 까지만 검증했고 실제 prompt 클릭 path 는
+검증 안 됐었음. 본 시나리오로 `handleStartChat → onComplete(prompt) →
+handleOnboardingComplete` chain 회귀 lock.
+
+(workspace 미설정 상태라 새 session 자동 생성은 검증 X — 그건 workspace
+pre-set fixture variant 가 필요하며 별도 슬롯에서 다룸.)
+
+unit suite 영향 0 — e2e-only change.
+
 ## [1.7.10] — 2026-05-06
 
 **Drive17 — 테마 토글 e2e 시나리오.**
