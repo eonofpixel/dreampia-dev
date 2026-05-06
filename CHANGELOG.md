@@ -2,6 +2,21 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.16] — 2026-05-06
+
+**AutomationModal i18n — 모든 hardcoded 한국어 → useT.**
+
+v1.7.4 의 AutomationModal 이 hardcoded 한국어로 작성됐던 것을 useT 기반
+i18n 으로 교체. 영어 locale 사용자가 자동화 패널만 한국어로 보이는 문제 해소.
+
+- 모달 title / aria-label / 닫기 버튼 / 새 규칙 form (이름 / 종류 / cron expr /
+  tz / interval / webhook path / 다음 실행 / 추가) / 목록 (제목 / loading /
+  empty / 행별 [실행] / [삭제]) — 모두 t() 기반.
+- 에러 메시지 2개 (IPC 미가용 / 이름 필수) i18n.
+- i18n: ko/en `automation.*` 28 키.
+
+회귀 0 (1914 pass).
+
 ## [1.7.15] — 2026-05-06
 
 **Telemetry opt-in toggle — `settings.telemetry_enabled` UI + bootstrap 연동.**
