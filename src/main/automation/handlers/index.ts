@@ -14,6 +14,10 @@ import {
   llmPromptHandler,
   LLM_PROMPT_HANDLER_NAME,
 } from './llmPromptHandler';
+import {
+  shellExecHandler,
+  SHELL_EXEC_HANDLER_NAME,
+} from './shellExecHandler';
 
 let registered = false;
 
@@ -25,6 +29,7 @@ export function registerBuiltinHandlers(): void {
   if (registered) return;
   handlerRegistry.register(NOOP_LOG_HANDLER_NAME, noopLogHandler);
   handlerRegistry.register(LLM_PROMPT_HANDLER_NAME, llmPromptHandler);
+  handlerRegistry.register(SHELL_EXEC_HANDLER_NAME, shellExecHandler);
   registered = true;
 }
 
@@ -39,6 +44,7 @@ export {
   noopLogHandler,
   NOOP_LOG_HANDLER_NAME,
   LLM_PROMPT_HANDLER_NAME,
+  SHELL_EXEC_HANDLER_NAME,
 };
 export type {
   AutomationHandler,

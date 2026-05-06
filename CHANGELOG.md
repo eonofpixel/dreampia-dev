@@ -2,6 +2,44 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.24] — 2026-05-06
+
+**Shell exec automation handler (opt-in).**
+
+v1.7.23 의 handler registry 위에 두 번째 builtin handler `'shell-exec'`
+추가. 자동화 rule fire 시 임의 binary 를 spawn 해 결과를 audit 에 기록.
+보안상 default 비활성 — `settings.automation_shell_enabled === true`
+일 때만 동작.
+
+### Added
+- `src/main/automation/handlers/shellExecHandler.ts` 신규.
+  - Config: `command` (required) / `args?` / `cwd?` / `timeout_ms?`
+    (default 30_000) / `env?`.
+  - `child_process.spawn` 사용. **shell: false** — `/bin/sh` 또는
+    string interpolation 미사용 → command injection 차단. args 는 array
+    만, array 가 아니면 빈 array 로 silent fallback.
+  - timeout 후 `SIGKILL` — 영구 실행 자동 차단.
+  - stdout / stderr 각 64KB 까지 capture, 초과분 drop.
+  - exit 0 → ok=true + `[exit 0] {stdout}` (truncated 2KB).
+  - exit ≠ 0 → ok=false + `exit {code}: {stderr}` (truncated 2KB).
+  - timeout / spawn ENOENT / child error → ok=false + 사유.
+  - `setShellSpawnForTesting()` / `setShellSettingsForTesting()` —
+    test 용 spawn / settings injection.
+- `settings.json` 에 `automation_shell_enabled?: boolean` (default
+  false). `AppSettings` + read 측 검증 추가.
+- `registerBuiltinHandlers()` 에 `'shell-exec'` 등록 추가.
+- IPC `automation/list-handlers` 의 응답에 자동 포함.
+
+### 회귀
+- 0. typecheck clean. lint clean.
+- 신규 `tests/main/automation.shellExec.test.ts` 10 tests PASS:
+  disabled 상태 / command 누락 / exit 0 / exit 1 / spawn ENOENT /
+  child error 이벤트 / timeout (SIGKILL) / args+cwd+env 전달 /
+  array 가 아닌 args 의 빈 array fallback / registerBuiltinHandlers
+  포함.
+- 기존 ipc.automation 15 + automation.handlers 15 회귀 0.
+- baseline 1953 → 1963 (+10 신규, 7 baseline fail 유지).
+
 ## [1.7.23] — 2026-05-06
 
 **Automation handler registry + first real handler (`llm-prompt`).**

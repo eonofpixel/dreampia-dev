@@ -147,6 +147,12 @@ export interface AppSettings {
    * 값을 읽어 setEnabled.
    */
   telemetry_enabled?: boolean;
+  /**
+   * v1.7.24 — Shell exec automation handler opt-in. default false.
+   * true 일 때만 'shell-exec' handler 가 동작. user 가 explicit 으로
+   * 활성화해야 자동화 rule 의 shell command 가 실행됨 (보안상).
+   */
+  automation_shell_enabled?: boolean;
 }
 
 /**
@@ -252,6 +258,10 @@ export function readSettings(): AppSettings {
       // v1.7.15 — telemetry_enabled. boolean 만 인정.
       if (typeof obj['telemetry_enabled'] === 'boolean') {
         next.telemetry_enabled = obj['telemetry_enabled'];
+      }
+      // v1.7.24 — automation_shell_enabled. boolean 만 인정.
+      if (typeof obj['automation_shell_enabled'] === 'boolean') {
+        next.automation_shell_enabled = obj['automation_shell_enabled'];
       }
       // v1.7.14 — automation_rules. 손상된 항목 silent drop.
       if (Array.isArray(obj['automation_rules'])) {
