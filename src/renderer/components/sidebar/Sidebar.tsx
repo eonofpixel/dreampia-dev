@@ -18,6 +18,7 @@ import {
   BarChart3,
   Server,
   GitCompareArrows,
+  HelpCircle,
 } from 'lucide-react';
 import { SearchSection, type SearchResultEntry } from './SearchSection';
 import { useMcp } from '../../hooks/useMcp';
@@ -71,6 +72,12 @@ export interface SidebarProps {
   onOpenAutomation?: () => void;
 
   /**
+   * v1.6.21 — [단축키 도움말] 클릭 시 호출. SlashHelpModal 을 연다.
+   * 미지정 시 버튼 자체를 숨김. App.tsx 의 setSlashHelpOpen wire up.
+   */
+  onOpenHelp?: () => void;
+
+  /**
    * v1.7.5 — sessions list loading 중. true 면 chats 영역에
    * SidebarSessionsSkeleton 표시 (sessions.length === 0 의 empty text 대신).
    */
@@ -106,6 +113,7 @@ export function Sidebar({
   onOpenCompare,
   onOpenPlugins,
   onOpenAutomation,
+  onOpenHelp,
   isLoadingSessions = false,
   searchQuery = '',
   onSearchQueryChange,
@@ -265,6 +273,15 @@ export function Sidebar({
             label={t('sidebar.onboarding_reopen')}
             onClick={onReopenOnboarding}
             testId="sidebar-reopen-onboarding"
+          />
+        )}
+        {onOpenHelp !== undefined && (
+          <SidebarNavItem
+            icon={<HelpCircle className="h-4 w-4" />}
+            label={t('sidebar.help')}
+            shortcut="Ctrl+/"
+            onClick={onOpenHelp}
+            testId="sidebar-open-help"
           />
         )}
         <SidebarNavItem

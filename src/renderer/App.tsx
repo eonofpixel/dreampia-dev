@@ -1343,6 +1343,7 @@ export function App(): React.JSX.Element {
             }}
             onOpenPlugins={() => setPluginsModalOpen(true)}
             onOpenAutomation={() => setAutomationModalOpen(true)}
+            onOpenHelp={() => setSlashHelpOpen(true)}
             isLoadingSessions={sessionsLoading}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}

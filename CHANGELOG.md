@@ -2,6 +2,32 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.21] — 2026-05-07
+
+**Sidebar 단축키 도움말 진입점 가시화.**
+
+SlashHelpModal + 'help.open' (Mod+/) 단축키 + dispatcher 는 v0.x 부터
+완비되어 있었지만 사이드바에는 진입점이 없어 발견성 낮음. v1.6.21 은
+사이드바 footer 에 [단축키 도움말] 버튼 한 개를 추가해 클릭으로 모달
+열기. 키보드 사용 안 하는 사용자에게도 도움말이 보이도록.
+
+### Added
+- `SidebarProps.onOpenHelp?: () => void` — 클릭 시 호출. 미지정 시 버튼
+  자체를 숨김 (legacy 동작 보존).
+- Sidebar footer 의 [온보딩 다시 보기] 와 [설정] 사이에 `<HelpCircle>`
+  아이콘 + label `t('sidebar.help')` 버튼. hover 시 `Ctrl+/` shortcut
+  hint 표시 (기존 SidebarNavItem shortcut prop 패턴 재사용).
+- `App.tsx` 의 `<Sidebar>` mount 부에 `onOpenHelp={() => setSlashHelpOpen(true)}`
+  wire up.
+- i18n `sidebar.help` (ko: "단축키 도움말" / en: "Keyboard shortcuts").
+- `tests/renderer/Sidebar.help.test.tsx` 신규 3 cases — onOpenHelp 호출 /
+  미지정 시 hidden / Ctrl+/ shortcut hint.
+
+### 회귀
+- 0. typecheck clean.
+- 신규 3 tests PASS. Sidebar 전체 (5 파일) 30 tests 회귀 0.
+- baseline 2007 → 2010 (+3).
+
 ## [1.7.28] — 2026-05-07
 
 **Automation rules JSON import/export.**
