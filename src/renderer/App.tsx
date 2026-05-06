@@ -150,6 +150,7 @@ export function App(): React.JSX.Element {
     clearTurns: persistClearTurns,
     updateConversation: persistUpdateConversation,
     updatePermission: persistUpdatePermission,
+    refresh: refreshSessions,
   } = useSessionStore();
 
   // Phase 3 B2: 첫 실행 wizard. completed=true 면 main app, false 면 wizard 표시.
@@ -1492,7 +1493,11 @@ export function App(): React.JSX.Element {
         open={backfillModal !== null}
         legacyCount={backfillModal?.legacyCount ?? 0}
         targetConflicts={backfillModal?.targetConflicts ?? 0}
-        onDone={() => setBackfillModal(null)}
+        onDone={() => {
+          setBackfillModal(null);
+          // workspace_id 가 sha256 으로 마이그레이션됐을 수 있으므로 sessions 캐시 강제 갱신
+          void refreshSessions();
+        }}
       />
       {/* v1.1.16 — 통일된 toast container. fixed top-right. */}
       <ToastContainer toasts={toasts.list} onDismiss={toasts.dismiss} />

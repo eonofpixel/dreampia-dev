@@ -2,6 +2,33 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.4.9] — 2026-05-07
+
+**BackfillPromptModal onDone → sessions cache 강제 갱신.**
+
+v1.4.8 의 backfill flow 가 settings flag 설정 + DB row 갱신은 끝냈지만,
+완료 모달을 닫은 직후 renderer 의 `useSessionStore` 캐시는 여전히
+이전 workspace_id (FNV) 기준 row 들을 보유. 이 상태에서 새 세션을
+생성하면 sha256 derived id 와 FK mismatch 가 발생할 수 있어, modal 의
+`onDone` 콜백을 강화해 `sessionStore.refresh()` 를 자동 호출.
+
+### Changed
+- `src/renderer/App.tsx` 의 `<BackfillPromptModal onDone>` 콜백이 이제
+  `setBackfillModal(null)` + `void refreshSessions()` 를 함께 호출.
+  workspace_id 가 sha256 으로 마이그레이션됐을 수 있으므로 sessions
+  목록을 강제로 다시 로드.
+- `useSessionStore()` destructure 에 `refresh: refreshSessions` 노출.
+
+### Added
+- `tests/renderer/BackfillPromptModal.refresh.test.tsx` 신규 4 cases —
+  [나중에] / X 닫기 / `open=false` rendering / inline `onDone` 콜백
+  계약 (refresh + setBackfillModal 동시 호출) 검증.
+
+### 회귀
+- 0. 모든 renderer + main tests 회귀 0.
+- 신규 4 tests PASS.
+- baseline 1988 → 1992 (+4).
+
 ## [1.4.8] — 2026-05-07
 
 **Workspace ID sha256 default 전환 + 부팅 시 backfill prompt modal.**
