@@ -2,6 +2,31 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.4] — 2026-05-06
+
+**Fullscreen layout toggle — Mod+Shift+F.**
+
+distraction-free 모드. 사이드바 + 미리보기를 한 번의 단축키로 동시에 숨겨
+chat panel 만 풀폭 차지. 다시 누르면 진입 직전 상태로 복원 (사용자가 진입
+전 preview 만 끄고 sidebar 만 켜둔 상태였다면 OFF 시 그대로 복귀).
+
+구현:
+- `ShortcutAction` 에 `'layout.fullscreen'` 추가 (default `Mod+Shift+F`,
+  category `navigation`).
+- App.tsx 에 `fullscreenSnapshotRef` (snapshot 의 존재 자체가 진입 상태 →
+  별도 boolean state X). 토글 핸들러: snapshot 없으면 진입+저장+둘 다 hide,
+  있으면 복원+clear.
+- ThreePanelLayout 자체는 변경 0 — 기존 sidebarVisible/previewVisible prop
+  으로 충분.
+
+테스트:
+- shortcuts.test.ts: SHORTCUT_DEFS 목록에 `layout.fullscreen` 추가 + default
+  검증 (`Mod+Shift+F`, navigation).
+- App.shortcuts.test.tsx: 2개 시나리오 — 둘 다 visible 상태에서 toggle round
+  trip / preview 만 끈 상태에서 fullscreen 진입+OFF 시 정확 복원.
+
+회귀 0 (1755 pass / baseline 7 fail).
+
 ## [1.5.2] — 2026-05-06
 
 **ProviderDropdown — ChatHeader 에 default_provider quick-access dropdown.**

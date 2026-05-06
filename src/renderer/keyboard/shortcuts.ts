@@ -28,7 +28,8 @@ export type ShortcutAction =
   | 'help.open'
   | 'modal.close'
   | 'chat.cancel'
-  | 'preview.toggle';
+  | 'preview.toggle'
+  | 'layout.fullscreen';
 
 /** 사용자에게 노출할 카테고리. SettingsModal 의 그룹핑에 사용. */
 export type ShortcutCategory = 'navigation' | 'settings' | 'chat' | 'modal';
@@ -70,6 +71,15 @@ export const SHORTCUT_DEFS: ReadonlyArray<ShortcutDef> = [
     default: 'Mod+\\',
     label: '미리보기 토글',
     description: '우측 미리보기 패널 표시 / 숨김',
+    category: 'navigation',
+  },
+  {
+    // v1.6.4 — Fullscreen / distraction-free 모드. 사이드바 + 미리보기 동시
+    // 숨김 (chat 만 풀폭). 다시 누르면 진입 직전 상태로 복원.
+    action: 'layout.fullscreen',
+    default: 'Mod+Shift+F',
+    label: '풀스크린 토글',
+    description: '사이드바 + 미리보기 한 번에 숨겨 채팅에 집중',
     category: 'navigation',
   },
   {

@@ -215,6 +215,13 @@ export function App(): React.JSX.Element {
   // 이전엔 schema (browser.panel_visible) 만 있고 UI/IPC 0 — 사용자가 닫을
   // 방법 없었음. 사이드바 토글 패턴 그대로 차용.
   const [previewVisible, setPreviewVisible] = useState(true);
+  // v1.6.4 — Fullscreen toggle (Mod+Shift+F). 진입 시 sidebar+preview 모두
+  // 숨기고 chat 만 풀폭. 진입 직전 sidebar/preview 상태를 ref 에 저장 →
+  // 토글 OFF 시 정확히 복원. ref 만으로 충분 (별도 상태 없이 snapshot 의
+  // 존재 자체가 fullscreen 진입 여부를 나타냄).
+  const fullscreenSnapshotRef = useRef<{ sidebar: boolean; preview: boolean } | null>(
+    null
+  );
   // v0.7.0 (F-026) — Sidebar 메시지 검색 state. 입력은 즉시 반영, 실제 IPC
   // 호출은 300ms debounce 후 별도 useEffect 가 트리거. results / error /
   // loading 은 IPC 응답에 따라 갱신. pendingFocusTurnId 는 사용자가 검색 결과
@@ -1116,6 +1123,24 @@ export function App(): React.JSX.Element {
       },
       'preview.toggle': (): void => {
         setPreviewVisible((v) => !v);
+      },
+      // v1.6.4 — Mod+Shift+F. 진입 시 sidebar/preview 현재 상태 저장 후 둘
+      // 다 hidden. 다시 누르면 snapshot 으로 복원. snapshot 의 존재 자체가
+      // 진입 상태를 나타냄 (별도 boolean state 불필요).
+      'layout.fullscreen': (): void => {
+        if (fullscreenSnapshotRef.current === null) {
+          fullscreenSnapshotRef.current = {
+            sidebar: sidebarVisible,
+            preview: previewVisible,
+          };
+          setSidebarVisible(false);
+          setPreviewVisible(false);
+        } else {
+          const snap = fullscreenSnapshotRef.current;
+          setSidebarVisible(snap.sidebar);
+          setPreviewVisible(snap.preview);
+          fullscreenSnapshotRef.current = null;
+        }
       },
       'help.open': (): void => {
         setSlashHelpOpen(true);

@@ -154,6 +154,61 @@ describe('App keyboard shortcuts (v0.10.0)', () => {
     expect(screen.queryByTestId('settings-modal')).not.toBeInTheDocument();
   });
 
+  it('Mod+Shift+F toggles fullscreen layout — hides sidebar + preview together (v1.6.4)', async () => {
+    stubPlatform('Win32');
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByTestId('sidebar-search-input')).toBeInTheDocument();
+    });
+    const layout = document.querySelector('[data-sidebar-visible]');
+    expect(layout?.getAttribute('data-sidebar-visible')).toBe('true');
+    expect(layout?.getAttribute('data-preview-visible')).toBe('true');
+
+    // 진입 — 둘 다 hidden.
+    fireEvent.keyDown(window, { key: 'F', ctrlKey: true, shiftKey: true });
+    await waitFor(() => {
+      const el = document.querySelector('[data-sidebar-visible]');
+      expect(el?.getAttribute('data-sidebar-visible')).toBe('false');
+      expect(el?.getAttribute('data-preview-visible')).toBe('false');
+    });
+
+    // OFF — snapshot 으로 복원.
+    fireEvent.keyDown(window, { key: 'F', ctrlKey: true, shiftKey: true });
+    await waitFor(() => {
+      const el = document.querySelector('[data-sidebar-visible]');
+      expect(el?.getAttribute('data-sidebar-visible')).toBe('true');
+      expect(el?.getAttribute('data-preview-visible')).toBe('true');
+    });
+  });
+
+  it('Mod+Shift+F restores prior sidebar-only state (v1.6.4)', async () => {
+    stubPlatform('Win32');
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByTestId('sidebar-search-input')).toBeInTheDocument();
+    });
+    // 사용자가 먼저 preview 를 끔 (Mod+\)
+    fireEvent.keyDown(window, { key: '\\', ctrlKey: true });
+    await waitFor(() => {
+      const el = document.querySelector('[data-preview-visible]');
+      expect(el?.getAttribute('data-preview-visible')).toBe('false');
+    });
+    // 진입 fullscreen — 사이드바도 hidden.
+    fireEvent.keyDown(window, { key: 'F', ctrlKey: true, shiftKey: true });
+    await waitFor(() => {
+      const el = document.querySelector('[data-sidebar-visible]');
+      expect(el?.getAttribute('data-sidebar-visible')).toBe('false');
+      expect(el?.getAttribute('data-preview-visible')).toBe('false');
+    });
+    // OFF — sidebar=true 로, preview=false 로 복원 (사용자가 끈 상태).
+    fireEvent.keyDown(window, { key: 'F', ctrlKey: true, shiftKey: true });
+    await waitFor(() => {
+      const el = document.querySelector('[data-sidebar-visible]');
+      expect(el?.getAttribute('data-sidebar-visible')).toBe('true');
+      expect(el?.getAttribute('data-preview-visible')).toBe('false');
+    });
+  });
+
   it('respects user override (Mod+J for search.focus)', async () => {
     stubPlatform('Win32');
     __mockStore.keyboardShortcuts = { 'search.focus': 'Mod+J' };

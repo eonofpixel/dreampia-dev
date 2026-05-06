@@ -46,6 +46,7 @@ describe('SHORTCUT_DEFS', () => {
         'chat.cancel',
         'chat.new',
         'help.open',
+        'layout.fullscreen',
         'modal.close',
         'preview.toggle',
         'search.focus',
@@ -54,6 +55,12 @@ describe('SHORTCUT_DEFS', () => {
         'usage.open',
       ].sort()
     );
+  });
+
+  it('layout.fullscreen has Mod+Shift+F default (v1.6.4)', () => {
+    const def = getShortcutDef('layout.fullscreen');
+    expect(def?.default).toBe('Mod+Shift+F');
+    expect(def?.category).toBe('navigation');
   });
 
   it('all definitions have non-empty default / label / description', () => {
