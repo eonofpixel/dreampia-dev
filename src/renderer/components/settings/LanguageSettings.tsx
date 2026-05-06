@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { setLocale, useT, type Locale } from '../../i18n';
+import { setLocale, useT, formatErrorDetail, type Locale } from '../../i18n';
 import { useOptionalToasts } from '../../hooks/useToasts';
 
 export function LanguageSettings(): React.JSX.Element {
@@ -67,14 +67,14 @@ export function LanguageSettings(): React.JSX.Element {
           setChoice(prev);
           setLocale(prev);
           toasts?.error(t('settings.language.error.save_failed'), {
-            detail: typeof r.error === 'string' ? r.error : undefined,
+            detail: formatErrorDetail(t, r.error),
           });
         }
       } catch (err) {
         setChoice(prev);
         setLocale(prev);
         toasts?.error(t('settings.language.error.save_failed'), {
-          detail: err instanceof Error ? err.message : String(err),
+          detail: formatErrorDetail(t, err),
         });
       }
     },

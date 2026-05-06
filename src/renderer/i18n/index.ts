@@ -134,3 +134,30 @@ export function __resetLocale(): void {
   currentLocale = DEFAULT_LOCALE;
   subscribers.clear();
 }
+
+/**
+ * v1.7.22 — IPC error detail 표시용 helper.
+ *
+ * 사용 맥락: settings panel 의 toast detail 에 main process 의 `r.error` 를
+ * 그대로 노출했었는데, 그 값이 영문 stack 일 수도 / `error.foo` 같은 i18n
+ * key 일 수도 / undefined 일 수도 있다. UX 일관성을 위해 한 곳에서 정규화:
+ *
+ *   - undefined / null → t('error.unknown')
+ *   - "error.xxx" 형식 (i18n key prefix) → t(value)  (한국어 fallback 자동)
+ *   - 그 외 string → 원문 그대로 (이미 사람이 읽을 수 있는 메시지로 가정)
+ */
+export function formatErrorDetail(
+  translate: typeof t,
+  raw: unknown
+): string {
+  if (raw === undefined || raw === null) return translate('error.unknown');
+  if (typeof raw === 'string') {
+    // i18n key 같으면 t() 통과 — 누락된 키도 자체 fallback 으로 원문 반환.
+    if (/^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/.test(raw)) {
+      return translate(raw);
+    }
+    return raw;
+  }
+  if (raw instanceof Error) return raw.message;
+  return String(raw);
+}

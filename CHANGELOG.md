@@ -2,6 +2,40 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.22] — 2026-05-06
+
+**Settings panel toast detail 의 IPC error 정규화 + i18n.**
+
+v1.7.11 의 settings panel toast (Provider/Permission/Theme/Language) 가
+main process 의 `r.error` 를 그대로 detail 에 노출했었는데, 그 값이
+영문 stack 일 수도 있어 사용자 가독성이 떨어졌음. 이제 한 helper 로
+정규화:
+
+`src/renderer/i18n/index.ts` 에 `formatErrorDetail(t, raw)` 추가:
+  - `undefined` / `null` → `t('error.unknown')`
+  - `"error.foo"` 같은 i18n key 형식 (lowercase + dot) → `t()` 통과
+  - 기타 string → 원문 그대로 (사람이 읽을 수 있는 메시지로 가정)
+  - `Error` instance → `.message`
+  - 그 외 → `String(value)`
+
+### Changed
+- `src/renderer/components/settings/SettingsModal.tsx` — Provider /
+  Permission revoke / Permission level / Theme 4곳 toast 의 detail 을
+  `formatErrorDetail(t, ...)` 통과로 변경. `r.error` 와 catch 의 `err`
+  모두 동일 helper.
+- `src/renderer/components/settings/LanguageSettings.tsx` — 같은 변경.
+
+### Added
+- ko/en `error.unknown` 1개 키.
+- `tests/renderer/i18n/formatErrorDetail.test.ts` 신규 (13 tests):
+  undefined / null / i18n key / 영문 stack / 한국어 메시지 / Error
+  instance / 숫자 / 객체 / 등록 안된 key fallback / 대문자 / dot 없는
+  단일 단어 등 모두 cover.
+
+### 회귀
+- 0. typecheck clean. Settings 전체 (103) + 신규 13 PASS. baseline
+  1921 → 1938 (+17 신규, 7 baseline fail 유지).
+
 ## [1.6.19] — 2026-05-06
 
 **Per-turn 분기 버튼 (turn footer 의 [🌿]).**

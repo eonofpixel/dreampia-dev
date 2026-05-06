@@ -464,6 +464,7 @@
 
   "error.ipc_unavailable": "App IPC connection failed. Please restart the app.",
   "error.workspace_required": "Please select a working folder first.",
+  "error.unknown": "An unknown error occurred.",
 
   "onboarding.welcome.title": "Welcome to Dreampia-Dev",
   "onboarding.welcome.start": "Get started →",

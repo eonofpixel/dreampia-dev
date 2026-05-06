@@ -46,7 +46,7 @@ import { LanguageSettings } from './LanguageSettings';
 import { DiagnoseSettings } from './DiagnoseSettings';
 import { AboutPanel } from './AboutPanel';
 import { type PermissionLevel } from '@/types';
-import { useT } from '../../i18n';
+import { useT, formatErrorDetail } from '../../i18n';
 import { useOptionalToasts } from '../../hooks/useToasts';
 import { localizedPermissionLabel } from './permissionLabels';
 
@@ -283,13 +283,13 @@ function ProviderPanel(): React.JSX.Element {
         if (r.ok === false) {
           setChoice(prev); // revert
           toasts?.error(t('settings.provider.error.save_failed'), {
-            detail: typeof r.error === 'string' ? r.error : undefined,
+            detail: formatErrorDetail(t, r.error),
           });
         }
       } catch (err) {
         setChoice(prev);
         toasts?.error(t('settings.provider.error.save_failed'), {
-          detail: err instanceof Error ? err.message : String(err),
+          detail: formatErrorDetail(t, err),
         });
       }
     },
@@ -636,12 +636,12 @@ function PermissionGrantsBlock(): React.JSX.Element {
         const r = await permApi.revokeGrant(grantId);
         if (r.ok === false) {
           toasts?.error(t('settings.permission.grants.error.revoke_failed'), {
-            detail: typeof r.error === 'string' ? r.error : undefined,
+            detail: formatErrorDetail(t, r.error),
           });
         }
       } catch (err) {
         toasts?.error(t('settings.permission.grants.error.revoke_failed'), {
-          detail: err instanceof Error ? err.message : String(err),
+          detail: formatErrorDetail(t, err),
         });
       }
       void reload();
@@ -820,13 +820,13 @@ function PermissionPanel(): React.JSX.Element {
         if (r.ok === false) {
           setLevel(prev);
           toasts?.error(t('settings.permission.error.save_failed'), {
-            detail: typeof r.error === 'string' ? r.error : undefined,
+            detail: formatErrorDetail(t, r.error),
           });
         }
       } catch (err) {
         setLevel(prev);
         toasts?.error(t('settings.permission.error.save_failed'), {
-          detail: err instanceof Error ? err.message : String(err),
+          detail: formatErrorDetail(t, err),
         });
       }
     },
@@ -1016,14 +1016,14 @@ function ThemePanel(): React.JSX.Element {
           setChoice(prev);
           applyTheme(prev);
           toasts?.error(t('settings.theme.error.save_failed'), {
-            detail: typeof r.error === 'string' ? r.error : undefined,
+            detail: formatErrorDetail(t, r.error),
           });
         }
       } catch (err) {
         setChoice(prev);
         applyTheme(prev);
         toasts?.error(t('settings.theme.error.save_failed'), {
-          detail: err instanceof Error ? err.message : String(err),
+          detail: formatErrorDetail(t, err),
         });
       }
     },
