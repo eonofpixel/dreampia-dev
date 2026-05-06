@@ -2,6 +2,23 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.5.1] — 2026-05-06
+
+**auto.ts routing — Direct API 우선 (settings 의 API key 검사).**
+
+`getDefaultProvider` 의 흐름에 Direct API 분기 추가:
+
+1. `DREAMPIA_TEST=1` (mock) — 그대로.
+2. CLI override (env) — 그대로.
+3. **신규 v1.5.1**: `settings.api_key_anthropic` 있고 model이 claude 계열 →
+   `AnthropicProvider`.
+4. **신규 v1.5.1**: `settings.api_key_openai` 있고 model이 gpt/o1/o3 계열 →
+   `OpenAIProvider`.
+5. CLI detect — 종전 fallback.
+
+사용자가 explicit API key 입력했으면 의도가 명확 — CLI detect 보다 먼저.
+v1.5.0 의 SettingsModal [Direct API] 탭 UI 는 후속.
+
 ## [1.4.6] — 2026-05-06
 
 **Anthropic prompt caching support.**

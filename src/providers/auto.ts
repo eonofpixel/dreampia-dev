@@ -20,7 +20,10 @@ import { detectCli, type CliDetectionResult, type CliInfo } from './cli/detect';
 import { translateClaudeJsonl } from './cli/translateClaudeJsonl';
 import { translateCodexJsonl } from './cli/translateCodexJsonl';
 import { getCliCommandOverride } from './cli/vcr';
+import { AnthropicProvider } from './api/AnthropicProvider';
+import { OpenAIProvider } from './api/OpenAIProvider';
 import { MockProvider } from './MockProvider';
+import { readSettings } from '../main/settings';
 import type { StreamingProvider } from './types';
 
 export type ProviderSource = 'claude-cli' | 'codex-cli' | 'mock';
@@ -101,6 +104,42 @@ export async function getDefaultProvider(
     };
   }
 
+  // v1.5.1: Direct API key 가 settings 에 있으면 우선 사용 (CLI detect 보다
+  // 먼저). 사용자가 explicit 으로 입력한 key 라 의도 명확.
+  // userDefaultProvider === 'claude'/'codex' 명시도 호환 — 그 경우 vendor 매칭.
+  const settings = readSettings();
+  const lower = model.toLowerCase();
+  const claudeFamily = ['claude-', 'sonnet-', 'opus-', 'haiku-'].some((p) => lower.startsWith(p));
+  const codexFamily = ['gpt-', 'o1-', 'o3-', 'codex-'].some((p) => lower.startsWith(p));
+  if (
+    typeof settings.api_key_anthropic === 'string' &&
+    settings.api_key_anthropic.length > 0 &&
+    (claudeFamily || userDefaultProvider === 'claude')
+  ) {
+    return {
+      provider: new AnthropicProvider({
+        apiKey: settings.api_key_anthropic,
+        ...(signal !== undefined && { signal }),
+      }),
+      source: 'claude-cli', // UI 호환 — 'direct-api' 는 후속 enum 추가.
+      detected: { claude: null, codex: null },
+    };
+  }
+  if (
+    typeof settings.api_key_openai === 'string' &&
+    settings.api_key_openai.length > 0 &&
+    (codexFamily || userDefaultProvider === 'codex')
+  ) {
+    return {
+      provider: new OpenAIProvider({
+        apiKey: settings.api_key_openai,
+        ...(signal !== undefined && { signal }),
+      }),
+      source: 'codex-cli',
+      detected: { claude: null, codex: null },
+    };
+  }
+
   const detected = await detectCli();
 
   // v0.3.0 — 사용자 명시 선택은 model-prefix routing 보다 우선.
@@ -130,12 +169,7 @@ export async function getDefaultProvider(
   // 하여 silent 실패 대신 가능한 다른 provider 를 시도. mock 의 경우는
   // production 에서 fail-closed 가 보장되어야 하므로 fallback 통과 시켜 둔다.
 
-  const lower = model.toLowerCase();
-
-  // model prefix 분류 (routing.ts 의 MODEL_PREFIXES 와 맞춤)
-  const claudeFamily = ['claude-', 'sonnet-', 'opus-', 'haiku-'].some((p) => lower.startsWith(p));
-  const codexFamily = ['gpt-', 'o1-', 'o3-', 'codex-'].some((p) => lower.startsWith(p));
-
+  // v1.5.1: claudeFamily / codexFamily 는 위에서 이미 계산됨.
   if (claudeFamily && detected.claude !== null) {
     return {
       provider: makeCliProvider(detected.claude, 'claude', signal, cwd, permissionLevel),
