@@ -39,14 +39,18 @@ describe('v1.2.1 — Direct API stubs', () => {
     expect(errors.length).toBeGreaterThan(0);
   });
 
-  it('OpenAIProvider.stream → not_implemented error (v1.4.5 stub)', async () => {
-    const p = new OpenAIProvider({ apiKey: 'sk-y' });
+  it('OpenAIProvider.stream → message_start + (fetch fail → error) (v1.4.5)', async () => {
+    const p = new OpenAIProvider({
+      apiKey: 'sk-y',
+      baseUrl: 'http://127.0.0.1:9/invalid',
+    });
     const events: StreamEvent[] = [];
     for await (const ev of p.stream({ turns: [], model: 'gpt-4' })) {
       events.push(ev);
     }
-    expect(events.length).toBe(1);
-    expect(events[0]?.type).toBe('error');
+    expect(events[0]?.type).toBe('message_start');
+    const errors = events.filter((e) => e.type === 'error');
+    expect(errors.length).toBeGreaterThan(0);
   });
 
   it('baseUrl override 가능', () => {

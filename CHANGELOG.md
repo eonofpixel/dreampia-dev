@@ -2,6 +2,19 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.4.5] — 2026-05-06
+
+**OpenAIProvider 실 SSE 구현 (Chat Completions API).**
+
+v1.4.4 의 Anthropic 패턴 그대로. POST /v1/chat/completions stream:true.
+`stream_options.include_usage: true` 로 마지막 chunk 에 usage 포함.
+`[DONE]` 종료 신호 인식. 미수신 시 자체 message_complete fallback.
+
+### Tests (5 신규 + 1 stub 갱신)
+
+- happy path (delta.content 2 + usage + [DONE]).
+- 401 error / SSE error chunk / chunked JSON split / [DONE] 없이 stream 종료.
+
 ## [1.4.4] — 2026-05-06
 
 **AnthropicProvider 실 SSE 구현 (Critical-first 진입).**
