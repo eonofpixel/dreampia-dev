@@ -1121,6 +1121,7 @@ function persistAutomationRules(rules: ReadonlyArray<AutomationRuleSummary>): vo
         webhook_path?: string;
         handler_name?: string;
         handler_config?: Record<string, unknown>;
+        enabled?: boolean;
       } = { name: r.name, kind: r.kind };
       if (r.interval_ms !== undefined) out.interval_ms = r.interval_ms;
       if (r.cron_expr !== undefined) out.cron_expr = r.cron_expr;
@@ -1128,6 +1129,7 @@ function persistAutomationRules(rules: ReadonlyArray<AutomationRuleSummary>): vo
       if (r.webhook_path !== undefined) out.webhook_path = r.webhook_path;
       if (r.handler_name !== undefined) out.handler_name = r.handler_name;
       if (r.handler_config !== undefined) out.handler_config = r.handler_config;
+      if (r.enabled === false) out.enabled = false;
       return out;
     });
     writeSettings({ automation_rules: persisted });
@@ -1311,6 +1313,22 @@ function registerAutomationHandlers(audit?: AuditLogStore): void {
       }
     }
   );
+
+  // v1.7.27 — rule enabled/disabled toggle.
+  ipcMain.handle('automation/set-enabled', (_evt, args: unknown): Result<boolean> => {
+    try {
+      const { name, enabled } = (args ?? {}) as { name?: string; enabled?: boolean };
+      if (typeof name !== 'string' || name.length === 0) return fail('name required');
+      if (typeof enabled !== 'boolean') return fail('enabled must be boolean');
+      const mgr = getAutomationManager();
+      const ok_ = mgr.setEnabled(name, enabled);
+      if (!ok_) return fail('rule not found');
+      persistAutomationRules(mgr.list().map((rl) => summarizeRule(rl)));
+      return ok(true);
+    } catch (err) {
+      return fail(err);
+    }
+  });
 
   // v1.7.26 — Automation audit log 최근 N개 조회. rule_name 필터 지원.
   ipcMain.handle('automation/audit-log', (_evt, opts: unknown): Result<AuditEvent[]> => {

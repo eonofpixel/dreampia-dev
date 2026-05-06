@@ -256,6 +256,10 @@
   "automation.field_handler_config_placeholder": "{ \"prompt\": \"Daily summary…\" }",
   "automation.error_handler_config_invalid_json": "Handler config must be valid JSON object.",
   "automation.handler_label": "handler",
+  "automation.field_enabled": "Enabled",
+  "automation.enabled_label": "On",
+  "automation.disabled_label": "Off",
+  "automation.toggle_tooltip": "Enable/disable this rule",
 
   "workspace_backfill.title": "Workspace ID upgrade recommended",
   "workspace_backfill.body": "{count} workspace records use the legacy FNV ID format. Upgrading to SHA-256 keeps your data identifiable across platforms and backups.",

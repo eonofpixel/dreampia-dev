@@ -57,6 +57,10 @@ export interface AutomationRule {
    * 의 prompt/model). settings.json 에 그대로 영속.
    */
   handler_config?: Record<string, unknown>;
+  /**
+   * v1.7.27 — false 면 schedule 등록 X / fire 시 skip. undefined/true 는 활성.
+   */
+  enabled?: boolean;
 }
 
 export interface AutomationAuditEvent {
@@ -115,7 +119,7 @@ export class AutomationManager {
       AutomationManager.validateCronExpr(rule.cron_expr, rule.cron_tz);
     }
     this.rules.set(rule.name, rule);
-    if (this.running) {
+    if (this.running && rule.enabled !== false) {
       if (rule.kind === 'interval' && rule.interval_ms !== undefined) {
         this.scheduleInterval(rule, rule.interval_ms);
       } else if (rule.kind === 'cron' && rule.cron_expr !== undefined) {
@@ -147,6 +151,7 @@ export class AutomationManager {
     if (this.running) return;
     this.running = true;
     for (const rule of this.rules.values()) {
+      if (rule.enabled === false) continue;
       if (rule.kind === 'interval' && rule.interval_ms !== undefined) {
         this.scheduleInterval(rule, rule.interval_ms);
       } else if (rule.kind === 'cron' && rule.cron_expr !== undefined) {
@@ -167,11 +172,44 @@ export class AutomationManager {
     this.cronJobs.clear();
   }
 
-  /** Test/programmatic — 즉시 1회 fire. */
+  /** Test/programmatic — 즉시 1회 fire. enabled === false 이면 skip. */
   async fire(name: string): Promise<void> {
     const rule = this.rules.get(name);
     if (rule === undefined) return;
+    if (rule.enabled === false) return;
     await this.runOnce(rule);
+  }
+
+  /**
+   * v1.7.27 — rule 의 enabled 상태를 변경.
+   * running 상태에서 enabled=true 로 바뀌면 schedule 재등록.
+   * enabled=false 로 바뀌면 기존 schedule 정리.
+   * @returns rule 이 존재하면 true, 없으면 false.
+   */
+  setEnabled(name: string, enabled: boolean): boolean {
+    const rule = this.rules.get(name);
+    if (rule === undefined) return false;
+    rule.enabled = enabled;
+    // 기존 schedule 정리.
+    const timer = this.timers.get(name);
+    if (timer !== undefined) {
+      clearInterval(timer);
+      this.timers.delete(name);
+    }
+    const job = this.cronJobs.get(name);
+    if (job !== undefined) {
+      job.stop();
+      this.cronJobs.delete(name);
+    }
+    // running 상태에서 enabled=true 면 다시 schedule 등록.
+    if (this.running && enabled) {
+      if (rule.kind === 'interval' && rule.interval_ms !== undefined) {
+        this.scheduleInterval(rule, rule.interval_ms);
+      } else if (rule.kind === 'cron' && rule.cron_expr !== undefined) {
+        this.scheduleCron(rule, rule.cron_expr, rule.cron_tz);
+      }
+    }
+    return true;
   }
 
   private scheduleInterval(rule: AutomationRule, intervalMs: number): void {
@@ -309,6 +347,7 @@ export function getAutomationManager(
             handler_name: hName,
             handler_config: hConfig,
             handler: async () => hFn({ rule_name: r.name, config: hConfig }),
+            ...(r.enabled === false && { enabled: false }),
           });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -350,6 +389,8 @@ export interface AutomationRuleSummary {
   handler_name?: string;
   /** v1.7.23 — handler config (직렬화 가능). UI 편집/영속용. */
   handler_config?: Record<string, unknown>;
+  /** v1.7.27 — false 면 비활성. undefined/true 는 활성. */
+  enabled?: boolean;
 }
 
 export function summarizeRule(rule: AutomationRule): AutomationRuleSummary {
@@ -364,6 +405,7 @@ export function summarizeRule(rule: AutomationRule): AutomationRuleSummary {
   if (rule.webhook_path !== undefined) summary.webhook_path = rule.webhook_path;
   if (rule.handler_name !== undefined) summary.handler_name = rule.handler_name;
   if (rule.handler_config !== undefined) summary.handler_config = rule.handler_config;
+  if (rule.enabled === false) summary.enabled = false;
   if (rule.kind === 'cron' && rule.cron_expr !== undefined) {
     summary.next_run = AutomationManager.getNextRun(rule.cron_expr, rule.cron_tz);
   }

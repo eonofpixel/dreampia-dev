@@ -2,6 +2,46 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.27] — 2026-05-07
+
+**Automation rule enable/disable toggle.**
+
+운영 중 자동화 규칙을 일시 정지하거나 다시 활성화하는 기본기. rule
+삭제 없이 schedule 만 비활성화 → handler 호출 0, audit emit 0. 사용자
+의도(잠시 끄기)와 모니터링(어떤 rule 이 죽어있는지) 가시화.
+
+### Added
+- `AutomationRule.enabled?: boolean` — `false` 면 비활성, `undefined`/`true`
+  는 활성. v1.7.27 이전 settings.json 의 rule 들은 자동으로 활성 처리.
+- `AutomationRulePersisted.enabled?: boolean` — settings.json 영속 shape.
+  파싱 단계에서 boolean 만 수용.
+- `AutomationManager.setEnabled(name, enabled): boolean` 신규 public API —
+  rule 의 enabled 상태 변경 + running 중이면 schedule 재등록/정리.
+- IPC `automation/set-enabled` — `{ name, enabled }` 입력. settings.json
+  자동 영속.
+- preload `automation.setEnabled(name, enabled)` 노출.
+- `AutomationRuleSummary.enabled?: boolean` — IPC 직렬화 shape에 노출.
+- AutomationModal UI: rule list 항목에 toggle (label = `automation.enabled_label` /
+  `automation.disabled_label`).
+- i18n 4 키: `automation.field_enabled`, `automation.enabled_label`,
+  `automation.disabled_label`, `automation.toggle_tooltip` (ko/en).
+- `tests/main/automation.enable.test.ts` 신규 5 cases.
+
+### Changed
+- `AutomationManager.register` — `enabled === false` 면 schedule 등록을
+  skip (rule 자체는 list 에 보존).
+- `AutomationManager.start` — for 루프 안에서 `enabled === false` 항목 skip.
+- `AutomationManager.fire` — 진입 시 `enabled === false` 면 즉시 return
+  (audit emit 없음, silent skip).
+- `summarizeRule` — `rule.enabled === false` 일 때 summary.enabled=false
+  포함 (UI 가 toggle 상태 표시).
+
+### 회귀
+- 0. typecheck clean.
+- 신규 5 tests PASS. automation 전체 (handlers / shellExec / ipcTrigger /
+  ipc.automation / audit) 회귀 0.
+- baseline 2001 → 2006 (+5).
+
 ## [1.7.26] — 2026-05-07
 
 **Automation audit log DB persistence + IPC 조회.**

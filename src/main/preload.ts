@@ -1495,11 +1495,17 @@ const api = {
       ipcRenderer.invoke('automation/audit-log', opts) as Promise<
         Result<AuditEventShape[]>
       >,
+    /** v1.7.27 — rule 활성화/비활성화 토글. */
+    setEnabled: (name: string, enabled: boolean): Promise<Result<boolean>> =>
+      ipcRenderer.invoke('automation/set-enabled', { name, enabled }) as Promise<
+        Result<boolean>
+      >,
   },
 };
 
 // v1.7.4 — Automation IPC types (preload-exposed shape).
 // v1.7.25 — handler_name + handler_config 추가 (registry 통합).
+// v1.7.27 — enabled 추가.
 export type AutomationKindShape = 'interval' | 'cron' | 'webhook';
 export interface AutomationRuleSummaryShape {
   name: string;
@@ -1511,6 +1517,8 @@ export interface AutomationRuleSummaryShape {
   next_run: string | null;
   handler_name?: string;
   handler_config?: Record<string, unknown>;
+  /** v1.7.27 — false 면 비활성. undefined/true 는 활성. */
+  enabled?: boolean;
 }
 export interface AutomationRuleRegisterShape {
   name: string;
@@ -1521,6 +1529,8 @@ export interface AutomationRuleRegisterShape {
   webhook_path?: string;
   handler_name?: string;
   handler_config?: Record<string, unknown>;
+  /** v1.7.27 — 초기 활성 상태. 미지정 시 활성. */
+  enabled?: boolean;
 }
 
 /** v1.7.26 — automation/audit-log 조회 결과 row shape. */

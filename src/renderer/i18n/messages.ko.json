@@ -256,6 +256,10 @@
   "automation.field_handler_config_placeholder": "{ \"prompt\": \"오늘의 요약…\" }",
   "automation.error_handler_config_invalid_json": "Handler 설정은 유효한 JSON 객체여야 해요.",
   "automation.handler_label": "handler",
+  "automation.field_enabled": "활성화",
+  "automation.enabled_label": "활성",
+  "automation.disabled_label": "비활성",
+  "automation.toggle_tooltip": "이 규칙 활성화/비활성화",
 
   "workspace_backfill.title": "워크스페이스 ID 업그레이드 권장",
   "workspace_backfill.body": "기존 FNV 형식 ID 를 사용하는 워크스페이스가 {count}개 있어요. SHA-256 으로 업그레이드하면 플랫폼/백업 간에 ID 가 안정적으로 유지됩니다.",

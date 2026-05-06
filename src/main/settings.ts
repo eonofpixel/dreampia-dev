@@ -180,6 +180,8 @@ export interface AutomationRulePersisted {
   webhook_path?: string;
   handler_name?: string;
   handler_config?: Record<string, unknown>;
+  /** v1.7.27 — false 면 비활성. undefined/true 는 활성. */
+  enabled?: boolean;
 }
 
 let cached: AppSettings | null = null;
@@ -322,6 +324,10 @@ export function readSettings(): AppSettings {
             !Array.isArray(r['handler_config'])
           ) {
             persisted.handler_config = r['handler_config'] as Record<string, unknown>;
+          }
+          // v1.7.27 — enabled. boolean 만 인정. 누락은 default 활성 (undefined).
+          if (typeof r['enabled'] === 'boolean') {
+            persisted.enabled = r['enabled'];
           }
           validRules.push(persisted);
         }

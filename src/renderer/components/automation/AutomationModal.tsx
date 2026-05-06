@@ -48,6 +48,13 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
   const [draftHandlerName, setDraftHandlerName] = useState('');
   const [draftHandlerConfig, setDraftHandlerConfig] = useState('');
 
+  const handleToggleEnabled = async (name: string, currentEnabled: boolean): Promise<void> => {
+    const api = typeof window !== 'undefined' ? window.dreampia?.automation : undefined;
+    if (api === undefined || api.setEnabled === undefined) return;
+    const r = await api.setEnabled(name, !currentEnabled);
+    if (r.ok) void reload();
+  };
+
   const reload = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
@@ -436,7 +443,25 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
                         )}
                       </div>
                     </div>
-                    <div className="flex shrink-0 gap-1">
+                    <div className="flex shrink-0 items-center gap-1">
+                      <label
+                        className="flex cursor-pointer items-center gap-1 text-[10px] text-text-secondary"
+                        title={t('automation.toggle_tooltip')}
+                        data-testid={`automation-toggle-${r.name}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={r.enabled !== false}
+                          onChange={() => {
+                            void handleToggleEnabled(r.name, r.enabled !== false);
+                          }}
+                          className="h-3 w-3 cursor-pointer"
+                          aria-label={t('automation.toggle_tooltip')}
+                        />
+                        {r.enabled !== false
+                          ? t('automation.enabled_label')
+                          : t('automation.disabled_label')}
+                      </label>
                       <button
                         type="button"
                         onClick={() => {
