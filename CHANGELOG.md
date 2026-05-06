@@ -2,6 +2,24 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.10] — 2026-05-06
+
+**Drive17 — 테마 토글 e2e 시나리오.**
+
+v0.8.0 의 ThemePanel + applyTheme + `app:set-theme` IPC chain 회귀 lock.
+playwright + Electron real-app launch (fixtures.ts, mock 환경) 에서:
+
+- 17-1: settings 모달 열고 [테마] 탭 → light 클릭 → `<html data-theme="light">`
+        즉시 반영 + light radio checked.
+- 17-2: dark 클릭 → `data-theme="dark"`.
+- 17-3: 모달 close (Escape) + 재열기 → 선택된 테마 유지 (in-memory state +
+        IPC 영속). dark 라디오 여전히 checked, DOM 도 dark 유지.
+
+drive14~16 과 동일 패턴 (test-results/drive/r17-*.png). 단순 UX 회귀 lock —
+사용자가 흔히 만지는 테마 변경이 silent 하게 깨지지 않도록.
+
+unit test 회귀 0 (1755 pass / baseline 7 fail — e2e 변경이라 unit 영향 X).
+
 ## [1.6.4] — 2026-05-06
 
 **Fullscreen layout toggle — Mod+Shift+F.**
