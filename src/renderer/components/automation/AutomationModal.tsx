@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { X, Plus, Play, Trash2 } from 'lucide-react';
 import type {
+  AuditEventShape,
   AutomationKindShape,
   AutomationRuleSummaryShape,
 } from '@/main/preload';
@@ -47,6 +48,14 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
   const [availableHandlers, setAvailableHandlers] = useState<string[]>([]);
   const [draftHandlerName, setDraftHandlerName] = useState('');
   const [draftHandlerConfig, setDraftHandlerConfig] = useState('');
+
+  // v1.7.29 — audit viewer 상태.
+  const [auditEvents, setAuditEvents] = useState<AuditEventShape[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditFilterRule, setAuditFilterRule] = useState<string>('');
+  const [auditFilterEvent, setAuditFilterEvent] = useState<
+    'all' | 'fired' | 'error'
+  >('all');
 
   const handleToggleEnabled = async (name: string, currentEnabled: boolean): Promise<void> => {
     const api = typeof window !== 'undefined' ? window.dreampia?.automation : undefined;
@@ -78,6 +87,27 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
   useEffect(() => {
     if (open) void reload();
   }, [open, reload]);
+
+  // v1.7.29 — Modal open + filter 변경 시 audit log 로드.
+  const reloadAudit = useCallback(async (): Promise<void> => {
+    const api = typeof window !== 'undefined' ? window.dreampia?.automation : undefined;
+    if (api === undefined || api.auditLog === undefined) return;
+    setAuditLoading(true);
+    try {
+      const opts: { rule_name?: string; limit?: number } = { limit: 100 };
+      if (auditFilterRule.length > 0) opts.rule_name = auditFilterRule;
+      const r = await api.auditLog(opts);
+      if (r.ok) setAuditEvents(r.value);
+    } catch {
+      // silent — viewer 가 비어 있어도 modal 동작에는 무관.
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [auditFilterRule]);
+
+  useEffect(() => {
+    if (open) void reloadAudit();
+  }, [open, reloadAudit]);
 
   // v1.7.25 — Modal open 시 handler 목록 로드.
   useEffect(() => {
@@ -562,6 +592,140 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
                 ))}
               </ul>
             )}
+          </section>
+
+          {/* v1.7.29 — audit viewer */}
+          <section
+            className="rounded-md border border-border-primary"
+            data-testid="automation-audit-viewer"
+          >
+            <div className="flex items-center justify-between border-b border-border-primary px-3 py-2">
+              <h3 className="text-sm font-semibold">{t('automation.audit_title')}</h3>
+              <div className="flex items-center gap-2 text-[10px]">
+                <select
+                  value={auditFilterRule}
+                  onChange={(e) => setAuditFilterRule(e.target.value)}
+                  className="rounded border border-border-primary bg-bg-secondary px-1 py-0.5 text-[10px]"
+                  data-testid="automation-audit-filter-rule"
+                  aria-label={t('automation.audit_filter_rule_aria')}
+                >
+                  <option value="">{t('automation.audit_filter_rule_all')}</option>
+                  {rules.map((r) => (
+                    <option key={r.name} value={r.name}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={auditFilterEvent}
+                  onChange={(e) =>
+                    setAuditFilterEvent(e.target.value as 'all' | 'fired' | 'error')
+                  }
+                  className="rounded border border-border-primary bg-bg-secondary px-1 py-0.5 text-[10px]"
+                  data-testid="automation-audit-filter-event"
+                  aria-label={t('automation.audit_filter_event_aria')}
+                >
+                  <option value="all">{t('automation.audit_filter_event_all')}</option>
+                  <option value="fired">{t('automation.audit_filter_event_fired')}</option>
+                  <option value="error">{t('automation.audit_filter_event_error')}</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => void reloadAudit()}
+                  className="rounded border border-border-primary bg-bg-tertiary px-1.5 py-0.5 text-[10px] hover:bg-bg-primary"
+                  data-testid="automation-audit-refresh"
+                  title={t('automation.audit_refresh_tooltip')}
+                >
+                  {t('automation.audit_refresh')}
+                </button>
+              </div>
+            </div>
+            {auditLoading ? (
+              <p className="p-3 text-xs text-text-secondary">
+                {t('automation.audit_loading')}
+              </p>
+            ) : (() => {
+                const visible = auditEvents.filter((e) =>
+                  auditFilterEvent === 'all'
+                    ? true
+                    : auditFilterEvent === 'fired'
+                    ? e.event === 'automation.fired'
+                    : e.event === 'automation.error'
+                );
+                if (visible.length === 0) {
+                  return (
+                    <p
+                      className="p-3 text-xs text-text-tertiary"
+                      data-testid="automation-audit-empty"
+                    >
+                      {t('automation.audit_empty')}
+                    </p>
+                  );
+                }
+                return (
+                  <ul
+                    className="max-h-64 divide-y divide-border-primary overflow-y-auto"
+                    data-testid="automation-audit-list"
+                  >
+                    {visible.map((e) => {
+                      let parsed: {
+                        rule_name?: string;
+                        handler_name?: string;
+                        duration_ms?: number;
+                        output?: string;
+                      } = {};
+                      try {
+                        parsed = JSON.parse(e.target_json) as typeof parsed;
+                      } catch {
+                        // target_json 손상 — fields 빈 채로 표시.
+                      }
+                      const isError = e.event === 'automation.error';
+                      return (
+                        <li
+                          key={e.id}
+                          className="flex items-start justify-between gap-2 px-3 py-1.5 text-[11px]"
+                          data-testid={`automation-audit-row-${e.id}`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={
+                                  isError
+                                    ? 'rounded bg-red-900/30 px-1 py-0.5 text-[9px] text-red-300'
+                                    : 'rounded bg-green-900/30 px-1 py-0.5 text-[9px] text-green-300'
+                                }
+                              >
+                                {isError ? 'error' : 'fired'}
+                              </span>
+                              <span className="font-mono text-text-secondary">
+                                {parsed.rule_name ?? '?'}
+                              </span>
+                              {parsed.handler_name !== undefined && (
+                                <span className="font-mono text-[10px] text-text-tertiary">
+                                  ({parsed.handler_name})
+                                </span>
+                              )}
+                              {parsed.duration_ms !== undefined && (
+                                <span className="text-[10px] text-text-tertiary">
+                                  {parsed.duration_ms}ms
+                                </span>
+                              )}
+                            </div>
+                            {(parsed.output !== undefined || e.error !== undefined) && (
+                              <div className="mt-0.5 truncate font-mono text-[10px] text-text-tertiary">
+                                {e.error ?? parsed.output}
+                              </div>
+                            )}
+                          </div>
+                          <span className="shrink-0 text-[10px] text-text-tertiary">
+                            {e.timestamp.slice(11, 19)}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                );
+              })()}
           </section>
         </div>
       </div>

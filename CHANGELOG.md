@@ -2,6 +2,36 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.29] — 2026-05-07
+
+**Automation audit viewer panel — recent runs in modal.**
+
+v1.7.26 의 audit DB persistence 후 자연스러운 다음. 사용자가 "내 자동화가
+어제 잘 동작했나?" 를 모달 안에서 바로 확인 가능. AutomationModal 하단에
+최근 100 audit event 를 timestamp DESC 로 노출, rule_name dropdown +
+event type filter (success/error/all) + 새로고침 버튼.
+
+### Added
+- AutomationModal 에 신규 섹션 `automation-audit-viewer`:
+  - rule_name dropdown filter — 등록된 rules 의 name 목록 (server-side
+    filter via `automation/audit-log` 의 `rule_name` 옵션).
+  - event type dropdown filter — `all` / `fired` / `error` (client-side
+    filter on `e.event === 'automation.fired'|'.error'`).
+  - 새로고침 버튼 — `reloadAudit()` 재호출.
+  - audit list — fired/error badge + rule_name + handler_name + duration_ms
+    + output/error preview + timestamp HH:MM:SS.
+- preload `AuditEventShape` 를 export 로 변경 (renderer 가 import 가능).
+- i18n 11 키: `automation.audit_*` (title / loading / empty / filter
+  rule/event labels + aria + refresh + tooltip) ko/en pair.
+- `tests/renderer/AutomationModal.audit-viewer.test.tsx` 신규 5 cases —
+  섹션 렌더 / 미주입 시 empty / mock auditLog 행 렌더 / event filter
+  client-side 동작 / refresh 가 api 재호출.
+
+### 회귀
+- 0. typecheck clean.
+- 신규 5 tests PASS.
+- baseline 2016 → 2021 (+5).
+
 ## [1.6.22] — 2026-05-07
 
 **Chat empty state CTA — 자동화/플러그인/단축키 빠른 진입.**

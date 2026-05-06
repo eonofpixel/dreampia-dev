@@ -220,7 +220,7 @@ interface ToolResultShape {
  * v1.0.11 SEC-3 — Audit log entry shape (renderer 노출용).
  * @see src/storage/AuditLogStore.ts AuditEvent
  */
-interface AuditEventShape {
+export interface AuditEventShape {
   id: number;
   timestamp: string;
   session_id: string;
