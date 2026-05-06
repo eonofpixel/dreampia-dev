@@ -2,6 +2,42 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.19] — 2026-05-06
+
+**Per-turn 분기 버튼 (turn footer 의 [🌿]).**
+
+v1.6.11 의 ChatHeader [🌿] 는 세션 전체 fork 였는데, 이제 각 turn footer
+에도 작은 [🌿] 버튼이 추가됨 — 클릭 시 그 turn 까지만 복사한 새 세션이
+즉시 활성화됨 (backend 의 `forkSession({ truncateAt })` 활용, v1.6.3 부터
+존재).
+
+UX
+  - hover 시에만 visible (`opacity-0 group-hover:opacity-100`) — 일상
+    viewing 의 시각 noise 최소화.
+  - streaming turn 은 미노출 (불완전 상태에서 분기 방지).
+  - user/assistant turn 모두 표시 — user turn footer 는 좌측, assistant
+    는 우측 (말풍선 정렬 반대편) 으로 배치.
+
+### Changed
+- `src/renderer/App.tsx` — 기존 inline `onForkSession` arrow → `useCallback`
+  로 추출한 `handleForkSession(truncateAt?)` helper 로 통합. ChatHeader
+  버튼은 `truncateAt = undefined` (전체 fork), per-turn 버튼은 `truncateAt
+  = turn.id` 로 호출.
+- `src/renderer/components/chat/ChatPanel.tsx` — `ChatPanelProps` /
+  `MessagesAreaProps` / `TurnDisplayProps` 에 `onForkAtTurn?: (turnId:
+  string) => void` prop 추가. `<article>` 에 `group` 클래스 추가하여
+  hover-visible 동작.
+
+### Added
+- ko/en `chat.turn.fork_tooltip` / `chat.turn.fork_aria` i18n 키.
+- `tests/renderer/ChatPanel.fork-at-turn.test.tsx` 신규 (4 tests):
+  prop 미지정 시 미노출, 지정 시 모든 completed turn 마다 mount,
+  streaming turn 미노출, 클릭 시 `onForkAtTurn(turnId)` 호출.
+
+### 회귀
+- 0. typecheck clean. ChatPanel.streaming/scroll/toolresult (35) +
+  fork backend (14) 모두 PASS.
+
 ## [1.7.21] — 2026-05-06
 
 **Sidebar `t_label_coming_soon` helper 제거 — useT 기반.**

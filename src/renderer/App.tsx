@@ -677,6 +677,46 @@ export function App(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSession?.id, workspaceLocked]);
 
+  /**
+   * v1.6.11 / v1.6.19 — Session fork.
+   * - truncateAt 미지정: 전체 conversation 복사 (header [🌿] 버튼).
+   * - truncateAt 지정: 그 turn 까지만 복사 (per-turn footer [🌿] 버튼).
+   * 새 session 활성화 + 사용자 toast.
+   */
+  const handleForkSession = useCallback(
+    async (truncateAt: string | undefined): Promise<void> => {
+      if (activeSession === null) return;
+      const sessionApi =
+        typeof window !== 'undefined' ? window.dreampia?.session : undefined;
+      if (sessionApi?.fork === undefined) {
+        toasts.warning(t('toast.fork.no_ipc'));
+        return;
+      }
+      try {
+        const r = await sessionApi.fork(
+          activeSession.id,
+          truncateAt !== undefined ? { truncateAt } : undefined
+        );
+        if (r.ok === false) {
+          toasts.error(t('toast.fork.failed'), {
+            detail: typeof r.error === 'string' ? r.error : undefined,
+          });
+          return;
+        }
+        setActiveSessionId(r.value.id);
+        toasts.success(t('toast.fork.success'));
+      } catch (err) {
+        toasts.error(t('toast.fork.failed'), {
+          detail: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+    // activeSession 객체 전체가 매 streaming chunk 마다 새 reference 라
+    // id 만 dep — 위의 handleToggleWorkspaceLock 와 동일 이유.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeSession?.id, t, toasts]
+  );
+
   // v0.8.0 — App 부팅 시 settings.theme 을 한 번 fetch + data-theme 적용.
   // SettingsModal 의 ThemePanel 도 mount 시 동일 fetch 를 하지만, 모달이 한
   // 번도 안 열렸을 때도 사용자 선호가 즉시 적용되도록 root 에서도 호출.
@@ -1340,30 +1380,10 @@ export function App(): React.JSX.Element {
               setPendingBlocks((prev) => prev.filter((_, i) => i !== index));
             }}
             onForkSession={async () => {
-              // v1.6.11 — Session fork. parent_session_id 자동 설정 + 모든
-              // turn 복사 (v1.6.3 backend). 새 session 활성화 + 사용자 toast.
-              if (activeSession === null) return;
-              const sessionApi =
-                typeof window !== 'undefined' ? window.dreampia?.session : undefined;
-              if (sessionApi?.fork === undefined) {
-                toasts.warning(t('toast.fork.no_ipc'));
-                return;
-              }
-              try {
-                const r = await sessionApi.fork(activeSession.id);
-                if (r.ok === false) {
-                  toasts.error(t('toast.fork.failed'), {
-                    detail: typeof r.error === 'string' ? r.error : undefined,
-                  });
-                  return;
-                }
-                setActiveSessionId(r.value.id);
-                toasts.success(t('toast.fork.success'));
-              } catch (err) {
-                toasts.error(t('toast.fork.failed'), {
-                  detail: err instanceof Error ? err.message : String(err),
-                });
-              }
+              await handleForkSession(undefined);
+            }}
+            onForkAtTurn={(turnId) => {
+              void handleForkSession(turnId);
             }}
           />
         }

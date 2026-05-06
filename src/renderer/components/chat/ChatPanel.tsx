@@ -138,6 +138,12 @@ export interface ChatPanelProps {
    */
   onForkSession?: () => void;
   /**
+   * v1.6.19 — per-turn fork. turn footer 의 🌿 버튼 클릭 시 호출. App.tsx
+   * 가 `sessionApi.fork(activeId, { truncateAt: turnId })` 호출 → 그 turn
+   * 까지만 복사된 새 세션 활성화. 미지정 시 turn 버튼 미노출.
+   */
+  onForkAtTurn?: (turnId: string) => void;
+  /**
    * v1.6.13 — Pending typed blocks (PreviewPanel 캡처 결과 등). ChatInput
    * 의 chip 미리보기 + 다음 submit 시 함께 prepend.
    */
@@ -169,6 +175,8 @@ interface MessagesAreaProps {
   onTurnFocused?: () => void;
   /** v0.13.0 — session_reference chip click handler (forwarded from ChatPanel). */
   onPickSession?: (sessionId: string) => void;
+  /** v1.6.19 — per-turn fork forwarded from ChatPanel. */
+  onForkAtTurn?: (turnId: string) => void;
 }
 
 export function ChatPanel({
@@ -201,6 +209,7 @@ export function ChatPanel({
   onConsumePendingBlocks,
   onAttachBlocks,
   onRemovePendingBlock,
+  onForkAtTurn,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -235,6 +244,7 @@ export function ChatPanel({
         pendingFocusTurnId={pendingFocusTurnId ?? null}
         onTurnFocused={onTurnFocused}
         onPickSession={onPickSession}
+        {...(onForkAtTurn !== undefined && { onForkAtTurn })}
       />
       <InputArea
         onSubmit={onSubmit}
@@ -283,6 +293,7 @@ function MessagesArea({
   pendingFocusTurnId,
   onTurnFocused,
   onPickSession,
+  onForkAtTurn,
 }: MessagesAreaProps): React.JSX.Element {
   const t = useT();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -334,6 +345,7 @@ function MessagesArea({
                 findToolResult(turns, index, callId)
               }
               onPickSession={onPickSession}
+              {...(onForkAtTurn !== undefined && { onForkAtTurn })}
             />
           ))}
         </div>
@@ -795,12 +807,17 @@ interface TurnDisplayProps {
    * chip 은 표시되지만 click 은 disabled.
    */
   onPickSession?: (sessionId: string) => void;
+  /**
+   * v1.6.19 — turn footer 의 [🌿] 버튼 클릭. 미지정 시 버튼 미노출.
+   */
+  onForkAtTurn?: (turnId: string) => void;
 }
 
 function TurnDisplay({
   turn,
   getResult,
   onPickSession,
+  onForkAtTurn,
 }: TurnDisplayProps): React.JSX.Element | null {
   const t = useT();
   // tool 역할 턴은 렌더링하지 않음 — 결과는 어시스턴트 턴 내 인라인으로 표시
@@ -823,7 +840,7 @@ function TurnDisplay({
 
   return (
     <article
-      className={isUser ? 'flex justify-end' : 'flex justify-start'}
+      className={`group ${isUser ? 'flex justify-end' : 'flex justify-start'}`}
       data-testid={'turn-' + turn.role}
       data-status={turn.status}
       data-turn-id={turn.id}
@@ -896,6 +913,24 @@ function TurnDisplay({
             {turn.tool_calls.map((tc) => (
               <ToolCallCard key={tc.id} call={tc} result={getResult(tc.id)} />
             ))}
+          </div>
+        )}
+        {/* v1.6.19 — per-turn fork. streaming turn 은 미노출 (불완전 상태에서
+            분기 방지). hover 시에만 visible — 일상 viewing 의 시각 noise 최소화. */}
+        {onForkAtTurn !== undefined && !isStreamingTurn && (
+          <div
+            className={`mt-1 flex ${isUser ? 'justify-start' : 'justify-end'} opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100`}
+          >
+            <button
+              type="button"
+              onClick={() => onForkAtTurn(turn.id)}
+              title={t('chat.turn.fork_tooltip')}
+              aria-label={t('chat.turn.fork_aria')}
+              data-testid={`turn-fork-button-${turn.id}`}
+              className="rounded-md px-1.5 py-0.5 text-xs hover:bg-bg-tertiary"
+            >
+              🌿
+            </button>
           </div>
         )}
       </div>
