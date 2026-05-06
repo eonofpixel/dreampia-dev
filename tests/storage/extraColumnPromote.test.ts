@@ -120,10 +120,7 @@ describe('v1.8.1 — _extra column promote', () => {
     expect(loaded?.permission.default_level).toBe('full_access');
   });
 
-  it('column 우선 read — plan_active column 변경 (INV-7 만족 setup)', () => {
-    // plan.active=true 면 temporarily_blocked 에 LOCAL_WRITE 필요. 따라서
-    // _extra 도 plan.active=true 로 시작 (withPermission 가 INV 만족 채움) 후
-    // column 만 0 으로 강제했을 때 fallback 이 _extra=true 채택하는지 검증.
+  it('v1.8.3 — column 만 source of truth (plan_active 0 이면 false 반환, _extra true 무시)', () => {
     const s = withPermission(
       base,
       'workspace_write',
@@ -132,34 +129,36 @@ describe('v1.8.1 — _extra column promote', () => {
       'ws-promote-2b'
     );
     store.createSession(s);
-    // column 만 0 으로 (legacy row 시뮬). _extra 의 plan.active=true 가 fallback.
+    // column 만 0 으로 강제. v1.8.1 까지는 _extra fallback 으로 true,
+    // v1.8.3 부터는 column 만 source of truth → false.
     store.getDb()
       .prepare('UPDATE sessions SET plan_active = 0 WHERE id = ?')
       .run(s.id);
 
     const loaded = store.getSession(s.id as SessionId);
-    expect(loaded?.plan.active).toBe(true);
+    expect(loaded?.plan.active).toBe(false);
   });
 
-  it('JSON fallback — column NULL 시 _extra 값 사용', () => {
+  it('v1.8.3 — column NULL 시 defensive default (workspace_write), _extra 무시', () => {
+    // v1.8.1 까지는 column NULL → _extra fallback. v1.8.3 부터는 column 이
+    // 단일 source of truth — NULL 은 정상 시나리오 아니지만 defensive
+    // default 'workspace_write' 사용.
     const s = withPermission(
       base,
-      'workspace_write',
+      'full_access',
       false,
       '019d0000-0000-7000-8000-00000000cc01',
       'ws-promote-3'
     );
     store.createSession(s);
-
-    // column 만 NULL/0 으로 강제 (legacy row 시뮬레이션).
+    // _extra 는 'full_access' 그대로 두고 column 만 NULL 로.
     store.getDb()
-      .prepare('UPDATE sessions SET permission_default_level = NULL, plan_active = 0 WHERE id = ?')
+      .prepare('UPDATE sessions SET permission_default_level = NULL WHERE id = ?')
       .run(s.id);
 
     const loaded = store.getSession(s.id as SessionId);
-    // metadata_json._extra.permission.default_level === 'workspace_write' 그대로 fallback.
+    // _extra 의 'full_access' 가 아니라 defensive default 'workspace_write'.
     expect(loaded?.permission.default_level).toBe('workspace_write');
-    expect(loaded?.plan.active).toBe(false);
   });
 
   it('updatePermission — column 도 갱신', () => {

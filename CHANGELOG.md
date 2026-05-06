@@ -2,6 +2,38 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.8.3] — 2026-05-07
+
+**`_extra` dual-write 정리 — column 만 source of truth.**
+
+v1.8.1 의 dual-write transition 구간 종료. `assembleSession` 의 `_extra`
+fallback 제거 — `permission.default_level` + `plan.active` 는 컬럼 값만
+사용. 마이그레이션 015 가 모든 기존 row 를 backfill 했으므로 column
+NULL 은 정상 시나리오 아님 — defensive default 만 유지
+(`permission_default_level` NULL 시 `'workspace_write'`, `plan_active`
+는 NOT NULL DEFAULT 0 로 항상 0/1).
+
+### Changed
+- `SessionStore.assembleSession`:
+  - `plan.active` = `row.plan_active === 1` (column 만, _extra 무시).
+  - `permission.default_level` = column 값 ?? `'workspace_write'`
+    (defensive default).
+- v1.8.1 의 _extra fallback 제거 — column 이 단일 source of truth.
+- `buildStoredMetadata` 는 dual-write 유지 (한 슬롯 더 backward compat —
+  v1.8.4+ 에서 _extra 측 stop write 예정).
+
+### Tests
+- 기존 promote 테스트 v1.8.3 시멘틱 반영:
+  - "JSON fallback" → "v1.8.3 column NULL 시 defensive default" (column
+    NULL 시 _extra 무시 + 'workspace_write' 반환).
+  - "plan_active column 변경" → "column 만 source of truth"
+    (column=0 이면 _extra=true 무시하고 false).
+
+### 회귀
+- 0. typecheck clean.
+- 기존 7 cases 모두 PASS (시멘틱 갱신 후).
+- baseline 2045 → 2045 (테스트 수 동일, 검증 의미만 변경).
+
 ## [1.8.2] — 2026-05-07
 
 **`_extra` schema canonical 문서 + strict contract test.**

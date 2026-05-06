@@ -1562,16 +1562,19 @@ export class SessionStore {
     const workspace = this.buildWorkspace(wsRow, worktrees, meta._extra.workspace);
     const terminal = this.buildTerminalState(panes, meta._extra.terminal);
     const browser = this.buildBrowserState(tabs, meta._extra.browser);
-    // v1.8.1 (B-3 2단계) — column 우선, JSON fallback.
+    // v1.8.3 (B-3 3단계) — column 만 source of truth. _extra fallback 제거.
+    // migration 015 가 모든 기존 row 를 backfill 했으므로 column NULL 은
+    // 정상 시나리오 아님 — defensive default 만 유지 (permission_default_level
+    // 만, plan_active 는 NOT NULL DEFAULT 0).
     const plan = this.buildPlanState(planItems, {
       ...meta._extra.plan,
-      active: row.plan_active === 1 ? true : meta._extra.plan.active,
+      active: row.plan_active === 1,
     });
     const permission = this.buildPermissionState(grants, {
       ...meta._extra.permission,
       default_level:
         (row.permission_default_level as PermissionState['default_level'] | null) ??
-        meta._extra.permission.default_level,
+        'workspace_write',
     });
 
     const session: Record<string, unknown> = {
