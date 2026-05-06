@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useState } from 'react';
-import { X } from 'lucide-react';
+import { Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 
 export interface BackfillPromptModalProps {
@@ -33,6 +33,13 @@ interface RunResult {
   conflicts: number;
 }
 
+interface ConflictRow {
+  legacy_id: string;
+  target_id: string;
+  root: string;
+  session_count: number;
+}
+
 export function BackfillPromptModal({
   open,
   legacyCount,
@@ -43,6 +50,42 @@ export function BackfillPromptModal({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<RunResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // v1.4.11 — 충돌 row 상세.
+  const [conflicts, setConflicts] = useState<ConflictRow[] | null>(null);
+  const [conflictsLoading, setConflictsLoading] = useState(false);
+
+  const reloadConflicts = useCallback(async (): Promise<void> => {
+    const api = window.dreampia?.app;
+    if (api === undefined || api.listBackfillConflicts === undefined) return;
+    setConflictsLoading(true);
+    try {
+      const r = await api.listBackfillConflicts();
+      if (r.ok) setConflicts(r.value);
+    } finally {
+      setConflictsLoading(false);
+    }
+  }, []);
+
+  const handleDeleteLegacy = useCallback(
+    async (row: ConflictRow): Promise<void> => {
+      const api = window.dreampia?.app;
+      if (api === undefined || api.deleteLegacyWorkspace === undefined) return;
+      const confirmed = window.confirm(
+        t('workspace_backfill.delete_confirm', {
+          root: row.root,
+          n: row.session_count,
+        })
+      );
+      if (!confirmed) return;
+      const r = await api.deleteLegacyWorkspace(row.legacy_id);
+      if (!r.ok) {
+        setError(typeof r.error === 'string' ? r.error : 'delete failed');
+        return;
+      }
+      await reloadConflicts();
+    },
+    [t, reloadConflicts]
+  );
 
   const handleRun = useCallback(async (): Promise<void> => {
     setBusy(true);
@@ -56,6 +99,10 @@ export function BackfillPromptModal({
       const r = await api.runWorkspaceBackfill();
       if (r.ok) {
         setResult(r.value);
+        // v1.4.11 — backfill 후 충돌이 남아 있으면 row detail 자동 fetch.
+        if (r.value.conflicts > 0) {
+          await reloadConflicts();
+        }
       } else {
         setError(typeof r.error === 'string' ? r.error : 'failed');
       }
@@ -64,7 +111,7 @@ export function BackfillPromptModal({
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [reloadConflicts]);
 
   const handleDismiss = useCallback(async (): Promise<void> => {
     try {
@@ -129,13 +176,74 @@ export function BackfillPromptModal({
               )}
             </>
           ) : (
-            <p data-testid="workspace-backfill-summary">
-              {t('workspace_backfill.done_summary', {
-                updated: result.updated,
-                skipped: result.skipped,
-                conflicts: result.conflicts,
-              })}
-            </p>
+            <>
+              <p data-testid="workspace-backfill-summary">
+                {t('workspace_backfill.done_summary', {
+                  updated: result.updated,
+                  skipped: result.skipped,
+                  conflicts: result.conflicts,
+                })}
+              </p>
+              {/* v1.4.11 — 남아있는 충돌 row 들 + [legacy 삭제] action */}
+              {result.conflicts > 0 && (
+                <div
+                  className="rounded border border-yellow-600/40 bg-yellow-900/10 p-2 text-[12px]"
+                  data-testid="workspace-backfill-conflicts-section"
+                >
+                  <p className="mb-2 text-yellow-300">
+                    {t('workspace_backfill.conflicts_resolution_intro')}
+                  </p>
+                  {conflictsLoading ? (
+                    <p className="text-text-secondary">
+                      {t('workspace_backfill.conflicts_loading')}
+                    </p>
+                  ) : conflicts === null || conflicts.length === 0 ? (
+                    <p
+                      className="text-text-tertiary"
+                      data-testid="workspace-backfill-conflicts-empty"
+                    >
+                      {t('workspace_backfill.conflicts_resolved')}
+                    </p>
+                  ) : (
+                    <ul
+                      className="divide-y divide-border-primary"
+                      data-testid="workspace-backfill-conflicts-list"
+                    >
+                      {conflicts.map((row) => (
+                        <li
+                          key={row.legacy_id}
+                          className="flex items-start justify-between gap-2 py-1"
+                          data-testid={`workspace-backfill-conflict-${row.legacy_id}`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-mono text-[11px]">
+                              {row.root}
+                            </div>
+                            <div className="text-[10px] text-text-tertiary">
+                              {t('workspace_backfill.conflict_session_count', {
+                                n: row.session_count,
+                              })}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void handleDeleteLegacy(row);
+                            }}
+                            className="inline-flex shrink-0 items-center gap-1 rounded border border-red-600/40 bg-red-900/20 px-2 py-0.5 text-[10px] text-red-300 hover:bg-red-900/30"
+                            title={t('workspace_backfill.delete_tooltip')}
+                            data-testid={`workspace-backfill-delete-${row.legacy_id}`}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            {t('workspace_backfill.delete_legacy')}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
 

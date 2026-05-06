@@ -861,6 +861,40 @@ const api = {
      */
     dismissWorkspaceBackfill: (): Promise<Result<void>> =>
       ipcRenderer.invoke('app:dismiss-workspace-backfill') as Promise<Result<void>>,
+    /**
+     * v1.4.11 — backfill 시 충돌이 예상되는 legacy row 들의 detail 반환.
+     * 사용자가 modal 에서 row 별 처리 가능.
+     */
+    listBackfillConflicts: (): Promise<
+      Result<
+        Array<{
+          legacy_id: string;
+          target_id: string;
+          root: string;
+          session_count: number;
+        }>
+      >
+    > =>
+      ipcRenderer.invoke('app:list-backfill-conflicts') as Promise<
+        Result<
+          Array<{
+            legacy_id: string;
+            target_id: string;
+            root: string;
+            session_count: number;
+          }>
+        >
+      >,
+    /**
+     * v1.4.11 — legacy workspace 1건 + 그를 FK 로 참조하는 sessions 들을
+     * 삭제. 보안: caller (renderer) 가 user confirm 후 호출.
+     */
+    deleteLegacyWorkspace: (
+      legacyId: string
+    ): Promise<Result<{ workspace_deleted: boolean; sessions_deleted: number }>> =>
+      ipcRenderer.invoke('app:delete-legacy-workspace', legacyId) as Promise<
+        Result<{ workspace_deleted: boolean; sessions_deleted: number }>
+      >,
   },
 
   /**

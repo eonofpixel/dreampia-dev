@@ -1060,6 +1060,56 @@ export function registerIpcHandlers(
     }
   );
 
+  // v1.4.11 — Conflict listing. 충돌 row 들의 detail (root + session_count)
+  // 을 사용자에게 노출 — modal 에서 row 별 처리 가능.
+  ipcMain.handle(
+    'app:list-backfill-conflicts',
+    async (): Promise<
+      Result<
+        Array<{
+          legacy_id: string;
+          target_id: string;
+          root: string;
+          session_count: number;
+        }>
+      >
+    > => {
+      try {
+        if (store === undefined) return ok([]);
+        const { listBackfillConflicts } = await import(
+          '../storage/workspaceBackfill'
+        );
+        return ok(listBackfillConflicts(store.getDb()));
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  // v1.4.11 — legacy workspace + cascade sessions 삭제. 사용자가 modal 의
+  // 충돌 row 에서 명시적으로 [legacy 삭제] 클릭 시만 호출. caller 가
+  // confirm 한 후에만 작동.
+  ipcMain.handle(
+    'app:delete-legacy-workspace',
+    async (
+      _evt,
+      legacyId: unknown
+    ): Promise<Result<{ workspace_deleted: boolean; sessions_deleted: number }>> => {
+      try {
+        if (typeof legacyId !== 'string' || legacyId.length === 0) {
+          return fail('legacy_id required');
+        }
+        if (store === undefined) return fail('store not loaded');
+        const { deleteLegacyWorkspace } = await import(
+          '../storage/workspaceBackfill'
+        );
+        return ok(deleteLegacyWorkspace(store.getDb(), legacyId));
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
   ipcMain.handle('app:diagnose', (): Result<AppDiagnoseResult> => {
     try {
       const out: AppDiagnoseResult = {

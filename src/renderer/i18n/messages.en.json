@@ -285,6 +285,13 @@
   "automation.audit_refresh": "Refresh",
   "automation.audit_refresh_tooltip": "Refetch audit log",
 
+  "workspace_backfill.conflicts_resolution_intro": "These folders could not upgrade to sha256. Delete the legacy entry and recreate the workspace:",
+  "workspace_backfill.conflicts_loading": "Loading conflicts…",
+  "workspace_backfill.conflicts_resolved": "No remaining conflicts.",
+  "workspace_backfill.conflict_session_count": "{n} sessions in this folder",
+  "workspace_backfill.delete_legacy": "Delete legacy",
+  "workspace_backfill.delete_tooltip": "Delete this legacy workspace and its sessions",
+  "workspace_backfill.delete_confirm": "Permanently delete the legacy entry for {root} and its {n} sessions?",
   "workspace_backfill.title": "Workspace ID upgrade recommended",
   "workspace_backfill.body": "{count} workspace records use the legacy FNV ID format. Upgrading to SHA-256 keeps your data identifiable across platforms and backups.",
   "workspace_backfill.warning_conflicts": "{n} workspaces would conflict during upgrade. They will be skipped (no data loss).",

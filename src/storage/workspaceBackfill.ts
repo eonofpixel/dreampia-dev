@@ -130,6 +130,86 @@ export interface BackfillDetectionResult {
   target_conflicts: number;
 }
 
+// ────────────────────────────────────────────────────────────
+// v1.4.11 — Conflict listing + resolution
+// ────────────────────────────────────────────────────────────
+
+export interface BackfillConflictRow {
+  /** root 차지 중인 legacy FNV id workspace. */
+  legacy_id: string;
+  /** sha256 derived target id (다른 row 가 이미 차지). */
+  target_id: string;
+  /** root 경로 — 동일. */
+  root: string;
+  /** legacy_id 를 FK 로 참조하는 sessions row 수 (delete 시 영향 범위). */
+  session_count: number;
+}
+
+/**
+ * v1.4.11 — backfill 시 충돌이 예상되는 legacy row 들의 detail 을 반환.
+ * `detectLegacyWorkspaceIds` 가 count 만 알려줬다면 이 함수는 사용자가
+ * 수동 처리할 수 있도록 row-level 정보 (root + session_count) 를 함께 노출.
+ * 데이터 변경 X (read-only).
+ */
+export function listBackfillConflicts(db: Database): BackfillConflictRow[] {
+  const rows = db
+    .prepare<unknown[], { id: string; root: string }>('SELECT id, root FROM workspaces')
+    .all() as Array<{ id: string; root: string }>;
+  const checkExisting = db.prepare('SELECT 1 FROM workspaces WHERE id = ?');
+  const countSessions = db.prepare(
+    'SELECT COUNT(*) as n FROM sessions WHERE workspace_id = ?'
+  );
+  const out: BackfillConflictRow[] = [];
+  for (const row of rows) {
+    if (!isLegacyFnvWorkspaceId(row.id as WorkspaceId, row.root)) continue;
+    const target = workspaceIdForSha256(row.root);
+    if (target === row.id) continue;
+    if (checkExisting.get(target) === undefined) continue;
+    const c = countSessions.get(row.id) as { n: number } | undefined;
+    out.push({
+      legacy_id: row.id,
+      target_id: target,
+      root: row.root,
+      session_count: c?.n ?? 0,
+    });
+  }
+  return out;
+}
+
+export interface DeleteLegacyResult {
+  /** legacy workspace row 가 실제로 지워졌는지. */
+  workspace_deleted: boolean;
+  /** cascade 로 함께 지워진 sessions row 수. */
+  sessions_deleted: number;
+}
+
+/**
+ * v1.4.11 — legacy id workspace + 그를 FK 로 참조하는 sessions 들을 삭제.
+ * sha256 target row 는 그대로 유지 — 사용자가 새 세션을 그 root 로
+ * 만들 때 자연스럽게 사용된다. 충돌 해결의 가장 단순/안전한 옵션.
+ *
+ * caller 는 호출 전후로 in-memory cache (sessions list 등) 를 무효화.
+ */
+export function deleteLegacyWorkspace(
+  db: Database,
+  legacyId: string
+): DeleteLegacyResult {
+  const result: DeleteLegacyResult = {
+    workspace_deleted: false,
+    sessions_deleted: 0,
+  };
+  const tx = db.transaction(() => {
+    const sessRes = db
+      .prepare('DELETE FROM sessions WHERE workspace_id = ?')
+      .run(legacyId);
+    result.sessions_deleted = Number(sessRes.changes ?? 0);
+    const wsRes = db.prepare('DELETE FROM workspaces WHERE id = ?').run(legacyId);
+    result.workspace_deleted = Number(wsRes.changes ?? 0) > 0;
+  });
+  tx();
+  return result;
+}
+
 /**
  * v1.4.8 — DB 의 workspaces 를 읽어 backfill 대상 통계를 반환.
  * 데이터 변경 X. 부팅 시 modal 표시 여부 결정에 사용.

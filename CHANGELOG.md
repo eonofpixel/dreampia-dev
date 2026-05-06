@@ -2,6 +2,37 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.4.11] — 2026-05-07
+
+**Backfill conflict resolution — modal 에서 row 별 [legacy 삭제].**
+
+v1.4.8 backfill 의 `conflicts` 는 silently skip — 사용자는 어떤 폴더가
+충돌했는지 알 수 없었음. v1.4.11 은 BackfillPromptModal 의 결과 화면에
+충돌 row 를 펼쳐 보여주고 row 별 [legacy 삭제] 버튼으로 직접 정리할
+수 있게 해 준다 (window.confirm 보안 게이트 + cascade 세션 삭제).
+
+### Added
+- `listBackfillConflicts(db): BackfillConflictRow[]` — read-only helper.
+  legacy FNV id + 그 root 의 sha256 target 이 이미 다른 row 차지된
+  경우만 detail 반환 (`legacy_id`, `target_id`, `root`, `session_count`).
+- `deleteLegacyWorkspace(db, legacyId): DeleteLegacyResult` — single-tx
+  cascade 삭제 (sessions WHERE workspace_id=? 먼저, 이후 workspaces
+  WHERE id=?).
+- IPC `app:list-backfill-conflicts` / `app:delete-legacy-workspace`.
+- preload `app.listBackfillConflicts()` / `app.deleteLegacyWorkspace(id)`.
+- BackfillPromptModal 결과 섹션에 `result.conflicts > 0` 일 때 자동
+  conflict list 노출:
+  - `data-testid="workspace-backfill-conflicts-section"` — 인트로 + list.
+  - row 별 `[legacy 삭제]` 버튼 (`window.confirm` 후 IPC 호출 → reload).
+  - 충돌 모두 제거 시 `workspace-backfill-conflicts-empty` 메시지.
+- i18n 7 키 (`workspace_backfill.conflicts_*`, `delete_*`,
+  `conflict_session_count`) ko/en pair.
+
+### 회귀
+- 0. typecheck clean.
+- 신규 7 tests PASS (`workspaceBackfillConflicts.test.ts`).
+- baseline 2025 → 2032 (+7).
+
 ## [1.4.10] — 2026-05-07
 
 **Workspace UNIQUE(root) 충돌 graceful 처리.**
