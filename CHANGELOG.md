@@ -2,6 +2,45 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.4.2] — 2026-05-06
+
+**Schema debt B-3 — `metadata_json._extra.conversation` columns promote (1단계).**
+
+v1.3.2 (migration 010) marker 의 application 후속 첫 단계. `_extra.conversation`
+의 3 scalar 필드를 정식 컬럼으로:
+- `current_model TEXT`
+- `current_effort TEXT`
+- `current_mode TEXT`
+
+Migration 014:
+- ALTER TABLE sessions ADD COLUMN × 3.
+- UPDATE backfill — `json_extract(metadata_json, '$._extra.conversation.*')`
+  로 기존 row 채움.
+
+Application code (dual-write, read-prefer-column):
+- `SessionRow` interface 에 3 필드 추가 (string | null).
+- `insertSessionRow`: INSERT 시 column 도 함께 채움.
+- `updateConversation`: UPDATE 시 column + JSON 둘 다 갱신.
+- `assembleSession.loadConversation`: `row.col ?? meta._extra.col` (column 우선,
+  null 이면 JSON fallback) — 옛 row / 향후 _extra 제거 transition 안전.
+
+Down migration 014 — `ALTER TABLE DROP COLUMN` × 3 (SQLite 3.35+).
+
+테스트: 6 신규 unit (`conversationColumns.test.ts`):
+- table_info 컬럼 type=TEXT 존재.
+- createSession dual-write 검증.
+- updateConversation column+JSON 둘 다 갱신.
+- load column 우선.
+- column NULL → JSON fallback (옛 데이터).
+- column / JSON divergent → column 우선.
+
+회귀 0 (1867 pass / 7 baseline).
+
+후속 — `_extra.workspace` / `_extra.terminal` / `_extra.browser` / `_extra.plan` /
+`_extra.permission` 의 promote 는 별도 슬롯 (각각 다른 형태 — 일부는 array/
+nested 라 그대로 JSON 컬럼 유지가 더 적합). `_extra.conversation` 자체 제거는
+v1.4.2.x 후속.
+
 ## [1.7.4] — 2026-05-06
 
 **Sidebar [자동화] panel 활성화 — AutomationModal + IPC.**

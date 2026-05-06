@@ -27,6 +27,7 @@ import sql010 from './migrations/010_json_columns_promote.sql?raw';
 import sql011 from './migrations/011_down_migration_marker.sql?raw';
 import sql012 from './migrations/012_workspace_id_sha256_marker.sql?raw';
 import sql013 from './migrations/013_permission_grants_id_text.sql?raw';
+import sql014 from './migrations/014_conversation_columns_promote.sql?raw';
 
 // v1.4.3 — down migrations. 일부 (markers 8-12) 만 backfill, 1-7 은 후속.
 import down008 from './migrations/down_008_workspace_id_deterministic.sql?raw';
@@ -35,6 +36,7 @@ import down010 from './migrations/down_010_json_columns_promote.sql?raw';
 import down011 from './migrations/down_011_down_migration_marker.sql?raw';
 import down012 from './migrations/down_012_workspace_id_sha256_marker.sql?raw';
 import down013 from './migrations/down_013_permission_grants_id_text.sql?raw';
+import down014 from './migrations/down_014_conversation_columns_promote.sql?raw';
 
 // ────────────────────────────────────────────────────────────
 // Migration registry
@@ -104,6 +106,12 @@ const MIGRATIONS: readonly Migration[] = [
     description: 'v1.4.1 — permission_grants.id INTEGER → TEXT rebuild (B-2)',
     up: sql013,
     down: down013,
+  },
+  {
+    version: 14,
+    description: 'v1.4.2 — sessions.conversation columns promote (B-3 1단계)',
+    up: sql014,
+    down: down014,
   },
 ] as const;
 

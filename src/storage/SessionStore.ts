@@ -78,6 +78,11 @@ interface SessionRow {
   created_at: string;
   updated_at: string;
   metadata_json: string | null;
+  // v1.4.2 (B-3 1단계) — promoted from metadata_json._extra.conversation.
+  // 기존 row 는 backfill SQL 로 채워짐. 새 row 는 application 이 dual-write.
+  current_model: string | null;
+  current_effort: string | null;
+  current_mode: string | null;
 }
 
 interface WorkspaceRow {
@@ -864,9 +869,22 @@ export class SessionStore {
       },
     };
     const now = new Date().toISOString();
+    // v1.4.2 (B-3 1단계) — column 도 함께 갱신 (dual-write).
     this.db
-      .prepare(`UPDATE sessions SET metadata_json = ?, updated_at = ? WHERE id = ?`)
-      .run(JSON.stringify(next), now, id);
+      .prepare(
+        `UPDATE sessions
+         SET metadata_json = ?, updated_at = ?,
+             current_model = ?, current_effort = ?, current_mode = ?
+         WHERE id = ?`
+      )
+      .run(
+        JSON.stringify(next),
+        now,
+        next._extra.conversation.current_model,
+        next._extra.conversation.current_effort,
+        next._extra.conversation.current_mode,
+        id
+      );
   }
 
   /**
@@ -1114,12 +1132,15 @@ export class SessionStore {
 
   private insertSessionRow(s: Session): void {
     if (!this.stmts.insertSession) {
+      // v1.4.2 (B-3 1단계) — current_model/effort/mode 컬럼 dual-write.
       this.stmts.insertSession = this.db.prepare(
         `INSERT INTO sessions
          (id, schema_version, provider, workspace_id, title, pinned, archived,
-          parent_session_id, created_at, updated_at, metadata_json)
+          parent_session_id, created_at, updated_at, metadata_json,
+          current_model, current_effort, current_mode)
          VALUES (@id, @schema_version, @provider, @workspace_id, @title, @pinned, @archived,
-                 @parent_session_id, @created_at, @updated_at, @metadata_json)`
+                 @parent_session_id, @created_at, @updated_at, @metadata_json,
+                 @current_model, @current_effort, @current_mode)`
       );
     }
 
@@ -1137,6 +1158,9 @@ export class SessionStore {
       created_at: s.created_at,
       updated_at: s.updated_at,
       metadata_json: JSON.stringify(meta),
+      current_model: s.conversation.current_model,
+      current_effort: s.conversation.current_effort,
+      current_mode: s.conversation.current_mode,
     });
   }
 
@@ -1397,7 +1421,18 @@ export class SessionStore {
     }
 
     const worktrees = this.loadWorktrees(row.workspace_id);
-    const conversation = this.loadConversation(row.id, meta._extra.conversation);
+    // v1.4.2 (B-3) — column 우선, JSON fallback. 마이그레이션 직후 기존 row 는
+    // 둘 다 채워져 있고, 새 row 는 dual-write.
+    const conversation = this.loadConversation(row.id, {
+      ...meta._extra.conversation,
+      current_model: row.current_model ?? meta._extra.conversation.current_model,
+      current_effort:
+        (row.current_effort as Conversation['current_effort'] | null) ??
+        meta._extra.conversation.current_effort,
+      current_mode:
+        (row.current_mode as Conversation['current_mode'] | null) ??
+        meta._extra.conversation.current_mode,
+    });
     const grants = this.loadGrants(row.id);
     const tabs = this.loadBrowserTabs(row.id);
     const panes = this.loadTerminalPanes(row.id);
