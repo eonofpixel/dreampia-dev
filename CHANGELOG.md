@@ -2,6 +2,33 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.19] — 2026-05-06
+
+**UsageSettings 모달 hardcoded 한국어 → useT i18n.**
+
+`src/renderer/components/settings/UsageSettings.tsx` 의 잔여 hardcoded 한국어
+문자열을 `useT()` 기반으로 교체. v1.0.12 의 부분 i18n 을 마무리:
+
+- Modal aria/title/subtitle/close
+- loading / empty / range total aria
+- 기록된 이벤트 + N건 (template `{n}`)
+- 일별 추이 차트 / 마지막 갱신 / 새로고침
+- formatRefreshTime 의 5개 분기 (아직 갱신 전 / 방금 / N초 전 / N분 전 /
+  N시간 전) — t 를 인자로 받도록 시그니처 변경
+- CostLimitSection 의 한도 입력 / placeholder / 저장 / 알림 임계 / 월 note
+- SummarySection 의 6개 컬럼 헤더 + 빈 상태
+- DailySection 의 4개 컬럼 헤더 + 빈 상태
+
+i18n: ko/en `usage.*` 약 36개 키 추가.
+
+기존 testid 유지 (cost-limit-* / usage-export-csv / usage-pricing-freshness).
+ko default — 기존 한국어 정규식 query (`/사용량 설정/i`, `/4건/`,
+`/마지막 갱신/i`, `/새로고침/i`, `/닫기/i`, `/한도 미설정/`, `/한도 초과/`)
+모두 그대로 매칭 → UsageSettings.test.tsx (11) +
+UsageSettings.csv-limits.test.tsx (9) 모두 PASS.
+
+회귀 0.
+
 ## [1.7.18] — 2026-05-06
 
 **McpSettings 모달 hardcoded 한국어 → useT i18n.**

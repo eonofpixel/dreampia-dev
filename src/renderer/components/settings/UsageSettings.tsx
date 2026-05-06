@@ -80,18 +80,19 @@ function formatTokens(n: number): string {
   return tokenFormatter.format(Math.max(0, Math.floor(n)));
 }
 
-function formatRefreshTime(ts: number | null): string {
-  if (ts === null) return '아직 갱신 전';
+function formatRefreshTime(t: ReturnType<typeof useT>, ts: number | null): string {
+  if (ts === null) return t('usage.refresh_time.never');
   const seconds = Math.floor((Date.now() - ts) / 1000);
-  if (seconds < 5) return '방금';
-  if (seconds < 60) return `${seconds}초 전`;
+  if (seconds < 5) return t('usage.refresh_time.now');
+  if (seconds < 60) return t('usage.refresh_time.seconds', { n: seconds });
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}분 전`;
+  if (minutes < 60) return t('usage.refresh_time.minutes', { n: minutes });
   const hours = Math.floor(minutes / 60);
-  return `${hours}시간 전`;
+  return t('usage.refresh_time.hours', { n: hours });
 }
 
 export function UsageSettings({ open, onClose }: UsageSettingsProps): React.JSX.Element | null {
+  const t = useT();
   if (!open) return null;
 
   return (
@@ -99,7 +100,7 @@ export function UsageSettings({ open, onClose }: UsageSettingsProps): React.JSX.
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       role="dialog"
       aria-modal="true"
-      aria-label="사용량 설정"
+      aria-label={t('usage.modal_aria')}
     >
       <div className="flex max-h-[90vh] w-[860px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl">
         {/* Header */}
@@ -107,16 +108,14 @@ export function UsageSettings({ open, onClose }: UsageSettingsProps): React.JSX.
           <div className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-text-secondary" />
             <div>
-              <h2 className="text-lg font-semibold">사용량 / 비용</h2>
-              <p className="text-xs text-text-secondary">
-                Provider 별 토큰 사용량과 추정 비용을 확인할 수 있어요.
-              </p>
+              <h2 className="text-lg font-semibold">{t('usage.title')}</h2>
+              <p className="text-xs text-text-secondary">{t('usage.subtitle')}</p>
             </div>
           </div>
           <button
             onClick={onClose}
             className="rounded-md p-2 hover:bg-bg-tertiary"
-            aria-label="닫기"
+            aria-label={t('usage.close')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -237,16 +236,16 @@ export function UsageSettingsPanel(): React.JSX.Element {
         <CostLimitSection currentMonthCost={getCurrentMonthCost(summary)} />
 
         {loading ? (
-          <p className="text-sm text-text-secondary">불러오는 중...</p>
+          <p className="text-sm text-text-secondary">{t('usage.loading')}</p>
         ) : summary.length === 0 && daily.length === 0 ? (
           <div className="py-12 text-center text-sm text-text-secondary">
-            아직 사용 기록이 없어요. 채팅을 시작하면 자동으로 기록됩니다.
+            {t('usage.empty')}
           </div>
         ) : (
           <>
             {/* Total card */}
             <section
-              aria-label="기간 합계"
+              aria-label={t('usage.range_total_aria')}
               className="mb-4 grid grid-cols-2 gap-2 rounded-md border border-border-primary bg-bg-secondary p-3 text-sm"
             >
               <div>
@@ -254,15 +253,17 @@ export function UsageSettingsPanel(): React.JSX.Element {
                 <div className="mt-0.5 text-base font-semibold">{formatCost(totalCost)}</div>
               </div>
               <div>
-                <div className="text-xs text-text-tertiary">기록된 이벤트</div>
-                <div className="mt-0.5 text-base font-semibold">{totalEvents}건</div>
+                <div className="text-xs text-text-tertiary">{t('usage.events_label')}</div>
+                <div className="mt-0.5 text-base font-semibold">
+                  {t('usage.events_count', { n: totalEvents })}
+                </div>
               </div>
             </section>
 
             {/* v0.9.0 — 일별 chart (토큰 stacked bar) */}
             {daily.length > 0 && (
               <section className="mb-4">
-                <SectionHeader>일별 추이 차트</SectionHeader>
+                <SectionHeader>{t('usage.daily_chart_title')}</SectionHeader>
                 <div className="rounded-md border border-border-primary bg-bg-secondary p-3 text-text-secondary">
                   <UsageChart data={daily} metric="tokens" maxDays={30} />
                 </div>
@@ -278,14 +279,14 @@ export function UsageSettingsPanel(): React.JSX.Element {
       {/* Footer */}
       <div className="flex items-center justify-between border-t border-border-primary p-3">
         <span className="text-xs text-text-tertiary">
-          마지막 갱신: {formatRefreshTime(lastRefreshedAt)}
+          {t('usage.last_refresh', { when: formatRefreshTime(t, lastRefreshedAt) })}
         </span>
         <button
           onClick={handleRefresh}
           className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-bg-tertiary"
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          새로고침
+          {t('usage.refresh')}
         </button>
       </div>
     </>
@@ -400,7 +401,7 @@ function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JS
       </header>
 
       {loading ? (
-        <p className="text-xs text-text-tertiary">불러오는 중...</p>
+        <p className="text-xs text-text-tertiary">{t('usage.loading')}</p>
       ) : (
         <div className="space-y-2 text-xs">
           {/* 한도 입력 */}
@@ -409,7 +410,7 @@ function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JS
               className="flex flex-1 items-center gap-2"
               data-testid="cost-limit-input-label"
             >
-              <span className="w-20 text-text-tertiary">한도 (USD/월)</span>
+              <span className="w-20 text-text-tertiary">{t('usage.cost_limit.input_label')}</span>
               <input
                 type="number"
                 step="0.01"
@@ -418,7 +419,7 @@ function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JS
                 onChange={(e) => {
                   setDraftLimit(e.target.value);
                 }}
-                placeholder="비워두면 한도 없음"
+                placeholder={t('usage.cost_limit.input_placeholder')}
                 className="flex-1 rounded-md border border-border-primary bg-bg-elevated px-2 py-1 text-sm font-mono"
                 data-testid="cost-limit-input"
               />
@@ -429,14 +430,18 @@ function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JS
               className="rounded-md border border-border-primary bg-bg-elevated px-2 py-1 hover:bg-bg-tertiary"
               data-testid="cost-limit-save"
             >
-              저장
+              {t('usage.cost_limit.save')}
             </button>
           </div>
 
           {/* 임계 옵션 */}
           <div className="flex items-center gap-2">
-            <span className="w-20 text-text-tertiary">알림 임계</span>
-            <div role="radiogroup" aria-label="알림 임계" className="flex gap-1">
+            <span className="w-20 text-text-tertiary">{t('usage.cost_limit.threshold_label')}</span>
+            <div
+              role="radiogroup"
+              aria-label={t('usage.cost_limit.threshold_aria')}
+              className="flex gap-1"
+            >
               {THRESHOLD_OPTIONS.map((opt) => (
                 <button
                   key={opt.value}
@@ -454,9 +459,7 @@ function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JS
             </div>
           </div>
 
-          <p className="text-[10px] text-text-tertiary">
-            ※ 표시되는 사용량은 현재 선택된 기간 합계입니다 (월 정확값은 v0.10.0 추가 예정).
-          </p>
+          <p className="text-[10px] text-text-tertiary">{t('usage.cost_limit.month_note')}</p>
         </div>
       )}
     </section>
@@ -472,12 +475,13 @@ interface SummarySectionProps {
 }
 
 function SummarySection({ rows }: SummarySectionProps): React.JSX.Element {
+  const t = useT();
   if (rows.length === 0) {
     return (
       <section className="mb-4">
-        <SectionHeader>Provider 별 합계</SectionHeader>
+        <SectionHeader>{t('usage.summary.title')}</SectionHeader>
         <p className="rounded-md border border-border-primary bg-bg-secondary p-3 text-xs text-text-tertiary">
-          이 기간엔 사용 기록이 없어요.
+          {t('usage.summary.empty')}
         </p>
       </section>
     );
@@ -485,17 +489,17 @@ function SummarySection({ rows }: SummarySectionProps): React.JSX.Element {
 
   return (
     <section className="mb-4">
-      <SectionHeader>Provider 별 합계</SectionHeader>
+      <SectionHeader>{t('usage.summary.title')}</SectionHeader>
       <div className="overflow-hidden rounded-md border border-border-primary">
         <table className="w-full text-sm">
           <thead className="bg-bg-secondary text-left text-xs text-text-tertiary">
             <tr>
-              <th className="p-2 font-medium">Provider</th>
-              <th className="p-2 font-medium">Model</th>
-              <th className="p-2 text-right font-medium">입력</th>
-              <th className="p-2 text-right font-medium">출력</th>
-              <th className="p-2 text-right font-medium">캐시</th>
-              <th className="p-2 text-right font-medium">비용</th>
+              <th className="p-2 font-medium">{t('usage.summary.col.provider')}</th>
+              <th className="p-2 font-medium">{t('usage.summary.col.model')}</th>
+              <th className="p-2 text-right font-medium">{t('usage.summary.col.input')}</th>
+              <th className="p-2 text-right font-medium">{t('usage.summary.col.output')}</th>
+              <th className="p-2 text-right font-medium">{t('usage.summary.col.cache')}</th>
+              <th className="p-2 text-right font-medium">{t('usage.summary.col.cost')}</th>
             </tr>
           </thead>
           <tbody>
@@ -540,12 +544,13 @@ interface DailySectionProps {
 }
 
 function DailySection({ rows }: DailySectionProps): React.JSX.Element {
+  const t = useT();
   if (rows.length === 0) {
     return (
       <section>
-        <SectionHeader>일별 추이</SectionHeader>
+        <SectionHeader>{t('usage.daily.title')}</SectionHeader>
         <p className="rounded-md border border-border-primary bg-bg-secondary p-3 text-xs text-text-tertiary">
-          일별 데이터가 없어요.
+          {t('usage.daily.empty')}
         </p>
       </section>
     );
@@ -553,15 +558,15 @@ function DailySection({ rows }: DailySectionProps): React.JSX.Element {
 
   return (
     <section>
-      <SectionHeader>일별 추이</SectionHeader>
+      <SectionHeader>{t('usage.daily.title')}</SectionHeader>
       <div className="overflow-hidden rounded-md border border-border-primary">
         <table className="w-full text-sm">
           <thead className="bg-bg-secondary text-left text-xs text-text-tertiary">
             <tr>
-              <th className="p-2 font-medium">날짜</th>
-              <th className="p-2 font-medium">Provider</th>
-              <th className="p-2 text-right font-medium">토큰</th>
-              <th className="p-2 text-right font-medium">비용</th>
+              <th className="p-2 font-medium">{t('usage.daily.col.date')}</th>
+              <th className="p-2 font-medium">{t('usage.daily.col.provider')}</th>
+              <th className="p-2 text-right font-medium">{t('usage.daily.col.tokens')}</th>
+              <th className="p-2 text-right font-medium">{t('usage.daily.col.cost')}</th>
             </tr>
           </thead>
           <tbody>
