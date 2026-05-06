@@ -217,11 +217,47 @@ let _instance: AutomationManager | null = null;
 
 /**
  * Main process 전용 singleton. IPC handlers + 부팅 시 1회 instantiation.
- * 첫 호출 시 instance 생성 + start(). 후속 호출은 동일 instance.
+ * 첫 호출 시 instance 생성 + 영속된 rules 가 있으면 hydrate + start().
+ * 후속 호출은 동일 instance.
+ *
+ * v1.7.14 — settings.json 의 `automation_rules` 가 있으면 부팅 시 자동 등록.
+ * handler 는 직렬화 불가라 default 'no-op log' 사용. 사용자가 register/
+ * unregister 시 자동 영속 (write-through).
  */
 export function getAutomationManager(): AutomationManager {
   if (_instance === null) {
     _instance = new AutomationManager();
+    // v1.7.14 — Hydrate from persisted settings (test 환경에선 readSettings
+    // 가 throw 가능하므로 try/catch).
+    try {
+      // dynamic import 회피 — 이미 main process 라 직접 import 가능.
+      // 단 lazy 로 require 한 이유는 test 환경 (electron mock) 호환.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const settings = (require('../settings') as typeof import('../settings')).readSettings();
+      const persisted = settings.automation_rules ?? [];
+      for (const r of persisted) {
+        try {
+          _instance.register({
+            name: r.name,
+            kind: r.kind,
+            ...(r.interval_ms !== undefined && { interval_ms: r.interval_ms }),
+            ...(r.cron_expr !== undefined && { cron_expr: r.cron_expr }),
+            ...(r.cron_tz !== undefined && { cron_tz: r.cron_tz }),
+            ...(r.webhook_path !== undefined && { webhook_path: r.webhook_path }),
+            handler: async (): Promise<void> => {
+              console.info(`[automation] rule fired (persisted no-op): ${r.name}`);
+            },
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(
+            `[AutomationManager] persisted rule '${r.name}' rejected: ${msg}`
+          );
+        }
+      }
+    } catch {
+      // settings 미로드 / electron mock 미준비 — 부팅 후속에서 정상화.
+    }
     _instance.start();
   }
   return _instance;

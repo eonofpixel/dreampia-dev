@@ -2,6 +2,31 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.14] — 2026-05-06
+
+**Automation rules 영속 (settings.json) + 부팅 hydrate.**
+
+이전 v1.7.4 의 in-memory only 한계 해소. AutomationManager 가 settings.json
+에 rules 영속 + 부팅 시 자동 hydrate.
+
+Settings schema:
+- `AppSettings.automation_rules?: AutomationRulePersisted[]` 추가.
+  handler 는 직렬화 불가 → 제외.
+- readSettings parse 시 손상된 항목 silent drop.
+
+AutomationManager:
+- `getAutomationManager()` singleton 부팅 시 `readSettings().automation_rules`
+  load → register('no-op log' default handler).
+- 잘못된 rule 은 console.warn 후 skip (전체 부팅 fail-safe).
+
+IPC `automation/register` / `automation/unregister`:
+- 성공 시 `persistAutomationRules(mgr.list().map(summarizeRule))` 호출 →
+  write-through.
+- write 실패 fail-soft (console.warn).
+
+테스트: 2 신규 unit (register → settings.automation_rules 영속 / unregister
+→ settings 에서 제거). 회귀 0 (1911 pass).
+
 ## [1.6.16] — 2026-05-06
 
 **ChatInput onAttachBlocks — image DnD → ImageBlock pendingBlocks 자동 push.**

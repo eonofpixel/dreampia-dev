@@ -135,6 +135,24 @@ export interface AppSettings {
    */
   api_key_anthropic?: string;
   api_key_openai?: string;
+  /**
+   * v1.7.14 — Automation rules 영속. AutomationManager 가 부팅 시 load,
+   * register/unregister 시 write. handler 는 직렬화 불가 → 'no-op log'
+   * default 로 hydrate.
+   */
+  automation_rules?: AutomationRulePersisted[];
+}
+
+/**
+ * Persisted shape — handler 는 직렬화 불가라 제외. 현재 schema 에 align.
+ */
+export interface AutomationRulePersisted {
+  name: string;
+  kind: 'interval' | 'cron' | 'webhook';
+  interval_ms?: number;
+  cron_expr?: string;
+  cron_tz?: string;
+  webhook_path?: string;
 }
 
 let cached: AppSettings | null = null;
@@ -218,6 +236,45 @@ export function readSettings(): AppSettings {
       }
       if (typeof obj['api_key_openai'] === 'string' && obj['api_key_openai'].length > 0) {
         next.api_key_openai = obj['api_key_openai'];
+      }
+      // v1.7.14 — automation_rules. 손상된 항목 silent drop.
+      if (Array.isArray(obj['automation_rules'])) {
+        const validRules: AutomationRulePersisted[] = [];
+        for (const item of obj['automation_rules']) {
+          if (item === null || typeof item !== 'object') continue;
+          const r = item as Record<string, unknown>;
+          if (typeof r['name'] !== 'string' || r['name'].length === 0) continue;
+          if (
+            r['kind'] !== 'interval' &&
+            r['kind'] !== 'cron' &&
+            r['kind'] !== 'webhook'
+          ) {
+            continue;
+          }
+          const persisted: AutomationRulePersisted = {
+            name: r['name'],
+            kind: r['kind'],
+          };
+          if (typeof r['interval_ms'] === 'number' && r['interval_ms'] > 0) {
+            persisted.interval_ms = r['interval_ms'];
+          }
+          if (typeof r['cron_expr'] === 'string' && r['cron_expr'].length > 0) {
+            persisted.cron_expr = r['cron_expr'];
+          }
+          if (typeof r['cron_tz'] === 'string' && r['cron_tz'].length > 0) {
+            persisted.cron_tz = r['cron_tz'];
+          }
+          if (
+            typeof r['webhook_path'] === 'string' &&
+            r['webhook_path'].length > 0
+          ) {
+            persisted.webhook_path = r['webhook_path'];
+          }
+          validRules.push(persisted);
+        }
+        if (validRules.length > 0) {
+          next.automation_rules = validRules;
+        }
       }
       // v0.10.0 — keyboard_shortcut_overrides. plain Record<string,string>.
       // string 키 / string 값만 보존, 그 외 (number / object / null) 은 drop.

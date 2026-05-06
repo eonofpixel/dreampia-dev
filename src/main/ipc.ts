@@ -972,6 +972,31 @@ export function registerIpcHandlers(
 // v1.7.4 — automation/* IPC
 // ────────────────────────────────────────────────────────────
 
+// v1.7.14 — register/unregister 시 호출. handler 는 직렬화 불가라 제외.
+function persistAutomationRules(rules: ReadonlyArray<AutomationRuleSummary>): void {
+  try {
+    const persisted = rules.map((r) => {
+      const out: {
+        name: string;
+        kind: 'interval' | 'cron' | 'webhook';
+        interval_ms?: number;
+        cron_expr?: string;
+        cron_tz?: string;
+        webhook_path?: string;
+      } = { name: r.name, kind: r.kind };
+      if (r.interval_ms !== undefined) out.interval_ms = r.interval_ms;
+      if (r.cron_expr !== undefined) out.cron_expr = r.cron_expr;
+      if (r.cron_tz !== undefined) out.cron_tz = r.cron_tz;
+      if (r.webhook_path !== undefined) out.webhook_path = r.webhook_path;
+      return out;
+    });
+    writeSettings({ automation_rules: persisted });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[ipc] persistAutomationRules failed: ${msg}`);
+  }
+}
+
 function registerAutomationHandlers(): void {
   ipcMain.handle(
     'automation/list',
@@ -1028,6 +1053,8 @@ function registerAutomationHandlers(): void {
         if (registered === undefined) {
           throw new Error('register failed (rule not found after insert)');
         }
+        // v1.7.14 — settings 에 write-through 영속.
+        persistAutomationRules(mgr.list().map((rl) => summarizeRule(rl)));
         return ok(summarizeRule(registered));
       } catch (err) {
         return fail(err);
@@ -1044,6 +1071,10 @@ function registerAutomationHandlers(): void {
         }
         const mgr = getAutomationManager();
         const removed = mgr.unregister(raw);
+        // v1.7.14 — write-through.
+        if (removed) {
+          persistAutomationRules(mgr.list().map((rl) => summarizeRule(rl)));
+        }
         return ok({ removed });
       } catch (err) {
         return fail(err);

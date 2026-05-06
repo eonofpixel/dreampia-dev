@@ -210,4 +210,42 @@ describe('v1.7.4 — Automation IPC handlers', () => {
     const r = await call<Result<void>>('automation/fire', '');
     expect(r.ok).toBe(false);
   });
+
+  it('register → settings.json 에 영속 (v1.7.14)', async () => {
+    await call('automation/register', {
+      name: 'persisted-1',
+      kind: 'cron',
+      cron_expr: '0 9 * * *',
+      cron_tz: 'Asia/Seoul',
+    });
+    // settings.json 읽어서 automation_rules 가 있는지 확인.
+    const { readSettings, __resetSettingsCache } = await import(
+      '../../src/main/settings'
+    );
+    __resetSettingsCache();
+    const settings = readSettings();
+    expect(settings.automation_rules).toBeDefined();
+    expect(settings.automation_rules!.length).toBe(1);
+    expect(settings.automation_rules![0]!.name).toBe('persisted-1');
+    expect(settings.automation_rules![0]!.kind).toBe('cron');
+    expect(settings.automation_rules![0]!.cron_expr).toBe('0 9 * * *');
+    expect(settings.automation_rules![0]!.cron_tz).toBe('Asia/Seoul');
+  });
+
+  it('unregister → settings 에서도 제거 (v1.7.14)', async () => {
+    await call('automation/register', {
+      name: 'will-remove',
+      kind: 'interval',
+      interval_ms: 5000,
+    });
+    await call('automation/unregister', 'will-remove');
+    const { readSettings, __resetSettingsCache } = await import(
+      '../../src/main/settings'
+    );
+    __resetSettingsCache();
+    const settings = readSettings();
+    // 다른 rule 들도 있을 수 있어 정확 비교 X — 'will-remove' 만 없으면 OK.
+    const names = (settings.automation_rules ?? []).map((r) => r.name);
+    expect(names).not.toContain('will-remove');
+  });
 });
