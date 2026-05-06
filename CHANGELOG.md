@@ -2,6 +2,33 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.3] — 2026-05-06
+
+**Session fork backend — `SessionStore.forkSession`.**
+
+Schema 의 `parent_session_id` (이미 존재) 위에 application 메서드 추가. 사용자가
+"이 시점에서 대화 분기" 시나리오를 지원하기 위한 backend MVP — UI 는 별도
+슬롯.
+
+API:
+- `forkSession(parentId, options?)` — `{ title?, truncateAt? }` 받음.
+- 동작:
+  - parent 미존재 → throw.
+  - 새 session id (UUIDv7), `parent_session_id` 설정.
+  - `title` 미지정 시 `${parent.title} (fork)`.
+  - turns 복사 (각 turn 새 id 부여 — globally unique 보장).
+  - `truncateAt` 가 turn id 이면 그 turn 까지 (포함) 복사. 미존재 id 는 전체.
+  - `permission.grants` 의 `session_id` 는 새 child id 로 매핑.
+  - `browser.tabs` / `terminal.panes` 는 빈 list (parent 와 격리 — 새 session
+    의 새 컨텍스트).
+- `createSession` 재사용 → 기존 transaction 보호.
+
+테스트: 7 신규 unit (parent 미존재 throw / parent_session_id 설정 / default
+title / title 옵션 우선 / turns 새 id / truncateAt 정확 / truncateAt 미존재
+fallback). 회귀 0 (1885 pass / 7 baseline).
+
+후속 — UI 진입점 (chat header [fork] 버튼 / turn-level [여기서 분기]).
+
 ## [1.5.7] — 2026-05-06
 
 **PDF 추출 → chat-injectable text 포맷 utility (v1.5.4 follow-up).**

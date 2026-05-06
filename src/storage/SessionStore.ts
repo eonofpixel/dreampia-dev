@@ -44,6 +44,8 @@
 import Database from 'better-sqlite3';
 import type { Database as DatabaseT, Statement } from 'better-sqlite3';
 import { SessionSchema, type Session } from '@/types/session';
+// v1.6.3 — fork 시 새 id 생성용.
+import { newSessionId, newTurnId, nowIso } from '@/types/helpers';
 import type {
   Annotation,
   Conversation,
@@ -612,6 +614,80 @@ export class SessionStore {
     });
 
     tx(session);
+  }
+
+  /**
+   * v1.6.3 — Parent-child session fork. 새 session 을 생성하면서 parent 의
+   * conversation context (turns) 를 복사해 "이 시점에서 대화 분기" 시나리오
+   * 를 지원.
+   *
+   * 동작:
+   *  - parent 세션 fetch (없으면 throw).
+   *  - 새 session 생성:
+   *    - id = newSessionId().
+   *    - parent_session_id = parentId.
+   *    - workspace / permission / browser / terminal / plan 은 parent 의
+   *      현재 상태 복사 (별도 row 들이지만 parent 와 독립적으로 progress).
+   *    - conversation.turns = parent 의 첫 N 개 turn (옵션 truncateAt) 또는
+   *      전체. truncateAt 이 turn id 라면 그 turn 까지 (포함) 복사.
+   *  - createSession 호출 → 모든 child rows insert.
+   *
+   * @returns 새 session id.
+   */
+  forkSession(
+    parentId: SessionId,
+    options: {
+      title?: string;
+      truncateAt?: string;
+    } = {}
+  ): SessionId {
+    const parent = this.getSession(parentId);
+    if (parent === null) {
+      throw new Error(`Parent session ${parentId} not found`);
+    }
+    const newId = newSessionId();
+    const now = nowIso();
+
+    // Conversation 자르기. truncateAt 가 있으면 그 turn 까지 (포함). 없으면
+    // 전체 복사.
+    let turns = parent.conversation.turns;
+    if (options.truncateAt !== undefined) {
+      const idx = turns.findIndex((t) => t.id === options.truncateAt);
+      if (idx >= 0) {
+        turns = turns.slice(0, idx + 1);
+      }
+    }
+
+    // Turn id 들은 globally unique 이어야 하므로 새 id 부여. content 는 동일.
+    const newTurns = turns.map((t) => ({
+      ...t,
+      id: newTurnId(),
+    }));
+
+    const fork: Session = {
+      ...parent,
+      id: newId,
+      created_at: now,
+      updated_at: now,
+      parent_session_id: parentId,
+      title: options.title ?? `${parent.title} (fork)`,
+      conversation: {
+        ...parent.conversation,
+        turns: newTurns,
+      },
+      // permission grants 는 deep copy — 같은 reference 공유 X.
+      permission: {
+        ...parent.permission,
+        grants: parent.permission.grants.map((g) => ({ ...g, session_id: newId })),
+      },
+      // browser tabs / terminal panes 도 새 session 의 것이므로 reset 권고.
+      // 안전한 default: 빈 list 로 시작 (기존 tabs 는 parent 가 계속 가짐).
+      browser: { ...parent.browser, tabs: [] },
+      terminal: { ...parent.terminal, panes: [] },
+    };
+
+    this.createSession(fork);
+    return newId;
   }
 
   /**
