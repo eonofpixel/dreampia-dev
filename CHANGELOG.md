@@ -2,6 +2,26 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.7] — 2026-05-06
+
+**axe-core/playwright a11y baseline (drive18).**
+
+`@axe-core/playwright` (^4.11) devDependency 추가 + `e2e/_drive18_axe.spec.ts`
+신설. 핵심 화면 3곳에서 WCAG 2.1 A/AA 자동 검사:
+
+- 18-1: 메인 채팅 화면 (사이드바 + chat panel + preview).
+- 18-2: settings 모달 (mcp 탭).
+- 18-3: settings 모달 [Direct API] 탭 (v1.5.0 산출물 a11y 회귀 lock).
+
+정책:
+- critical / serious 위반 0 강제 (`expect.soft` — 한 번에 모두 보고).
+- moderate / minor 는 경고만 — 점진 개선 단계 (v1.7.8 후속).
+- false positive 차단용 `DISABLE_RULES` 배열 — 현재 비어있음 (strict baseline).
+- 각 시나리오 결과를 `test-results/drive/r18-*.json` 으로 저장 (위반 누적
+  추적 + diff 가능).
+
+unit suite 영향 0 — e2e-only change (axe 자체는 e2e 환경에서만 실행).
+
 ## [1.7.11] — 2026-05-06
 
 **Toast context + settings 패널 silent fail 마이그레이션.**
