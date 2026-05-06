@@ -23,20 +23,23 @@ describe('v1.2.1 — Direct API stubs', () => {
     expect(p.provider).toBe('codex');
   });
 
-  it('AnthropicProvider.stream → not_implemented error', async () => {
-    const p = new AnthropicProvider({ apiKey: 'sk-x' });
+  it('AnthropicProvider.stream → message_start + (fetch fail → error event)', async () => {
+    // v1.4.4: 실 fetch 시도. 잘못된 baseUrl 로 즉시 실패 유도.
+    const p = new AnthropicProvider({
+      apiKey: 'sk-x',
+      baseUrl: 'http://127.0.0.1:9/invalid',
+    });
     const events: StreamEvent[] = [];
     for await (const ev of p.stream({ turns: [], model: 'claude-sonnet' })) {
       events.push(ev);
     }
-    expect(events.length).toBe(1);
-    expect(events[0]?.type).toBe('error');
-    if (events[0]?.type === 'error') {
-      expect(events[0].error).toMatch(/not yet implemented/);
-    }
+    // 첫 event 는 message_start, 마지막은 error.
+    expect(events[0]?.type).toBe('message_start');
+    const errors = events.filter((e) => e.type === 'error');
+    expect(errors.length).toBeGreaterThan(0);
   });
 
-  it('OpenAIProvider.stream → not_implemented error', async () => {
+  it('OpenAIProvider.stream → not_implemented error (v1.4.5 stub)', async () => {
     const p = new OpenAIProvider({ apiKey: 'sk-y' });
     const events: StreamEvent[] = [];
     for await (const ev of p.stream({ turns: [], model: 'gpt-4' })) {

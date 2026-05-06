@@ -2,6 +2,35 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.4.4] — 2026-05-06
+
+**AnthropicProvider 실 SSE 구현 (Critical-first 진입).**
+
+v1.2.1 stub 을 production 동작으로. fetch + Anthropic Messages API SSE
+응답 파싱 → StreamEvent 변환.
+
+### Implemented
+
+- POST `/v1/messages` with `stream: true` + `accept: text/event-stream`.
+- SseParser 통합 → SSE event JSON parse → StreamEvent:
+  - `message_start` (turn_id 자체 생성).
+  - `content_block_delta.text_delta` → `text_delta`.
+  - `message_delta.usage` → `usage`.
+  - `message_stop` → `message_complete` (synthesized assistant turn).
+  - `error` → `error`.
+- non-200 → 명시적 error event (status + body slice).
+- AbortSignal 전달.
+
+### Limitations (v1.4.6 후속)
+
+- tool_use / image / multi-content_block 변환 X.
+- 401/429/5xx retry 없음.
+- prompt caching 없음.
+
+### Tests (5 신규 + 1 stub 갱신)
+
+- happy path / 401 error / SSE error event / chunked split / 빈 turns.
+
 ## [1.3.7] — 2026-05-06
 
 **Bot Automation manager (마지막 P3 슬롯).**
