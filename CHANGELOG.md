@@ -2,6 +2,28 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.18] — 2026-05-06
+
+**McpSettings 모달 hardcoded 한국어 → useT i18n.**
+
+`src/renderer/components/settings/McpSettings.tsx` 의 모든 hardcoded 한국어
+문자열을 `useT()` 기반으로 교체. Modal aria / title / subtitle / close /
+loading / empty / status labels (5종) / discovery 섹션 / server row 버튼 (로그/
+재시작/제거) / add form (전 필드 + 에러 5종) / logs modal 까지 모두 t() 통과.
+
+`STATUS_LABELS` module-level const → `statusLabel(t, s)` helper function 으로
+변경 — locale 전환 시 reactive 하게 라벨 갱신.
+
+i18n: ko/en `mcp.*` 약 47개 키 추가.
+
+기존 testid (mcp-server-list / mcp-add-button / discovered-* / suggested-* /
+mcp-discovery-section) 그대로 유지. ko default 에서 기존 한국어 정규식 query
+(예: /MCP 서버 설정/i, /등록된 MCP 서버가 없어요/i, /^추가$/i) 그대로 매칭 →
+McpSettings.test.tsx (12 tests) + McpSettings.discovery.test.tsx (5 tests)
+모두 PASS.
+
+회귀 0.
+
 ## [1.7.17] — 2026-05-06
 
 **App.tsx 의 toast 메시지들 i18n 화.**

@@ -16,7 +16,8 @@
  *  - 단순 form: env / args 는 textarea (each line one entry)
  *  - 생성 시간/추가일은 자동 채움 (new Date().toISOString())
  *
- * 한국어 우선 — Spec: docs/design/principles.md
+ * v1.7.18 — hardcoded 한국어 전체를 useT() 기반으로 교체. STATUS_LABELS const →
+ * `statusLabel(t, s)` helper 로 locale reactive.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -37,19 +38,12 @@ import {
   type McpServerStatusUI,
   type SuggestedMcpServerUI,
 } from '../../hooks/useMcp';
+import { useT } from '../../i18n';
 
 export interface McpSettingsProps {
   open: boolean;
   onClose: () => void;
 }
-
-const STATUS_LABELS: Record<McpServerStatusUI, string> = {
-  disconnected: '미연결',
-  connecting: '연결 중',
-  ready: '준비 완료',
-  error: '오류',
-  disabled: '비활성',
-};
 
 const STATUS_COLORS: Record<McpServerStatusUI, string> = {
   disconnected: 'bg-gray-500',
@@ -59,7 +53,24 @@ const STATUS_COLORS: Record<McpServerStatusUI, string> = {
   disabled: 'bg-gray-400',
 };
 
+/** v1.7.18 — locale reactive label. caller 가 useT() 결과를 전달. */
+function statusLabel(t: ReturnType<typeof useT>, status: McpServerStatusUI): string {
+  switch (status) {
+    case 'disconnected':
+      return t('mcp.status.disconnected');
+    case 'connecting':
+      return t('mcp.status.connecting');
+    case 'ready':
+      return t('mcp.status.ready');
+    case 'error':
+      return t('mcp.status.error');
+    case 'disabled':
+      return t('mcp.status.disabled');
+  }
+}
+
 export function McpSettings({ open, onClose }: McpSettingsProps): React.JSX.Element | null {
+  const t = useT();
   if (!open) return null;
 
   return (
@@ -67,21 +78,19 @@ export function McpSettings({ open, onClose }: McpSettingsProps): React.JSX.Elem
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       role="dialog"
       aria-modal="true"
-      aria-label="MCP 서버 설정"
+      aria-label={t('mcp.modal_aria')}
     >
       <div className="flex max-h-[90vh] w-[800px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border-primary p-4">
           <div>
-            <h2 className="text-lg font-semibold">MCP 서버</h2>
-            <p className="text-xs text-text-secondary">
-              Model Context Protocol 서버를 등록하면 AI 가 외부 도구를 호출할 수 있어요.
-            </p>
+            <h2 className="text-lg font-semibold">{t('mcp.title')}</h2>
+            <p className="text-xs text-text-secondary">{t('mcp.subtitle')}</p>
           </div>
           <button
             onClick={onClose}
             className="rounded-md p-2 hover:bg-bg-tertiary"
-            aria-label="닫기"
+            aria-label={t('mcp.close')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -101,6 +110,7 @@ export function McpSettings({ open, onClose }: McpSettingsProps): React.JSX.Elem
  * 버튼 클릭 시 add form 에 미리 채워진 상태로 열림.
  */
 export function McpSettingsPanel(): React.JSX.Element {
+  const t = useT();
   const {
     servers,
     loading,
@@ -191,10 +201,10 @@ export function McpSettingsPanel(): React.JSX.Element {
         )}
 
         {loading ? (
-          <p className="text-sm text-text-secondary">불러오는 중...</p>
+          <p className="text-sm text-text-secondary">{t('mcp.loading')}</p>
         ) : servers.length === 0 ? (
           <div className="py-8 text-center text-sm text-text-secondary">
-            등록된 MCP 서버가 없어요. 우측 하단 [+ 서버 추가] 버튼으로 시작해보세요.
+            {t('mcp.empty')}
           </div>
         ) : (
           <ul className="space-y-2" data-testid="mcp-server-list">
@@ -226,7 +236,7 @@ export function McpSettingsPanel(): React.JSX.Element {
           className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-bg-tertiary"
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          새로고침
+          {t('mcp.refresh')}
         </button>
         <button
           onClick={() => {
@@ -236,7 +246,7 @@ export function McpSettingsPanel(): React.JSX.Element {
           data-testid="mcp-add-button"
         >
           <Plus className="h-3.5 w-3.5" />
-          서버 추가
+          {t('mcp.add_server')}
         </button>
       </div>
 
@@ -286,6 +296,7 @@ function McpDiscoverySection({
   onAddSuggested,
   onAddDiscovered,
 }: McpDiscoverySectionProps): React.JSX.Element | null {
+  const t = useT();
   const hasDiscovered = discovery.from_claude.length + discovery.from_codex.length > 0;
   const hasSuggested = discovery.suggested.length > 0;
   if (!hasDiscovered && !hasSuggested) return null;
@@ -295,7 +306,7 @@ function McpDiscoverySection({
       {hasDiscovered && (
         <div>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-            CLI 에서 발견된 서버
+            {t('mcp.discovery.from_cli_title')}
           </h3>
           <ul className="space-y-1.5">
             {discovery.from_claude.map((c) => (
@@ -322,7 +333,7 @@ function McpDiscoverySection({
         <div>
           <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
             <Sparkles className="h-3 w-3" aria-hidden="true" />
-            추천 서버
+            {t('mcp.discovery.suggested_title')}
           </h3>
           <ul className="space-y-1.5">
             {discovery.suggested.map((s) => (
@@ -346,6 +357,7 @@ interface DiscoveredRowProps {
 }
 
 function DiscoveredRow({ source, config, onAdd }: DiscoveredRowProps): React.JSX.Element {
+  const t = useT();
   return (
     <li
       className="flex items-start justify-between gap-3 rounded-md border border-border-primary bg-bg-elevated p-2.5"
@@ -371,7 +383,7 @@ function DiscoveredRow({ source, config, onAdd }: DiscoveredRowProps): React.JSX
         data-testid={`discovered-add-${config.id}`}
       >
         <Plus className="h-3 w-3" />
-        추가
+        {t('mcp.add')}
       </button>
     </li>
   );
@@ -383,6 +395,7 @@ interface SuggestedRowProps {
 }
 
 function SuggestedRow({ suggested, onAdd }: SuggestedRowProps): React.JSX.Element {
+  const t = useT();
   return (
     <li
       className="flex items-start justify-between gap-3 rounded-md border border-border-primary bg-bg-elevated p-2.5"
@@ -400,7 +413,7 @@ function SuggestedRow({ suggested, onAdd }: SuggestedRowProps): React.JSX.Elemen
         data-testid={`suggested-add-${suggested.id}`}
       >
         <Plus className="h-3 w-3" />
-        추가
+        {t('mcp.add')}
       </button>
     </li>
   );
@@ -423,6 +436,8 @@ function McpServerRow({
   onRemove,
   onViewLogs,
 }: McpServerRowProps): React.JSX.Element {
+  const t = useT();
+  const sLabel = statusLabel(t, server.status);
   return (
     <li className="rounded-md border border-border-primary p-3">
       <div className="flex items-start justify-between gap-3">
@@ -430,13 +445,11 @@ function McpServerRow({
           <div className="flex items-center gap-2">
             <span
               className={`inline-block h-2 w-2 rounded-full ${STATUS_COLORS[server.status]}`}
-              aria-label={STATUS_LABELS[server.status]}
+              aria-label={sLabel}
             />
             <span className="font-medium">{server.config.name}</span>
             <span className="text-xs text-text-tertiary">@{server.config.id}</span>
-            <span className="text-xs text-text-secondary">
-              {STATUS_LABELS[server.status]}
-            </span>
+            <span className="text-xs text-text-secondary">{sLabel}</span>
           </div>
           <div className="mt-1 truncate text-xs text-text-secondary">
             <code className="font-mono">
@@ -444,35 +457,37 @@ function McpServerRow({
             </code>
           </div>
           <div className="mt-1 text-xs text-text-secondary">
-            도구 {server.tools.length}개
+            {t('mcp.tools_count', { n: server.tools.length })}
             {server.pid !== undefined ? ` · PID ${server.pid}` : ''}
           </div>
           {server.last_error !== undefined && (
-            <p className="mt-1 text-xs text-red-400">에러: {server.last_error}</p>
+            <p className="mt-1 text-xs text-red-400">
+              {t('mcp.row_error', { e: server.last_error })}
+            </p>
           )}
         </div>
         <div className="flex flex-shrink-0 gap-1">
           <button
             onClick={onViewLogs}
             className="rounded-md p-1.5 hover:bg-bg-tertiary"
-            aria-label="로그 보기"
-            title="로그 보기"
+            aria-label={t('mcp.row.view_logs')}
+            title={t('mcp.row.view_logs')}
           >
             <FileText className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={onRestart}
             className="rounded-md p-1.5 hover:bg-bg-tertiary"
-            aria-label="재시작"
-            title="재시작"
+            aria-label={t('mcp.row.restart')}
+            title={t('mcp.row.restart')}
           >
             <RefreshCw className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={onRemove}
             className="rounded-md p-1.5 text-red-400 hover:bg-red-500/10"
-            aria-label="제거"
-            title="제거"
+            aria-label={t('mcp.row.remove')}
+            title={t('mcp.row.remove')}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -494,6 +509,7 @@ interface McpAddFormProps {
 }
 
 function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.Element {
+  const t = useT();
   const [id, setId] = useState(initial?.id ?? '');
   const [name, setName] = useState(initial?.name ?? '');
   const [command, setCommand] = useState(initial?.command ?? '');
@@ -517,15 +533,15 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
 
       const trimmedId = id.trim();
       if (!/^[a-zA-Z0-9_-]+$/.test(trimmedId)) {
-        setFormError('id 는 영문/숫자/하이픈/언더스코어만 사용할 수 있어요.');
+        setFormError(t('mcp.add_form.err_invalid_id'));
         return;
       }
       if (name.trim().length === 0) {
-        setFormError('이름을 입력해주세요.');
+        setFormError(t('mcp.add_form.err_name_required'));
         return;
       }
       if (command.trim().length === 0) {
-        setFormError('실행 명령을 입력해주세요.');
+        setFormError(t('mcp.add_form.err_command_required'));
         return;
       }
 
@@ -540,7 +556,7 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
         if (line.length === 0) continue;
         const eq = line.indexOf('=');
         if (eq <= 0) {
-          setFormError(`환경 변수 형식 오류: '${line.slice(0, 30)}' (KEY=VALUE 형식 필요)`);
+          setFormError(t('mcp.add_form.err_env_format', { line: line.slice(0, 30) }));
           return;
         }
         const key = line.slice(0, eq).trim();
@@ -565,10 +581,10 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
       const success = await onSubmit(config);
       setSubmitting(false);
       if (!success) {
-        setFormError('서버 추가에 실패했어요. (이미 존재하거나 spawn 실패)');
+        setFormError(t('mcp.add_form.err_submit_failed'));
       }
     },
-    [id, name, command, argsText, envText, cwd, enabled, onSubmit]
+    [id, name, command, argsText, envText, cwd, enabled, onSubmit, t]
   );
 
   return (
@@ -576,7 +592,7 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60"
       role="dialog"
       aria-modal="true"
-      aria-label="MCP 서버 추가"
+      aria-label={t('mcp.add_form_aria')}
     >
       <form
         onSubmit={(e) => {
@@ -585,12 +601,12 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
         className="flex max-h-[90vh] w-[600px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl"
       >
         <div className="flex items-center justify-between border-b border-border-primary p-4">
-          <h3 className="text-base font-semibold">새 MCP 서버</h3>
+          <h3 className="text-base font-semibold">{t('mcp.add_form_title')}</h3>
           <button
             type="button"
             onClick={onClose}
             className="rounded-md p-2 hover:bg-bg-tertiary"
-            aria-label="닫기"
+            aria-label={t('mcp.close')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -603,7 +619,7 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
             </div>
           )}
 
-          <Field label="ID" hint="영문/숫자/하이픈/언더스코어 (예: github-mcp)">
+          <Field label={t('mcp.field.id')} hint={t('mcp.hint.id')}>
             <input
               value={id}
               onChange={(e) => {
@@ -614,7 +630,7 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
             />
           </Field>
 
-          <Field label="이름" hint="목록에 표시되는 표시명">
+          <Field label={t('mcp.field.name')} hint={t('mcp.hint.name')}>
             <input
               value={name}
               onChange={(e) => {
@@ -625,7 +641,7 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
             />
           </Field>
 
-          <Field label="실행 명령" hint="예: npx, node, python">
+          <Field label={t('mcp.field.command')} hint={t('mcp.hint.command')}>
             <input
               value={command}
               onChange={(e) => {
@@ -636,7 +652,7 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
             />
           </Field>
 
-          <Field label="인자 (줄바꿈 구분)" hint="예: -y / @modelcontextprotocol/server-github">
+          <Field label={t('mcp.field.args')} hint={t('mcp.hint.args')}>
             <textarea
               value={argsText}
               onChange={(e) => {
@@ -646,7 +662,7 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
             />
           </Field>
 
-          <Field label="환경 변수 (KEY=VALUE per line)" hint="예: GITHUB_TOKEN=...">
+          <Field label={t('mcp.field.env')} hint={t('mcp.hint.env')}>
             <textarea
               value={envText}
               onChange={(e) => {
@@ -656,7 +672,7 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
             />
           </Field>
 
-          <Field label="작업 디렉토리 (선택)" hint="비우면 process.cwd() 사용">
+          <Field label={t('mcp.field.cwd')} hint={t('mcp.hint.cwd')}>
             <input
               value={cwd}
               onChange={(e) => {
@@ -674,7 +690,7 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
                 setEnabled(e.target.checked);
               }}
             />
-            <span>저장 후 즉시 실행</span>
+            <span>{t('mcp.field.enabled_label')}</span>
           </label>
         </div>
 
@@ -684,14 +700,14 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
             onClick={onClose}
             className="rounded-md px-3 py-1.5 text-sm hover:bg-bg-tertiary"
           >
-            취소
+            {t('mcp.cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting}
             className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {submitting ? '추가 중...' : '추가'}
+            {submitting ? t('mcp.adding') : t('mcp.add')}
           </button>
         </div>
       </form>
@@ -710,27 +726,28 @@ interface McpLogsModalProps {
 }
 
 function McpLogsModal({ id, lines, onClose }: McpLogsModalProps): React.JSX.Element {
+  const t = useT();
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60"
       role="dialog"
       aria-modal="true"
-      aria-label={`${id} 로그`}
+      aria-label={t('mcp.logs.aria', { id })}
     >
       <div className="flex max-h-[80vh] w-[700px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl">
         <div className="flex items-center justify-between border-b border-border-primary p-3">
-          <h3 className="text-base font-semibold">로그 — {id}</h3>
+          <h3 className="text-base font-semibold">{t('mcp.logs.title', { id })}</h3>
           <button
             onClick={onClose}
             className="rounded-md p-2 hover:bg-bg-tertiary"
-            aria-label="닫기"
+            aria-label={t('mcp.close')}
           >
             <X className="h-4 w-4" />
           </button>
         </div>
         <div className="flex-1 overflow-y-auto bg-bg-secondary p-3">
           {lines.length === 0 ? (
-            <p className="text-sm text-text-secondary">로그가 없어요.</p>
+            <p className="text-sm text-text-secondary">{t('mcp.logs.empty')}</p>
           ) : (
             <pre className="whitespace-pre-wrap font-mono text-xs text-text-primary">
               {lines.join('\n')}
