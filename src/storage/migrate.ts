@@ -27,6 +27,13 @@ import sql010 from './migrations/010_json_columns_promote.sql?raw';
 import sql011 from './migrations/011_down_migration_marker.sql?raw';
 import sql012 from './migrations/012_workspace_id_sha256_marker.sql?raw';
 
+// v1.4.3 — down migrations. 일부 (markers 8-12) 만 backfill, 1-7 은 후속.
+import down008 from './migrations/down_008_workspace_id_deterministic.sql?raw';
+import down009 from './migrations/down_009_grants_id_text.sql?raw';
+import down010 from './migrations/down_010_json_columns_promote.sql?raw';
+import down011 from './migrations/down_011_down_migration_marker.sql?raw';
+import down012 from './migrations/down_012_workspace_id_sha256_marker.sql?raw';
+
 // ────────────────────────────────────────────────────────────
 // Migration registry
 // ────────────────────────────────────────────────────────────
@@ -35,6 +42,12 @@ interface Migration {
   version: number;
   description: string;
   up: string;
+  /**
+   * v1.4.3 — Down migration SQL. 미정 시 본 migration 을 cross 하는 revertTo
+   * 호출은 throw — 데이터 손실 방지. 현재 markers (8-12) 만 down 정의되어
+   * 있고 실제 schema 변경 migration (1-7) 은 후속에서 추가.
+   */
+  down?: string;
 }
 
 /** Ordered list of migrations. Future versions append here. */
@@ -58,26 +71,31 @@ const MIGRATIONS: readonly Migration[] = [
     version: 8,
     description: 'v1.3.0 — workspace_id deterministic marker (B-1)',
     up: sql008,
+    down: down008,
   },
   {
     version: 9,
     description: 'v1.3.1 — permission_grants.id TEXT promote marker (B-2)',
     up: sql009,
+    down: down009,
   },
   {
     version: 10,
     description: 'v1.3.2 — JSON-wrapped columns promote marker (B-3)',
     up: sql010,
+    down: down010,
   },
   {
     version: 11,
     description: 'v1.3.3 — down-migration marker (B-4)',
     up: sql011,
+    down: down011,
   },
   {
     version: 12,
     description: 'v1.4.0 — workspace_id sha256 backfill foundation (B-1 후속)',
     up: sql012,
+    down: down012,
   },
 ] as const;
 
@@ -187,4 +205,90 @@ export function migrate(db: Database): void {
 /** Read the current schema version. Returns 0 if uninitialized. */
 export function getSchemaVersion(db: Database): number {
   return readCurrentVersion(db);
+}
+
+// ────────────────────────────────────────────────────────────
+// v1.4.3 — Down-migration / revertTo
+// ────────────────────────────────────────────────────────────
+
+/**
+ * RevertToResult — `revertTo` 호출 결과 통계.
+ *
+ *  - reverted: 실제로 down SQL 이 실행된 migration version 들 (descending).
+ *  - from / to: 시작 / 최종 schema_version.
+ */
+export interface RevertToResult {
+  from: number;
+  to: number;
+  reverted: number[];
+}
+
+export class DownMigrationMissingError extends Error {
+  constructor(public readonly version: number) {
+    super(
+      `Migration v${version} 의 down SQL 이 정의되지 않아 revert 를 거절합니다. ` +
+        `데이터 손실 방지를 위해 backup 후 manual 처리가 필요합니다.`
+    );
+    this.name = 'DownMigrationMissingError';
+  }
+}
+
+/**
+ * 현재 schema_version 에서 `targetVersion` 까지 down migrations 를 역순으로
+ * 적용. 한 번이라도 down 이 정의 안 된 migration 을 cross 해야 한다면
+ * `DownMigrationMissingError` 로 fail-fast (데이터 손실 위험).
+ *
+ * 호출자 책임:
+ *  - 호출 전 DB backup (file copy 권장).
+ *  - 호출 후 application 의 in-memory cache 무효화.
+ *  - INV: targetVersion 은 0 ≤ target ≤ current.
+ */
+export function revertTo(db: Database, targetVersion: number): RevertToResult {
+  const current = readCurrentVersion(db);
+  if (targetVersion < 0 || !Number.isInteger(targetVersion)) {
+    throw new Error(`targetVersion must be a non-negative integer (got ${targetVersion})`);
+  }
+  if (targetVersion > current) {
+    throw new Error(
+      `Cannot revert to v${targetVersion} from v${current} (target > current).`
+    );
+  }
+  if (targetVersion === current) {
+    return { from: current, to: current, reverted: [] };
+  }
+
+  // descending — current > current-1 > ... > target+1.
+  const toRevert: Migration[] = [];
+  for (let v = current; v > targetVersion; v -= 1) {
+    const m = MIGRATIONS.find((mg) => mg.version === v);
+    if (m === undefined) {
+      throw new Error(`No migration registered for version ${v}`);
+    }
+    if (m.down === undefined) {
+      throw new DownMigrationMissingError(v);
+    }
+    toRevert.push(m);
+  }
+
+  const reverted: number[] = [];
+  for (const m of toRevert) {
+    db.transaction(() => {
+      // down SQL — markers 는 SELECT 1, 실제 schema 변경 migration 은 DROP /
+      // ALTER 등 명시 statement 가 들어있어야 함.
+      db.exec(m.down ?? 'SELECT 1');
+      // schema_version 은 한 단계 내려감 (m.version - 1).
+      upsertMeta(db, 'version', String(m.version - 1));
+    })();
+    reverted.push(m.version);
+  }
+
+  return { from: current, to: targetVersion, reverted };
+}
+
+/**
+ * 어떤 migration version 들이 revert 가능한지 (down SQL 보유) 반환. UI 의
+ * "이 version 까지 안전하게 되돌릴 수 있어요" 표시에 사용.
+ */
+export function getRevertableVersions(): readonly number[] {
+  return MIGRATIONS.filter((m) => m.down !== undefined).map((m) => m.version);
 }

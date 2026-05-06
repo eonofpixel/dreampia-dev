@@ -2,6 +2,32 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.4.3] — 2026-05-06
+
+**Schema debt B-4 — down migration backfill + `revertTo` API.**
+
+v1.3.3 (migration 011) marker 의 application 후속. Down-migration 인프라
+구현. SQLite 가 native down 미지원이라 application layer 가 명시 SQL 파일 +
+역순 적용 함수를 제공.
+
+설계:
+- `Migration.down?: string` — optional. markers 8-12 만 backfill (no-op SELECT 1
+  — schema 변경 없는 marker 들). 1-7 은 추후 (실 schema 변경이라 DROP/ALTER
+  명시 SQL 필요).
+- `revertTo(db, targetVersion)` — current → target 까지 down 역순 적용. 한
+  단계라도 down 미정 migration 을 cross 해야 한다면 `DownMigrationMissingError`
+  fail-fast (데이터 손실 방지). 각 step 은 transaction.
+- `getRevertableVersions()` — UI 의 "안전 revert 가능 버전" 표시용.
+- `RevertToResult` — `{ from, to, reverted[] }` 통계.
+- 5개 down SQL 파일 (`down_008` ~ `down_012`) — 모두 SELECT 1 marker.
+
+테스트: 10 신규 unit (revertable 목록 / no-op / 1단계 / markers 4단계 /
+v7 cross fail-fast / v0 fail / target>current / 음수 / descending 순서 /
+revert 후 새 DB migrate 정상). 회귀 0 (1829 pass / 7 baseline).
+
+후속 — 실 schema 변경 migration (1-7) 의 down SQL 작성 + UI [DB 진단] 패널
+의 [revert 버전 선택] wiring 은 별도 슬롯.
+
 ## [1.7.3] — 2026-05-06
 
 **Cron expression parser — AutomationManager `'cron'` kind.**
