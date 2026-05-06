@@ -523,5 +523,14 @@
   "slash_help.footer.navigate": "탐색",
   "slash_help.footer.select": "선택",
   "slash_help.footer.autocomplete": "자동완성",
-  "slash_help.footer.close": "닫기"
+  "slash_help.footer.close": "닫기",
+  "chat.embedded_card.label": "[임베디드 카드: {title}]",
+  "chat.provider_badge.mock_title": "Mock provider 사용 중 (CLI 미감지)",
+  "chat.provider_badge.mock": "Mock",
+  "chat.provider_badge.claude_title": "Claude CLI {version} 감지됨 ({path})",
+  "chat.provider_badge.claude": "Claude CLI {version}",
+  "chat.provider_badge.codex_title": "Codex CLI {version} 감지됨 ({path})",
+  "chat.provider_badge.codex": "Codex CLI {version}",
+  "chat.provider_badge.none_title": "CLI 미감지 — Mock 사용",
+  "chat.provider_badge.none": "CLI 없음"
 }

@@ -2,6 +2,39 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.20] — 2026-05-07
+
+**ChatPanel 잔여 i18n — embedded card label + CLI provider badge.**
+
+v1.6.x i18n 트랙의 잔여 hardcoded 문자열 정리. `ChatPanel.tsx` 의
+TurnDisplay 임베디드 카드 레이블 + CliStatusBadge 의 provider 표기 4종
+(mock / claude / codex / none) 의 title + visible label 을 모두 t()
+경유로 전환. ko/en pair 9 키 신규.
+
+### Changed
+- `src/renderer/components/chat/ChatPanel.tsx`
+  - `[임베디드 카드: {title}]` (TurnDisplay) → `t('chat.embedded_card.label', { title })`.
+  - `CliStatusBadge` 의 mock/claude/codex/none 분기 모두 t() 경유로 전환:
+    - title attribute (mock_title / claude_title / codex_title / none_title)
+    - aria-label (claude / codex 는 visible label 과 같은 키 재사용)
+    - visible label (mock / claude / codex / none — `{version}` 보간)
+  - `useT()` import 가 이미 존재 — 새 import 없음.
+
+### Added
+- `src/renderer/i18n/messages.ko.json` + `messages.en.json` 에 9 키:
+  - `chat.embedded_card.label` ({title})
+  - `chat.provider_badge.mock_title`, `chat.provider_badge.mock`
+  - `chat.provider_badge.claude_title` ({version,path}), `chat.provider_badge.claude` ({version})
+  - `chat.provider_badge.codex_title` ({version,path}), `chat.provider_badge.codex` ({version})
+  - `chat.provider_badge.none_title`, `chat.provider_badge.none`
+- `tests/renderer/i18n/chatPanel.i18n.test.ts` 신규 6 cases — ko/en
+  키 존재 + 보간 + miss 미발생 검증.
+
+### 회귀
+- 0. typecheck clean.
+- 신규 6 tests PASS. 기존 i18n 38 tests 회귀 0.
+- baseline 1992 → 1998 (+6).
+
 ## [1.4.9] — 2026-05-07
 
 **BackfillPromptModal onDone → sessions cache 강제 갱신.**

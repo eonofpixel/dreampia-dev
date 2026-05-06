@@ -654,18 +654,19 @@ const PROVIDER_BADGE_CLASS: Record<string, string> = {
 };
 
 function CliStatusBadge({ status }: { status: CliStatus }): React.JSX.Element | null {
+  const t = useT();
   if (status === null) return null;
   const baseClass = 'rounded border px-1.5 py-0.5 text-[10px]';
   if (status.source === 'mock') {
     return (
       <span
-        title="Mock provider in use (CLI not detected)"
+        title={t('chat.provider_badge.mock_title')}
         aria-label="Mock provider"
         className={`${baseClass} ${PROVIDER_BADGE_CLASS.mock}`}
         data-testid="provider-status-badge"
         data-provider-source="mock"
       >
-        Mock
+        {t('chat.provider_badge.mock')}
       </span>
     );
   }
@@ -673,13 +674,13 @@ function CliStatusBadge({ status }: { status: CliStatus }): React.JSX.Element | 
     const v = status.claude.version ?? '?';
     return (
       <span
-        title={`Claude CLI ${v} detected at ${status.claude.path}`}
-        aria-label={`Claude CLI ${v}`}
+        title={t('chat.provider_badge.claude_title', { version: v, path: status.claude.path })}
+        aria-label={t('chat.provider_badge.claude', { version: v })}
         className={`${baseClass} ${PROVIDER_BADGE_CLASS['claude-cli']}`}
         data-testid="provider-status-badge"
         data-provider-source="claude-cli"
       >
-        Claude CLI {v}
+        {t('chat.provider_badge.claude', { version: v })}
       </span>
     );
   }
@@ -687,25 +688,25 @@ function CliStatusBadge({ status }: { status: CliStatus }): React.JSX.Element | 
     const v = status.codex.version ?? '?';
     return (
       <span
-        title={`Codex CLI ${v} detected at ${status.codex.path}`}
-        aria-label={`Codex CLI ${v}`}
+        title={t('chat.provider_badge.codex_title', { version: v, path: status.codex.path })}
+        aria-label={t('chat.provider_badge.codex', { version: v })}
         className={`${baseClass} ${PROVIDER_BADGE_CLASS['codex-cli']}`}
         data-testid="provider-status-badge"
         data-provider-source="codex-cli"
       >
-        Codex CLI {v}
+        {t('chat.provider_badge.codex', { version: v })}
       </span>
     );
   }
   return (
     <span
-      title="No CLI detected — using Mock"
-      aria-label="No CLI"
+      title={t('chat.provider_badge.none_title')}
+      aria-label={t('chat.provider_badge.none')}
       className={`${baseClass} ${PROVIDER_BADGE_CLASS.none}`}
       data-testid="provider-status-badge"
       data-provider-source="none"
     >
-      No CLI
+      {t('chat.provider_badge.none')}
     </span>
   );
 }
@@ -872,7 +873,7 @@ function TurnDisplay({
           if (block.type === 'embedded_card') {
             return (
               <p key={i} className="text-xs italic opacity-70">
-                [임베디드 카드: {block.card.title}]
+                {t('chat.embedded_card.label', { title: block.card.title })}
               </p>
             );
           }

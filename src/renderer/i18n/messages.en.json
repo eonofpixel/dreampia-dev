@@ -523,5 +523,14 @@
   "slash_help.footer.navigate": "Navigate",
   "slash_help.footer.select": "Select",
   "slash_help.footer.autocomplete": "Autocomplete",
-  "slash_help.footer.close": "Close"
+  "slash_help.footer.close": "Close",
+  "chat.embedded_card.label": "[Embedded card: {title}]",
+  "chat.provider_badge.mock_title": "Mock provider in use (CLI not detected)",
+  "chat.provider_badge.mock": "Mock",
+  "chat.provider_badge.claude_title": "Claude CLI {version} detected at {path}",
+  "chat.provider_badge.claude": "Claude CLI {version}",
+  "chat.provider_badge.codex_title": "Codex CLI {version} detected at {path}",
+  "chat.provider_badge.codex": "Codex CLI {version}",
+  "chat.provider_badge.none_title": "No CLI detected — using Mock",
+  "chat.provider_badge.none": "No CLI"
 }
