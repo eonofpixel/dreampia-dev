@@ -156,6 +156,14 @@ export class Telemetry {
     return this.enabled;
   }
 
+  /**
+   * v1.7.0 — bootstrap 가 ConsoleSink → SentrySink 교체 시 사용. 이미 enabled
+   * 상태에서도 안전 (다음 emit 부터 새 sink 적용).
+   */
+  setSink(sink: TelemetrySink): void {
+    this.sink = sink;
+  }
+
   error(name: string, error: string | Error, context?: Record<string, string | number | boolean>): void {
     if (!this.enabled) return;
     const errStr = error instanceof Error ? error.stack ?? error.message : error;

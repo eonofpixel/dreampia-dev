@@ -2,6 +2,30 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.12] — 2026-05-06
+
+**Telemetry bootstrap — Sentry init 부팅 wiring (v1.7.0 follow-up).**
+
+main process 시작 시 1회 호출되는 `bootstrapTelemetry` 함수 + `Telemetry.setSink`
+API 추가. SENTRY_DSN env 가 있으면 `@sentry/node` dynamic import → SentrySink
+교체 → console fallback 유지.
+
+설계 (`src/main/telemetry/bootstrap.ts`):
+- `bootstrapTelemetry({ telemetry, Sentry?, env?, enabled? })`:
+  1. `setEnabled(enabled)` — settings.telemetry_enabled 와 연동.
+  2. SENTRY_DSN 미정 → `{ sentry: false, reason: 'SENTRY_DSN not set' }`.
+  3. Sentry namespace 미주입 시 `await import('@sentry/node')` (test 는 mock 주입).
+  4. `initSentryFromEnv` + `SentrySink` wrap → `telemetry.setSink(sentrySink)`.
+- 모든 단계 fail-soft — exception 시 reason 메시지 + console fallback 유지.
+- `Telemetry.setSink(sink)` — 기존 console → Sentry 교체용.
+
+후속 wiring (별도 슬롯) — main/index.ts 가 settings + getTelemetry 와 함께
+호출. 본 commit 은 함수 + 테스트만.
+
+테스트: 6 신규 unit (DSN 미정 / Sentry 주입 + DSN → init 호출 / Sentry.init
+throw → reason / enabled true → setEnabled / enabled false → setEnabled false /
+성공 후 error → captureException). 회귀 0 (1898 pass / 7 baseline).
+
 ## [1.6.8] — 2026-05-06
 
 **Session fork IPC — `session/fork` (v1.6.3 follow-up).**
