@@ -2,6 +2,62 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.23] — 2026-05-06
+
+**Automation handler registry + first real handler (`llm-prompt`).**
+
+v1.7.4~v1.7.16 의 자동화 인프라 (interval / cron / webhook trigger,
+영속, AutomationModal UI) 는 모두 갖춰져 있었지만 fire 시점의 실제
+동작이 `[automation] rule fired (no-op)` 콘솔 로그뿐이었음. 이번
+슬롯에서 named handler registry 를 도입해 rule 에 실제 동작을
+바인딩.
+
+### Added
+- `src/main/automation/handlers/HandlerRegistry.ts` 신규 — name →
+  async handler 의 lookup table. `HandlerContext` (`rule_name` +
+  `config`) / `HandlerResult` (`ok` + `output?` + `error?`) 인터페이스.
+  `truncateOutput()` audit 용 helper. Module-level singleton
+  `handlerRegistry`.
+- `src/main/automation/handlers/llmPromptHandler.ts` 신규 — 첫 번째
+  builtin handler. `config.prompt` 를 활성 provider (`getDefaultProvider`)
+  로 전달, stream 의 `text_delta` 누적 → 결과 text 를 `truncateOutput`
+  통과해 `output` 으로 반환. `model` / `cwd` 는 optional.
+- `src/main/automation/handlers/index.ts` 신규 — `registerBuiltinHandlers()`
+  (idempotent), test 용 `resetBuiltinHandlersForTesting()`.
+- `noopLogHandler` (이름 `'noop-log'`) 가 default fallback. 종전 v1.7.4
+  ~v1.7.16 의 동작과 호환.
+- IPC `automation/list-handlers` 신규 — registered handler 이름 목록.
+  v1.7.25 의 AutomationModal handler picker UI 의 source.
+
+### Changed
+- `AutomationRule` 에 `handler_name?` + `handler_config?` 추가.
+  closure 자체는 직렬화 불가지만 식별자 + config 는 영속 가능 →
+  부팅 시 registry lookup 으로 closure 재구성.
+- `AutomationAuditEvent` 에 `handler_name?` + `output?` 추가. handler
+  가 `HandlerResult` 를 반환하면 `runOnce` 가 audit 에 자동 포함.
+  `ok=false` + `error` 면 `automation.error` 분기로 이동.
+- `AutomationRule.handler` 시그니처가 `() => Promise<unknown> | unknown`
+  로 완화 — `HandlerResult` 또는 void 모두 호환.
+- `AutomationRuleSummary` 에 `handler_name?` + `handler_config?` 추가
+  (직렬화 가능).
+- `AutomationRulePersisted` (settings.ts) 에 `handler_name?` +
+  `handler_config?` 추가. read 측에서 손상 항목 silent drop.
+- IPC `automation/register` 가 `handler_name` + `handler_config` 를
+  raw 입력에서 받아 registry lookup. 알 수 없는 이름은 fail-fast
+  (typo 의 silent fall-back 보다 안전). 기존 호출 (둘 다 미지정) 은
+  `noop-log` 로 fallback — 호환.
+- `getAutomationManager()` 의 hydration 이 persisted `handler_name` +
+  `handler_config` 를 사용해 closure 재구성.
+
+### 회귀
+- 0. typecheck clean. lint clean (변경 파일).
+- 신규 `tests/main/automation.handlers.test.ts` 15 tests PASS:
+  HandlerRegistry CRUD, builtin idempotency, llmPromptHandler
+  validation + Mock provider 통합, AutomationManager.runOnce 의
+  HandlerResult 처리 (output 캡처 + ok=false 분기 + void 호환).
+- `tests/main/ipc.automation.test.ts` (15 tests) 회귀 0.
+- baseline 1938 → 1953 (+15 신규, 7 baseline fail 유지).
+
 ## [1.7.22] — 2026-05-06
 
 **Settings panel toast detail 의 IPC error 정규화 + i18n.**

@@ -151,6 +151,10 @@ export interface AppSettings {
 
 /**
  * Persisted shape — handler 는 직렬화 불가라 제외. 현재 schema 에 align.
+ *
+ * v1.7.23 — handler_name / handler_config 추가. handler closure 는 직렬화
+ * 불가하지만 식별자 + config 는 영속 가능. 부팅 시 registry lookup 으로
+ * 실 closure 재구성.
  */
 export interface AutomationRulePersisted {
   name: string;
@@ -159,6 +163,8 @@ export interface AutomationRulePersisted {
   cron_expr?: string;
   cron_tz?: string;
   webhook_path?: string;
+  handler_name?: string;
+  handler_config?: Record<string, unknown>;
 }
 
 let cached: AppSettings | null = null;
@@ -279,6 +285,20 @@ export function readSettings(): AppSettings {
             r['webhook_path'].length > 0
           ) {
             persisted.webhook_path = r['webhook_path'];
+          }
+          // v1.7.23 — handler_name / handler_config. 손상된 항목 silent drop.
+          if (
+            typeof r['handler_name'] === 'string' &&
+            r['handler_name'].length > 0
+          ) {
+            persisted.handler_name = r['handler_name'];
+          }
+          if (
+            r['handler_config'] !== null &&
+            typeof r['handler_config'] === 'object' &&
+            !Array.isArray(r['handler_config'])
+          ) {
+            persisted.handler_config = r['handler_config'] as Record<string, unknown>;
           }
           validRules.push(persisted);
         }

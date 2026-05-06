@@ -83,6 +83,12 @@ import {
   summarizeRule,
   type AutomationRuleSummary,
 } from './automation/AutomationManager';
+// v1.7.23 — Handler registry for automation rules.
+import {
+  handlerRegistry,
+  registerBuiltinHandlers,
+  NOOP_LOG_HANDLER_NAME,
+} from './automation/handlers';
 // CLI / auto 는 Node-only — main 에서만 import. providers barrel 은
 // renderer 와 공유되므로 여기서 직접 명시적 경로로 가져온다.
 import {
@@ -1042,6 +1048,7 @@ export function registerIpcHandlers(
 // ────────────────────────────────────────────────────────────
 
 // v1.7.14 — register/unregister 시 호출. handler 는 직렬화 불가라 제외.
+// v1.7.23 — handler_name / handler_config 도 영속.
 function persistAutomationRules(rules: ReadonlyArray<AutomationRuleSummary>): void {
   try {
     const persisted = rules.map((r) => {
@@ -1052,11 +1059,15 @@ function persistAutomationRules(rules: ReadonlyArray<AutomationRuleSummary>): vo
         cron_expr?: string;
         cron_tz?: string;
         webhook_path?: string;
+        handler_name?: string;
+        handler_config?: Record<string, unknown>;
       } = { name: r.name, kind: r.kind };
       if (r.interval_ms !== undefined) out.interval_ms = r.interval_ms;
       if (r.cron_expr !== undefined) out.cron_expr = r.cron_expr;
       if (r.cron_tz !== undefined) out.cron_tz = r.cron_tz;
       if (r.webhook_path !== undefined) out.webhook_path = r.webhook_path;
+      if (r.handler_name !== undefined) out.handler_name = r.handler_name;
+      if (r.handler_config !== undefined) out.handler_config = r.handler_config;
       return out;
     });
     writeSettings({ automation_rules: persisted });
@@ -1095,12 +1106,30 @@ function registerAutomationHandlers(): void {
         if (name.length === 0 || name.length > 64) {
           throw new Error('name must be 1..64 chars');
         }
+
+        // v1.7.23 — handler registry lookup. handler_name 미지정 시 noop-log
+        // (종전 동작 호환). 알려지지 않은 이름은 immediate fail — 사용자가
+        // typo 한 경우 silent fall-back 보다 fail-fast 가 안전.
+        registerBuiltinHandlers();
+        const handlerName =
+          typeof obj['handler_name'] === 'string' && obj['handler_name'].length > 0
+            ? obj['handler_name']
+            : NOOP_LOG_HANDLER_NAME;
+        const handlerConfig =
+          obj['handler_config'] !== null &&
+          typeof obj['handler_config'] === 'object' &&
+          !Array.isArray(obj['handler_config'])
+            ? (obj['handler_config'] as Record<string, unknown>)
+            : {};
+        const handlerFn = handlerRegistry.get(handlerName);
+        if (handlerFn === undefined) {
+          throw new Error(`unknown handler_name: ${handlerName}`);
+        }
+
         const mgr = getAutomationManager();
-        // handler 는 IPC 로 못 받음 — 일단 no-op log handler 로 등록.
-        // 실 handler 는 별도 슬롯에서 (LLM call / shell script 실행 등).
-        const handler = async (): Promise<void> => {
-          console.info(`[automation] rule fired (no-op): ${name}`);
-        };
+        const handler = async (): Promise<unknown> =>
+          handlerFn({ rule_name: name, config: handlerConfig });
+
         mgr.register({
           name,
           kind,
@@ -1116,6 +1145,8 @@ function registerAutomationHandlers(): void {
           ...(typeof obj['webhook_path'] === 'string' && {
             webhook_path: obj['webhook_path'],
           }),
+          handler_name: handlerName,
+          handler_config: handlerConfig,
           handler,
         });
         const registered = mgr.list().find((r) => r.name === name);
@@ -1176,6 +1207,19 @@ function registerAutomationHandlers(): void {
         }
         const tz = typeof tzRaw === 'string' && tzRaw.length > 0 ? tzRaw : undefined;
         return ok({ next_run: AutomationManager.getNextRun(exprRaw, tz) });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  // v1.7.23 — Registered handler 이름 목록. UI dropdown 의 source.
+  ipcMain.handle(
+    'automation/list-handlers',
+    (): Result<string[]> => {
+      try {
+        registerBuiltinHandlers();
+        return ok(handlerRegistry.list());
       } catch (err) {
         return fail(err);
       }
