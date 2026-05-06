@@ -107,7 +107,13 @@ export async function getDefaultProvider(
   // v1.5.1: Direct API key 가 settings 에 있으면 우선 사용 (CLI detect 보다
   // 먼저). 사용자가 explicit 으로 입력한 key 라 의도 명확.
   // userDefaultProvider === 'claude'/'codex' 명시도 호환 — 그 경우 vendor 매칭.
-  const settings = readSettings();
+  // test 환경 (app.getPath mock 미적용) 에서 readSettings 가 throw 할 수 있음.
+  let settings: ReturnType<typeof readSettings>;
+  try {
+    settings = readSettings();
+  } catch {
+    settings = {};
+  }
   const lower = model.toLowerCase();
   const claudeFamily = ['claude-', 'sonnet-', 'opus-', 'haiku-'].some((p) => lower.startsWith(p));
   const codexFamily = ['gpt-', 'o1-', 'o3-', 'codex-'].some((p) => lower.startsWith(p));

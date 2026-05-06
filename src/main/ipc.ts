@@ -2017,6 +2017,12 @@ export interface AiHandlerConfig {
    * 기본 (별도 sink) 미설정 시 audit 미기록 — Queue 의 audit_sink 와 다른 경로.
    */
   costAuditSink?: (event: import('./CostGate').CostAuditEvent) => void;
+  /**
+   * v1.6.5 — Plugin Hook integration. AI stream 시작/종료 시점에 plugin
+   * hook (pre_turn / post_turn) 실행. 미지정 시 hook 호출 X (테스트 호환).
+   */
+  pluginManager?: import('./plugins/PluginManager').PluginManager;
+  pluginHookRunner?: import('./plugins/PluginHookRunner').PluginHookRunner;
 }
 
 interface ActiveStream {
@@ -2230,6 +2236,30 @@ async function runStreamPump(
 
   let terminalEmitted = false;
   let currentTurnId: TurnId | null = null;
+
+  // v1.6.5 — Plugin Hook integration. pre_turn 호출 (best-effort, throw 무시).
+  // 본 시점은 실제 provider stream 시작 직전 — plugin 이 ctx.payload 를
+  // 통해 turn 의 model/session 정보 확인 가능.
+  if (
+    cfg.pluginManager !== undefined &&
+    cfg.pluginHookRunner !== undefined
+  ) {
+    const plugins = cfg.pluginManager.list().loaded;
+    if (plugins.length > 0) {
+      try {
+        await cfg.pluginHookRunner.runHook(plugins, 'pre_turn', {
+          kind: 'pre_turn',
+          payload: {
+            session_id: input.session_id ?? '',
+            model: input.model,
+            stream_id: streamId,
+          },
+        });
+      } catch {
+        // best-effort — plugin runtime 의 throw 가 stream 을 막지 X.
+      }
+    }
+  }
   // v0.4.0 — translator 가 한 turn 동안 usage event 를 여러 번 emit 할 수 있다
   // (Claude assistant message + result 양쪽). DB 에는 마지막 1건만 영속해야
   // 누적이 정확. 매 usage 가 도착할 때마다 latest 를 갱신하고 stream 종료
@@ -2309,6 +2339,39 @@ async function runStreamPump(
     // 영속하므로 reserved 는 단순 삭제. 다음 ai/start-stream 호출의 MTD 합계
     // 가 갱신된 durable 합계 + (이번 stream 미반영) reserved 0 으로 정확.
     cfg.costGate?.release(streamId);
+
+    // v1.6.5 — Plugin post_turn hook (best-effort). v1.6.6 의 cost-limit-hook
+    // 이 본 ctx.payload.mtd_total_usd 등을 검사 → 사용자에게 toast 알림 위해
+    // hooks runtime 의 ctx.notify 가 main → renderer IPC 로 전달 (별도 IPC).
+    if (
+      cfg.pluginManager !== undefined &&
+      cfg.pluginHookRunner !== undefined
+    ) {
+      const plugins = cfg.pluginManager.list().loaded;
+      if (plugins.length > 0) {
+        const payload: Record<string, unknown> = {
+          session_id: input.session_id ?? '',
+          model: input.model,
+          stream_id: streamId,
+        };
+        if (latestUsage !== null) {
+          payload['cost_usd'] = latestUsage.data.total_cost_usd;
+        }
+        try {
+          await cfg.pluginHookRunner.runHook(plugins, 'post_turn', {
+            kind: 'post_turn',
+            payload,
+            // v1.6.6: ctx.notify 가 renderer 의 toast 로 forward.
+            notify: (message, kind): void => {
+              send('plugin/notify', { message, kind: kind ?? 'info' });
+            },
+          });
+        } catch {
+          // best-effort
+        }
+      }
+    }
+
     // Aborted 이고 terminal event 도 못 보냈으면 가짜 error event 발행 (renderer
     // 에서 hang 방지).
     if (!terminalEmitted && controller.signal.aborted) {

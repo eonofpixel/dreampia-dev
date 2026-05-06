@@ -186,6 +186,18 @@ export function App(): React.JSX.Element {
   const [pluginsModalOpen, setPluginsModalOpen] = useState(false);
   // v1.1.16 — 통일된 toast 알림 (error / warning / info / success).
   const toasts = useToasts();
+
+  // v1.6.5 — plugin hook 의 ctx.notify → renderer toast forward.
+  useEffect(() => {
+    const api = typeof window !== 'undefined' ? window.dreampia?.plugin : undefined;
+    if (api?.onNotify === undefined) return;
+    const off = api.onNotify(({ message, kind }) => {
+      const k = kind === 'error' || kind === 'warning' ? kind : 'info';
+      toasts.push(k, message, { detail: 'Plugin: cost-limit-hook' });
+    });
+    return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // v1.0.12 (COST-2): main 의 ai/start-stream 이 COST_LIMIT_EXCEEDED 로 차단
   // 시 본 state 가 채워져 modal 이 mount. parseCostLimitError 가 JSON 파싱.
   const [costLimitError, setCostLimitError] = useState<ParsedCostLimitError | null>(null);

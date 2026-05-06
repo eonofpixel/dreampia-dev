@@ -2,6 +2,26 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.6.5] — 2026-05-06
+
+**Plugin Hook integration — runStreamPump 의 pre/post_turn 호출.**
+
+`AiHandlerConfig` 에 `pluginManager?` + `pluginHookRunner?` 추가. main 의
+boot 시 PluginHookRunner instance 생성 + audit_log sink 연결. registerIpcHandlers
+의 cfg 에 주입.
+
+`runStreamPump` 에서:
+- 시작 직전 `pre_turn` 호출 — payload `{session_id, model, stream_id}`.
+- finally 에서 `post_turn` 호출 — payload + `cost_usd` (latestUsage 의
+  total_cost_usd) + `notify` callback.
+- `notify` 가 main → renderer `plugin/notify` IPC 로 forward.
+
+renderer (App.tsx) 가 `window.dreampia.plugin.onNotify(handler)` 등록 →
+toast 로 표시.
+
+auto.ts: `readSettings()` 호출이 test 환경 mock 부족으로 throw 시 fallback
+빈 객체.
+
 ## [1.5.6] — 2026-05-06
 
 **Vision routing — provider 별 image block format 변환.**

@@ -614,6 +614,8 @@ const ALLOWED_RECEIVE_CHANNELS = [
   'compare/stream-event',
   // v1.1.0 (SEC-2 full) — permission request from main → renderer
   'permission/request',
+  // v1.6.5 — Plugin hook ctx.notify → renderer toast.
+  'plugin/notify',
 ] as const;
 
 type AllowedInvokeChannel = (typeof ALLOWED_INVOKE_CHANNELS)[number];
@@ -941,6 +943,22 @@ const api = {
           rootDir: string;
         }>
       >,
+    /**
+     * v1.6.5 — plugin hook 의 ctx.notify() 가 main 에서 emit 하면 본 listener
+     * 가 renderer 에서 수신. App.tsx 가 toast 로 forward.
+     */
+    onNotify: (
+      handler: (payload: { message: string; kind: 'info' | 'warning' | 'error' }) => void
+    ): (() => void) => {
+      const listener = (
+        _event: unknown,
+        payload: { message: string; kind: 'info' | 'warning' | 'error' }
+      ): void => {
+        handler(payload);
+      };
+      ipcRenderer.on('plugin/notify', listener);
+      return () => ipcRenderer.removeListener('plugin/notify', listener);
+    },
   },
 
   /**

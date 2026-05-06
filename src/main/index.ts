@@ -32,6 +32,7 @@ import { readSettings, writeSettings } from './settings';
 import { classifyUserDataConflict } from './workspaceConflict';
 import { IpcPermissionConfirmer } from './IpcPermissionConfirmer';
 import { PluginManager } from './plugins/PluginManager';
+import { PluginHookRunner } from './plugins/PluginHookRunner';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -53,6 +54,8 @@ let auditLogStore: AuditLogStore | null = null;
 let toolQueue: ToolQueue | null = null;
 // v1.1.15 (Plugin Loader UI): boot 시 한 번 scan, IPC handler 가 list 반환.
 let pluginManager: PluginManager | null = null;
+// v1.6.5: ai stream 시 pre/post_turn hook 실행 — cfg 통해 ipc.ts 가 사용.
+let pluginHookRunner: PluginHookRunner | null = null;
 
 interface WindowRuntime {
   election: LeaderElection;
@@ -374,6 +377,28 @@ app.whenReady().then(() => {
   });
   void pluginManager.scan();
 
+  // v1.6.5 — Plugin Hook runtime. ai/start-stream 의 pre/post_turn 호출용.
+  pluginHookRunner = new PluginHookRunner({
+    auditSink: (event) => {
+      auditLogStore?.recordEvent({
+        timestamp: event.timestamp,
+        session_id: 'plugin-hook',
+        event: event.event,
+        capability: 'PLUGIN',
+        target_json: JSON.stringify({
+          plugin: event.plugin_name,
+          hook: event.hook,
+          duration_ms: event.duration_ms,
+        }),
+        decision_reason: event.event === 'plugin.hook_ok' ? 'ok' : 'error',
+        ...(event.event !== 'plugin.hook_ok' && {
+          outcome: event.event === 'plugin.hook_timeout' ? 'timeout' : 'error',
+          ...(event.error !== undefined && { error: event.error }),
+        }),
+      });
+    },
+  });
+
   // v1.1.15: plugin/* IPC handlers — preload bridge 가 호출.
   // (registerIpcHandlers 와 별개로 단순 — args 없는 read-only IPC.)
   ipcMain.handle('plugin/list', () => {
@@ -519,6 +544,8 @@ app.whenReady().then(() => {
       toolQueue: queue,
       costGate,
       costAuditSink,
+      ...(pluginManager !== null && { pluginManager }),
+      ...(pluginHookRunner !== null && { pluginHookRunner }),
     },
     {
       registry,
