@@ -208,6 +208,57 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
     await api.fire(name);
   }, []);
 
+  // v1.7.28 — Rules JSON export. blob → download anchor.
+  const handleExport = useCallback(async (): Promise<void> => {
+    const api = typeof window !== 'undefined' ? window.dreampia?.automation : undefined;
+    if (api === undefined || api.exportRules === undefined) {
+      setError(t('automation.export_error'));
+      return;
+    }
+    const r = await api.exportRules();
+    if (!r.ok) {
+      setError(t('automation.export_error'));
+      return;
+    }
+    const blob = new Blob([r.value], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `automation-rules-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setError(null);
+  }, [t]);
+
+  // v1.7.28 — Rules JSON import. file picker + user confirm.
+  const handleImport = useCallback((): void => {
+    const api = typeof window !== 'undefined' ? window.dreampia?.automation : undefined;
+    if (api === undefined || api.importRules === undefined) {
+      setError(t('automation.import_error', { reason: 'no IPC' }));
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.onchange = async (e): Promise<void> => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file === undefined) return;
+      const text = await file.text();
+      const confirmed = window.confirm(t('automation.import_confirm'));
+      if (!confirmed) return;
+      const r = await api.importRules(text, 'skip');
+      if (!r.ok) {
+        setError(t('automation.import_error', { reason: r.error ?? '?' }));
+        return;
+      }
+      setError(null);
+      await reload();
+    };
+    input.click();
+  }, [t, reload]);
+
   if (!open) return null;
 
   return (
@@ -221,15 +272,35 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
       <div className="flex max-h-[90vh] w-[860px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl">
         <div className="flex items-center justify-between border-b border-border-primary p-4">
           <h2 className="text-lg font-semibold">{t('automation.title')}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-2 hover:bg-bg-tertiary"
-            aria-label={t('automation.close')}
-            data-testid="automation-close"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void handleExport()}
+              className="rounded-md border border-border-primary px-2 py-1 text-xs hover:bg-bg-tertiary"
+              title={t('automation.export_tooltip')}
+              data-testid="automation-export"
+            >
+              {t('automation.export')}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleImport()}
+              className="rounded-md border border-border-primary px-2 py-1 text-xs hover:bg-bg-tertiary"
+              title={t('automation.import_tooltip')}
+              data-testid="automation-import"
+            >
+              {t('automation.import')}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md p-2 hover:bg-bg-tertiary"
+              aria-label={t('automation.close')}
+              data-testid="automation-close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 space-y-4 overflow-y-auto p-4">

@@ -1500,6 +1500,20 @@ const api = {
       ipcRenderer.invoke('automation/set-enabled', { name, enabled }) as Promise<
         Result<boolean>
       >,
+    /** v1.7.28 — Rules JSON export. handler closure 제외, settings 영속 shape 만 직렬화. */
+    exportRules: (): Promise<Result<string>> =>
+      ipcRenderer.invoke('automation/export') as Promise<Result<string>>,
+    /**
+     * v1.7.28 — Rules JSON import. mode='skip' (default) 면 이름 충돌 시 건너뜀.
+     * 보안: caller 가 user confirm 후 호출. 부분 실패는 errors[] 에 누적 보고.
+     */
+    importRules: (
+      json: string,
+      mode?: 'skip' | 'overwrite'
+    ): Promise<Result<{ added: number; skipped: number; errors: string[] }>> =>
+      ipcRenderer.invoke('automation/import', { json, mode: mode ?? 'skip' }) as Promise<
+        Result<{ added: number; skipped: number; errors: string[] }>
+      >,
   },
 };
 

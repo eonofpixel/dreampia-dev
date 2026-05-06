@@ -2,6 +2,43 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.7.28] — 2026-05-07
+
+**Automation rules JSON import/export.**
+
+규칙 백업/공유/재사용 흐름. 사용자가 IDE 세팅처럼 자동화 규칙을 JSON
+파일로 내보내고, 다른 머신/세션에서 가져올 수 있도록 IPC + UI 추가.
+handler closure 는 직렬화 불가지만 handler_name + handler_config 는
+영속 가능 — registry lookup 으로 복원.
+
+### Added
+- `exportAutomationRulesJson(mgr): string` — pure helper. payload shape
+  `{ version: 1, exported_at, rules: AutomationRulePersisted[] }`.
+- `importAutomationRulesJson(mgr, json, overwrite): Result<{ added,
+  skipped, errors }>` — pure helper. parsing/validation/registration
+  의 단일 진입점, 부분 실패 errors[] 누적.
+- IPC `automation/export` — `Result<string>` JSON.
+- IPC `automation/import` — `{ json, mode: 'skip'|'overwrite' }` 입력,
+  `{ added, skipped, errors }` 반환. 성공 시 settings.json 영속 1회.
+- preload `automation.exportRules()` / `automation.importRules(json, mode?)`
+  노출.
+- AutomationModal 헤더에 [내보내기] [가져오기] 버튼:
+  - 내보내기: blob → download anchor (filename: `automation-rules-YYYY-MM-DD.json`).
+  - 가져오기: file picker + `window.confirm` 보안 게이트 + reload.
+- i18n 8 키 (ko/en): `automation.export` / `automation.import` /
+  `*_tooltip` / `import_confirm` / `import_error` / `export_error` /
+  `import_success`.
+- `tests/main/automation.import-export.test.ts` 신규 8 cases — 빈 export
+  / roundtrip / invalid JSON / shape 강제 / skip vs overwrite / 미지정
+  handler fallback / 부분 실패 errors[] 누적.
+
+### 회귀
+- 0. typecheck clean.
+- 신규 8 tests PASS. automation 전체 (handlers / shellExec / ipcTrigger /
+  ipc.automation / audit / enable / AutomationManager / HttpListener)
+  86 tests 회귀 0.
+- baseline 2006 → 2014 (+8).
+
 ## [1.7.27] — 2026-05-07
 
 **Automation rule enable/disable toggle.**

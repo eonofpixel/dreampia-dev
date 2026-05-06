@@ -89,6 +89,8 @@ import {
   registerBuiltinHandlers,
   NOOP_LOG_HANDLER_NAME,
 } from './automation/handlers';
+import { noopLogHandler } from './automation/handlers/HandlerRegistry';
+import type { AutomationRulePersisted } from './settings';
 // CLI / auto 는 Node-only — main 에서만 import. providers barrel 은
 // renderer 와 공유되므로 여기서 직접 명시적 경로로 가져온다.
 import {
@@ -1139,6 +1141,116 @@ function persistAutomationRules(rules: ReadonlyArray<AutomationRuleSummary>): vo
   }
 }
 
+/**
+ * v1.7.28 — Rules JSON 직렬화. handler closure 는 제외하고 영속 가능
+ * shape (AutomationRulePersisted) 만 담는다. 사용자가 백업/공유 가능한
+ * `{ version, exported_at, rules }` 포맷.
+ */
+export function exportAutomationRulesJson(mgr: AutomationManager): string {
+  const exportable = mgr.list().map((r) => {
+    const out: AutomationRulePersisted = { name: r.name, kind: r.kind };
+    if (r.interval_ms !== undefined) out.interval_ms = r.interval_ms;
+    if (r.cron_expr !== undefined) out.cron_expr = r.cron_expr;
+    if (r.cron_tz !== undefined) out.cron_tz = r.cron_tz;
+    if (r.webhook_path !== undefined) out.webhook_path = r.webhook_path;
+    if (r.handler_name !== undefined) out.handler_name = r.handler_name;
+    if (r.handler_config !== undefined) out.handler_config = r.handler_config;
+    if (r.enabled === false) out.enabled = false;
+    return out;
+  });
+  return JSON.stringify(
+    { version: 1, exported_at: new Date().toISOString(), rules: exportable },
+    null,
+    2
+  );
+}
+
+/**
+ * v1.7.28 — Rules JSON 역직렬화 + register. handler closure 는 registry
+ * lookup 으로 재구성 (미존재 시 noop-log fallback). overwrite=false 면 name
+ * 충돌 시 skip. 부분 실패 (invalid kind 등) 는 errors[] 에 모아 반환.
+ */
+export function importAutomationRulesJson(
+  mgr: AutomationManager,
+  json: string,
+  overwrite: boolean
+): Result<{ added: number; skipped: number; errors: string[] }> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch (err) {
+    return fail(`invalid JSON: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (
+    parsed === null ||
+    typeof parsed !== 'object' ||
+    !Array.isArray((parsed as { rules?: unknown }).rules)
+  ) {
+    return fail('expected { rules: [...] }');
+  }
+  const rules = (parsed as { rules: unknown[] }).rules;
+  const existingNames = new Set(mgr.list().map((r) => r.name));
+  let added = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+  for (const item of rules) {
+    if (item === null || typeof item !== 'object') {
+      errors.push('non-object rule entry');
+      continue;
+    }
+    const r = item as Record<string, unknown>;
+    const name = typeof r['name'] === 'string' ? r['name'] : '';
+    if (name.length === 0) {
+      errors.push('rule.name required');
+      continue;
+    }
+    if (existingNames.has(name) && !overwrite) {
+      skipped += 1;
+      continue;
+    }
+    const kind = r['kind'];
+    if (kind !== 'interval' && kind !== 'cron' && kind !== 'webhook') {
+      errors.push(`${name}: invalid kind`);
+      continue;
+    }
+    const handlerName =
+      typeof r['handler_name'] === 'string' && r['handler_name'].length > 0
+        ? r['handler_name']
+        : NOOP_LOG_HANDLER_NAME;
+    const handlerConfig =
+      r['handler_config'] !== null &&
+      typeof r['handler_config'] === 'object' &&
+      !Array.isArray(r['handler_config'])
+        ? (r['handler_config'] as Record<string, unknown>)
+        : {};
+    const hFn = handlerRegistry.get(handlerName) ?? noopLogHandler;
+    try {
+      if (existingNames.has(name) && overwrite) mgr.unregister(name);
+      mgr.register({
+        name,
+        kind,
+        ...(typeof r['interval_ms'] === 'number' &&
+          r['interval_ms'] > 0 && { interval_ms: r['interval_ms'] }),
+        ...(typeof r['cron_expr'] === 'string' &&
+          r['cron_expr'].length > 0 && { cron_expr: r['cron_expr'] }),
+        ...(typeof r['cron_tz'] === 'string' &&
+          r['cron_tz'].length > 0 && { cron_tz: r['cron_tz'] }),
+        ...(typeof r['webhook_path'] === 'string' &&
+          r['webhook_path'].length > 0 && { webhook_path: r['webhook_path'] }),
+        handler_name: handlerName,
+        handler_config: handlerConfig,
+        handler: async () => hFn({ rule_name: name, config: handlerConfig }),
+        ...(r['enabled'] === false && { enabled: false }),
+      });
+      added += 1;
+      existingNames.add(name);
+    } catch (err) {
+      errors.push(`${name}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return ok({ added, skipped, errors });
+}
+
 function registerAutomationHandlers(audit?: AuditLogStore): void {
   // v1.7.26 — audit sink closure: automation events → AuditLogStore.recordEvent.
   // getAutomationManager 는 singleton — 첫 호출 시에만 auditSink 가 적용됨.
@@ -1329,6 +1441,45 @@ function registerAutomationHandlers(audit?: AuditLogStore): void {
       return fail(err);
     }
   });
+
+  // v1.7.28 — Rules JSON export. handler closure 는 직렬화 불가 — handler_name +
+  // handler_config 만 영속. payload shape: { version: 1, exported_at, rules }.
+  ipcMain.handle('automation/export', (): Result<string> => {
+    try {
+      const json = exportAutomationRulesJson(getAutomationManager());
+      return ok(json);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  // v1.7.28 — Rules JSON import. mode='skip' (default) 면 기존 name 충돌 시
+  // 건너뛰고, 'overwrite' 면 unregister 후 재등록. 파싱/검증 실패는 errors[]
+  // 에 모아 부분 성공도 보고. 보안: caller (renderer) 가 user confirm 후 호출.
+  ipcMain.handle(
+    'automation/import',
+    (
+      _evt,
+      args: unknown
+    ): Result<{ added: number; skipped: number; errors: string[] }> => {
+      try {
+        if (args === null || typeof args !== 'object') return fail('args required');
+        const { json, mode } = args as { json?: unknown; mode?: unknown };
+        if (typeof json !== 'string' || json.length === 0) {
+          return fail('json string required');
+        }
+        const overwrite = mode === 'overwrite';
+        const result = importAutomationRulesJson(getAutomationManager(), json, overwrite);
+        if (!result.ok) return fail(result.error);
+        persistAutomationRules(
+          getAutomationManager().list().map((rl) => summarizeRule(rl))
+        );
+        return ok(result.value);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
 
   // v1.7.26 — Automation audit log 최근 N개 조회. rule_name 필터 지원.
   ipcMain.handle('automation/audit-log', (_evt, opts: unknown): Result<AuditEvent[]> => {
