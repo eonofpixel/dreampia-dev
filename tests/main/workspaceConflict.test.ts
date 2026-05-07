@@ -27,37 +27,47 @@ describe('checkUserDataConflict — POSIX', () => {
   // Force POSIX 으로 보이도록 platform 검사 우회 — 본 모듈은 process.platform
   // 분기를 갖지만 path.resolve 의 구분자는 OS 의존. Linux/macOS CI 에서 직접
   // 검증.
+  //
+  // CI 안정성: `/home/u/.dreampia` 같은 path 의 일부 prefix (`/home`) 가
+  // 실제 존재 여부에 따라 realpath 가 다르게 정규화 — macOS 의 autofs 매핑
+  // (`/home` → `/System/Volumes/Data/...`) 등 환경 의존. test 는 lexical
+  // 비교만 검증하므로 모든 prefix 가 미존재인 path 를 사용 — realpath fail →
+  // 일관된 lexical fallback.
   const isWin = process.platform === 'win32';
+  const POSIX_UD = '/nonexistent-dreampia-test/u/.dreampia';
+  const WIN_UD = 'Q:\\nonexistent-dreampia-test\\u\\AppData\\Roaming\\Dreampia-Dev';
 
   it('정확 일치 → 차단', () => {
-    const root = isWin ? 'C:\\Users\\u\\AppData\\Roaming\\Dreampia-Dev' : '/home/u/.dreampia';
+    const root = isWin ? WIN_UD : POSIX_UD;
     expect(checkUserDataConflict(root, root)).not.toBeNull();
     expect(classifyUserDataConflict(root, root)).toBe('exact');
   });
 
   it('child 관계 (picked 가 userData 안) → 차단', () => {
-    const ud = isWin ? 'C:\\Users\\u\\AppData\\Roaming\\Dreampia-Dev' : '/home/u/.dreampia';
+    const ud = isWin ? WIN_UD : POSIX_UD;
     const picked = path.join(ud, 'sub', 'workspace');
     expect(classifyUserDataConflict(picked, ud)).toBe('child');
   });
 
   it('parent 관계 (picked 가 userData 의 부모) → 차단', () => {
-    const ud = isWin ? 'C:\\Users\\u\\AppData\\Roaming\\Dreampia-Dev' : '/home/u/.dreampia';
+    const ud = isWin ? WIN_UD : POSIX_UD;
     const picked = path.dirname(path.dirname(ud));
     expect(classifyUserDataConflict(picked, ud)).toBe('parent');
   });
 
   it('무관 폴더 → null', () => {
-    const ud = isWin ? 'C:\\Users\\u\\AppData\\Roaming\\Dreampia-Dev' : '/home/u/.dreampia';
-    const picked = isWin ? 'D:\\dev\\my-project' : '/home/u/projects/my-project';
+    const ud = isWin ? WIN_UD : POSIX_UD;
+    const picked = isWin
+      ? 'Q:\\nonexistent-dreampia-test\\dev\\my-project'
+      : '/nonexistent-dreampia-test/u/projects/my-project';
     expect(checkUserDataConflict(picked, ud)).toBeNull();
     expect(classifyUserDataConflict(picked, ud)).toBeNull();
   });
 
   it('sibling (같은 부모 다른 자식) → null', () => {
     const ud = isWin
-      ? 'C:\\Users\\u\\AppData\\Roaming\\Dreampia-Dev'
-      : '/home/u/Library/Application Support/Dreampia-Dev';
+      ? WIN_UD
+      : '/nonexistent-dreampia-test/u/Library/Application Support/Dreampia-Dev';
     const sibling = path.join(path.dirname(ud), 'OtherApp');
     expect(classifyUserDataConflict(sibling, ud)).toBeNull();
   });
