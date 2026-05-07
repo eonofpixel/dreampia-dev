@@ -107,6 +107,10 @@ export function makeVcrTest(fixtureRelPath: string, options: MakeVcrTestOptions 
             onboarding_completed: true,
             workspace_root: workspaceDir,
             workspace_name: basename(workspaceDir),
+            // E2E v1.1.5 — drive14/15/16 spec 들이 PermissionApprovalCard
+            // 표시를 검증하므로 prompt 발생 강제. default workspace_write 는
+            // shell.run 의 LOCAL_EXECUTE 를 auto-allow → card 안 뜸.
+            default_permission_level: 'read_only',
           },
           null,
           2

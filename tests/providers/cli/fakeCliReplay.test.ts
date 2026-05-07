@@ -178,7 +178,7 @@ describe('v1.1.5 — fake CLI replay (Tier 2 integration)', () => {
         if (tc?.type === 'tool_call_complete') {
           expect(tc.tool_call.tool_id).toBe('shell.run');
           expect(tc.tool_call.id).toBe('toolu_vcr_001');
-          expect(tc.tool_call.input).toEqual({ command: 'ls' });
+          expect(tc.tool_call.input).toEqual({ cmd: 'ls' });
         }
 
         // 에러 event 없음.

@@ -29,6 +29,17 @@ test.describe('drive14 — Claude CLI tool_use round-trip (VCR)', () => {
       await expect(window.getByTestId('sidebar-search-input')).toBeVisible({
         timeout: 15_000,
       });
+      // 새 세션 시작 — chat-input 노출 prerequisite (drive3 와 동일 패턴).
+      await window.getByRole('button', { name: '새 채팅', exact: false }).first().click();
+      // 모델 설정 — 본 fixture 는 Claude argv 기반. App.tsx 기본 `gpt-5.5` 는
+      // codex CLI argv 로 라우팅되어 fake CLI 검증 실패. /model 슬래시로 명시.
+      // Slash popover 가 열린 상태로 Enter 시 handlePickCommand 가 hasArgs=true
+      // /model 트리거를 다시 채워 arg 가 사라짐 (UX 버그). Escape 로 popover
+      // 먼저 dismiss 한 후 Enter.
+      const _modelInput = window.getByTestId('chat-input');
+      await _modelInput.fill('/model claude-sonnet-4-6');
+      await _modelInput.press('Escape');
+      await _modelInput.press('Enter');
 
       // 2. 채팅 입력. fixture 의 prompt_last 와 정확히 일치해야 fake CLI 가
       //    argv-last 검증 통과. testid 는 ChatInput 의 'chat-input' (textarea).
@@ -71,6 +82,17 @@ test.describe('drive14 — Claude CLI tool_use round-trip (VCR)', () => {
       await expect(window.getByTestId('sidebar-search-input')).toBeVisible({
         timeout: 15_000,
       });
+      // 새 세션 시작 — chat-input 노출 prerequisite (drive3 와 동일 패턴).
+      await window.getByRole('button', { name: '새 채팅', exact: false }).first().click();
+      // 모델 설정 — 본 fixture 는 Claude argv 기반. App.tsx 기본 `gpt-5.5` 는
+      // codex CLI argv 로 라우팅되어 fake CLI 검증 실패. /model 슬래시로 명시.
+      // Slash popover 가 열린 상태로 Enter 시 handlePickCommand 가 hasArgs=true
+      // /model 트리거를 다시 채워 arg 가 사라짐 (UX 버그). Escape 로 popover
+      // 먼저 dismiss 한 후 Enter.
+      const _modelInput = window.getByTestId('chat-input');
+      await _modelInput.fill('/model claude-sonnet-4-6');
+      await _modelInput.press('Escape');
+      await _modelInput.press('Enter');
       const composer = window.getByTestId('chat-input');
       await composer.fill('현재 디렉토리 파일 목록 보여줘');
       await composer.press('Enter');
@@ -93,6 +115,17 @@ test.describe('drive14 — Claude CLI tool_use round-trip (VCR)', () => {
       await expect(window.getByTestId('sidebar-search-input')).toBeVisible({
         timeout: 15_000,
       });
+      // 새 세션 시작 — chat-input 노출 prerequisite (drive3 와 동일 패턴).
+      await window.getByRole('button', { name: '새 채팅', exact: false }).first().click();
+      // 모델 설정 — 본 fixture 는 Claude argv 기반. App.tsx 기본 `gpt-5.5` 는
+      // codex CLI argv 로 라우팅되어 fake CLI 검증 실패. /model 슬래시로 명시.
+      // Slash popover 가 열린 상태로 Enter 시 handlePickCommand 가 hasArgs=true
+      // /model 트리거를 다시 채워 arg 가 사라짐 (UX 버그). Escape 로 popover
+      // 먼저 dismiss 한 후 Enter.
+      const _modelInput = window.getByTestId('chat-input');
+      await _modelInput.fill('/model claude-sonnet-4-6');
+      await _modelInput.press('Escape');
+      await _modelInput.press('Enter');
       const composer = window.getByTestId('chat-input');
       await composer.fill('현재 디렉토리 파일 목록 보여줘');
       await composer.press('Enter');
@@ -150,6 +183,17 @@ test.describe('drive14 — Claude CLI tool_use round-trip (VCR)', () => {
       await expect(window.getByTestId('sidebar-search-input')).toBeVisible({
         timeout: 15_000,
       });
+      // 새 세션 시작 — chat-input 노출 prerequisite (drive3 와 동일 패턴).
+      await window.getByRole('button', { name: '새 채팅', exact: false }).first().click();
+      // 모델 설정 — 본 fixture 는 Claude argv 기반. App.tsx 기본 `gpt-5.5` 는
+      // codex CLI argv 로 라우팅되어 fake CLI 검증 실패. /model 슬래시로 명시.
+      // Slash popover 가 열린 상태로 Enter 시 handlePickCommand 가 hasArgs=true
+      // /model 트리거를 다시 채워 arg 가 사라짐 (UX 버그). Escape 로 popover
+      // 먼저 dismiss 한 후 Enter.
+      const _modelInput = window.getByTestId('chat-input');
+      await _modelInput.fill('/model claude-sonnet-4-6');
+      await _modelInput.press('Escape');
+      await _modelInput.press('Enter');
       // detect-cli 가 fire 된 후 badge 가 마운트되거나 안 될 수 있음 (CLI 미감지
       // 면 'No CLI' badge — 그것도 mock 아님). 충분 대기 후 확인.
       await window.waitForTimeout(2_000);

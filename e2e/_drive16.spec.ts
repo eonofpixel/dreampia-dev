@@ -26,6 +26,12 @@ function test_exitNonZero(): void {
       await expect(window.getByTestId('sidebar-search-input')).toBeVisible({
         timeout: 15_000,
       });
+      // 새 세션 시작 + Claude 모델 설정 (drive14 와 동일 — fixture 가 Claude argv 기반).
+      await window.getByRole('button', { name: '새 채팅', exact: false }).first().click();
+      const _modelInput16 = window.getByTestId('chat-input');
+      await _modelInput16.fill('/model claude-sonnet-4-6');
+      await _modelInput16.press('Escape');
+      await _modelInput16.press('Enter');
       const composer = window.getByTestId('chat-input');
       await composer.fill('실패 케이스');
       await composer.press('Enter');
@@ -53,6 +59,12 @@ function test_stderrError(): void {
       await expect(window.getByTestId('sidebar-search-input')).toBeVisible({
         timeout: 15_000,
       });
+      // 새 세션 시작 + Claude 모델 설정 (drive14 와 동일 — fixture 가 Claude argv 기반).
+      await window.getByRole('button', { name: '새 채팅', exact: false }).first().click();
+      const _modelInput16 = window.getByTestId('chat-input');
+      await _modelInput16.fill('/model claude-sonnet-4-6');
+      await _modelInput16.press('Escape');
+      await _modelInput16.press('Enter');
       const composer = window.getByTestId('chat-input');
       await composer.fill('stderr 에러');
       await composer.press('Enter');

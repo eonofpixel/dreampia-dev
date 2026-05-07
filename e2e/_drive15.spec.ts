@@ -27,6 +27,12 @@ test.describe('drive15 — KR cwd 와 함께 tool_use round-trip', () => {
       await expect(window.getByTestId('sidebar-search-input')).toBeVisible({
         timeout: 15_000,
       });
+      // 새 세션 시작 + Claude 모델 설정 (drive14 와 동일 — fixture 가 Claude argv 기반).
+      await window.getByRole('button', { name: '새 채팅', exact: false }).first().click();
+      const _modelInput15 = window.getByTestId('chat-input');
+      await _modelInput15.fill('/model claude-sonnet-4-6');
+      await _modelInput15.press('Escape');
+      await _modelInput15.press('Enter');
 
       const composer = window.getByTestId('chat-input');
       await composer.fill('현재 디렉토리 파일 목록 보여줘');
