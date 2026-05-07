@@ -2,6 +2,27 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.8.5] — 2026-05-07
+
+**`package.json` version monotonic 정합 — Batch #4 hotfix.**
+
+Codex Q12 PR review (PR #6) 이 식별한 유일한 머지 blocker: v1.8.4 → v1.4.12 → v1.4.13 진행 시 track-슬롯 명명 컨벤션을 따라 `package.json` 도 1.8.4 → 1.4.12 → 1.4.13 으로 함께 다운그레이드 했음. SemVer 측면에서 monotonic 위반 — auto-update / electron-updater / npm dist-tag 경로에서 즉시 위험.
+
+CHANGELOG 의 슬롯 명명 (v1.4.12, v1.4.13) 은 트랙-기반 컨벤션 유지 (코드는 정확히 v1.4 트랙 영역). `package.json.version` 만 monotonic max 인 1.8.5 로 회복 — Batch #4 종결 marker.
+
+### Changed
+- `package.json:version`: `1.4.13` → `1.8.5`.
+
+### 정책 명시
+- 향후 cross-track 슬롯 (예: 1.7.x 트랙 작업이 1.8.x land 후 진행) 시
+  CHANGELOG 슬롯 명은 트랙 기반 유지하되 `package.json.version` 은
+  monotonic 유지 (`Math.max(prev, slot, +1)` 보다 높은 트랙 marker 사용).
+- 본 정책은 별도 release-checklist.md 후속 PR 에서 정식화.
+
+### 회귀
+- 0. 코드 변경 없음 — version string 1자리.
+- baseline 2056/0 유지.
+
 ## [1.4.13] — 2026-05-07
 
 **`_extra.plan.checklist[]` 비정규화 정리 — code reality alignment.**
