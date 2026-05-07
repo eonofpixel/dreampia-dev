@@ -2,6 +2,46 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.4.12] — 2026-05-07
+
+**`_extra.permission.grants[]` 비정규화 정리 — code reality alignment.**
+
+v1.8.0 audit 가 "metadata 에 grants 캐시" 라고 추정했으나 실제 코드는
+`MetadataExtra.permission` interface + `PermissionExtraSchema` (zod)
+모두 `grants` 필드를 한 번도 포함한 적 없음. `permission_grants`
+테이블이 처음부터 단일 source. `buildStoredMetadata` 도 직렬화 X,
+`assembleSession` 은 `loadGrants` table 만 사용.
+
+본 슬롯의 작업: 코드 변경 없음 + 명시 contract guard 추가 +
+audit 문서 정정. Codex Q11 #2 권고 ("write stop + ignore-on-read,
+N+1 강제 삭제 보류") 자연 충족.
+
+### Added
+- `tests/storage/extraSchemaContract.test.ts` — 신규 2 guard cases:
+  - "v1.4.12 — round-trip 후 _extra.permission 에 grants 키 부재
+    (denorm guard)": 모든 fixture round-trip 후 `meta._extra.permission`
+    에 `grants` property 부재 명시 검증. fixture 마다 fresh
+    `SessionStore(':memory:')` 로 grant id 충돌 회피.
+  - "v1.4.12 — strict schema 가 _extra.permission.grants 가 들어오면
+    거부": legacy/regression 시나리오 시 `MetadataExtraSchema.safeParse`
+    가 fail. `PermissionExtraSchema` 의 `.strict()` 가 미등록 leaf 거부.
+
+### Changed
+- `docs/extra-namespace-audit.md` § 3.5: v1.4.12 정정 box 추가.
+  audit 의 "metadata 캐시" 가설을 v1.4.11 시점 추정으로 명기 + 실제
+  코드는 처음부터 clean 명시. 표의 `grants` row 도 ~~strikethrough~~ +
+  "본디 부재 확정" 로 갱신.
+
+### 회귀
+- 0. typecheck clean.
+- baseline 2052/0 → 2054/0 (+2 신규 guard tests).
+
+### Down-grade 안전성
+v1.4.12 는 코드 변경 없음 — 모든 prior 버전과 binary-compatible.
+Legacy DB 의 _extra 측에 grants 가 있다면 production read path
+(`assembleSession` 의 `JSON.parse` cast) 는 tolerant — 무시. strict
+schema 는 contract test 에서만 사용 → production 영향 X.
+
 ## [1.8.4] — 2026-05-07
 
 **`_extra` write 제거 — column transition 마무리.**

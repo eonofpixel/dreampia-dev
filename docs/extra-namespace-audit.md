@@ -137,9 +137,16 @@ v1.4.2.x 이후 예정" 명시.
 **특이점**: `permission.grants[]` 는 별도 테이블 `permission_grants`.
 metadata 에 캐시되어 있어 비정규화 — 향후 정규화 가치 있음.
 
+> **v1.4.12 정정 (2026-05-07)**: 본 audit 의 "grants 가 metadata 에
+> 캐시" 가설은 v1.4.11 시점 추정이었으나, 실제 `MetadataExtra` interface +
+> `MetadataExtraSchema` 모두 `permission.grants` 필드를 한 번도 포함한
+> 적이 없음 (`buildStoredMetadata` 도 직렬화 X). `permission_grants` 테이블이
+> 처음부터 단일 source. v1.4.12 슬롯에서 명시 contract guard test 추가
+> (`tests/storage/extraSchemaContract.test.ts`) — 향후 regression 즉시 fail.
+
 | 필드 | 추정 타입 | Read 빈도 | Write 빈도 | 권고 |
 |---|---|---|---|---|
-| `grants` | `PermissionGrant[]` | medium (Resolver findActiveGrants 매 call) | medium (insert/update) | **JSON 유지 (단, 비정규화 정리)** — `permission_grants` 테이블이 source of truth 가 되도록 metadata 에서 제거 검토 (v1.9.x) |
+| ~~`grants`~~ | (부재) | (해당 없음 — 테이블 source) | (해당 없음) | **v1.4.12 — 본디 부재 확정. contract guard test 로 명시.** |
 | `default_level` | `PermissionLevel` (enum) | **very high** (Resolver + UI render + streaming forward) | medium (v0.8.0 IPC) | **Promote 강력 후보** — string enum scalar, 가장 자주 read 되는 \_extra 필드 |
 | `temporarily_blocked_capabilities` | `string[]` | low | low | **JSON 유지** (array, 가변) |
 | `last_denied` | `{ capability, ts } \| undefined` | low (audit only) | low | **JSON 유지** (optional, audit 용) |

@@ -151,6 +151,61 @@ describe('v1.8.2 — _extra MetadataExtraSchema contract', () => {
     expect(r.success).toBe(false);
   });
 
+  it('v1.4.12 — round-trip 후 _extra.permission 에 grants 키 부재 (denorm guard)', () => {
+    // _extra.permission.grants[] 는 한 번도 source 가 아니었으나 audit
+    // (v1.8.0) 의 speculative 권고 이후 명시 가드. permission_grants 테이블이
+    // 단일 source. 향후 regression 시 본 test 가 즉시 fail.
+    //
+    // 위 round-trip test 와 같은 isolation 패턴 — fixture 마다 fresh store.
+    for (const f of listFixtures()) {
+      const store = new SessionStore(':memory:');
+      try {
+        const raw = JSON.parse(readFileSync(join(FIXTURES_DIR, f), 'utf-8')) as {
+          parent_session_id?: string;
+        };
+        if (typeof raw.parent_session_id === 'string') continue;
+        const session = SessionSchema.parse(raw);
+        store.createSession(session);
+        const row = store.getDb()
+          .prepare('SELECT metadata_json FROM sessions WHERE id = ?')
+          .get(session.id) as { metadata_json: string };
+        const meta = JSON.parse(row.metadata_json) as {
+          _extra: { permission: Record<string, unknown> };
+        };
+        expect(meta._extra.permission).not.toHaveProperty('grants');
+      } finally {
+        store.close();
+      }
+    }
+  });
+
+  it('v1.4.12 — strict schema 가 _extra.permission.grants 가 들어오면 거부', () => {
+    // legacy row 시뮬레이션 — 만약 production read path (assembleSession) 가
+    // 직접 schema 검증을 하면 거부. 현재는 JSON.parse cast 라 tolerant.
+    const sample = {
+      conversation: {
+        current_model: 'sonnet',
+        current_effort: 'medium',
+        current_mode: 'chat',
+      },
+      workspace: { recent_files: [], open_files: [], ignore_patterns: [] },
+      terminal: { panel_open: false, height_px: 200 },
+      browser: {
+        panel_visible: false,
+        layout: 'hidden',
+        partition_id: 'p',
+      },
+      plan: { browser_tool_enabled: false },
+      permission: {
+        temporarily_blocked_capabilities: [],
+        // 미등록 leaf — strict 거부 대상.
+        grants: [],
+      },
+    };
+    const r = MetadataExtraSchema.safeParse(sample);
+    expect(r.success).toBe(false);
+  });
+
   it('permission.default_level enum 강제 (잘못된 값 거부)', () => {
     const sample = {
       conversation: {
