@@ -285,11 +285,7 @@ export function readSettings(): AppSettings {
           if (item === null || typeof item !== 'object') continue;
           const r = item as Record<string, unknown>;
           if (typeof r['name'] !== 'string' || r['name'].length === 0) continue;
-          if (
-            r['kind'] !== 'interval' &&
-            r['kind'] !== 'cron' &&
-            r['kind'] !== 'webhook'
-          ) {
+          if (r['kind'] !== 'interval' && r['kind'] !== 'cron' && r['kind'] !== 'webhook') {
             continue;
           }
           const persisted: AutomationRulePersisted = {
@@ -305,17 +301,11 @@ export function readSettings(): AppSettings {
           if (typeof r['cron_tz'] === 'string' && r['cron_tz'].length > 0) {
             persisted.cron_tz = r['cron_tz'];
           }
-          if (
-            typeof r['webhook_path'] === 'string' &&
-            r['webhook_path'].length > 0
-          ) {
+          if (typeof r['webhook_path'] === 'string' && r['webhook_path'].length > 0) {
             persisted.webhook_path = r['webhook_path'];
           }
           // v1.7.23 — handler_name / handler_config. 손상된 항목 silent drop.
-          if (
-            typeof r['handler_name'] === 'string' &&
-            r['handler_name'].length > 0
-          ) {
+          if (typeof r['handler_name'] === 'string' && r['handler_name'].length > 0) {
             persisted.handler_name = r['handler_name'];
           }
           if (

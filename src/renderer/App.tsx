@@ -258,9 +258,7 @@ export function App(): React.JSX.Element {
   // 숨기고 chat 만 풀폭. 진입 직전 sidebar/preview 상태를 ref 에 저장 →
   // 토글 OFF 시 정확히 복원. ref 만으로 충분 (별도 상태 없이 snapshot 의
   // 존재 자체가 fullscreen 진입 여부를 나타냄).
-  const fullscreenSnapshotRef = useRef<{ sidebar: boolean; preview: boolean } | null>(
-    null
-  );
+  const fullscreenSnapshotRef = useRef<{ sidebar: boolean; preview: boolean } | null>(null);
   // v0.7.0 (F-026) — Sidebar 메시지 검색 state. 입력은 즉시 반영, 실제 IPC
   // 호출은 300ms debounce 후 별도 useEffect 가 트리거. results / error /
   // loading 은 IPC 응답에 따라 갱신. pendingFocusTurnId 는 사용자가 검색 결과
@@ -458,8 +456,7 @@ export function App(): React.JSX.Element {
     let cancelled = false;
     setSearchLoading(true);
     const timer = setTimeout(() => {
-      const sessApi =
-        typeof window !== 'undefined' ? window.dreampia?.session : undefined;
+      const sessApi = typeof window !== 'undefined' ? window.dreampia?.session : undefined;
       // search method 가 미정 (구버전 preload, 또는 mock 미설정) 이면 silent
       // fallback — UI 는 빈 결과 + loading=false 로 종료.
       if (sessApi === undefined || typeof sessApi.search !== 'function') {
@@ -499,13 +496,10 @@ export function App(): React.JSX.Element {
 
   // v0.7.0 (F-026) — 검색 결과 클릭 → 활성 세션 전환 + scroll target 보관.
   // ChatPanel 이 다음 render cycle 에 pendingFocusTurnId 를 보고 scrollIntoView.
-  const handleSearchResultClick = useCallback(
-    (sessionId: string, turnId: string): void => {
-      setActiveSessionId(sessionId);
-      setPendingFocusTurnId(turnId);
-    },
-    []
-  );
+  const handleSearchResultClick = useCallback((sessionId: string, turnId: string): void => {
+    setActiveSessionId(sessionId);
+    setPendingFocusTurnId(turnId);
+  }, []);
 
   // ChatPanel 의 onTurnFocused — scroll 끝나면 pendingFocusTurnId 를 비워야
   // 다음 검색 클릭이 다시 동작.
@@ -590,13 +584,7 @@ export function App(): React.JSX.Element {
     if (created !== null) {
       setActiveSessionId(created.id);
     }
-  }, [
-    createSession,
-    defaultWorkspace,
-    defaultPermissionLevel,
-    pickWorkspace,
-    sessions.length,
-  ]);
+  }, [createSession, defaultWorkspace, defaultPermissionLevel, pickWorkspace, sessions.length]);
 
   // v0.5.0 (F-018) — `/clear` 슬래시 명령. 활성 세션의 turn 만 비우고 session
   // 자체는 유지. local activeSession shadow 도 즉시 갱신해 UI 가 빠르게 반응.
@@ -689,10 +677,7 @@ export function App(): React.JSX.Element {
     setWorkspaceLocked(next);
     void (async () => {
       try {
-        const result = await sessionApi.setWorkspaceLocked(
-          activeSession.id as SessionId,
-          next
-        );
+        const result = await sessionApi.setWorkspaceLocked(activeSession.id as SessionId, next);
         if (!result.ok) {
           // IPC 실패 → 원복 + 사용자 알림 (v1.1.25 — silent fail X).
           setWorkspaceLocked(!next);
@@ -720,8 +705,7 @@ export function App(): React.JSX.Element {
   const handleForkSession = useCallback(
     async (truncateAt: string | undefined): Promise<void> => {
       if (activeSession === null) return;
-      const sessionApi =
-        typeof window !== 'undefined' ? window.dreampia?.session : undefined;
+      const sessionApi = typeof window !== 'undefined' ? window.dreampia?.session : undefined;
       if (sessionApi?.fork === undefined) {
         toasts.warning(t('toast.fork.no_ipc'));
         return;
@@ -968,19 +952,12 @@ export function App(): React.JSX.Element {
       }
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    activeSession?.id,
-    chatHeaderWorkspaceName,
-    sessionWorkspaceName,
-    workspaceLocked,
-  ]);
+  }, [activeSession?.id, chatHeaderWorkspaceName, sessionWorkspaceName, workspaceLocked]);
 
   // v0.5.0 (F-018) — slash command handler 맵. ChatInput 으로 forward 되어
   // 사용자가 `/help`, `/clear` 등을 입력했을 때 호출된다. 인자가 없는 명령은
   // arg 인자를 무시한다. KNOWN_MODELS 화이트리스트는 `/model` 에서만 사용.
-  const commandHandlers = useMemo<
-    Partial<Record<SlashCommandId, (arg?: string) => void>>
-  >(
+  const commandHandlers = useMemo<Partial<Record<SlashCommandId, (arg?: string) => void>>>(
     () => ({
       help: () => {
         setSlashHelpOpen(true);
@@ -1035,8 +1012,7 @@ export function App(): React.JSX.Element {
         // v1.0.13 (WS-1): defaultWorkspace 우선, 그 다음 session.workspace.root.
         // v1.0.5 의 workspace drift fix 누락 부분 청산 — 사용자가 /project
         // 로 폴더 변경 후 /compare 했을 때 옛 폴더로 가던 회귀 방지.
-        const compareWorkspaceRoot =
-          defaultWorkspace?.root ?? activeSession.workspace.root;
+        const compareWorkspaceRoot = defaultWorkspace?.root ?? activeSession.workspace.root;
         void compareHook.start({
           prompt: arg,
           session_id: activeSession.id,
@@ -1143,13 +1119,7 @@ export function App(): React.JSX.Element {
         setPendingPrompt(firstPrompt);
       }
     },
-    [
-      completeOnboarding,
-      defaultWorkspace,
-      defaultPermissionLevel,
-      createSession,
-      sessions.length,
-    ]
+    [completeOnboarding, defaultWorkspace, defaultPermissionLevel, createSession, sessions.length]
   );
 
   const handleOnboardingSkip = useCallback(async (): Promise<void> => {
@@ -1173,9 +1143,7 @@ export function App(): React.JSX.Element {
   const keyboardHandlers = useMemo<Partial<Record<ShortcutAction, () => void>>>(() => {
     return {
       'search.focus': (): void => {
-        const el = document.querySelector<HTMLInputElement>(
-          '[data-testid="sidebar-search-input"]'
-        );
+        const el = document.querySelector<HTMLInputElement>('[data-testid="sidebar-search-input"]');
         if (el !== null) {
           // 사이드바가 collapse 되어 있으면 먼저 펼쳐 input 이 표시되도록.
           if (!sidebarVisible) setSidebarVisible(true);
@@ -1483,15 +1451,9 @@ export function App(): React.JSX.Element {
         }}
         onAccept={handleAcceptCompare}
       />
-      <PluginsModal
-        open={pluginsModalOpen}
-        onClose={() => setPluginsModalOpen(false)}
-      />
+      <PluginsModal open={pluginsModalOpen} onClose={() => setPluginsModalOpen(false)} />
       {/* v1.7.4 — Automation modal (Sidebar [자동화] 클릭). */}
-      <AutomationModal
-        open={automationModalOpen}
-        onClose={() => setAutomationModalOpen(false)}
-      />
+      <AutomationModal open={automationModalOpen} onClose={() => setAutomationModalOpen(false)} />
       {/* v1.4.8 — Workspace ID backfill prompt (boot effect 가 trigger). */}
       <BackfillPromptModal
         open={backfillModal !== null}
@@ -1515,11 +1477,7 @@ export function App(): React.JSX.Element {
               request={permission.current}
               onDecide={(decision, reason) => {
                 if (permission.current === null) return;
-                void permission.respond(
-                  permission.current.request_id,
-                  decision,
-                  reason
-                );
+                void permission.respond(permission.current.request_id, decision, reason);
               }}
             />
           </div>
@@ -1528,9 +1486,7 @@ export function App(): React.JSX.Element {
       {/* v1.1.0 SEC-2 full: dangerous 권한 요청 center modal escalation. */}
       <PermissionDangerModal
         request={
-          permission.current !== null && permission.current.is_dangerous
-            ? permission.current
-            : null
+          permission.current !== null && permission.current.is_dangerous ? permission.current : null
         }
         onDecide={(decision, reason) => {
           if (permission.current === null) return;

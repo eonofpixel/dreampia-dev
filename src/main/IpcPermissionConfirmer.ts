@@ -47,12 +47,7 @@ export interface IpcPermissionConfirmerOptions {
    * 시 같은 ID 의 webContents 만 수락. send 실패 시 -1 같은 sentinel 권고 X —
    * 단순 false 반환 (기존 호환).
    */
-  send: (
-    channel: string,
-    payload: unknown
-  ) =>
-    | boolean
-    | { sent: boolean; web_contents_id: number };
+  send: (channel: string, payload: unknown) => boolean | { sent: boolean; web_contents_id: number };
   /** Auto deny timeout. default 60s. */
   timeout_ms?: number;
 }
@@ -167,9 +162,7 @@ export class IpcPermissionConfirmer implements PermissionConfirmer {
   getPendingRequests(senderWebContentsId?: number): PermissionRequest[] {
     const all = Array.from(this.pending.values());
     if (senderWebContentsId === undefined) return all.map((d) => d.request);
-    return all
-      .filter((d) => d.webContentsId === senderWebContentsId)
-      .map((d) => d.request);
+    return all.filter((d) => d.webContentsId === senderWebContentsId).map((d) => d.request);
   }
 
   /**

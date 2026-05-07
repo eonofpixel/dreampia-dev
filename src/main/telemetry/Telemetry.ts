@@ -54,7 +54,10 @@ class ConsoleSink implements TelemetrySink {
 
 export interface SentryClientLike {
   /** error kind — `Sentry.captureException` 와 호환. */
-  captureException(error: Error | string, hint?: { tags?: Record<string, string>; extra?: Record<string, unknown> }): void;
+  captureException(
+    error: Error | string,
+    hint?: { tags?: Record<string, string>; extra?: Record<string, unknown> }
+  ): void;
   /** event kind — `Sentry.captureMessage` 와 호환. */
   captureMessage(
     message: string,
@@ -120,9 +123,10 @@ export class SentrySink implements TelemetrySink {
  * Context 의 string 값 (≤ 64자) 은 tags 로, 그 외 (긴 string / number / boolean)
  * 는 extra 로 분리. Sentry tag 는 indexable 하지만 길이/타입 제약 있음.
  */
-function splitContext(
-  ctx: Record<string, string | number | boolean> | undefined
-): { tags?: Record<string, string>; extra?: Record<string, unknown> } {
+function splitContext(ctx: Record<string, string | number | boolean> | undefined): {
+  tags?: Record<string, string>;
+  extra?: Record<string, unknown>;
+} {
   if (ctx === undefined) return {};
   const tags: Record<string, string> = {};
   const extra: Record<string, unknown> = {};
@@ -164,10 +168,19 @@ export class Telemetry {
     this.sink = sink;
   }
 
-  error(name: string, error: string | Error, context?: Record<string, string | number | boolean>): void {
+  error(
+    name: string,
+    error: string | Error,
+    context?: Record<string, string | number | boolean>
+  ): void {
     if (!this.enabled) return;
-    const errStr = error instanceof Error ? error.stack ?? error.message : error;
-    this.sink.emit({ kind: 'error', name, error: errStr, ...(context !== undefined && { context }) });
+    const errStr = error instanceof Error ? (error.stack ?? error.message) : error;
+    this.sink.emit({
+      kind: 'error',
+      name,
+      error: errStr,
+      ...(context !== undefined && { context }),
+    });
   }
 
   event(name: string, context?: Record<string, string | number | boolean>): void {

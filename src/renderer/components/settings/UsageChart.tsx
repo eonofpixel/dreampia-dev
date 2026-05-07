@@ -52,10 +52,7 @@ interface DayBucket {
  * raw rows → 일자 → provider 합계로 reshape. 같은 날짜의 다른 provider 들이
  * 한 막대 안에 stacked 로 그려진다.
  */
-function bucketize(
-  rows: ReadonlyArray<DailyUsageRowUI>,
-  metric: 'tokens' | 'cost'
-): DayBucket[] {
+function bucketize(rows: ReadonlyArray<DailyUsageRowUI>, metric: 'tokens' | 'cost'): DayBucket[] {
   const map = new Map<string, DayBucket>();
   for (const r of rows) {
     let bucket = map.get(r.date);
@@ -191,13 +188,7 @@ export function UsageChart({
               strokeOpacity={0.1}
               strokeDasharray="2 2"
             />
-            <text
-              x={PAD_LEFT - 4}
-              y={t.y + 3}
-              textAnchor="end"
-              fill="currentColor"
-              opacity={0.6}
-            >
+            <text x={PAD_LEFT - 4} y={t.y + 3} textAnchor="end" fill="currentColor" opacity={0.6}>
               {formatTick(t.value)}
             </text>
           </g>

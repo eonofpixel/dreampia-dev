@@ -1,3 +1,4 @@
+/* global ctx */
 // cost-limit-hook — Dreampia-Dev Plugin Loader sample (v1.1.24).
 //
 // Spec: docs/v1.x-roadmap.md (P1 v1.1.x Plugin Loader / hook 시스템).

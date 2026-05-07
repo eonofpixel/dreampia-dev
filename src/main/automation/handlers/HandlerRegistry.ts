@@ -30,9 +30,7 @@ export interface HandlerResult {
   error?: string;
 }
 
-export type AutomationHandler = (
-  ctx: HandlerContext
-) => Promise<HandlerResult>;
+export type AutomationHandler = (ctx: HandlerContext) => Promise<HandlerResult>;
 
 /**
  * Handler 식별자 → 실행 함수 lookup.

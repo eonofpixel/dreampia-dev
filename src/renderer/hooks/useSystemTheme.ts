@@ -36,9 +36,7 @@ export function useSystemTheme(): SystemTheme {
     if ('addListener' in mq && typeof mq.addListener === 'function') {
       (mq as unknown as { addListener: (h: typeof handler) => void }).addListener(handler);
       return () => {
-        (mq as unknown as { removeListener: (h: typeof handler) => void }).removeListener(
-          handler
-        );
+        (mq as unknown as { removeListener: (h: typeof handler) => void }).removeListener(handler);
       };
     }
     return undefined;

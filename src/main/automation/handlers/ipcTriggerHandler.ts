@@ -82,8 +82,6 @@ export const ipcTriggerHandler: AutomationHandler = async (ctx) => {
   }
 
   const summary =
-    payload === undefined
-      ? channel
-      : `${channel} ${truncateOutput(JSON.stringify(payload), 200)}`;
+    payload === undefined ? channel : `${channel} ${truncateOutput(JSON.stringify(payload), 200)}`;
   return { ok: true, output: `[ipc] ${summary}` };
 };

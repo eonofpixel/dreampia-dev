@@ -85,7 +85,10 @@ export function SearchSection({
           data-testid="sidebar-search-results"
         >
           {loading ? (
-            <p className="px-3 py-2 text-xs text-text-tertiary" data-testid="sidebar-search-loading">
+            <p
+              className="px-3 py-2 text-xs text-text-tertiary"
+              data-testid="sidebar-search-loading"
+            >
               {t('sidebar.search.loading')}
             </p>
           ) : error !== null ? (
@@ -97,10 +100,7 @@ export function SearchSection({
               {t('sidebar.search.error')}
             </p>
           ) : results.length === 0 ? (
-            <p
-              className="px-3 py-2 text-xs text-text-tertiary"
-              data-testid="sidebar-search-empty"
-            >
+            <p className="px-3 py-2 text-xs text-text-tertiary" data-testid="sidebar-search-empty">
               {t('sidebar.search.no_results')}
             </p>
           ) : (
@@ -117,14 +117,15 @@ export function SearchSection({
                   >
                     <span className="flex w-full items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-text-tertiary">
                       <span className="truncate">
-                        {sessionTitleById?.get(r.session_id) ?? t('sidebar.search.fallback_session_title')}
+                        {sessionTitleById?.get(r.session_id) ??
+                          t('sidebar.search.fallback_session_title')}
                       </span>
                       <span className="shrink-0">
                         {r.role === 'user'
                           ? t('sidebar.search.role_user')
                           : r.role === 'assistant'
-                          ? t('sidebar.search.role_assistant')
-                          : r.role}
+                            ? t('sidebar.search.role_assistant')
+                            : r.role}
                       </span>
                     </span>
                     <SnippetText snippet={r.snippet} />

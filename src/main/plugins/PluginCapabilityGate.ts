@@ -13,21 +13,10 @@
  *    'session' 은 영속 X (의도된 한정 grant).
  */
 
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type {
-  PermissionConfirmer,
-  PermissionGrantDuration,
-  PermissionRequest,
-} from '../../tools';
+import type { PermissionConfirmer, PermissionGrantDuration, PermissionRequest } from '../../tools';
 
 export interface PluginCapabilityAuditEvent {
   timestamp: string;
@@ -77,9 +66,7 @@ export class PluginCapabilityGate {
       options.auditSink ??
       ((e): void => {
         if (e.event !== 'plugin.cap_granted') {
-          console.warn(
-            `[PluginCapabilityGate] ${e.event} ${e.plugin_name}/${e.capability}`
-          );
+          console.warn(`[PluginCapabilityGate] ${e.event} ${e.plugin_name}/${e.capability}`);
         }
       });
     if (this.storageDir !== undefined) {
@@ -150,9 +137,7 @@ export class PluginCapabilityGate {
     } catch (err) {
       // write 실패 → in-memory 만 유지. 다음 process restart 시 재요청.
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(
-        `[PluginCapabilityGate] persist failed for ${pluginName}/${capability}: ${msg}`
-      );
+      console.warn(`[PluginCapabilityGate] persist failed for ${pluginName}/${capability}: ${msg}`);
     }
   }
 
@@ -162,10 +147,7 @@ export class PluginCapabilityGate {
    *
    * @returns 모든 capability 승인됨 → true. 하나라도 거절 → false.
    */
-  async ensureGranted(
-    pluginName: string,
-    capabilities: ReadonlyArray<string>
-  ): Promise<boolean> {
+  async ensureGranted(pluginName: string, capabilities: ReadonlyArray<string>): Promise<boolean> {
     const grantedSet = this.granted.get(pluginName) ?? new Set<string>();
     const deniedSet = this.denied.get(pluginName) ?? new Set<string>();
     // Map 에 ref 가 새 Set 이면 방금 만든 것이라 set 에 등록.

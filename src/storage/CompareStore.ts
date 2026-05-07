@@ -32,12 +32,7 @@ import type { PermissionLevel } from '@/types/permission';
 
 export type CompareRunStatus = 'running' | 'completed' | 'failed';
 
-export type CompareSideStatus =
-  | 'pending'
-  | 'streaming'
-  | 'done'
-  | 'error'
-  | 'skipped';
+export type CompareSideStatus = 'pending' | 'streaming' | 'done' | 'error' | 'skipped';
 
 /**
  * 한 side (claude 또는 codex) 의 streaming 상태 + 누적 결과.
@@ -122,11 +117,7 @@ interface CompareRunRow {
 // Helpers
 // ────────────────────────────────────────────────────────────
 
-const RUN_STATUSES: ReadonlySet<CompareRunStatus> = new Set([
-  'running',
-  'completed',
-  'failed',
-]);
+const RUN_STATUSES: ReadonlySet<CompareRunStatus> = new Set(['running', 'completed', 'failed']);
 
 const SIDE_STATUSES: ReadonlySet<CompareSideStatus> = new Set([
   'pending',
@@ -149,15 +140,11 @@ function parseRunStatus(s: string): CompareRunStatus {
 
 function parseSideStatus(s: string | null): CompareSideStatus {
   if (s === null) return 'pending';
-  return SIDE_STATUSES.has(s as CompareSideStatus)
-    ? (s as CompareSideStatus)
-    : 'pending';
+  return SIDE_STATUSES.has(s as CompareSideStatus) ? (s as CompareSideStatus) : 'pending';
 }
 
 function parsePermissionLevel(s: string): PermissionLevel {
-  return PERMISSION_LEVELS.has(s as PermissionLevel)
-    ? (s as PermissionLevel)
-    : 'workspace_write';
+  return PERMISSION_LEVELS.has(s as PermissionLevel) ? (s as PermissionLevel) : 'workspace_write';
 }
 
 function rowToRun(row: CompareRunRow): CompareRun {
@@ -248,9 +235,7 @@ export class CompareStore {
        ORDER BY created_at DESC LIMIT ?`
     );
     this.deleteStmt = db.prepare(`DELETE FROM compare_runs WHERE id = ?`);
-    this.setOverallStatusStmt = db.prepare(
-      `UPDATE compare_runs SET status = ? WHERE id = ?`
-    );
+    this.setOverallStatusStmt = db.prepare(`UPDATE compare_runs SET status = ? WHERE id = ?`);
   }
 
   // ── write ─────────────────────────────────────────────────────
@@ -355,9 +340,7 @@ export class CompareStore {
     const values: unknown[] = [];
     if (patch.status !== undefined) {
       if (!SIDE_STATUSES.has(patch.status)) {
-        throw new Error(
-          `CompareStore.updateSide: invalid status '${patch.status}'`
-        );
+        throw new Error(`CompareStore.updateSide: invalid status '${patch.status}'`);
       }
       fields.push(`${side}_status = ?`);
       values.push(patch.status);
@@ -431,9 +414,7 @@ export class CompareStore {
   listBySession(sessionId: string, limit = 20): CompareRun[] {
     if (sessionId.length === 0) return [];
     const safeLimit =
-      typeof limit === 'number' && Number.isFinite(limit) && limit > 0
-        ? Math.floor(limit)
-        : 20;
+      typeof limit === 'number' && Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 20;
     const rows = this.listStmt.all(sessionId, safeLimit) as CompareRunRow[];
     return rows.map(rowToRun);
   }

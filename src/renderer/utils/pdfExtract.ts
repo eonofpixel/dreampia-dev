@@ -17,10 +17,7 @@ import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mj
 // pdfjs-dist 가 worker 를 별도 thread 에 로드하려 하면 vite/electron 환경에서
 // 까다롭다. main thread 동기 모드: workerSrc 를 빈 string 으로 무력화 → 자동
 // fallback (느리지만 안전).
-if (
-  typeof GlobalWorkerOptions !== 'undefined' &&
-  GlobalWorkerOptions.workerSrc.length === 0
-) {
+if (typeof GlobalWorkerOptions !== 'undefined' && GlobalWorkerOptions.workerSrc.length === 0) {
   GlobalWorkerOptions.workerSrc = '';
 }
 
@@ -80,8 +77,7 @@ export async function extractPdfText(
         }
       }
       const trimmed = text.trim();
-      const finalText =
-        trimmed.length > cap ? `${trimmed.slice(0, cap)}…` : trimmed;
+      const finalText = trimmed.length > cap ? `${trimmed.slice(0, cap)}…` : trimmed;
       pages.push({ index: i, text: finalText });
     } finally {
       // pdfjs page 객체는 cleanup 호출이 권장됨 (메모리 회수).
@@ -102,7 +98,10 @@ export async function extractPdfText(
 
   return {
     pages,
-    text: pages.map((p) => p.text).filter((t) => t.length > 0).join('\n\n'),
+    text: pages
+      .map((p) => p.text)
+      .filter((t) => t.length > 0)
+      .join('\n\n'),
     page_count: totalPages,
   };
 }
@@ -162,9 +161,7 @@ export function formatPdfExtractAsText(
     return `[PDF: ${filename}, ${result.page_count} pages — text 추출 안 됨 (이미지 PDF 일 가능성)]`;
   }
   const header = `[PDF: ${filename}, ${result.page_count} pages]`;
-  const body = nonEmpty
-    .map((p) => `--- Page ${p.index} ---\n${p.text}`)
-    .join('\n\n');
+  const body = nonEmpty.map((p) => `--- Page ${p.index} ---\n${p.text}`).join('\n\n');
   return `${header}\n\n${body}`;
 }
 

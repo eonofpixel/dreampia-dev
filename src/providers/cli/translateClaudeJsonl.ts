@@ -138,8 +138,7 @@ export function translateClaudeJsonl(parsed: unknown, ctx: TranslateContext): St
       const tokens = parseClaudeUsage(usageRaw);
       const cliCost = obj.total_cost_usd;
       // CLI 가 직접 cost 를 줬으면 found=true (제공자 신뢰), 아니면 priceUsage.
-      const cliCostValid =
-        typeof cliCost === 'number' && Number.isFinite(cliCost) && cliCost >= 0;
+      const cliCostValid = typeof cliCost === 'number' && Number.isFinite(cliCost) && cliCost >= 0;
       const priced = priceUsage(ctx.model, tokens);
       const cost = cliCostValid
         ? Math.round((cliCost as number) * 1_000_000) / 1_000_000

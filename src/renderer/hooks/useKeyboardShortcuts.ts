@@ -21,11 +21,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import {
-  SHORTCUT_DEFS,
-  matchesShortcut,
-  type ShortcutAction,
-} from '../keyboard/shortcuts';
+import { SHORTCUT_DEFS, matchesShortcut, type ShortcutAction } from '../keyboard/shortcuts';
 
 export interface UseKeyboardShortcutsArgs {
   /**
@@ -115,9 +111,7 @@ export function useKeyboardShortcuts(args: UseKeyboardShortcutsArgs): void {
         // [편집] 모드에서 빈 키를 저장한 경우에도 단축키가 살아 있도록.
         const rawOverride = overridesMap[def.action];
         const combo =
-          rawOverride !== undefined && rawOverride.trim().length > 0
-            ? rawOverride
-            : def.default;
+          rawOverride !== undefined && rawOverride.trim().length > 0 ? rawOverride : def.default;
         if (matchesShortcut(e, combo)) {
           e.preventDefault();
           handler();

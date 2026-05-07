@@ -64,7 +64,7 @@ function makeCall(overrides: Partial<ToolCall> = {}): ToolCall {
   };
 }
 
-function makeTool(caps: Capability[]): Tool<{}, { ok: number }> {
+function makeTool(caps: Capability[]): Tool<Record<string, never>, { ok: number }> {
   return {
     id: 'mock.high-risk',
     version: '1.0.0',

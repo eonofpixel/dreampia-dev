@@ -21,15 +21,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  X,
-  RefreshCw,
-  Trash2,
-  FileText,
-  Plus,
-  AlertCircle,
-  Sparkles,
-} from 'lucide-react';
+import { X, RefreshCw, Trash2, FileText, Plus, AlertCircle, Sparkles } from 'lucide-react';
 import {
   useMcp,
   type McpDiscoveryUI,
@@ -111,17 +103,7 @@ export function McpSettings({ open, onClose }: McpSettingsProps): React.JSX.Elem
  */
 export function McpSettingsPanel(): React.JSX.Element {
   const t = useT();
-  const {
-    servers,
-    loading,
-    error,
-    refresh,
-    add,
-    remove,
-    restart,
-    getLogs,
-    discover,
-  } = useMcp();
+  const { servers, loading, error, refresh, add, remove, restart, getLogs, discover } = useMcp();
   const [showAddForm, setShowAddForm] = useState(false);
   /** add form 의 초기값 — suggested server / discovered server 를 템플릿으로 제공. */
   const [addFormInitial, setAddFormInitial] = useState<McpServerConfigUI | null>(null);
@@ -203,9 +185,7 @@ export function McpSettingsPanel(): React.JSX.Element {
         {loading ? (
           <p className="text-sm text-text-secondary">{t('mcp.loading')}</p>
         ) : servers.length === 0 ? (
-          <div className="py-8 text-center text-sm text-text-secondary">
-            {t('mcp.empty')}
-          </div>
+          <div className="py-8 text-center text-sm text-text-secondary">{t('mcp.empty')}</div>
         ) : (
           <ul className="space-y-2" data-testid="mcp-server-list">
             {servers.map((server) => (

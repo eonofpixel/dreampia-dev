@@ -692,10 +692,7 @@ function McpMiniSection({
   onOpenMcpSettings?: () => void;
 }): React.JSX.Element {
   return (
-    <div
-      className="mt-5 border-t border-border-primary pt-4"
-      data-testid="onboarding-mcp-mini"
-    >
+    <div className="mt-5 border-t border-border-primary pt-4" data-testid="onboarding-mcp-mini">
       <header className="mb-2 flex items-center gap-2">
         <Server className="h-4 w-4 text-text-secondary" aria-hidden="true" />
         <p className="text-sm font-medium text-text-primary">MCP 서버 (선택)</p>
@@ -802,10 +799,7 @@ function WorkspaceStep({
       </button>
 
       {/* v0.3.0 — 기본 권한 preset */}
-      <div
-        className="mt-5 border-t border-border-primary pt-4"
-        data-testid="permission-selector"
-      >
+      <div className="mt-5 border-t border-border-primary pt-4" data-testid="permission-selector">
         <header className="mb-2 flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-text-secondary" aria-hidden="true" />
           <p className="text-sm font-medium text-text-primary">AI 가 기본으로 가질 권한</p>
@@ -834,9 +828,7 @@ function WorkspaceStep({
                   />
                   <div className="flex-1">
                     <p className="text-text-primary">
-                      <span className="font-medium">
-                        {PERMISSION_LEVEL_LABELS_KO[opt.value]}
-                      </span>
+                      <span className="font-medium">{PERMISSION_LEVEL_LABELS_KO[opt.value]}</span>
                       {opt.value === 'workspace_write' && (
                         <span className="ml-2 rounded bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent">
                           권장

@@ -136,20 +136,22 @@ function rowToEvent(row: AuditRow): AuditEvent {
 
 export class AuditLogStore {
   private readonly db: Database;
-  private readonly insertStmt: Statement<[
-    string,
-    string,
-    string | null,
-    string,
-    string,
-    string,
-    string,
-    string | null,
-    string | null,
-    string | null,
-    string | null,
-    string | null,
-  ]>;
+  private readonly insertStmt: Statement<
+    [
+      string,
+      string,
+      string | null,
+      string,
+      string,
+      string,
+      string,
+      string | null,
+      string | null,
+      string | null,
+      string | null,
+      string | null,
+    ]
+  >;
 
   constructor(db: Database) {
     this.db = db;

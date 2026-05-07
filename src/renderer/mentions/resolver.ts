@@ -197,10 +197,7 @@ function byteLength(text: string): number {
   return Math.ceil(text.length * 1.5);
 }
 
-async function resolveFile(
-  match: MentionMatch,
-  ctx: ResolverContext
-): Promise<ResolvedMention> {
+async function resolveFile(match: MentionMatch, ctx: ResolverContext): Promise<ResolvedMention> {
   if (match.value.length === 0) {
     return { match, kind: 'error', error: '파일 경로가 비어있습니다' };
   }
@@ -222,10 +219,7 @@ async function resolveFile(
   };
 }
 
-async function resolveSession(
-  match: MentionMatch,
-  ctx: ResolverContext
-): Promise<ResolvedMention> {
+async function resolveSession(match: MentionMatch, ctx: ResolverContext): Promise<ResolvedMention> {
   if (match.value.length === 0) {
     return { match, kind: 'error', error: '세션 ID 가 비어있습니다' };
   }
@@ -381,10 +375,7 @@ export function resolveMentionsToTypedBlocks(
  * 잘라내며 (인덱스 안정성) 양옆 공백 정규화. 빈 입력이거나 멘션이 없으면
  * 입력 그대로 반환.
  */
-export function stripMentionTokens(
-  text: string,
-  mentions: ReadonlyArray<MentionMatch>
-): string {
+export function stripMentionTokens(text: string, mentions: ReadonlyArray<MentionMatch>): string {
   if (mentions.length === 0) return text;
   // 우측에서부터 잘라내면 앞쪽 인덱스가 손상되지 않는다.
   const sorted = [...mentions].sort((a, b) => b.start - a.start);

@@ -143,9 +143,10 @@ export class ClaudeAdapter implements ProviderAdapter {
       case 'dom_dump': {
         // v1.6.2 — DOM dump. Claude 에는 페이지 URL + structured JSON dump 를
         // fenced code block 으로 전달. node_count / summary 는 사용자 hint.
-        const sel = block.selector !== undefined && block.selector.length > 0
-          ? ` selector="${block.selector}"`
-          : '';
+        const sel =
+          block.selector !== undefined && block.selector.length > 0
+            ? ` selector="${block.selector}"`
+            : '';
         const header = `[DOM] ${block.url}${sel} — ${block.summary}`;
         const fenced = '```json\n' + block.dump_json + '\n```';
         return { type: 'text', text: `${header}\n${fenced}` };
@@ -155,9 +156,8 @@ export class ClaudeAdapter implements ProviderAdapter {
         const bb = block.bounding_box;
         const head = `[Annotation] ${block.url} (bbox ${bb.x},${bb.y},${bb.w}×${bb.h})`;
         const cmt = block.comment.length > 0 ? `\n주석: ${block.comment}` : '';
-        const shot = block.screenshot_uri !== undefined
-          ? `\n스크린샷: ${block.screenshot_uri}`
-          : '';
+        const shot =
+          block.screenshot_uri !== undefined ? `\n스크린샷: ${block.screenshot_uri}` : '';
         return { type: 'text', text: `${head}${cmt}${shot}` };
       }
     }

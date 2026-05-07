@@ -53,9 +53,7 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
   const [auditEvents, setAuditEvents] = useState<AuditEventShape[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditFilterRule, setAuditFilterRule] = useState<string>('');
-  const [auditFilterEvent, setAuditFilterEvent] = useState<
-    'all' | 'fired' | 'error'
-  >('all');
+  const [auditFilterEvent, setAuditFilterEvent] = useState<'all' | 'fired' | 'error'>('all');
 
   const handleToggleEnabled = async (name: string, currentEnabled: boolean): Promise<void> => {
     const api = typeof window !== 'undefined' ? window.dreampia?.automation : undefined;
@@ -178,8 +176,7 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
         return;
       }
     }
-    const handlerNameToUse =
-      draftHandlerName.length > 0 ? draftHandlerName : undefined;
+    const handlerNameToUse = draftHandlerName.length > 0 ? draftHandlerName : undefined;
 
     try {
       const base =
@@ -491,10 +488,7 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
             {loading ? (
               <p className="p-3 text-xs text-text-secondary">{t('automation.loading')}</p>
             ) : rules.length === 0 ? (
-              <p
-                className="p-3 text-xs text-text-tertiary"
-                data-testid="automation-empty"
-              >
+              <p className="p-3 text-xs text-text-tertiary" data-testid="automation-empty">
                 {t('automation.empty')}
               </p>
             ) : (
@@ -524,9 +518,7 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
                         {r.kind === 'cron' && (
                           <>
                             <span className="font-mono">{r.cron_expr}</span>
-                            {r.cron_tz !== undefined && (
-                              <span className="ml-2">@ {r.cron_tz}</span>
-                            )}
+                            {r.cron_tz !== undefined && <span className="ml-2">@ {r.cron_tz}</span>}
                             {r.next_run !== null && (
                               <span className="ml-2">
                                 {t('automation.next_label')}: {r.next_run}
@@ -535,9 +527,7 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
                           </>
                         )}
                         {r.kind === 'interval' && (
-                          <span>
-                            {t('automation.every', { ms: r.interval_ms ?? 0 })}
-                          </span>
+                          <span>{t('automation.every', { ms: r.interval_ms ?? 0 })}</span>
                         )}
                         {r.kind === 'webhook' && (
                           <span className="font-mono">POST {r.webhook_path}</span>
@@ -618,9 +608,7 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
                 </select>
                 <select
                   value={auditFilterEvent}
-                  onChange={(e) =>
-                    setAuditFilterEvent(e.target.value as 'all' | 'fired' | 'error')
-                  }
+                  onChange={(e) => setAuditFilterEvent(e.target.value as 'all' | 'fired' | 'error')}
                   className="rounded border border-border-primary bg-bg-secondary px-1 py-0.5 text-[10px]"
                   data-testid="automation-audit-filter-event"
                   aria-label={t('automation.audit_filter_event_aria')}
@@ -641,16 +629,15 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
               </div>
             </div>
             {auditLoading ? (
-              <p className="p-3 text-xs text-text-secondary">
-                {t('automation.audit_loading')}
-              </p>
-            ) : (() => {
+              <p className="p-3 text-xs text-text-secondary">{t('automation.audit_loading')}</p>
+            ) : (
+              (() => {
                 const visible = auditEvents.filter((e) =>
                   auditFilterEvent === 'all'
                     ? true
                     : auditFilterEvent === 'fired'
-                    ? e.event === 'automation.fired'
-                    : e.event === 'automation.error'
+                      ? e.event === 'automation.fired'
+                      : e.event === 'automation.error'
                 );
                 if (visible.length === 0) {
                   return (
@@ -725,7 +712,8 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
                     })}
                   </ul>
                 );
-              })()}
+              })()
+            )}
           </section>
         </div>
       </div>

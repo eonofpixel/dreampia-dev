@@ -185,10 +185,7 @@ type NetworkSideEffectShape = {
   status?: number;
   host?: string;
 };
-type SideEffectShape =
-  | FileSideEffectShape
-  | ProcessSideEffectShape
-  | NetworkSideEffectShape;
+type SideEffectShape = FileSideEffectShape | ProcessSideEffectShape | NetworkSideEffectShape;
 
 interface ToolResultShape {
   call_id: string;
@@ -290,12 +287,7 @@ interface McpServerConfigShape {
   added_at: string;
 }
 
-type McpServerStatusShape =
-  | 'disconnected'
-  | 'connecting'
-  | 'ready'
-  | 'error'
-  | 'disabled';
+type McpServerStatusShape = 'disconnected' | 'connecting' | 'ready' | 'error' | 'disabled';
 
 interface McpToolInfoShape {
   name: string;
@@ -409,12 +401,7 @@ interface SearchTurnsArgsShape {
 // v0.12.0 (I) — Cross-AI Verify/Compare shapes. CompareStore 의 export 와
 // sync. preload 는 better-sqlite3 의 transitive import 를 피하기 위해 inline
 // 한다. main 의 zod CompareRunArgsSchema 가 IPC 경계에서 검증한다.
-type CompareSideStatusShape =
-  | 'pending'
-  | 'streaming'
-  | 'done'
-  | 'error'
-  | 'skipped';
+type CompareSideStatusShape = 'pending' | 'streaming' | 'done' | 'error' | 'skipped';
 type CompareRunStatusShape = 'running' | 'completed' | 'failed';
 type CompareSideShape = 'claude' | 'codex';
 
@@ -691,9 +678,7 @@ const api = {
     /**
      * v0.3.0 — wizard / 설정에서 호출. main 측 Zod 가 enum 검증.
      */
-    setDefaultProvider: (
-      provider: 'auto' | 'claude' | 'codex' | 'mock'
-    ): Promise<Result<void>> =>
+    setDefaultProvider: (provider: 'auto' | 'claude' | 'codex' | 'mock'): Promise<Result<void>> =>
       ipcRenderer.invoke('app:set-default-provider', provider) as Promise<Result<void>>,
 
     /**
@@ -729,14 +714,10 @@ const api = {
      * PermissionLevel 별로 plain string[] 를 반환 — IPC 직렬화 안전.
      */
     getPermissionCapabilities: (): Promise<
-      Result<
-        Record<'read_only' | 'workspace_write' | 'full_access' | 'custom', string[]>
-      >
+      Result<Record<'read_only' | 'workspace_write' | 'full_access' | 'custom', string[]>>
     > =>
       ipcRenderer.invoke('app:get-permission-capabilities') as Promise<
-        Result<
-          Record<'read_only' | 'workspace_write' | 'full_access' | 'custom', string[]>
-        >
+        Result<Record<'read_only' | 'workspace_write' | 'full_access' | 'custom', string[]>>
       >,
 
     /**
@@ -744,21 +725,15 @@ const api = {
      * 키: ShortcutAction, 값: combo 문자열 ("Mod+K"). 미설정 시 빈 object.
      */
     getKeyboardShortcuts: (): Promise<Result<Record<string, string>>> =>
-      ipcRenderer.invoke('app:get-keyboard-shortcuts') as Promise<
-        Result<Record<string, string>>
-      >,
+      ipcRenderer.invoke('app:get-keyboard-shortcuts') as Promise<Result<Record<string, string>>>,
 
     /**
      * v0.10.0 — 사용자 지정 매핑 영속. 빈 object 를 보내면 모든 override 제거.
      * action / combo 형식은 renderer 가 검증하고 main 은 plain string-string
      * 매핑만 보존.
      */
-    setKeyboardShortcuts: (
-      overrides: Record<string, string>
-    ): Promise<Result<void>> =>
-      ipcRenderer.invoke('app:set-keyboard-shortcuts', overrides) as Promise<
-        Result<void>
-      >,
+    setKeyboardShortcuts: (overrides: Record<string, string>): Promise<Result<void>> =>
+      ipcRenderer.invoke('app:set-keyboard-shortcuts', overrides) as Promise<Result<void>>,
 
     /**
      * v0.11.0 (B2) — Settings 모달 [언어] 탭. 'ko' default.
@@ -791,10 +766,7 @@ const api = {
      * v1.5.0 — Direct API key 설정. 빈 문자열을 보내면 해당 provider key 삭제.
      * provider 는 'anthropic' | 'openai' enum. main 측에서 zod-less 수동 검증.
      */
-    setDirectApiKey: (
-      provider: 'anthropic' | 'openai',
-      key: string
-    ): Promise<Result<void>> =>
+    setDirectApiKey: (provider: 'anthropic' | 'openai', key: string): Promise<Result<void>> =>
       ipcRenderer.invoke('app:set-direct-api-key', provider, key) as Promise<Result<void>>,
 
     /**
@@ -920,9 +892,7 @@ const api = {
      * 큰 monorepo 에선 ignore_patterns 를 신중히 지정하는 게 권장.
      */
     listFiles: (args: ListFilesArgsShape): Promise<Result<FileEntryShape[]>> =>
-      ipcRenderer.invoke('workspace/list-files', args) as Promise<
-        Result<FileEntryShape[]>
-      >,
+      ipcRenderer.invoke('workspace/list-files', args) as Promise<Result<FileEntryShape[]>>,
 
     /**
      * v0.6.0 (F-019) — workspace 내 단일 파일 read. 다음 케이스는 거절:
@@ -933,9 +903,7 @@ const api = {
      * 정상 read 라도 max_bytes 초과면 truncated=true + content 는 prefix.
      */
     readFile: (args: ReadFileArgsShape): Promise<Result<FileContentShape>> =>
-      ipcRenderer.invoke('workspace/read-file', args) as Promise<
-        Result<FileContentShape>
-      >,
+      ipcRenderer.invoke('workspace/read-file', args) as Promise<Result<FileContentShape>>,
   },
 
   /**
@@ -999,32 +967,22 @@ const api = {
      * 패턴으로 안전 렌더링해야 한다 (XSS 방어).
      */
     search: (args: SearchTurnsArgsShape): Promise<Result<TurnSearchResultShape[]>> =>
-      ipcRenderer.invoke('session/search', args) as Promise<
-        Result<TurnSearchResultShape[]>
-      >,
+      ipcRenderer.invoke('session/search', args) as Promise<Result<TurnSearchResultShape[]>>,
 
     /**
      * v0.8.0 — H Permission Dropdown 가 호출. 세션의 default_level 변경 후
      * 갱신된 Session 반환. main 측 Zod 가 enum 검증 + strict mode 로 unknown
      * field 거절.
      */
-    updatePermission: (
-      id: SessionId,
-      patch: PermissionPatch
-    ): Promise<Result<Session>> =>
-      ipcRenderer.invoke('session/update-permission', id, patch) as Promise<
-        Result<Session>
-      >,
+    updatePermission: (id: SessionId, patch: PermissionPatch): Promise<Result<Session>> =>
+      ipcRenderer.invoke('session/update-permission', id, patch) as Promise<Result<Session>>,
 
     /**
      * v1.1.11 (Workspace UX): per-session sticky workspace lock toggle.
      * ChatHeader 의 🔒 toggle 이 호출. main 측이 sessions.workspace_locked
      * 컬럼 갱신 후 ok 반환.
      */
-    setWorkspaceLocked: (
-      sessionId: SessionId,
-      locked: boolean
-    ): Promise<Result<{ ok: boolean }>> =>
+    setWorkspaceLocked: (sessionId: SessionId, locked: boolean): Promise<Result<{ ok: boolean }>> =>
       ipcRenderer.invoke('session/set-workspace-locked', {
         sessionId,
         locked,
@@ -1033,9 +991,7 @@ const api = {
     /**
      * v1.1.11: 특정 세션의 lock 상태 read — UI mount / 새 세션 전환 시 동기화.
      */
-    getWorkspaceLocked: (
-      sessionId: SessionId
-    ): Promise<Result<{ locked: boolean }>> =>
+    getWorkspaceLocked: (sessionId: SessionId): Promise<Result<{ locked: boolean }>> =>
       ipcRenderer.invoke('session/get-workspace-locked', sessionId) as Promise<
         Result<{ locked: boolean }>
       >,
@@ -1381,10 +1337,7 @@ const api = {
         Result<CompareRunShape | null>
       >,
 
-    list: (
-      sessionId: string,
-      limit?: number
-    ): Promise<Result<CompareRunShape[]>> =>
+    list: (sessionId: string, limit?: number): Promise<Result<CompareRunShape[]>> =>
       ipcRenderer.invoke(
         'compare/list',
         limit !== undefined ? { session_id: sessionId, limit } : { session_id: sessionId }
@@ -1394,10 +1347,7 @@ const api = {
       ipcRenderer.invoke('compare/cancel', { run_id: runId }) as Promise<Result<void>>,
 
     onStreamEvent: (listener: (event: CompareEventShape) => void): (() => void) => {
-      const handler = (
-        _event: Electron.IpcRendererEvent,
-        payload: CompareEventShape
-      ): void => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: CompareEventShape): void => {
         listener(payload);
       };
       ipcRenderer.on('compare/stream-event', handler);
@@ -1419,10 +1369,7 @@ const api = {
       ipcRenderer.invoke('audit/recent', args ?? {}) as Promise<Result<AuditEventShape[]>>,
 
     /** 단일 세션의 audit event — 시간 ASC. limit default 500, max 5000. */
-    bySession: (
-      sessionId: string,
-      limit?: number
-    ): Promise<Result<AuditEventShape[]>> =>
+    bySession: (sessionId: string, limit?: number): Promise<Result<AuditEventShape[]>> =>
       ipcRenderer.invoke(
         'audit/by-session',
         limit !== undefined ? { session_id: sessionId, limit } : { session_id: sessionId }
@@ -1443,9 +1390,7 @@ const api = {
    */
   permission: {
     /** main → renderer 의 permission/request 구독. unsubscribe 함수 반환. */
-    onRequest: (
-      listener: (request: PermissionRequestShape) => void
-    ): (() => void) => {
+    onRequest: (listener: (request: PermissionRequestShape) => void): (() => void) => {
       const handler = (
         _event: Electron.IpcRendererEvent,
         payload: PermissionRequestShape
@@ -1469,14 +1414,10 @@ const api = {
 
     /** UI mount/reload 시 — 진행 중 요청 다시 받아 inline card 복원. */
     listPending: (): Promise<Result<PermissionRequestShape[]>> =>
-      ipcRenderer.invoke('permission/list-pending') as Promise<
-        Result<PermissionRequestShape[]>
-      >,
+      ipcRenderer.invoke('permission/list-pending') as Promise<Result<PermissionRequestShape[]>>,
 
     /** Settings > 권한 — active grant 목록 (revoked 제외). */
-    listGrants: (
-      sessionId: string
-    ): Promise<Result<PermissionGrantSummaryShape[]>> =>
+    listGrants: (sessionId: string): Promise<Result<PermissionGrantSummaryShape[]>> =>
       ipcRenderer.invoke('permission/grants/list', { session_id: sessionId }) as Promise<
         Result<PermissionGrantSummaryShape[]>
       >,
@@ -1496,25 +1437,16 @@ const api = {
    */
   automation: {
     list: (): Promise<Result<AutomationRuleSummaryShape[]>> =>
-      ipcRenderer.invoke('automation/list') as Promise<
-        Result<AutomationRuleSummaryShape[]>
-      >,
-    register: (
-      rule: AutomationRuleRegisterShape
-    ): Promise<Result<AutomationRuleSummaryShape>> =>
+      ipcRenderer.invoke('automation/list') as Promise<Result<AutomationRuleSummaryShape[]>>,
+    register: (rule: AutomationRuleRegisterShape): Promise<Result<AutomationRuleSummaryShape>> =>
       ipcRenderer.invoke('automation/register', rule) as Promise<
         Result<AutomationRuleSummaryShape>
       >,
     unregister: (name: string): Promise<Result<{ removed: boolean }>> =>
-      ipcRenderer.invoke('automation/unregister', name) as Promise<
-        Result<{ removed: boolean }>
-      >,
+      ipcRenderer.invoke('automation/unregister', name) as Promise<Result<{ removed: boolean }>>,
     fire: (name: string): Promise<Result<void>> =>
       ipcRenderer.invoke('automation/fire', name) as Promise<Result<void>>,
-    getNextRun: (
-      cronExpr: string,
-      tz?: string
-    ): Promise<Result<{ next_run: string | null }>> =>
+    getNextRun: (cronExpr: string, tz?: string): Promise<Result<{ next_run: string | null }>> =>
       ipcRenderer.invoke('automation/get-next-run', cronExpr, tz) as Promise<
         Result<{ next_run: string | null }>
       >,
@@ -1522,18 +1454,11 @@ const api = {
     listHandlers: (): Promise<Result<string[]>> =>
       ipcRenderer.invoke('automation/list-handlers') as Promise<Result<string[]>>,
     /** v1.7.26 — Automation audit log 최근 N개 조회. rule_name 필터 지원. */
-    auditLog: (opts?: {
-      rule_name?: string;
-      limit?: number;
-    }): Promise<Result<AuditEventShape[]>> =>
-      ipcRenderer.invoke('automation/audit-log', opts) as Promise<
-        Result<AuditEventShape[]>
-      >,
+    auditLog: (opts?: { rule_name?: string; limit?: number }): Promise<Result<AuditEventShape[]>> =>
+      ipcRenderer.invoke('automation/audit-log', opts) as Promise<Result<AuditEventShape[]>>,
     /** v1.7.27 — rule 활성화/비활성화 토글. */
     setEnabled: (name: string, enabled: boolean): Promise<Result<boolean>> =>
-      ipcRenderer.invoke('automation/set-enabled', { name, enabled }) as Promise<
-        Result<boolean>
-      >,
+      ipcRenderer.invoke('automation/set-enabled', { name, enabled }) as Promise<Result<boolean>>,
     /** v1.7.28 — Rules JSON export. handler closure 제외, settings 영속 shape 만 직렬화. */
     exportRules: (): Promise<Result<string>> =>
       ipcRenderer.invoke('automation/export') as Promise<Result<string>>,

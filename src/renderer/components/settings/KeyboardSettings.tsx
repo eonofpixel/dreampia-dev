@@ -41,12 +41,7 @@ const CATEGORY_LABELS_KO: Record<ShortcutCategory, string> = {
   modal: '모달',
 };
 
-const CATEGORY_ORDER: ReadonlyArray<ShortcutCategory> = [
-  'navigation',
-  'settings',
-  'chat',
-  'modal',
-];
+const CATEGORY_ORDER: ReadonlyArray<ShortcutCategory> = ['navigation', 'settings', 'chat', 'modal'];
 
 /**
  * SettingsModal 의 [단축키] 탭에서 mount. 자체적으로 IPC fetch + save 처리.
@@ -104,9 +99,7 @@ export function KeyboardSettings(): React.JSX.Element {
           // default 를 유지한 채 사용자가 같은 값을 explicit 으로 입력해도
           // 의미가 같으므로 통과시킨다.
           if (otherCombo === other.default && combo === def.default) continue;
-          setError(
-            `${formatShortcut(combo)} 는 이미 "${other.label}" 에 사용 중입니다.`
-          );
+          setError(`${formatShortcut(combo)} 는 이미 "${other.label}" 에 사용 중입니다.`);
           setEditing(null);
           return;
         }
@@ -143,9 +136,7 @@ export function KeyboardSettings(): React.JSX.Element {
   }, [save]);
 
   // SHORTCUT_DEFS 를 카테고리 별로 그룹.
-  const grouped = useMemo<
-    Map<ShortcutCategory, ShortcutDef[]>
-  >(() => {
+  const grouped = useMemo<Map<ShortcutCategory, ShortcutDef[]>>(() => {
     const m = new Map<ShortcutCategory, ShortcutDef[]>();
     for (const def of SHORTCUT_DEFS) {
       const arr = m.get(def.category) ?? [];
@@ -159,10 +150,7 @@ export function KeyboardSettings(): React.JSX.Element {
   const hasAnyOverride = Object.keys(overrides).length > 0;
 
   return (
-    <section
-      className="flex-1 overflow-y-auto p-6"
-      data-testid="settings-keyboard-panel"
-    >
+    <section className="flex-1 overflow-y-auto p-6" data-testid="settings-keyboard-panel">
       <header className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-2 text-base font-semibold">
@@ -170,8 +158,7 @@ export function KeyboardSettings(): React.JSX.Element {
             단축키
           </h3>
           <p className="text-xs text-text-secondary">
-            행을 [편집] 으로 누른 뒤 원하는 키 조합을 입력하면 즉시 적용됩니다.
-            {' '}
+            행을 [편집] 으로 누른 뒤 원하는 키 조합을 입력하면 즉시 적용됩니다.{' '}
             <code className="rounded bg-bg-tertiary px-1 font-mono">Mod</code> ={' '}
             {onMac ? '⌘ Cmd (macOS)' : 'Ctrl (Windows / Linux)'}.
           </p>
@@ -220,8 +207,7 @@ export function KeyboardSettings(): React.JSX.Element {
                     const combo = overrides[def.action] ?? def.default;
                     const isEditing = editing === def.action;
                     const isOverridden =
-                      overrides[def.action] !== undefined &&
-                      overrides[def.action] !== def.default;
+                      overrides[def.action] !== undefined && overrides[def.action] !== def.default;
                     return (
                       <li
                         key={def.action}

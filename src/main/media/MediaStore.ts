@@ -11,15 +11,8 @@
  *  - meta sidecar `<sha256>.meta.json` — 원본 파일명 + mime + 추가시각.
  */
 
-import {
-  createHash,
-} from 'node:crypto';
-import {
-  mkdirSync,
-  promises as fsp,
-  readdirSync,
-  statSync,
-} from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, promises as fsp, readdirSync, statSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { homedir } from 'node:os';
 

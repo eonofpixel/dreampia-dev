@@ -135,17 +135,8 @@ export function UsageSettings({ open, onClose }: UsageSettingsProps): React.JSX.
  */
 export function UsageSettingsPanel(): React.JSX.Element {
   const t = useT();
-  const {
-    summary,
-    daily,
-    loading,
-    error,
-    lastRefreshedAt,
-    preset,
-    setPreset,
-    refresh,
-    exportCsv,
-  } = useUsage('7d');
+  const { summary, daily, loading, error, lastRefreshedAt, preset, setPreset, refresh, exportCsv } =
+    useUsage('7d');
 
   const handleRefresh = useCallback((): void => {
     void refresh();
@@ -238,9 +229,7 @@ export function UsageSettingsPanel(): React.JSX.Element {
         {loading ? (
           <p className="text-sm text-text-secondary">{t('usage.loading')}</p>
         ) : summary.length === 0 && daily.length === 0 ? (
-          <div className="py-12 text-center text-sm text-text-secondary">
-            {t('usage.empty')}
-          </div>
+          <div className="py-12 text-center text-sm text-text-secondary">{t('usage.empty')}</div>
         ) : (
           <>
             {/* Total card */}
@@ -325,9 +314,7 @@ function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JS
   // limits 가 로딩되면 input 의 default 값을 채움.
   useEffect(() => {
     if (limits === null) return;
-    setDraftLimit(
-      limits.cost_limit_usd !== undefined ? String(limits.cost_limit_usd) : ''
-    );
+    setDraftLimit(limits.cost_limit_usd !== undefined ? String(limits.cost_limit_usd) : '');
   }, [limits]);
 
   const threshold = limits?.alert_threshold ?? 0.8;
@@ -357,10 +344,18 @@ function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JS
   // 글자만 바꿔 영어용으로 합칠 수 있도록 단순 base label + 비율 함께 표시).
   const status = useMemo(() => {
     if (limitUsd === undefined) {
-      return { kind: 'unset' as const, label: t('usage.cost_limit.unset'), color: 'text-text-tertiary' };
+      return {
+        kind: 'unset' as const,
+        label: t('usage.cost_limit.unset'),
+        color: 'text-text-tertiary',
+      };
     }
     if (limitUsd === 0) {
-      return { kind: 'over' as const, label: t('usage.cost_limit.exceeded'), color: 'text-red-400' };
+      return {
+        kind: 'over' as const,
+        label: t('usage.cost_limit.exceeded'),
+        color: 'text-red-400',
+      };
     }
     const ratio = currentMonthCost / limitUsd;
     const pct = `${(ratio * 100).toFixed(0)}%`;
@@ -395,7 +390,10 @@ function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JS
         <h3 className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
           {t('usage.cost_limit')}
         </h3>
-        <span className={`ml-auto text-xs font-medium ${status.color}`} data-testid="cost-limit-status">
+        <span
+          className={`ml-auto text-xs font-medium ${status.color}`}
+          data-testid="cost-limit-status"
+        >
           {status.label}
         </span>
       </header>
@@ -406,10 +404,7 @@ function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JS
         <div className="space-y-2 text-xs">
           {/* 한도 입력 */}
           <div className="flex items-center gap-2">
-            <label
-              className="flex flex-1 items-center gap-2"
-              data-testid="cost-limit-input-label"
-            >
+            <label className="flex flex-1 items-center gap-2" data-testid="cost-limit-input-label">
               <span className="w-20 text-text-tertiary">{t('usage.cost_limit.input_label')}</span>
               <input
                 type="number"
@@ -507,10 +502,7 @@ function SummarySection({ rows }: SummarySectionProps): React.JSX.Element {
               const cacheTotal =
                 row.total_cache_creation + row.total_cache_read + row.total_reasoning;
               return (
-                <tr
-                  key={`${row.provider}/${row.model}`}
-                  className="border-t border-border-primary"
-                >
+                <tr key={`${row.provider}/${row.model}`} className="border-t border-border-primary">
                   <td className="p-2">
                     <span
                       className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs ${PROVIDER_BADGE_COLORS[row.provider]}`}
@@ -571,7 +563,10 @@ function DailySection({ rows }: DailySectionProps): React.JSX.Element {
           </thead>
           <tbody>
             {rows.map((row, idx) => (
-              <tr key={`${row.date}/${row.provider}/${idx}`} className="border-t border-border-primary">
+              <tr
+                key={`${row.date}/${row.provider}/${idx}`}
+                className="border-t border-border-primary"
+              >
                 <td className="p-2 font-mono text-xs">{row.date}</td>
                 <td className="p-2">
                   <span
@@ -638,9 +633,7 @@ function PricingFreshnessBanner(): React.JSX.Element | null {
         })}
       </p>
       {stale && (
-        <p className="mt-0.5 text-yellow-300/80">
-          {t('usage.pricing_freshness.stale_hint')}
-        </p>
+        <p className="mt-0.5 text-yellow-300/80">{t('usage.pricing_freshness.stale_hint')}</p>
       )}
     </div>
   );

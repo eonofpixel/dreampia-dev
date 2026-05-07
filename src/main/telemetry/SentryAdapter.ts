@@ -26,14 +26,8 @@ import type { SentryClientLike } from './Telemetry';
  */
 export interface SentryNamespaceLike {
   init: (options: SentryInitOptionsLike) => void;
-  captureException: (
-    error: Error | string,
-    hint?: SentryHintLike
-  ) => unknown;
-  captureMessage: (
-    message: string,
-    levelOrHint?: SentryLevelLike | SentryHintLike
-  ) => unknown;
+  captureException: (error: Error | string, hint?: SentryHintLike) => unknown;
+  captureMessage: (message: string, levelOrHint?: SentryLevelLike | SentryHintLike) => unknown;
   /**
    * Sentry node SDK 의 `metrics.distribution`. 일부 버전 / 빌드에는 없을 수
    * 있어 optional.

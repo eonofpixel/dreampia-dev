@@ -36,12 +36,8 @@ export const llmPromptHandler: AutomationHandler = async (ctx) => {
     return { ok: false, error: 'prompt required (config.prompt: string)' };
   }
   const model =
-    typeof cfg['model'] === 'string' && cfg['model'].length > 0
-      ? cfg['model']
-      : DEFAULT_MODEL;
-  const cwd = typeof cfg['cwd'] === 'string' && cfg['cwd'].length > 0
-    ? cfg['cwd']
-    : process.cwd();
+    typeof cfg['model'] === 'string' && cfg['model'].length > 0 ? cfg['model'] : DEFAULT_MODEL;
+  const cwd = typeof cfg['cwd'] === 'string' && cfg['cwd'].length > 0 ? cfg['cwd'] : process.cwd();
 
   const turn: Turn = {
     id: `auto-${ctx.rule_name}-${Date.now()}` as TurnId,
@@ -52,13 +48,7 @@ export const llmPromptHandler: AutomationHandler = async (ctx) => {
   };
 
   try {
-    const { provider } = await getDefaultProvider(
-      model,
-      undefined,
-      cwd,
-      'workspace_write',
-      'auto'
-    );
+    const { provider } = await getDefaultProvider(model, undefined, cwd, 'workspace_write', 'auto');
 
     let text = '';
     let errored: string | null = null;

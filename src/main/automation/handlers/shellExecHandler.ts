@@ -53,8 +53,7 @@ export function setShellSpawnForTesting(fn: ShellSpawnFn | null): void {
  * Test 용 settings override. Production 은 readSettings() 호출.
  * null 이면 다시 readSettings() 사용.
  */
-let settingsOverrideForTesting: { automation_shell_enabled?: boolean } | null =
-  null;
+let settingsOverrideForTesting: { automation_shell_enabled?: boolean } | null = null;
 
 export function setShellSettingsForTesting(
   override: { automation_shell_enabled?: boolean } | null
@@ -90,23 +89,17 @@ export const shellExecHandler: AutomationHandler = async (ctx) => {
   const args = Array.isArray(cfg['args'])
     ? cfg['args'].filter((a): a is string => typeof a === 'string')
     : [];
-  const cwd =
-    typeof cfg['cwd'] === 'string' && cfg['cwd'].length > 0
-      ? cfg['cwd']
-      : undefined;
+  const cwd = typeof cfg['cwd'] === 'string' && cfg['cwd'].length > 0 ? cfg['cwd'] : undefined;
   const timeoutMs =
     typeof cfg['timeout_ms'] === 'number' && cfg['timeout_ms'] > 0
       ? Math.floor(cfg['timeout_ms'])
       : DEFAULT_TIMEOUT_MS;
   const extraEnv =
-    cfg['env'] !== null &&
-    typeof cfg['env'] === 'object' &&
-    !Array.isArray(cfg['env'])
+    cfg['env'] !== null && typeof cfg['env'] === 'object' && !Array.isArray(cfg['env'])
       ? (cfg['env'] as Record<string, string>)
       : {};
 
-  const spawnFn: ShellSpawnFn =
-    injectedSpawn ?? ((cmd, a, o) => nodeSpawn(cmd, a as string[], o));
+  const spawnFn: ShellSpawnFn = injectedSpawn ?? ((cmd, a, o) => nodeSpawn(cmd, a as string[], o));
 
   return new Promise((resolve) => {
     let child: ChildProcess;

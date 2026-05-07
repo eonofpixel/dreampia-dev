@@ -169,9 +169,7 @@ export function CompareModal({
               title={run?.prompt ?? ''}
               data-testid="compare-prompt"
             >
-              {run !== null && run.prompt.length > 0
-                ? run.prompt
-                : t('compare.prompt.empty')}
+              {run !== null && run.prompt.length > 0 ? run.prompt : t('compare.prompt.empty')}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -239,12 +237,7 @@ interface SidePanelProps {
   onAccept: (side: CompareSide, text: string, model: string | null) => void;
 }
 
-function SidePanel({
-  side,
-  result,
-  isRunning,
-  onAccept,
-}: SidePanelProps): React.JSX.Element {
+function SidePanel({ side, result, isRunning, onAccept }: SidePanelProps): React.JSX.Element {
   const t = useT();
   const status: CompareSideStatus = result?.status ?? 'pending';
   const text = result?.text ?? '';

@@ -10,10 +10,7 @@
 
 import { useState, useEffect } from 'react';
 import { useT } from '../../i18n';
-import type {
-  PermissionRequestUi,
-  PermissionDecisionUi,
-} from '../../hooks/usePermissionRequests';
+import type { PermissionRequestUi, PermissionDecisionUi } from '../../hooks/usePermissionRequests';
 
 export interface PermissionDangerModalProps {
   request: PermissionRequestUi | null;
@@ -51,9 +48,7 @@ export function PermissionDangerModal({
           ⚠ {t('permission.danger.title', { tool: request.tool_display_name })}
         </h3>
 
-        <p className="mb-3 text-sm text-text-secondary">
-          {t('permission.danger.body')}
-        </p>
+        <p className="mb-3 text-sm text-text-secondary">{t('permission.danger.body')}</p>
 
         {/* v1.1.2 hotfix (Codex Q8): high-risk capability 는 server-side 에서
             session/always 응답을 once 로 강제 다운그레이드 — 사용자가
@@ -67,15 +62,11 @@ export function PermissionDangerModal({
 
         <dl className="mb-3 space-y-1 rounded-md border border-red-600/30 bg-red-900/10 p-3 text-xs">
           <div className="flex items-baseline justify-between gap-3">
-            <dt className="flex-shrink-0 text-text-tertiary">
-              {t('permission.card.capability')}
-            </dt>
+            <dt className="flex-shrink-0 text-text-tertiary">{t('permission.card.capability')}</dt>
             <dd className="font-mono text-text-primary">{request.capability}</dd>
           </div>
           <div className="flex items-baseline justify-between gap-3">
-            <dt className="flex-shrink-0 text-text-tertiary">
-              {t('permission.card.target')}
-            </dt>
+            <dt className="flex-shrink-0 text-text-tertiary">{t('permission.card.target')}</dt>
             <dd className="break-all font-mono text-text-primary">
               {request.target.kind}: {request.target.value || '(global)'}
             </dd>

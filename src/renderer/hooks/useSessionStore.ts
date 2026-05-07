@@ -27,12 +27,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Session, SessionId, Turn } from '@/types';
-import type {
-  ConversationPatch,
-  PermissionPatch,
-  Result,
-  SessionMetaPatch,
-} from '@/main/types';
+import type { ConversationPatch, PermissionPatch, Result, SessionMetaPatch } from '@/main/types';
 
 // SessionMeta shape (kept in sync with `@/storage` and preload).
 // Defined here (not imported from `@/storage`) so the renderer never

@@ -30,12 +30,7 @@ import type { PermissionLevel } from '@/types/permission';
 import type { Turn, TurnId } from '@/types';
 import { newTurnId, nowIso } from '@/types';
 import type { StreamEvent, StreamingProvider } from '@/providers';
-import {
-  CompareStore,
-  type CompareRun,
-  type CompareSide,
-  type CompareSideStatus,
-} from '@/storage';
+import { CompareStore, type CompareRun, type CompareSide, type CompareSideStatus } from '@/storage';
 
 // ────────────────────────────────────────────────────────────
 // Public types

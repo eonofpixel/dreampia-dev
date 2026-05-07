@@ -80,16 +80,11 @@ function normalizePath(p: string): string {
  * @param picked 사용자가 고르거나 저장된 workspace path.
  * @param userDataDir Electron app.getPath('userData') 값.
  */
-export function checkUserDataConflict(
-  picked: string,
-  userDataDir: string
-): string | null {
+export function checkUserDataConflict(picked: string, userDataDir: string): string | null {
   const normalizedPicked = normalizePath(picked);
   const normalizedUd = normalizePath(userDataDir);
-  const a =
-    process.platform === 'win32' ? normalizedPicked.toLowerCase() : normalizedPicked;
-  const b =
-    process.platform === 'win32' ? normalizedUd.toLowerCase() : normalizedUd;
+  const a = process.platform === 'win32' ? normalizedPicked.toLowerCase() : normalizedPicked;
+  const b = process.platform === 'win32' ? normalizedUd.toLowerCase() : normalizedUd;
 
   if (a === b) {
     return `선택한 폴더 "${picked}" 가 앱 데이터 폴더 "${userDataDir}" 와 정확히 같아요. SQLite WAL/journal 파일이 작업 폴더에 노출되면 위험합니다. 다른 폴더를 선택해주세요.`;
@@ -118,10 +113,8 @@ export function classifyUserDataConflict(
   // 일관 (둘은 동일 정규화를 거쳐야 — message 와 kind 가 분리되면 안 됨).
   const normalizedPicked = normalizePath(picked);
   const normalizedUd = normalizePath(userDataDir);
-  const a =
-    process.platform === 'win32' ? normalizedPicked.toLowerCase() : normalizedPicked;
-  const b =
-    process.platform === 'win32' ? normalizedUd.toLowerCase() : normalizedUd;
+  const a = process.platform === 'win32' ? normalizedPicked.toLowerCase() : normalizedPicked;
+  const b = process.platform === 'win32' ? normalizedUd.toLowerCase() : normalizedUd;
 
   if (a === b) return 'exact';
   if (a.startsWith(`${b}${path.sep}`) || a.startsWith(`${b}/`)) return 'child';

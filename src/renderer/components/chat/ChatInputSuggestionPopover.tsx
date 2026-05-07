@@ -114,9 +114,7 @@ export function ChatInputSuggestionPopover<T extends SuggestionItem>({
         {items.map((item, index) => {
           const isActive = index === activeIndex;
           const optionTestid =
-            optionTestidPrefix !== undefined
-              ? `${optionTestidPrefix}-${item.id}`
-              : undefined;
+            optionTestidPrefix !== undefined ? `${optionTestidPrefix}-${item.id}` : undefined;
           return (
             <li
               key={item.id}

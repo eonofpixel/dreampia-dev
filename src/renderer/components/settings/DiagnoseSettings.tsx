@@ -164,9 +164,7 @@ function TelemetrySection({ t }: SubProps): React.JSX.Element {
       className="mt-6 rounded-md border border-border-primary p-4"
       data-testid="settings-telemetry-section"
     >
-      <h4 className="mb-1 text-sm font-semibold">
-        {t('settings.diagnose.telemetry.title')}
-      </h4>
+      <h4 className="mb-1 text-sm font-semibold">{t('settings.diagnose.telemetry.title')}</h4>
       <p className="mb-3 text-xs text-text-secondary">
         {t('settings.diagnose.telemetry.description')}
       </p>
@@ -354,9 +352,7 @@ function AuditLogSection({ t }: SubProps): React.JSX.Element {
       <header className="mb-2 flex items-start justify-between gap-3">
         <div className="flex-1">
           <h4 className="text-sm font-semibold">{t('settings.diagnose.audit.title')}</h4>
-          <p className="text-xs text-text-tertiary">
-            {t('settings.diagnose.audit.description')}
-          </p>
+          <p className="text-xs text-text-tertiary">{t('settings.diagnose.audit.description')}</p>
         </div>
         <button
           type="button"
@@ -387,10 +383,7 @@ function AuditLogSection({ t }: SubProps): React.JSX.Element {
       ) : entries !== null && entries.length > 0 ? (
         <AuditTable entries={entries} t={t} />
       ) : (
-        <p
-          className="text-xs text-text-tertiary"
-          data-testid="settings-diagnose-audit-empty"
-        >
+        <p className="text-xs text-text-tertiary" data-testid="settings-diagnose-audit-empty">
           {t('settings.diagnose.audit.empty')}
         </p>
       )}
@@ -451,12 +444,8 @@ function AuditTable({
                   ) : null;
                 })()}
               </td>
-              <td className="py-1 pr-3 font-mono text-text-secondary">
-                {e.capability || '—'}
-              </td>
-              <td
-                className={`py-1 pr-3 font-mono ${auditOutcomeClass(e)}`}
-              >
+              <td className="py-1 pr-3 font-mono text-text-secondary">{e.capability || '—'}</td>
+              <td className={`py-1 pr-3 font-mono ${auditOutcomeClass(e)}`}>
                 {e.outcome ?? e.decision_reason}
               </td>
               <td className="py-1 font-mono text-text-tertiary">

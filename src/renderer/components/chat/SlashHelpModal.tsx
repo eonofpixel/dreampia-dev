@@ -16,11 +16,7 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { SLASH_COMMANDS } from '../../commands/registry';
-import {
-  SHORTCUT_DEFS,
-  formatShortcut,
-  type ShortcutAction,
-} from '../../keyboard/shortcuts';
+import { SHORTCUT_DEFS, formatShortcut, type ShortcutAction } from '../../keyboard/shortcuts';
 import { useT } from '../../i18n';
 
 export interface SlashHelpModalProps {
@@ -28,10 +24,7 @@ export interface SlashHelpModalProps {
   onClose: () => void;
 }
 
-export function SlashHelpModal({
-  open,
-  onClose,
-}: SlashHelpModalProps): React.JSX.Element | null {
+export function SlashHelpModal({ open, onClose }: SlashHelpModalProps): React.JSX.Element | null {
   const t = useT();
   // v0.10.0 — 사용자가 지정한 keyboard overrides 를 IPC 에서 fetch 해 표시.
   // 미존재 / 실패 시 default 만 보여줌 (graceful).
@@ -180,11 +173,13 @@ export function SlashHelpModal({
         {/* Footer hint */}
         <div className="border-t border-border-primary px-4 py-2 text-xs text-text-tertiary">
           <kbd className="rounded bg-bg-tertiary px-1">↑</kbd>
-          <kbd className="ml-0.5 rounded bg-bg-tertiary px-1">↓</kbd> {t('slash_help.footer.navigate')}
+          <kbd className="ml-0.5 rounded bg-bg-tertiary px-1">↓</kbd>{' '}
+          {t('slash_help.footer.navigate')}
           <span className="mx-2">·</span>
           <kbd className="rounded bg-bg-tertiary px-1">Enter</kbd> {t('slash_help.footer.select')}
           <span className="mx-2">·</span>
-          <kbd className="rounded bg-bg-tertiary px-1">Tab</kbd> {t('slash_help.footer.autocomplete')}
+          <kbd className="rounded bg-bg-tertiary px-1">Tab</kbd>{' '}
+          {t('slash_help.footer.autocomplete')}
           <span className="mx-2">·</span>
           <kbd className="rounded bg-bg-tertiary px-1">Esc</kbd> {t('slash_help.footer.close')}
         </div>

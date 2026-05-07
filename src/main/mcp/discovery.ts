@@ -95,10 +95,7 @@ function claudeConfigCandidates(): string[] {
  */
 function codexConfigCandidates(): string[] {
   const home = homedir();
-  return [
-    join(home, '.codex', 'config.json'),
-    join(home, '.config', 'codex', 'config.json'),
-  ];
+  return [join(home, '.codex', 'config.json'), join(home, '.config', 'codex', 'config.json')];
 }
 
 /**

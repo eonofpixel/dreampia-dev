@@ -75,10 +75,7 @@ export class McpManager {
   private readonly clients = new Map<string, McpClient>();
   private readonly settings: McpManagerSettingsAdapter;
   private readonly clientOptions: McpClientOptions | undefined;
-  private readonly createClient: (
-    config: McpServerConfig,
-    options?: McpClientOptions
-  ) => McpClient;
+  private readonly createClient: (config: McpServerConfig, options?: McpClientOptions) => McpClient;
   /** v1.0.13 (FAKE-5): schema 변환 audit sink. 미설정 시 dormant. */
   private readonly options: McpManagerOptions;
 
@@ -89,8 +86,7 @@ export class McpManager {
     this.options = options;
     this.settings = options.settings;
     this.clientOptions = options.clientOptions;
-    this.createClient =
-      options.createClient ?? ((config, opts) => new McpClient(config, opts));
+    this.createClient = options.createClient ?? ((config, opts) => new McpClient(config, opts));
   }
 
   // ──────────────────────────────────────────────────────────
@@ -226,7 +222,8 @@ export class McpManager {
       const client = this.clients.get(config.id);
       const state: McpServerState = {
         config,
-        status: client !== undefined ? client.getStatus() : config.enabled ? 'disconnected' : 'disabled',
+        status:
+          client !== undefined ? client.getStatus() : config.enabled ? 'disconnected' : 'disabled',
         tools: client !== undefined ? client.getTools() : [],
         last_log: client !== undefined ? client.getLogTail() : [],
       };
@@ -246,11 +243,7 @@ export class McpManager {
   // 내부 — Tool wrapper / registry sync
   // ──────────────────────────────────────────────────────────
 
-  private buildToolWrapper(
-    client: McpClient,
-    config: McpServerConfig,
-    info: McpToolInfo
-  ): Tool {
+  private buildToolWrapper(client: McpClient, config: McpServerConfig, info: McpToolInfo): Tool {
     const toolId = `mcp.${config.id}.${info.name}`;
     // v1.0.13 (FAKE-5): JSON Schema → Zod 중간 변환 (top-level type + required).
     // Codex 권고 (옵션 b). 변환 실패 / partial fallback 시 schemaAuditSink 호출.

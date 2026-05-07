@@ -49,10 +49,7 @@ function hasOnboardingApi(): boolean {
 }
 
 function hasResetOnboardingApi(): boolean {
-  return (
-    hasOnboardingApi() &&
-    typeof window.dreampia.app.resetOnboarding === 'function'
-  );
+  return hasOnboardingApi() && typeof window.dreampia.app.resetOnboarding === 'function';
 }
 
 export function useOnboarding(): UseOnboardingApi {

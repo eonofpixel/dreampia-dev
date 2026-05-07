@@ -37,10 +37,7 @@ export interface DumpOptions {
  * `Element` 가 아닌 입력 (Text node 등) → null.
  * Window/Document 미접근 환경 (vitest jsdom 환경 외) — caller 책임.
  */
-export function dumpElement(
-  el: Element,
-  options: DumpOptions = {}
-): DomDumpNode {
+export function dumpElement(el: Element, options: DumpOptions = {}): DomDumpNode {
   const maxDepth = options.maxDepth ?? 3;
   const maxText = options.maxText ?? 200;
   const includeBounds = options.includeBounds ?? true;
@@ -76,9 +73,7 @@ function dumpRec(
   // direct text only — 자식 element 의 text 제외.
   const directText = directTextOf(el).trim();
   if (directText.length > 0) {
-    node.text = directText.length > maxText
-      ? directText.slice(0, maxText) + '…'
-      : directText;
+    node.text = directText.length > maxText ? directText.slice(0, maxText) + '…' : directText;
   }
   // bounds.
   if (includeBounds && typeof el.getBoundingClientRect === 'function') {

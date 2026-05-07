@@ -17,10 +17,7 @@
 
 import { useEffect, useState } from 'react';
 import { useT } from '../../i18n';
-import type {
-  PermissionRequestUi,
-  PermissionDecisionUi,
-} from '../../hooks/usePermissionRequests';
+import type { PermissionRequestUi, PermissionDecisionUi } from '../../hooks/usePermissionRequests';
 
 export interface PermissionApprovalCardProps {
   request: PermissionRequestUi;
@@ -56,15 +53,11 @@ export function PermissionApprovalCard({
 
       <dl className="mb-3 space-y-1 text-xs">
         <div className="flex items-baseline justify-between gap-3">
-          <dt className="flex-shrink-0 text-text-tertiary">
-            {t('permission.card.capability')}
-          </dt>
+          <dt className="flex-shrink-0 text-text-tertiary">{t('permission.card.capability')}</dt>
           <dd className="font-mono text-text-secondary">{request.capability}</dd>
         </div>
         <div className="flex items-baseline justify-between gap-3">
-          <dt className="flex-shrink-0 text-text-tertiary">
-            {t('permission.card.target')}
-          </dt>
+          <dt className="flex-shrink-0 text-text-tertiary">{t('permission.card.target')}</dt>
           <dd className="break-all font-mono text-text-secondary">
             {request.target.kind}: {request.target.value || '(global)'}
           </dd>

@@ -187,8 +187,7 @@ function* translateOpenAiEvent(
   const usage = obj.usage as Record<string, unknown> | undefined;
   if (usage !== undefined) {
     const inputTokens = typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : 0;
-    const outputTokens =
-      typeof usage.completion_tokens === 'number' ? usage.completion_tokens : 0;
+    const outputTokens = typeof usage.completion_tokens === 'number' ? usage.completion_tokens : 0;
     yield {
       type: 'usage',
       data: {

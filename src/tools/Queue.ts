@@ -273,9 +273,7 @@ export class ToolQueue {
     const eventName = `tool_use.${result.status}`;
     const decisionReason =
       result.status === 'success' ? 'success' : (result.error?.code ?? 'unknown');
-    const errMsg = result.error
-      ? `${result.error.code}: ${result.error.message}`
-      : undefined;
+    const errMsg = result.error ? `${result.error.code}: ${result.error.message}` : undefined;
     return {
       timestamp: result.completed_at,
       session_id: call.session_id,
@@ -314,10 +312,7 @@ export class ToolQueue {
    *   핸들러가 `event.sender.id` 를 webContentsId 로 전달. 미지정 시
    *   NO_ORIGIN(0) 버킷 사용 (테스트/프로그램적 호출용).
    */
-  async enqueue(
-    call: ToolCall,
-    origin?: { web_contents_id: number }
-  ): Promise<ToolResult> {
+  async enqueue(call: ToolCall, origin?: { web_contents_id: number }): Promise<ToolResult> {
     const webContentsId = origin?.web_contents_id ?? ToolQueue.NO_ORIGIN;
     // ── Step 1: Tool 조회 ──
     const tool = this.registry.get(call.tool_id);
@@ -385,13 +380,7 @@ export class ToolQueue {
     }
 
     // ── Step 6: 실행 ──
-    const result = await this.runTool(
-      call,
-      tool,
-      validatedInput,
-      session,
-      webContentsId
-    );
+    const result = await this.runTool(call, tool, validatedInput, session, webContentsId);
     this.emitAudit(this.resultToAuditEvent(call, result));
     return result;
   }
@@ -555,10 +544,7 @@ export class ToolQueue {
     // v1.1.1 hotfix: in-memory session grants 와 머지된 session 객체.
     // v1.1.2 hotfix: webContentsId 버킷에서 grants 조회 (sessionId X — Codex Q8).
     // Resolver 의 findActiveGrants 가 본 augmented session 의 grants 를 본다.
-    const augmentedSession = this.augmentSessionWithRuntimeGrants(
-      session,
-      webContentsId
-    );
+    const augmentedSession = this.augmentSessionWithRuntimeGrants(session, webContentsId);
 
     for (const cap of caps) {
       const target = this.resolveTarget(tool, input, cap, session);
@@ -622,12 +608,7 @@ export class ToolQueue {
         return this.decisionToError(cap, denyDecision);
       }
 
-      const decision = isAllowed(
-        cap,
-        resolved,
-        augmentedSession,
-        augmentedSession.workspace.root
-      );
+      const decision = isAllowed(cap, resolved, augmentedSession, augmentedSession.workspace.root);
 
       if (decision.allowed) continue;
 
@@ -637,10 +618,7 @@ export class ToolQueue {
       }
 
       // ── v1.1.0 SEC-2 full: requires_user_confirmation → confirmer ──
-      if (
-        decision.reason === 'requires_user_confirmation' &&
-        this.confirmer !== undefined
-      ) {
+      if (decision.reason === 'requires_user_confirmation' && this.confirmer !== undefined) {
         const userOk = await this.askConfirmation(
           tool,
           call,
@@ -720,10 +698,7 @@ export class ToolQueue {
     // downgrade. UI 가 dangerous modal 만 노출했을 때도 사용자가 IPC 직접 호출
     // 등으로 우회 시도하면 본 server-side downgrade 가 차단.
     let effectiveDecision = response.decision;
-    if (
-      highRisk &&
-      (response.decision === 'session' || response.decision === 'always')
-    ) {
+    if (highRisk && (response.decision === 'session' || response.decision === 'always')) {
       effectiveDecision = 'once';
       this.emitPermissionDecisionAudit(
         call,
@@ -806,10 +781,7 @@ export class ToolQueue {
    * 같은 webContentsId 안에서 sessionA 의 'session' grant 가 sessionB 호출에
    * 활성되는 누수 차단 — 사용자 인식 ("이 chat session 동안") 과 정합.
    */
-  private augmentSessionWithRuntimeGrants(
-    session: Session,
-    webContentsId: number
-  ): Session {
+  private augmentSessionWithRuntimeGrants(session: Session, webContentsId: number): Session {
     const bucket = this.sessionGrants.get(webContentsId) ?? [];
     if (bucket.length === 0) return session;
     const runtime = bucket.filter((g) => g.session_id === session.id);
@@ -841,9 +813,7 @@ export class ToolQueue {
    * Test inspection — 특정 webContents 의 in-memory grant 목록 (read-only).
    * v1.1.2 hotfix: 키 변경. 미지정 시 NO_ORIGIN(0) 버킷 — 테스트 호환.
    */
-  getSessionGrants(
-    webContentsId: number = ToolQueue.NO_ORIGIN
-  ): ReadonlyArray<PermissionGrant> {
+  getSessionGrants(webContentsId: number = ToolQueue.NO_ORIGIN): ReadonlyArray<PermissionGrant> {
     return this.sessionGrants.get(webContentsId) ?? [];
   }
 

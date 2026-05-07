@@ -29,7 +29,10 @@ export class VcrFixtureMissingError extends Error {
 }
 
 export class VcrFixtureInvalidError extends Error {
-  constructor(public readonly path: string, message: string) {
+  constructor(
+    public readonly path: string,
+    message: string
+  ) {
     super(`VCR fixture invalid (${path}): ${message}`);
     this.name = 'VcrFixtureInvalidError';
   }
@@ -200,10 +203,7 @@ export function detectDrift(
  *
  * Codex Q10 picking: manual record (auto-overwrite on nightly fail X).
  */
-export function updateFixtureHash(
-  fixturePath: string,
-  capturedEvents: StreamEvent[]
-): void {
+export function updateFixtureHash(fixturePath: string, capturedEvents: StreamEvent[]): void {
   const fixture = loadFixture(fixturePath);
   const hash = eventsHashOf(capturedEvents);
   const updated: VcrFixture = {

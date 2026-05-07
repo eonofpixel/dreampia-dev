@@ -51,23 +51,20 @@ export function useKeyboardOverrides(): UseKeyboardOverridesResult {
     };
   }, []);
 
-  const save = useCallback(
-    async (next: Record<string, string>): Promise<boolean> => {
-      // Optimistic local update — UI 가 즉시 반응.
-      setOverrides({ ...next });
-      const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
-      if (appApi === undefined || typeof appApi.setKeyboardShortcuts !== 'function') {
-        return false;
-      }
-      try {
-        const result = await appApi.setKeyboardShortcuts(next);
-        return result.ok;
-      } catch {
-        return false;
-      }
-    },
-    []
-  );
+  const save = useCallback(async (next: Record<string, string>): Promise<boolean> => {
+    // Optimistic local update — UI 가 즉시 반응.
+    setOverrides({ ...next });
+    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+    if (appApi === undefined || typeof appApi.setKeyboardShortcuts !== 'function') {
+      return false;
+    }
+    try {
+      const result = await appApi.setKeyboardShortcuts(next);
+      return result.ok;
+    } catch {
+      return false;
+    }
+  }, []);
 
   const reset = useCallback(async (): Promise<boolean> => {
     return save({});

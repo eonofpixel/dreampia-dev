@@ -117,8 +117,7 @@ const MIGRATIONS: readonly Migration[] = [
   },
   {
     version: 15,
-    description:
-      'v1.8.1 — sessions.permission_default_level + plan_active promote (B-3 2단계)',
+    description: 'v1.8.1 — sessions.permission_default_level + plan_active promote (B-3 2단계)',
     up: sql015,
     down: down015,
   },
@@ -274,9 +273,7 @@ export function revertTo(db: Database, targetVersion: number): RevertToResult {
     throw new Error(`targetVersion must be a non-negative integer (got ${targetVersion})`);
   }
   if (targetVersion > current) {
-    throw new Error(
-      `Cannot revert to v${targetVersion} from v${current} (target > current).`
-    );
+    throw new Error(`Cannot revert to v${targetVersion} from v${current} (target > current).`);
   }
   if (targetVersion === current) {
     return { from: current, to: current, reverted: [] };

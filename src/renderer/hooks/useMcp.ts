@@ -32,12 +32,7 @@ export interface McpServerConfigUI {
   added_at: string;
 }
 
-export type McpServerStatusUI =
-  | 'disconnected'
-  | 'connecting'
-  | 'ready'
-  | 'error'
-  | 'disabled';
+export type McpServerStatusUI = 'disconnected' | 'connecting' | 'ready' | 'error' | 'disabled';
 
 export interface McpToolInfoUI {
   name: string;

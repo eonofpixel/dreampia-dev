@@ -97,9 +97,7 @@ export async function readFileAsBase64(file: File): Promise<ReadFileResult> {
     binary += String.fromCharCode(bytes[i] as number);
   }
   const base64 =
-    typeof btoa === 'function'
-      ? btoa(binary)
-      : Buffer.from(binary, 'binary').toString('base64');
+    typeof btoa === 'function' ? btoa(binary) : Buffer.from(binary, 'binary').toString('base64');
   return {
     base64,
     mime: file.type,

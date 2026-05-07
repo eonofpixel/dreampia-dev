@@ -112,9 +112,7 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
             <>
               <p className="mb-3 text-xs text-text-tertiary">
                 {t('plugins.modal.root_dir_label')}{' '}
-                <code className="rounded bg-bg-tertiary px-1.5 py-0.5">
-                  {data.rootDir}
-                </code>
+                <code className="rounded bg-bg-tertiary px-1.5 py-0.5">{data.rootDir}</code>
               </p>
               {data.loaded.length === 0 && data.issues.length === 0 && (
                 <p
@@ -137,9 +135,7 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
                         data-testid="plugins-modal-loaded-item"
                       >
                         <div className="flex items-baseline gap-2">
-                          <span className="font-mono text-sm font-semibold">
-                            {p.manifest.name}
-                          </span>
+                          <span className="font-mono text-sm font-semibold">{p.manifest.name}</span>
                           <span className="font-mono text-[11px] text-text-tertiary">
                             v{p.manifest.version}
                           </span>

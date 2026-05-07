@@ -116,8 +116,7 @@ export function useToasts(): ToastsApi {
     [push]
   );
   const warning = useCallback(
-    (message: string, options?: ToastPushOptions): string =>
-      push('warning', message, options),
+    (message: string, options?: ToastPushOptions): string => push('warning', message, options),
     [push]
   );
   const info = useCallback(
@@ -125,8 +124,7 @@ export function useToasts(): ToastsApi {
     [push]
   );
   const success = useCallback(
-    (message: string, options?: ToastPushOptions): string =>
-      push('success', message, options),
+    (message: string, options?: ToastPushOptions): string => push('success', message, options),
     [push]
   );
 

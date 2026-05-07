@@ -111,11 +111,9 @@ export async function ensureAsciiCwd(cwd: string | undefined): Promise<string | 
     let child: ChildProcess;
     try {
       // `for %I in (...)` 안의 quoted path 를 cmd.exe 가 GetShortPathName 로 변환.
-      child = spawn(
-        'cmd.exe',
-        ['/d', '/s', '/c', `for %I in ("${cwd}") do @echo %~sI`],
-        { shell: false }
-      );
+      child = spawn('cmd.exe', ['/d', '/s', '/c', `for %I in ("${cwd}") do @echo %~sI`], {
+        shell: false,
+      });
     } catch {
       finish(cwd);
       return;

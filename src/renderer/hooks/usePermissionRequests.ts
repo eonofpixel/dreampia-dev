@@ -35,11 +35,7 @@ export interface UsePermissionRequestsReturn {
    * 가장 위로 (center modal). 그 외엔 inline.
    */
   current: PermissionRequestUi | null;
-  respond: (
-    request_id: string,
-    decision: PermissionDecisionUi,
-    reason?: string
-  ) => Promise<void>;
+  respond: (request_id: string, decision: PermissionDecisionUi, reason?: string) => Promise<void>;
 }
 
 interface PermissionApi {
@@ -97,11 +93,7 @@ export function usePermissionRequests(): UsePermissionRequestsReturn {
   }, []);
 
   const respond = useCallback(
-    async (
-      request_id: string,
-      decision: PermissionDecisionUi,
-      reason?: string
-    ): Promise<void> => {
+    async (request_id: string, decision: PermissionDecisionUi, reason?: string): Promise<void> => {
       const api = apiRef.current;
       if (api === null) return;
       // Optimistic local removal — main 의 응답을 기다리지 않고 UI 정리.
