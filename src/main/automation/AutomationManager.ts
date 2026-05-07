@@ -351,9 +351,7 @@ export function getAutomationManager(
           });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          console.warn(
-            `[AutomationManager] persisted rule '${r.name}' rejected: ${msg}`
-          );
+          console.warn(`[AutomationManager] persisted rule '${r.name}' rejected: ${msg}`);
         }
       }
     } catch {

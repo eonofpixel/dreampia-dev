@@ -71,9 +71,7 @@ export function jsonSchemaToZod(input: unknown): JsonSchemaToZodResult {
   const propsObj = propsRaw as JsonSchemaLike;
   const propKeys = Object.keys(propsObj);
   if (propKeys.length > MAX_PROPERTY_COUNT) {
-    warnings.push(
-      `properties count ${propKeys.length} > ${MAX_PROPERTY_COUNT} — truncating`
-    );
+    warnings.push(`properties count ${propKeys.length} > ${MAX_PROPERTY_COUNT} — truncating`);
   }
 
   const requiredSet = new Set<string>();
@@ -94,8 +92,7 @@ export function jsonSchemaToZod(input: unknown): JsonSchemaToZodResult {
   // additionalProperties: false 명시 시 strict, 그 외엔 passthrough (MCP 가
   // 추가 필드 보낼 수 있으니 관대).
   const additional = schemaObj['additionalProperties'];
-  const objSchema =
-    additional === false ? z.object(shape).strict() : z.object(shape).passthrough();
+  const objSchema = additional === false ? z.object(shape).strict() : z.object(shape).passthrough();
 
   return { schema: objSchema, converted: true, warnings };
 }
@@ -104,11 +101,7 @@ export function jsonSchemaToZod(input: unknown): JsonSchemaToZodResult {
  * Top-level type 만 변환 — string/number/boolean → 정확. object/array 는
  * z.unknown() (nested 는 P1 에서 변환). enum/format 등 은 미지원 (warnings).
  */
-function primitiveType(
-  prop: unknown,
-  warnings: string[],
-  key: string
-): z.ZodTypeAny {
+function primitiveType(prop: unknown, warnings: string[], key: string): z.ZodTypeAny {
   if (prop === null || prop === undefined || typeof prop !== 'object') {
     warnings.push(`property "${key}": malformed`);
     return z.unknown();

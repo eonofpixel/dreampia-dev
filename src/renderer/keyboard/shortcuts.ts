@@ -199,7 +199,10 @@ export function parseShortcut(combo: string): ParsedShortcut {
     key: '',
   };
   if (typeof combo !== 'string' || combo.length === 0) return out;
-  const parts = combo.split('+').map((p) => p.trim()).filter((p) => p.length > 0);
+  const parts = combo
+    .split('+')
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
   for (const raw of parts) {
     const lower = raw.toLowerCase();
     switch (lower) {

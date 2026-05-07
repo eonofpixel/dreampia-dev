@@ -10,20 +10,10 @@ import { autoUpdater } from 'electron-updater';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import {
-  registerIpcHandlers,
-  shutdownAiHandlers,
-  shutdownCompareHandlers,
-} from './ipc';
+import { registerIpcHandlers, shutdownAiHandlers, shutdownCompareHandlers } from './ipc';
 import { BrowserManager } from './BrowserManager';
 import { McpManager, createSettingsAdapter } from './mcp';
-import {
-  AuditLogStore,
-  CompareStore,
-  LeaderElection,
-  SessionStore,
-  UsageStore,
-} from '@/storage';
+import { AuditLogStore, CompareStore, LeaderElection, SessionStore, UsageStore } from '@/storage';
 import { ShellRunTool, ToolQueue, ToolRegistry, type ToolAuditEvent } from '@/tools';
 import { getDefaultProvider } from '@/providers/auto';
 import type { ProviderFactory } from './compare/orchestrator';
@@ -251,9 +241,7 @@ app.whenReady().then(async () => {
       enabled,
     });
     if (result.sentry) {
-      console.info(
-        `[main] Sentry telemetry initialized (enabled=${String(enabled)})`
-      );
+      console.info(`[main] Sentry telemetry initialized (enabled=${String(enabled)})`);
     } else {
       console.debug(`[main] Telemetry: ${result.reason ?? 'console fallback'}`);
     }
@@ -390,8 +378,7 @@ app.whenReady().then(async () => {
         event: event.event,
         capability: 'PLUGIN',
         target_json: JSON.stringify({ plugin_dir: event.plugin_dir }),
-        decision_reason:
-          event.event === 'plugin.loaded' ? 'loaded' : 'invalid',
+        decision_reason: event.event === 'plugin.loaded' ? 'loaded' : 'invalid',
         ...(event.event !== 'plugin.loaded' && {
           outcome: 'skipped',
           ...(event.reason !== undefined && { error: event.reason }),
@@ -496,8 +483,7 @@ app.whenReady().then(async () => {
           tool_name: event.tool_name,
           warnings: event.warnings,
         }),
-        decision_reason:
-          event.event === 'mcp.input_schema_converted' ? 'converted' : 'unconverted',
+        decision_reason: event.event === 'mcp.input_schema_converted' ? 'converted' : 'unconverted',
         outcome: event.warnings.length > 0 ? 'partial' : 'ok',
         ...(event.warnings.length > 0 && { error: event.warnings.join('; ') }),
       });
@@ -512,13 +498,7 @@ app.whenReady().then(async () => {
   // via getDefaultProvider so that user's wizard preference (claude / codex /
   // mock override) still applies, but model prefix routing forces the chosen
   // CLI per side. We pass `userDefaultProvider='auto'` so model prefix wins.
-  const compareFactory: ProviderFactory = async (
-    side,
-    model,
-    signal,
-    cwd,
-    permissionLevel
-  ) => {
+  const compareFactory: ProviderFactory = async (side, model, signal, cwd, permissionLevel) => {
     const result = await getDefaultProvider(model, signal, cwd, permissionLevel, 'auto');
     void side;
     return { provider: result.provider, source: result.source };
@@ -594,17 +574,12 @@ app.whenReady().then(async () => {
   // mainWindow.webContents.send 로 자동화 rule 이 renderer 에 IPC 발사.
   // window 가 destroyed 되면 silent drop (다음 fire 시 재시도).
   void (async () => {
-    const { setIpcTriggerEmitter } = await import(
-      './automation/handlers/ipcTriggerHandler'
-    );
+    const { setIpcTriggerEmitter } = await import('./automation/handlers/ipcTriggerHandler');
     setIpcTriggerEmitter((channel, payload) => {
       const win = mainWindow;
       if (win === null) return;
       try {
-        if (
-          'isDestroyed' in win &&
-          (win as { isDestroyed?: () => boolean }).isDestroyed?.()
-        ) {
+        if ('isDestroyed' in win && (win as { isDestroyed?: () => boolean }).isDestroyed?.()) {
           return;
         }
         win.webContents.send(channel, payload);

@@ -135,10 +135,7 @@ export function estimateCostUsd(model: string, usage: UsageInputs): number {
  * COST-2 의 hard limit gate 가 found=false 인 경우 unknown 정책 (기본 차단)
  * 적용. UsageStore.recordEvent 도 unknown 플래그 동시 영속.
  */
-export function priceUsage(
-  model: string,
-  usage: UsageInputs
-): { usd: number; found: boolean } {
+export function priceUsage(model: string, usage: UsageInputs): { usd: number; found: boolean } {
   const pricing = lookupPricing(model);
   if (pricing === null) {
     return { usd: 0, found: false };
@@ -149,8 +146,7 @@ export function priceUsage(
 
   const inputCost = (usage.input_tokens / 1_000_000) * pricing.input_per_mtok;
   const outputCost = (usage.output_tokens / 1_000_000) * pricing.output_per_mtok;
-  const cacheWriteCost =
-    ((usage.cache_creation_input_tokens ?? 0) / 1_000_000) * cacheWritePer;
+  const cacheWriteCost = ((usage.cache_creation_input_tokens ?? 0) / 1_000_000) * cacheWritePer;
   const cacheReadCost = ((usage.cache_read_input_tokens ?? 0) / 1_000_000) * cacheReadPer;
 
   const total = inputCost + outputCost + cacheWriteCost + cacheReadCost;

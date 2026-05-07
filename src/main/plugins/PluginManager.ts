@@ -92,7 +92,9 @@ export class PluginManager {
       options.auditSink ??
       ((event): void => {
         if (event.event !== 'plugin.loaded') {
-          console.error(`[PluginManager] ${event.event} ${event.plugin_dir}: ${event.reason ?? ''}`);
+          console.error(
+            `[PluginManager] ${event.event} ${event.plugin_dir}: ${event.reason ?? ''}`
+          );
         }
       });
   }

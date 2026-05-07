@@ -195,9 +195,7 @@ function* translateAnthropicEvent(
             ? usage.cache_creation_input_tokens
             : 0;
         const cacheRead =
-          typeof usage.cache_read_input_tokens === 'number'
-            ? usage.cache_read_input_tokens
-            : 0;
+          typeof usage.cache_read_input_tokens === 'number' ? usage.cache_read_input_tokens : 0;
         yield {
           type: 'usage',
           data: {

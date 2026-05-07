@@ -146,10 +146,7 @@ export function __resetLocale(): void {
  *   - "error.xxx" 형식 (i18n key prefix) → t(value)  (한국어 fallback 자동)
  *   - 그 외 string → 원문 그대로 (이미 사람이 읽을 수 있는 메시지로 가정)
  */
-export function formatErrorDetail(
-  translate: typeof t,
-  raw: unknown
-): string {
+export function formatErrorDetail(translate: typeof t, raw: unknown): string {
   if (raw === undefined || raw === null) return translate('error.unknown');
   if (typeof raw === 'string') {
     // i18n key 같으면 t() 통과 — 누락된 키도 자체 fallback 으로 원문 반환.

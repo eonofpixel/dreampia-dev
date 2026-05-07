@@ -84,12 +84,8 @@ const PermissionExtraSchema = z
      * v1.8.4 legacy optional. column `sessions.permission_default_level`
      * 가 단일 source. 신규 row 는 본 필드 직렬화 X.
      */
-    default_level: z
-      .enum(['read_only', 'workspace_write', 'full_access', 'custom'])
-      .optional(),
-    last_denied: z
-      .object({ capability: z.string(), ts: z.string() })
-      .optional(),
+    default_level: z.enum(['read_only', 'workspace_write', 'full_access', 'custom']).optional(),
+    last_denied: z.object({ capability: z.string(), ts: z.string() }).optional(),
     temporarily_blocked_capabilities: z.array(z.string()),
   })
   .strict();

@@ -92,7 +92,11 @@ const TAB_ORDER: ReadonlyArray<TabSpec> = [
   // v1.5.0 — Direct API 탭. provider 다음에 두어 "어떤 provider 쓸지 → 어떻게
   // 인증할지" 동선이 자연스럽게 연결되도록.
   { id: 'direct_api', labelKey: 'settings.tab.direct_api', icon: <KeyRound className="h-4 w-4" /> },
-  { id: 'permission', labelKey: 'settings.tab.permission', icon: <ShieldCheck className="h-4 w-4" /> },
+  {
+    id: 'permission',
+    labelKey: 'settings.tab.permission',
+    icon: <ShieldCheck className="h-4 w-4" />,
+  },
   { id: 'theme', labelKey: 'settings.tab.theme', icon: <Palette className="h-4 w-4" /> },
   { id: 'keyboard', labelKey: 'settings.tab.keyboard', icon: <Keyboard className="h-4 w-4" /> },
   // v0.11.0 (B2) — 언어 탭. theme 와 keyboard 사이에 두는 게 자연스럽지만 이미
@@ -437,7 +441,10 @@ function DirectApiPanel(): React.JSX.Element {
     const trimmed = inputValue.trim();
     const isSaving = saving === provider;
     return (
-      <div className="rounded-md border border-border-primary p-3" data-testid={`settings-direct-api-${provider}`}>
+      <div
+        className="rounded-md border border-border-primary p-3"
+        data-testid={`settings-direct-api-${provider}`}
+      >
         <div className="mb-2 flex items-center justify-between">
           <label htmlFor={inputId} className="text-sm font-medium">
             {label}
@@ -595,7 +602,17 @@ function PermissionGrantsBlock(): React.JSX.Element {
     setError(null);
     const w = typeof window !== 'undefined' ? window : undefined;
     const sessionApi = w?.dreampia?.session;
-    const permApi = (w?.dreampia as { permission?: { listGrants: (id: string) => Promise<{ ok: boolean; value?: GrantSummary[]; error?: string }> } } | undefined)?.permission;
+    const permApi = (
+      w?.dreampia as
+        | {
+            permission?: {
+              listGrants: (
+                id: string
+              ) => Promise<{ ok: boolean; value?: GrantSummary[]; error?: string }>;
+            };
+          }
+        | undefined
+    )?.permission;
     if (sessionApi === undefined || permApi === undefined) {
       setLoading(false);
       return;
@@ -627,7 +644,15 @@ function PermissionGrantsBlock(): React.JSX.Element {
   const handleRevoke = useCallback(
     async (grantId: string): Promise<void> => {
       const w = typeof window !== 'undefined' ? window : undefined;
-      const permApi = (w?.dreampia as { permission?: { revokeGrant: (id: string) => Promise<{ ok: boolean; error?: unknown }> } } | undefined)?.permission;
+      const permApi = (
+        w?.dreampia as
+          | {
+              permission?: {
+                revokeGrant: (id: string) => Promise<{ ok: boolean; error?: unknown }>;
+              };
+            }
+          | undefined
+      )?.permission;
       if (permApi === undefined) {
         toasts?.warning(t('settings.permission.grants.error.no_ipc'));
         return;
@@ -686,10 +711,7 @@ function PermissionGrantsBlock(): React.JSX.Element {
       {loading ? (
         <p className="text-xs text-text-secondary">{t('settings.loading')}</p>
       ) : grants.length === 0 ? (
-        <p
-          className="text-xs text-text-tertiary"
-          data-testid="settings-permission-grants-empty"
-        >
+        <p className="text-xs text-text-tertiary" data-testid="settings-permission-grants-empty">
           {t('settings.permission.grants.empty')}
         </p>
       ) : (
@@ -753,7 +775,9 @@ function PermissionGrantsBlock(): React.JSX.Element {
 
 function shortTarget(targetJson: string): string {
   try {
-    const obj = JSON.parse(targetJson) as { target?: { kind?: string; path?: string; url?: string; domain?: string } };
+    const obj = JSON.parse(targetJson) as {
+      target?: { kind?: string; path?: string; url?: string; domain?: string };
+    };
     const t = obj.target;
     if (t === undefined) return targetJson;
     if (t.kind === 'path' && t.path !== undefined) return `path:${t.path}`;
@@ -770,9 +794,7 @@ function PermissionPanel(): React.JSX.Element {
   const t = useT();
   const toasts = useOptionalToasts();
   const [level, setLevel] = useState<PermissionLevel>('workspace_write');
-  const [capabilities, setCapabilities] = useState<
-    Record<PermissionLevel, string[]> | null
-  >(null);
+  const [capabilities, setCapabilities] = useState<Record<PermissionLevel, string[]> | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -808,10 +830,7 @@ function PermissionPanel(): React.JSX.Element {
       const prev = level;
       setLevel(next); // optimistic
       const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
-      if (
-        appApi === undefined ||
-        typeof appApi.setDefaultPermissionLevel !== 'function'
-      ) {
+      if (appApi === undefined || typeof appApi.setDefaultPermissionLevel !== 'function') {
         toasts?.warning(t('settings.permission.error.no_ipc'));
         return;
       }

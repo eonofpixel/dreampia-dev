@@ -24,10 +24,7 @@ import {
   type SlashCommand,
   type SlashCommandId,
 } from '../../commands/registry';
-import {
-  SlashCommandPopover,
-  commandOptionId,
-} from './SlashCommandPopover';
+import { SlashCommandPopover, commandOptionId } from './SlashCommandPopover';
 import {
   ChatInputSuggestionPopover,
   suggestionOptionId,
@@ -294,7 +291,10 @@ export function ChatInput({
     if (activeMention.kind === 'session') {
       const list = sessions ?? [];
       return list
-        .filter((s) => q.length === 0 || s.title.toLowerCase().includes(q) || s.id.toLowerCase().includes(q))
+        .filter(
+          (s) =>
+            q.length === 0 || s.title.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)
+        )
         .slice(0, MENTION_SUGGESTION_LIMIT)
         .map(
           (s): MentionSuggestion => ({
@@ -440,9 +440,7 @@ export function ChatInput({
       for (const f of files) {
         const v = validateImageFile(f);
         if (!v.ok) {
-          console.warn(
-            `[ChatInput] file rejected: ${v.reason} (${f.name}, ${f.type}, ${f.size})`
-          );
+          console.warn(`[ChatInput] file rejected: ${v.reason} (${f.name}, ${f.type}, ${f.size})`);
           continue;
         }
         try {
@@ -453,9 +451,7 @@ export function ChatInput({
             const text = await pdfBase64ToChatText(result.base64, {
               filename: f.name,
             });
-            setValue((prev) =>
-              prev.length > 0 ? `${prev}\n\n${text}` : text
-            );
+            setValue((prev) => (prev.length > 0 ? `${prev}\n\n${text}` : text));
           } else {
             // v1.6.16 — Image → ImageBlock 으로 변환 후 부모에 forward.
             imageBlocks.push({
@@ -529,11 +525,7 @@ export function ChatInput({
     if (mentions.length === 0 || resolverContext === undefined) {
       // v1.6.13 — mention 이 없어도 pendingBlocks 가 있으면 typed-block 경로
       // 사용 (그래야 attached blocks 도 함께 전달).
-      if (
-        onSubmitBlocks !== undefined &&
-        pendingBlocks !== undefined &&
-        pendingBlocks.length > 0
-      ) {
+      if (onSubmitBlocks !== undefined && pendingBlocks !== undefined && pendingBlocks.length > 0) {
         onSubmitBlocks(text, [...pendingBlocks]);
         onConsumePendingBlocks?.();
         setValue('');
@@ -557,10 +549,7 @@ export function ChatInput({
     void (async () => {
       try {
         // v1.0.13 (MENT-1): resolveMentionsRich 가 limits 정보 같이 반환.
-        const { resolved, limits } = await resolveMentionsRich(
-          mentions,
-          resolverContext
-        );
+        const { resolved, limits } = await resolveMentionsRich(mentions, resolverContext);
         // 초과 시 사용자에게 "N개 / X KB 제외됨" 안내 (Codex 추가 권고).
         const summary = summarizeMentionLimits(limits);
         setMentionExclusion(summary);

@@ -5,23 +5,10 @@
  * 외부 (plugin / test) 에서 추가 handler 등록은 `handlerRegistry.register()`.
  */
 
-import {
-  handlerRegistry,
-  noopLogHandler,
-  NOOP_LOG_HANDLER_NAME,
-} from './HandlerRegistry';
-import {
-  llmPromptHandler,
-  LLM_PROMPT_HANDLER_NAME,
-} from './llmPromptHandler';
-import {
-  shellExecHandler,
-  SHELL_EXEC_HANDLER_NAME,
-} from './shellExecHandler';
-import {
-  ipcTriggerHandler,
-  IPC_TRIGGER_HANDLER_NAME,
-} from './ipcTriggerHandler';
+import { handlerRegistry, noopLogHandler, NOOP_LOG_HANDLER_NAME } from './HandlerRegistry';
+import { llmPromptHandler, LLM_PROMPT_HANDLER_NAME } from './llmPromptHandler';
+import { shellExecHandler, SHELL_EXEC_HANDLER_NAME } from './shellExecHandler';
+import { ipcTriggerHandler, IPC_TRIGGER_HANDLER_NAME } from './ipcTriggerHandler';
 
 let registered = false;
 
@@ -53,8 +40,4 @@ export {
   IPC_TRIGGER_HANDLER_NAME,
 };
 export { setIpcTriggerEmitter } from './ipcTriggerHandler';
-export type {
-  AutomationHandler,
-  HandlerContext,
-  HandlerResult,
-} from './HandlerRegistry';
+export type { AutomationHandler, HandlerContext, HandlerResult } from './HandlerRegistry';

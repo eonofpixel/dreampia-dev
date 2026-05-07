@@ -5,11 +5,7 @@
  */
 
 export { McpClient, type McpClientOptions, type SpawnFn } from './McpClient';
-export {
-  McpManager,
-  type McpManagerOptions,
-  type McpManagerSettingsAdapter,
-} from './McpManager';
+export { McpManager, type McpManagerOptions, type McpManagerSettingsAdapter } from './McpManager';
 export { createSettingsAdapter } from './settingsAdapter';
 export {
   SUGGESTED_MCP_SERVERS,

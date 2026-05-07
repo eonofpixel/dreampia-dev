@@ -105,9 +105,11 @@ function getUsageApi(): UsageApi | null {
  * - today: 자정 (local) → 지금. daily query 는 days=1 로 매핑.
  * - 7d / 30d: 단순 N일 전 → 지금. daily query 는 days=N.
  */
-export function rangeFromPreset(
-  preset: UsageRangePreset
-): { from: string; to: string; days: number } {
+export function rangeFromPreset(preset: UsageRangePreset): {
+  from: string;
+  to: string;
+  days: number;
+} {
   const now = new Date();
   if (preset === 'today') {
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);

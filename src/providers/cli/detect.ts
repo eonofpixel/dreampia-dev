@@ -112,8 +112,8 @@ async function execPathLookup(cmd: string, binaryName: string): Promise<string |
     if (lower.endsWith('.cmd')) return 0;
     if (lower.endsWith('.exe')) return 0;
     if (lower.endsWith('.bat')) return 0;
-    if (lower.endsWith('.ps1')) return 2;  // PowerShell needs `shell:true` to spawn
-    return 3;  // extensionless unix wrapper — last resort
+    if (lower.endsWith('.ps1')) return 2; // PowerShell needs `shell:true` to spawn
+    return 3; // extensionless unix wrapper — last resort
   };
   const sorted = [...lines].sort((a, b) => priority(a) - priority(b));
   return sorted[0] ?? null;

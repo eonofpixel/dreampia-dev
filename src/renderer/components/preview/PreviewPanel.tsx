@@ -32,10 +32,7 @@ import { ArrowLeft, ArrowRight, RotateCw, Plus, Maximize2, X, Camera, Code } fro
 import type { BrowserState, SessionId } from '@/types';
 import { useBrowser, type BrowserTabUI } from '../../hooks/useBrowser';
 import { useT } from '../../i18n';
-import {
-  AnnotationOverlay,
-  type AnnotationBox,
-} from './AnnotationOverlay';
+import { AnnotationOverlay, type AnnotationBox } from './AnnotationOverlay';
 import type { AnnotationBlock, DomDumpBlock } from '@/types/conversation';
 
 const DEMO_URL = 'https://example.com';

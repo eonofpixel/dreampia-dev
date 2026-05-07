@@ -215,13 +215,7 @@ export interface ToolError {
 
 export type SideEffectKind = 'file' | 'process' | 'network';
 
-export type FileSideEffectOp =
-  | 'read'
-  | 'write'
-  | 'create'
-  | 'delete'
-  | 'rename'
-  | 'chmod';
+export type FileSideEffectOp = 'read' | 'write' | 'create' | 'delete' | 'rename' | 'chmod';
 
 export interface FileSideEffect {
   kind: 'file';

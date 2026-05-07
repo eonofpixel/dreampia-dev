@@ -22,12 +22,7 @@ import type { PermissionLevel } from '@/types';
 
 export type CompareSide = 'claude' | 'codex';
 
-export type CompareSideStatus =
-  | 'pending'
-  | 'streaming'
-  | 'done'
-  | 'error'
-  | 'skipped';
+export type CompareSideStatus = 'pending' | 'streaming' | 'done' | 'error' | 'skipped';
 
 export type CompareRunStatus = 'running' | 'completed' | 'failed';
 
@@ -173,17 +168,13 @@ export function useCompare(args: UseCompareArgs = {}): UseCompareReturn {
 
   // Subscribe to compare/stream-event once on mount. Filter by activeRunIdRef.
   useEffect(() => {
-    const compareApi =
-      typeof window !== 'undefined' ? window.dreampia?.compare : undefined;
+    const compareApi = typeof window !== 'undefined' ? window.dreampia?.compare : undefined;
     if (compareApi === undefined || typeof compareApi.onStreamEvent !== 'function') {
       return undefined;
     }
     const unsubscribe = compareApi.onStreamEvent((event) => {
       // 이벤트 run_id 가 현재 active 가 아니면 무시 (다른 hook 인스턴스의 run).
-      if (
-        activeRunIdRef.current === null ||
-        event.run_id !== activeRunIdRef.current
-      ) {
+      if (activeRunIdRef.current === null || event.run_id !== activeRunIdRef.current) {
         // compare_start 는 첫 이벤트이므로 active 가 set 되어 있어야 한다.
         // 만약 race 로 activeRunIdRef 가 아직 set 되지 않은 상태에서 첫 이벤트가
         // 도달하면, 같은 run 이라고 간주해 적용.
@@ -201,61 +192,54 @@ export function useCompare(args: UseCompareArgs = {}): UseCompareReturn {
     return unsubscribe;
   }, []);
 
-  const start = useCallback(
-    async (input: CompareStartArgs): Promise<string | null> => {
-      const compareApi =
-        typeof window !== 'undefined' ? window.dreampia?.compare : undefined;
-      if (compareApi === undefined || typeof compareApi.run !== 'function') {
-        onErrorRef.current?.('compare API unavailable');
-        return null;
-      }
-      // Optimistic init — UI 는 즉시 'pending' 양쪽 표시.
-      const placeholder: CompareRun = {
-        id: '',
+  const start = useCallback(async (input: CompareStartArgs): Promise<string | null> => {
+    const compareApi = typeof window !== 'undefined' ? window.dreampia?.compare : undefined;
+    if (compareApi === undefined || typeof compareApi.run !== 'function') {
+      onErrorRef.current?.('compare API unavailable');
+      return null;
+    }
+    // Optimistic init — UI 는 즉시 'pending' 양쪽 표시.
+    const placeholder: CompareRun = {
+      id: '',
+      session_id: input.session_id,
+      prompt: input.prompt,
+      workspace_root: input.workspace_root,
+      permission_level: input.permission_level,
+      created_at: new Date().toISOString(),
+      status: 'running',
+      claude: makeInitialSide(input.claude_model),
+      codex: makeInitialSide(input.codex_model),
+    };
+    setRun(placeholder);
+    setIsRunning(true);
+    try {
+      const result = await compareApi.run({
         session_id: input.session_id,
         prompt: input.prompt,
         workspace_root: input.workspace_root,
         permission_level: input.permission_level,
-        created_at: new Date().toISOString(),
-        status: 'running',
-        claude: makeInitialSide(input.claude_model),
-        codex: makeInitialSide(input.codex_model),
-      };
-      setRun(placeholder);
-      setIsRunning(true);
-      try {
-        const result = await compareApi.run({
-          session_id: input.session_id,
-          prompt: input.prompt,
-          workspace_root: input.workspace_root,
-          permission_level: input.permission_level,
-          claude_model: input.claude_model,
-          codex_model: input.codex_model,
-        });
-        if (!result.ok) {
-          onErrorRef.current?.(result.error);
-          setIsRunning(false);
-          return null;
-        }
-        activeRunIdRef.current = result.value.run_id;
-        // run.id 갱신 — placeholder 의 빈 id 를 실제 run_id 로.
-        setRun((prev) =>
-          prev === null ? prev : { ...prev, id: result.value.run_id }
-        );
-        return result.value.run_id;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        onErrorRef.current?.(msg);
+        claude_model: input.claude_model,
+        codex_model: input.codex_model,
+      });
+      if (!result.ok) {
+        onErrorRef.current?.(result.error);
         setIsRunning(false);
         return null;
       }
-    },
-    []
-  );
+      activeRunIdRef.current = result.value.run_id;
+      // run.id 갱신 — placeholder 의 빈 id 를 실제 run_id 로.
+      setRun((prev) => (prev === null ? prev : { ...prev, id: result.value.run_id }));
+      return result.value.run_id;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      onErrorRef.current?.(msg);
+      setIsRunning(false);
+      return null;
+    }
+  }, []);
 
   const cancel = useCallback(async (): Promise<void> => {
-    const compareApi =
-      typeof window !== 'undefined' ? window.dreampia?.compare : undefined;
+    const compareApi = typeof window !== 'undefined' ? window.dreampia?.compare : undefined;
     const runId = activeRunIdRef.current;
     if (compareApi === undefined || typeof compareApi.cancel !== 'function') return;
     if (runId === null) return;

@@ -290,8 +290,7 @@ export class CodexAdapter implements ProviderAdapter {
     const bb = block.bounding_box;
     const head = `[Annotation] ${block.url} (bbox ${bb.x},${bb.y},${bb.w}×${bb.h})`;
     const cmt = block.comment.length > 0 ? `\n주석: ${block.comment}` : '';
-    const shot =
-      block.screenshot_uri !== undefined ? `\n스크린샷: ${block.screenshot_uri}` : '';
+    const shot = block.screenshot_uri !== undefined ? `\n스크린샷: ${block.screenshot_uri}` : '';
     return `${head}${cmt}${shot}`;
   }
 

@@ -51,9 +51,7 @@ export function EmptyState({
       )}
       <p className="text-sm font-semibold text-text-secondary">{title}</p>
       {description !== undefined && (
-        <p className="max-w-[320px] text-xs leading-relaxed text-text-tertiary">
-          {description}
-        </p>
+        <p className="max-w-[320px] text-xs leading-relaxed text-text-tertiary">{description}</p>
       )}
       {action !== undefined && (
         <button

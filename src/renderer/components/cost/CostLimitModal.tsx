@@ -14,9 +14,7 @@
 
 import { useT } from '../../i18n';
 
-export type CostLimitBlockReason =
-  | 'limit_exceeded'
-  | 'unknown_model_under_limit';
+export type CostLimitBlockReason = 'limit_exceeded' | 'unknown_model_under_limit';
 
 export interface CostLimitModalProps {
   open: boolean;
@@ -48,13 +46,9 @@ export function CostLimitModal({
   if (!open) return null;
 
   const titleKey =
-    reason === 'unknown_model_under_limit'
-      ? 'cost.modal.unknown_title'
-      : 'cost.modal.limit_title';
+    reason === 'unknown_model_under_limit' ? 'cost.modal.unknown_title' : 'cost.modal.limit_title';
   const bodyKey =
-    reason === 'unknown_model_under_limit'
-      ? 'cost.modal.unknown_body'
-      : 'cost.modal.limit_body';
+    reason === 'unknown_model_under_limit' ? 'cost.modal.unknown_body' : 'cost.modal.limit_body';
 
   return (
     <div

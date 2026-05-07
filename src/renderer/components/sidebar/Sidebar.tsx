@@ -364,10 +364,7 @@ function McpStatusIndicator({ onOpen }: { onOpen: () => void }): React.JSX.Eleme
       </span>
       <span className="flex-1 truncate">{t('sidebar.mcp.label')}</span>
       <span className="flex flex-shrink-0 items-center gap-1.5 text-xs text-text-tertiary">
-        <span
-          className={`inline-block h-2 w-2 rounded-full ${dotColor}`}
-          aria-hidden="true"
-        />
+        <span className={`inline-block h-2 w-2 rounded-full ${dotColor}`} aria-hidden="true" />
         {label}
       </span>
     </button>
@@ -415,9 +412,7 @@ function SidebarNavItem({
       title={comingSoon === true ? comingSoonHint : undefined}
       aria-disabled={isDisabled}
       className={`group flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left ${
-        isDisabled
-          ? 'cursor-not-allowed opacity-50'
-          : 'hover:bg-bg-tertiary'
+        isDisabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-bg-tertiary'
       }`}
     >
       <span className="flex-shrink-0">{icon}</span>

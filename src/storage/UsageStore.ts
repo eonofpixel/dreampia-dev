@@ -177,11 +177,24 @@ function rowToEvent(row: UsageEventRow): UsageEvent {
 
 export class UsageStore {
   private readonly db: Database;
-  private readonly insertStmt: Statement<[
-    string, string, string, string, string,
-    number, number, number, number, number,
-    number, string, string | null, number,
-  ]>;
+  private readonly insertStmt: Statement<
+    [
+      string,
+      string,
+      string,
+      string,
+      string,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      string,
+      string | null,
+      number,
+    ]
+  >;
 
   constructor(db: Database) {
     this.db = db;
@@ -525,12 +538,7 @@ export class UsageStore {
  * 가능하지만 현재는 export 하지 않음 (필요해질 때 외부화).
  */
 function csvEscape(value: string): string {
-  if (
-    value.includes(',') ||
-    value.includes('"') ||
-    value.includes('\n') ||
-    value.includes('\r')
-  ) {
+  if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;

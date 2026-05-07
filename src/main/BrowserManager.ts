@@ -463,7 +463,9 @@ export class BrowserManager {
    * Electron NativeImage 의 `toPNG()` 는 Buffer 반환. base64 변환은 caller
    * 가 결정 가능하지만 IPC 직렬화 호환을 위해 본 메서드는 base64 string 반환.
    */
-  async captureTab(tab_id: string): Promise<{ png_base64: string; width: number; height: number } | null> {
+  async captureTab(
+    tab_id: string
+  ): Promise<{ png_base64: string; width: number; height: number } | null> {
     const tab = this.tabs.get(tab_id);
     if (!tab) return null;
     const wc = tab.view.webContents as {

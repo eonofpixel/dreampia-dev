@@ -137,9 +137,7 @@ export function BackfillPromptModal({
       <div className="flex w-[520px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl">
         <div className="flex items-center justify-between border-b border-border-primary p-4">
           <h2 className="text-lg font-semibold">
-            {result === null
-              ? t('workspace_backfill.title')
-              : t('workspace_backfill.done_title')}
+            {result === null ? t('workspace_backfill.title') : t('workspace_backfill.done_title')}
           </h2>
           <button
             type="button"
@@ -216,9 +214,7 @@ export function BackfillPromptModal({
                           data-testid={`workspace-backfill-conflict-${row.legacy_id}`}
                         >
                           <div className="min-w-0 flex-1">
-                            <div className="truncate font-mono text-[11px]">
-                              {row.root}
-                            </div>
+                            <div className="truncate font-mono text-[11px]">{row.root}</div>
                             <div className="text-[10px] text-text-tertiary">
                               {t('workspace_backfill.conflict_session_count', {
                                 n: row.session_count,
@@ -279,9 +275,7 @@ export function BackfillPromptModal({
                 className="rounded-md bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
                 data-testid="workspace-backfill-run"
               >
-                {busy
-                  ? t('workspace_backfill.running')
-                  : t('workspace_backfill.run')}
+                {busy ? t('workspace_backfill.running') : t('workspace_backfill.run')}
               </button>
             </>
           ) : (

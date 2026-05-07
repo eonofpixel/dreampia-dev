@@ -19,10 +19,7 @@
  */
 
 import type { Database } from 'better-sqlite3';
-import {
-  isLegacyFnvWorkspaceId,
-  workspaceIdForSha256,
-} from '../types/helpers';
+import { isLegacyFnvWorkspaceId, workspaceIdForSha256 } from '../types/helpers';
 import type { WorkspaceId } from '../types';
 
 export interface BackfillResult {
@@ -63,20 +60,16 @@ export function backfillWorkspaceIdsToSha256(db: Database): BackfillResult {
   }
 
   const tx = db.transaction(() => {
-    const rows = db.prepare<unknown[], { id: string; root: string }>(
-      'SELECT id, root FROM workspaces'
-    ).all() as Array<{ id: string; root: string }>;
+    const rows = db
+      .prepare<unknown[], { id: string; root: string }>('SELECT id, root FROM workspaces')
+      .all() as Array<{ id: string; root: string }>;
     result.scanned = rows.length;
 
-    const updateWorkspace = db.prepare(
-      'UPDATE workspaces SET id = ? WHERE id = ?'
-    );
+    const updateWorkspace = db.prepare('UPDATE workspaces SET id = ? WHERE id = ?');
     const updateSessionsFk = db.prepare(
       'UPDATE sessions SET workspace_id = ? WHERE workspace_id = ?'
     );
-    const checkExistingTarget = db.prepare(
-      'SELECT 1 FROM workspaces WHERE id = ?'
-    );
+    const checkExistingTarget = db.prepare('SELECT 1 FROM workspaces WHERE id = ?');
 
     for (const row of rows) {
       // Random UUIDv7 / 이미 sha256 → skip.
@@ -156,9 +149,7 @@ export function listBackfillConflicts(db: Database): BackfillConflictRow[] {
     .prepare<unknown[], { id: string; root: string }>('SELECT id, root FROM workspaces')
     .all() as Array<{ id: string; root: string }>;
   const checkExisting = db.prepare('SELECT 1 FROM workspaces WHERE id = ?');
-  const countSessions = db.prepare(
-    'SELECT COUNT(*) as n FROM sessions WHERE workspace_id = ?'
-  );
+  const countSessions = db.prepare('SELECT COUNT(*) as n FROM sessions WHERE workspace_id = ?');
   const out: BackfillConflictRow[] = [];
   for (const row of rows) {
     if (!isLegacyFnvWorkspaceId(row.id as WorkspaceId, row.root)) continue;
@@ -190,18 +181,13 @@ export interface DeleteLegacyResult {
  *
  * caller 는 호출 전후로 in-memory cache (sessions list 등) 를 무효화.
  */
-export function deleteLegacyWorkspace(
-  db: Database,
-  legacyId: string
-): DeleteLegacyResult {
+export function deleteLegacyWorkspace(db: Database, legacyId: string): DeleteLegacyResult {
   const result: DeleteLegacyResult = {
     workspace_deleted: false,
     sessions_deleted: 0,
   };
   const tx = db.transaction(() => {
-    const sessRes = db
-      .prepare('DELETE FROM sessions WHERE workspace_id = ?')
-      .run(legacyId);
+    const sessRes = db.prepare('DELETE FROM sessions WHERE workspace_id = ?').run(legacyId);
     result.sessions_deleted = Number(sessRes.changes ?? 0);
     const wsRes = db.prepare('DELETE FROM workspaces WHERE id = ?').run(legacyId);
     result.workspace_deleted = Number(wsRes.changes ?? 0) > 0;
@@ -214,12 +200,10 @@ export function deleteLegacyWorkspace(
  * v1.4.8 — DB 의 workspaces 를 읽어 backfill 대상 통계를 반환.
  * 데이터 변경 X. 부팅 시 modal 표시 여부 결정에 사용.
  */
-export function detectLegacyWorkspaceIds(
-  db: Database
-): BackfillDetectionResult {
-  const rows = db.prepare<unknown[], { id: string; root: string }>(
-    'SELECT id, root FROM workspaces'
-  ).all() as Array<{ id: string; root: string }>;
+export function detectLegacyWorkspaceIds(db: Database): BackfillDetectionResult {
+  const rows = db
+    .prepare<unknown[], { id: string; root: string }>('SELECT id, root FROM workspaces')
+    .all() as Array<{ id: string; root: string }>;
   const total = rows.length;
   let legacy = 0;
   let conflicts = 0;

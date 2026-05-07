@@ -12,14 +12,7 @@
  * include absolute paths) into the renderer.
  */
 
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  ipcMain,
-  type App,
-  type IpcMainInvokeEvent,
-} from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, type App, type IpcMainInvokeEvent } from 'electron';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
@@ -351,12 +344,7 @@ const ListFilesArgsSchema = z
   .object({
     workspace_root: z.string().min(1),
     ignore_patterns: z.array(z.string()).optional(),
-    max_files: z
-      .number()
-      .int()
-      .positive()
-      .max(FILE_LIST_HARD_MAX_FILES)
-      .optional(),
+    max_files: z.number().int().positive().max(FILE_LIST_HARD_MAX_FILES).optional(),
   })
   .strict();
 
@@ -364,12 +352,7 @@ const ReadFileArgsSchema = z
   .object({
     workspace_root: z.string().min(1),
     rel_path: z.string().min(1),
-    max_bytes: z
-      .number()
-      .int()
-      .positive()
-      .max(FILE_READ_HARD_MAX_BYTES)
-      .optional(),
+    max_bytes: z.number().int().positive().max(FILE_READ_HARD_MAX_BYTES).optional(),
   })
   .strict();
 
@@ -428,8 +411,20 @@ function compileGlob(pattern: string): RegExp {
       re += '[^/]';
       continue;
     }
-    if (ch === '.' || ch === '+' || ch === '(' || ch === ')' || ch === '|' || ch === '^' ||
-        ch === '$' || ch === '{' || ch === '}' || ch === '[' || ch === ']' || ch === '\\') {
+    if (
+      ch === '.' ||
+      ch === '+' ||
+      ch === '(' ||
+      ch === ')' ||
+      ch === '|' ||
+      ch === '^' ||
+      ch === '$' ||
+      ch === '{' ||
+      ch === '}' ||
+      ch === '[' ||
+      ch === ']' ||
+      ch === '\\'
+    ) {
       re += '\\' + ch;
       continue;
     }
@@ -467,10 +462,7 @@ function isIgnored(relPath: string, compiledPatterns: ReadonlyArray<RegExp>): bo
  * Throws "path traversal" 메시지의 Error 가 발생하면 호출 측 try/catch 가
  * `Result<never>` 의 fail 로 변환한다 (renderer 는 string 만 받음).
  */
-async function resolveInsideWorkspace(
-  workspaceRoot: string,
-  relPath: string
-): Promise<string> {
+async function resolveInsideWorkspace(workspaceRoot: string, relPath: string): Promise<string> {
   // Step 1: workspace root 자체의 realpath (예: macOS 의 /tmp → /private/tmp,
   // Windows junction `C:\Dev\분석` 의 8.3 short path / junction alias 등도
   // 동일한 normalized form 으로 만든다).
@@ -498,9 +490,7 @@ async function resolveInsideWorkspace(
   }
 
   if (realTarget !== root && !realTarget.startsWith(root + sep)) {
-    throw new Error(
-      'path traversal: symlink/junction target resolves outside workspace_root'
-    );
+    throw new Error('path traversal: symlink/junction target resolves outside workspace_root');
   }
   return realTarget;
 }
@@ -664,15 +654,8 @@ export function registerIpcHandlers(
     try {
       // v0.3.0 — wizard 또는 설정에서 호출. Zod 스키마 대신 명시적 enum
       // 검증 — 작은 string union 에 schema 가 과하다.
-      if (
-        raw !== 'auto' &&
-        raw !== 'claude' &&
-        raw !== 'codex' &&
-        raw !== 'mock'
-      ) {
-        throw new Error(
-          'default_provider must be one of: auto, claude, codex, mock'
-        );
+      if (raw !== 'auto' && raw !== 'claude' && raw !== 'codex' && raw !== 'mock') {
+        throw new Error('default_provider must be one of: auto, claude, codex, mock');
       }
       writeSettings({ default_provider: raw });
       return ok(undefined);
@@ -715,10 +698,7 @@ export function registerIpcHandlers(
 
   ipcMain.handle('app:set-theme', (_evt, raw: unknown): Result<void> => {
     try {
-      if (
-        typeof raw !== 'string' ||
-        !(THEME_VALUES as readonly string[]).includes(raw)
-      ) {
+      if (typeof raw !== 'string' || !(THEME_VALUES as readonly string[]).includes(raw)) {
         throw new Error(`theme must be one of: ${THEME_VALUES.join(', ')}`);
       }
       writeSettings({ theme: raw as ThemeChoice });
@@ -741,10 +721,7 @@ export function registerIpcHandlers(
 
   ipcMain.handle('app:set-language', (_evt, raw: unknown): Result<void> => {
     try {
-      if (
-        typeof raw !== 'string' ||
-        !(LANGUAGE_VALUES as readonly string[]).includes(raw)
-      ) {
+      if (typeof raw !== 'string' || !(LANGUAGE_VALUES as readonly string[]).includes(raw)) {
         throw new Error(`language must be one of: ${LANGUAGE_VALUES.join(', ')}`);
       }
       writeSettings({ language: raw as LanguageChoice });
@@ -797,11 +774,14 @@ export function registerIpcHandlers(
         };
         return ok({
           anthropic: {
-            present: typeof settings.api_key_anthropic === 'string' && settings.api_key_anthropic.length > 0,
+            present:
+              typeof settings.api_key_anthropic === 'string' &&
+              settings.api_key_anthropic.length > 0,
             preview: previewOf(settings.api_key_anthropic),
           },
           openai: {
-            present: typeof settings.api_key_openai === 'string' && settings.api_key_openai.length > 0,
+            present:
+              typeof settings.api_key_openai === 'string' && settings.api_key_openai.length > 0,
             preview: previewOf(settings.api_key_openai),
           },
         });
@@ -842,45 +822,39 @@ export function registerIpcHandlers(
   // v0.10.0 — Settings 모달 [단축키] 탭. 사용자 지정 매핑 (action → combo).
   // GET 은 settings.json 의 keyboard_shortcut_overrides 를 그대로 반환 — 미설정
   // 시 빈 object. Renderer 의 useKeyboardShortcuts 가 default 와 merge.
-  ipcMain.handle(
-    'app:get-keyboard-shortcuts',
-    (): Result<Record<string, string>> => {
-      try {
-        const settings = readSettings();
-        return ok(settings.keyboard_shortcut_overrides ?? {});
-      } catch (err) {
-        return fail(err);
-      }
+  ipcMain.handle('app:get-keyboard-shortcuts', (): Result<Record<string, string>> => {
+    try {
+      const settings = readSettings();
+      return ok(settings.keyboard_shortcut_overrides ?? {});
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
   // SET 은 plain Record<string,string> 으로 검증. 빈 object 는 모든 override
   // 제거 = default 복원. action / combo 형식 검증은 renderer 가 책임 — main
   // 은 단순 영속 layer (corrupt-tolerant: 빈 키/값 drop, 그 외는 그대로 저장).
-  ipcMain.handle(
-    'app:set-keyboard-shortcuts',
-    (_evt, raw: unknown): Result<void> => {
-      try {
-        if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-          throw new Error('keyboard_shortcut_overrides must be a plain object');
-        }
-        const obj = raw as Record<string, unknown>;
-        const validated: Record<string, string> = {};
-        for (const [k, v] of Object.entries(obj)) {
-          if (typeof k !== 'string' || k.length === 0) continue;
-          if (typeof v !== 'string' || v.length === 0) continue;
-          // 키 / 값 길이 상한 — 의도치 않은 거대 payload 차단.
-          if (k.length > 64) continue;
-          if (v.length > 64) continue;
-          validated[k] = v;
-        }
-        writeSettings({ keyboard_shortcut_overrides: validated });
-        return ok(undefined);
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('app:set-keyboard-shortcuts', (_evt, raw: unknown): Result<void> => {
+    try {
+      if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+        throw new Error('keyboard_shortcut_overrides must be a plain object');
       }
+      const obj = raw as Record<string, unknown>;
+      const validated: Record<string, string> = {};
+      for (const [k, v] of Object.entries(obj)) {
+        if (typeof k !== 'string' || k.length === 0) continue;
+        if (typeof v !== 'string' || v.length === 0) continue;
+        // 키 / 값 길이 상한 — 의도치 않은 거대 payload 차단.
+        if (k.length > 64) continue;
+        if (v.length > 64) continue;
+        validated[k] = v;
+      }
+      writeSettings({ keyboard_shortcut_overrides: validated });
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
   ipcMain.handle('app:get-default-workspace', (): Result<WorkspaceInfo | null> => {
     try {
@@ -934,38 +908,32 @@ export function registerIpcHandlers(
   // 정보는 반환. DB 쪽 정보는 store 가 있을 때만 채움.
   // v1.7.15 — telemetry_enabled get/set. settings.json 에 영속 + 즉시
   // Telemetry singleton 의 setEnabled 반영.
-  ipcMain.handle(
-    'app:get-telemetry-enabled',
-    (): Result<boolean> => {
-      try {
-        return ok(readSettings().telemetry_enabled === true);
-      } catch (err) {
-        return fail(err);
-      }
+  ipcMain.handle('app:get-telemetry-enabled', (): Result<boolean> => {
+    try {
+      return ok(readSettings().telemetry_enabled === true);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
-  ipcMain.handle(
-    'app:set-telemetry-enabled',
-    async (_evt, raw: unknown): Promise<Result<void>> => {
-      try {
-        if (typeof raw !== 'boolean') {
-          throw new Error('telemetry_enabled must be boolean');
-        }
-        writeSettings({ telemetry_enabled: raw });
-        // Telemetry singleton 도 즉시 반영 (다음 emit 부터 적용).
-        try {
-          const tel = (await import('./telemetry/Telemetry')).getTelemetry();
-          tel.setEnabled(raw);
-        } catch {
-          // singleton 미초기화 — 다음 부팅에서 settings 가 적용됨.
-        }
-        return ok(undefined);
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('app:set-telemetry-enabled', async (_evt, raw: unknown): Promise<Result<void>> => {
+    try {
+      if (typeof raw !== 'boolean') {
+        throw new Error('telemetry_enabled must be boolean');
       }
+      writeSettings({ telemetry_enabled: raw });
+      // Telemetry singleton 도 즉시 반영 (다음 emit 부터 적용).
+      try {
+        const tel = (await import('./telemetry/Telemetry')).getTelemetry();
+        tel.setEnabled(raw);
+      } catch {
+        // singleton 미초기화 — 다음 부팅에서 settings 가 적용됨.
+      }
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
   // v1.4.0 follow-up — 사용자가 [DB 진단] 패널에서 trigger. workspace_id
   // FNV → sha256 backfill 을 명시 호출. 결과 통계 반환.
@@ -985,9 +953,7 @@ export function registerIpcHandlers(
         if (store === undefined) {
           throw new Error('SessionStore not initialized');
         }
-        const { backfillWorkspaceIdsToSha256 } = await import(
-          '../storage/workspaceBackfill'
-        );
+        const { backfillWorkspaceIdsToSha256 } = await import('../storage/workspaceBackfill');
         const r = backfillWorkspaceIdsToSha256(store.getDb());
         // v1.4.8 — 마이그레이션 완료 → flag set.
         try {
@@ -1031,9 +997,7 @@ export function registerIpcHandlers(
             flag_done: flagDone,
           });
         }
-        const { detectLegacyWorkspaceIds } = await import(
-          '../storage/workspaceBackfill'
-        );
+        const { detectLegacyWorkspaceIds } = await import('../storage/workspaceBackfill');
         const r = detectLegacyWorkspaceIds(store.getDb());
         return ok({
           total: r.total,
@@ -1048,17 +1012,14 @@ export function registerIpcHandlers(
   );
 
   // v1.4.8 — Dismiss. modal 의 [다시 묻지 않기] — backfill 미실행 + flag 만 set.
-  ipcMain.handle(
-    'app:dismiss-workspace-backfill',
-    (): Result<void> => {
-      try {
-        writeSettings({ workspace_backfill_done: true });
-        return ok(undefined);
-      } catch (err) {
-        return fail(err);
-      }
+  ipcMain.handle('app:dismiss-workspace-backfill', (): Result<void> => {
+    try {
+      writeSettings({ workspace_backfill_done: true });
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
   // v1.4.11 — Conflict listing. 충돌 row 들의 detail (root + session_count)
   // 을 사용자에게 노출 — modal 에서 row 별 처리 가능.
@@ -1076,9 +1037,7 @@ export function registerIpcHandlers(
     > => {
       try {
         if (store === undefined) return ok([]);
-        const { listBackfillConflicts } = await import(
-          '../storage/workspaceBackfill'
-        );
+        const { listBackfillConflicts } = await import('../storage/workspaceBackfill');
         return ok(listBackfillConflicts(store.getDb()));
       } catch (err) {
         return fail(err);
@@ -1100,9 +1059,7 @@ export function registerIpcHandlers(
           return fail('legacy_id required');
         }
         if (store === undefined) return fail('store not loaded');
-        const { deleteLegacyWorkspace } = await import(
-          '../storage/workspaceBackfill'
-        );
+        const { deleteLegacyWorkspace } = await import('../storage/workspaceBackfill');
         return ok(deleteLegacyWorkspace(store.getDb(), legacyId));
       } catch (err) {
         return fail(err);
@@ -1328,125 +1285,113 @@ function registerAutomationHandlers(audit?: AuditLogStore): void {
     });
   }
 
-  ipcMain.handle(
-    'automation/list',
-    (): Result<AutomationRuleSummary[]> => {
-      try {
-        const mgr = getAutomationManager();
-        return ok(mgr.list().map((r) => summarizeRule(r)));
-      } catch (err) {
-        return fail(err);
-      }
+  ipcMain.handle('automation/list', (): Result<AutomationRuleSummary[]> => {
+    try {
+      const mgr = getAutomationManager();
+      return ok(mgr.list().map((r) => summarizeRule(r)));
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
-  ipcMain.handle(
-    'automation/register',
-    (_evt, raw: unknown): Result<AutomationRuleSummary> => {
-      try {
-        if (raw === null || typeof raw !== 'object') {
-          throw new Error('rule must be an object');
-        }
-        const obj = raw as Record<string, unknown>;
-        const name = String(obj['name'] ?? '');
-        const kind = obj['kind'];
-        if (kind !== 'interval' && kind !== 'cron' && kind !== 'webhook') {
-          throw new Error("kind must be 'interval' | 'cron' | 'webhook'");
-        }
-        if (name.length === 0 || name.length > 64) {
-          throw new Error('name must be 1..64 chars');
-        }
+  ipcMain.handle('automation/register', (_evt, raw: unknown): Result<AutomationRuleSummary> => {
+    try {
+      if (raw === null || typeof raw !== 'object') {
+        throw new Error('rule must be an object');
+      }
+      const obj = raw as Record<string, unknown>;
+      const name = String(obj['name'] ?? '');
+      const kind = obj['kind'];
+      if (kind !== 'interval' && kind !== 'cron' && kind !== 'webhook') {
+        throw new Error("kind must be 'interval' | 'cron' | 'webhook'");
+      }
+      if (name.length === 0 || name.length > 64) {
+        throw new Error('name must be 1..64 chars');
+      }
 
-        // v1.7.23 — handler registry lookup. handler_name 미지정 시 noop-log
-        // (종전 동작 호환). 알려지지 않은 이름은 immediate fail — 사용자가
-        // typo 한 경우 silent fall-back 보다 fail-fast 가 안전.
-        registerBuiltinHandlers();
-        const handlerName =
-          typeof obj['handler_name'] === 'string' && obj['handler_name'].length > 0
-            ? obj['handler_name']
-            : NOOP_LOG_HANDLER_NAME;
-        const handlerConfig =
-          obj['handler_config'] !== null &&
-          typeof obj['handler_config'] === 'object' &&
-          !Array.isArray(obj['handler_config'])
-            ? (obj['handler_config'] as Record<string, unknown>)
-            : {};
-        const handlerFn = handlerRegistry.get(handlerName);
-        if (handlerFn === undefined) {
-          throw new Error(`unknown handler_name: ${handlerName}`);
-        }
+      // v1.7.23 — handler registry lookup. handler_name 미지정 시 noop-log
+      // (종전 동작 호환). 알려지지 않은 이름은 immediate fail — 사용자가
+      // typo 한 경우 silent fall-back 보다 fail-fast 가 안전.
+      registerBuiltinHandlers();
+      const handlerName =
+        typeof obj['handler_name'] === 'string' && obj['handler_name'].length > 0
+          ? obj['handler_name']
+          : NOOP_LOG_HANDLER_NAME;
+      const handlerConfig =
+        obj['handler_config'] !== null &&
+        typeof obj['handler_config'] === 'object' &&
+        !Array.isArray(obj['handler_config'])
+          ? (obj['handler_config'] as Record<string, unknown>)
+          : {};
+      const handlerFn = handlerRegistry.get(handlerName);
+      if (handlerFn === undefined) {
+        throw new Error(`unknown handler_name: ${handlerName}`);
+      }
 
-        const mgr = getAutomationManager();
-        const handler = async (): Promise<unknown> =>
-          handlerFn({ rule_name: name, config: handlerConfig });
+      const mgr = getAutomationManager();
+      const handler = async (): Promise<unknown> =>
+        handlerFn({ rule_name: name, config: handlerConfig });
 
-        mgr.register({
-          name,
-          kind,
-          ...(typeof obj['interval_ms'] === 'number' && {
-            interval_ms: obj['interval_ms'],
-          }),
-          ...(typeof obj['cron_expr'] === 'string' && {
-            cron_expr: obj['cron_expr'],
-          }),
-          ...(typeof obj['cron_tz'] === 'string' && {
-            cron_tz: obj['cron_tz'],
-          }),
-          ...(typeof obj['webhook_path'] === 'string' && {
-            webhook_path: obj['webhook_path'],
-          }),
-          handler_name: handlerName,
-          handler_config: handlerConfig,
-          handler,
-        });
-        const registered = mgr.list().find((r) => r.name === name);
-        if (registered === undefined) {
-          throw new Error('register failed (rule not found after insert)');
-        }
-        // v1.7.14 — settings 에 write-through 영속.
+      mgr.register({
+        name,
+        kind,
+        ...(typeof obj['interval_ms'] === 'number' && {
+          interval_ms: obj['interval_ms'],
+        }),
+        ...(typeof obj['cron_expr'] === 'string' && {
+          cron_expr: obj['cron_expr'],
+        }),
+        ...(typeof obj['cron_tz'] === 'string' && {
+          cron_tz: obj['cron_tz'],
+        }),
+        ...(typeof obj['webhook_path'] === 'string' && {
+          webhook_path: obj['webhook_path'],
+        }),
+        handler_name: handlerName,
+        handler_config: handlerConfig,
+        handler,
+      });
+      const registered = mgr.list().find((r) => r.name === name);
+      if (registered === undefined) {
+        throw new Error('register failed (rule not found after insert)');
+      }
+      // v1.7.14 — settings 에 write-through 영속.
+      persistAutomationRules(mgr.list().map((rl) => summarizeRule(rl)));
+      return ok(summarizeRule(registered));
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('automation/unregister', (_evt, raw: unknown): Result<{ removed: boolean }> => {
+    try {
+      if (typeof raw !== 'string' || raw.length === 0) {
+        throw new Error('rule name must be a non-empty string');
+      }
+      const mgr = getAutomationManager();
+      const removed = mgr.unregister(raw);
+      // v1.7.14 — write-through.
+      if (removed) {
         persistAutomationRules(mgr.list().map((rl) => summarizeRule(rl)));
-        return ok(summarizeRule(registered));
-      } catch (err) {
-        return fail(err);
       }
+      return ok({ removed });
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
-  ipcMain.handle(
-    'automation/unregister',
-    (_evt, raw: unknown): Result<{ removed: boolean }> => {
-      try {
-        if (typeof raw !== 'string' || raw.length === 0) {
-          throw new Error('rule name must be a non-empty string');
-        }
-        const mgr = getAutomationManager();
-        const removed = mgr.unregister(raw);
-        // v1.7.14 — write-through.
-        if (removed) {
-          persistAutomationRules(mgr.list().map((rl) => summarizeRule(rl)));
-        }
-        return ok({ removed });
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('automation/fire', async (_evt, raw: unknown): Promise<Result<void>> => {
+    try {
+      if (typeof raw !== 'string' || raw.length === 0) {
+        throw new Error('rule name must be a non-empty string');
       }
+      const mgr = getAutomationManager();
+      await mgr.fire(raw);
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
     }
-  );
-
-  ipcMain.handle(
-    'automation/fire',
-    async (_evt, raw: unknown): Promise<Result<void>> => {
-      try {
-        if (typeof raw !== 'string' || raw.length === 0) {
-          throw new Error('rule name must be a non-empty string');
-        }
-        const mgr = getAutomationManager();
-        await mgr.fire(raw);
-        return ok(undefined);
-      } catch (err) {
-        return fail(err);
-      }
-    }
-  );
+  });
 
   ipcMain.handle(
     'automation/get-next-run',
@@ -1464,17 +1409,14 @@ function registerAutomationHandlers(audit?: AuditLogStore): void {
   );
 
   // v1.7.23 — Registered handler 이름 목록. UI dropdown 의 source.
-  ipcMain.handle(
-    'automation/list-handlers',
-    (): Result<string[]> => {
-      try {
-        registerBuiltinHandlers();
-        return ok(handlerRegistry.list());
-      } catch (err) {
-        return fail(err);
-      }
+  ipcMain.handle('automation/list-handlers', (): Result<string[]> => {
+    try {
+      registerBuiltinHandlers();
+      return ok(handlerRegistry.list());
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
   // v1.7.27 — rule enabled/disabled toggle.
   ipcMain.handle('automation/set-enabled', (_evt, args: unknown): Result<boolean> => {
@@ -1508,10 +1450,7 @@ function registerAutomationHandlers(audit?: AuditLogStore): void {
   // 에 모아 부분 성공도 보고. 보안: caller (renderer) 가 user confirm 후 호출.
   ipcMain.handle(
     'automation/import',
-    (
-      _evt,
-      args: unknown
-    ): Result<{ added: number; skipped: number; errors: string[] }> => {
+    (_evt, args: unknown): Result<{ added: number; skipped: number; errors: string[] }> => {
       try {
         if (args === null || typeof args !== 'object') return fail('args required');
         const { json, mode } = args as { json?: unknown; mode?: unknown };
@@ -1522,7 +1461,9 @@ function registerAutomationHandlers(audit?: AuditLogStore): void {
         const result = importAutomationRulesJson(getAutomationManager(), json, overwrite);
         if (!result.ok) return fail(result.error);
         persistAutomationRules(
-          getAutomationManager().list().map((rl) => summarizeRule(rl))
+          getAutomationManager()
+            .list()
+            .map((rl) => summarizeRule(rl))
         );
         return ok(result.value);
       } catch (err) {
@@ -1570,34 +1511,23 @@ export interface PermissionHandlerConfig {
   confirmer: import('./IpcPermissionConfirmer').IpcPermissionConfirmer;
 }
 
-function registerPermissionHandlers(
-  cfg: PermissionHandlerConfig,
-  store?: SessionStore
-): void {
-  ipcMain.handle(
-    'permission/respond',
-    (event, raw: unknown): Result<{ matched: boolean }> => {
-      try {
-        const args = PermissionRespondArgsSchema.parse(raw);
-        // v1.1.3 hotfix (Codex Q9): event.sender.id 를 confirmer 에 전달.
-        // confirm 시점 owner webContents 와 다르면 silently drop — 다른 창
-        // 또는 spoofed sender 차단.
-        const senderId =
-          typeof (event as { sender?: { id?: unknown } } | undefined)?.sender?.id === 'number'
-            ? (event as { sender: { id: number } }).sender.id
-            : undefined;
-        const matched = cfg.confirmer.respond(
-          args.request_id,
-          args.decision,
-          args.reason,
-          senderId
-        );
-        return ok({ matched });
-      } catch (err) {
-        return fail(err);
-      }
+function registerPermissionHandlers(cfg: PermissionHandlerConfig, store?: SessionStore): void {
+  ipcMain.handle('permission/respond', (event, raw: unknown): Result<{ matched: boolean }> => {
+    try {
+      const args = PermissionRespondArgsSchema.parse(raw);
+      // v1.1.3 hotfix (Codex Q9): event.sender.id 를 confirmer 에 전달.
+      // confirm 시점 owner webContents 와 다르면 silently drop — 다른 창
+      // 또는 spoofed sender 차단.
+      const senderId =
+        typeof (event as { sender?: { id?: unknown } } | undefined)?.sender?.id === 'number'
+          ? (event as { sender: { id: number } }).sender.id
+          : undefined;
+      const matched = cfg.confirmer.respond(args.request_id, args.decision, args.reason, senderId);
+      return ok({ matched });
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
   ipcMain.handle('permission/list-pending', (event): Result<unknown[]> => {
     try {
@@ -1616,30 +1546,22 @@ function registerPermissionHandlers(
     try {
       const args = PermissionGrantsListArgsSchema.parse(raw);
       if (store === undefined) return ok([]);
-      return ok(
-        store.listActivePermissionGrants(args.session_id as import('@/types').SessionId)
-      );
+      return ok(store.listActivePermissionGrants(args.session_id as import('@/types').SessionId));
     } catch (err) {
       return fail(err);
     }
   });
 
-  ipcMain.handle(
-    'permission/grants/revoke',
-    (_evt, raw: unknown): Result<{ revoked: boolean }> => {
-      try {
-        const args = PermissionGrantsRevokeArgsSchema.parse(raw);
-        if (store === undefined) return ok({ revoked: false });
-        const revoked = store.revokePermissionGrant(
-          args.grant_id,
-          new Date().toISOString()
-        );
-        return ok({ revoked });
-      } catch (err) {
-        return fail(err);
-      }
+  ipcMain.handle('permission/grants/revoke', (_evt, raw: unknown): Result<{ revoked: boolean }> => {
+    try {
+      const args = PermissionGrantsRevokeArgsSchema.parse(raw);
+      if (store === undefined) return ok({ revoked: false });
+      const revoked = store.revokePermissionGrant(args.grant_id, new Date().toISOString());
+      return ok({ revoked });
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 }
 
 // ────────────────────────────────────────────────────────────
@@ -1649,9 +1571,7 @@ function registerPermissionHandlers(
 function registerWorkspaceHandlers(electronApp: App): void {
   ipcMain.handle(
     'workspace/pick-folder',
-    async (
-      event: IpcMainInvokeEvent
-    ): Promise<Result<{ path: string; name: string } | null>> => {
+    async (event: IpcMainInvokeEvent): Promise<Result<{ path: string; name: string } | null>> => {
       try {
         // v1.0.4 fix — parent BrowserWindow 명시. 이전엔 옵션만 넘겨서
         // Windows 에서 dialog 가 main window 뒤로 가거나 안 뜨는 증상이 있었음
@@ -1712,10 +1632,7 @@ function registerWorkspaceHandlers(electronApp: App): void {
         // v1.0.14 (META-4 hotfix): 저장된 workspace 가 userData 와 충돌하면
         // null 반환 — 사용자가 picker 로 다시 선택해야 함.
         const userDataDir = electronApp.getPath('userData');
-        const conflict = checkUserDataConflict(
-          settings.workspace_root,
-          userDataDir
-        );
+        const conflict = checkUserDataConflict(settings.workspace_root, userDataDir);
         if (conflict !== null) {
           console.warn('[workspace/get] saved workspace conflicts with userData:', conflict);
           return ok(null);
@@ -1736,62 +1653,65 @@ function registerWorkspaceHandlers(electronApp: App): void {
   //   prune 해서 node_modules 같은 거대한 트리에 진입 X)
   // - max_files 도달 시 즉시 중단, 부분 결과 반환
   // - 심볼릭 / 권한 오류는 silently skip — 한 손상 항목이 전체 enumerate 를 깨뜨리지 않도록
-  ipcMain.handle('workspace/list-files', async (_evt, raw: unknown): Promise<Result<FileEntry[]>> => {
-    try {
-      const args = ListFilesArgsSchema.parse(raw);
-      const root = path.resolve(args.workspace_root);
-      const stat = await fsp.stat(root).catch(() => null);
-      if (stat === null || !stat.isDirectory()) {
-        throw new Error('workspace_root must be an existing directory');
-      }
-      const cap = args.max_files ?? FILE_LIST_DEFAULT_MAX_FILES;
-      const compiled = (args.ignore_patterns ?? []).map(compileGlob);
-      const out: FileEntry[] = [];
-      // BFS 가 아닌 DFS — 결과 순서는 caller 가 sort 한다.
-      const stack: Array<{ abs: string; rel: string; depth: number }> = [
-        { abs: root, rel: '', depth: 0 },
-      ];
-      while (stack.length > 0) {
-        if (out.length >= cap) break;
-        const top = stack.pop();
-        if (top === undefined) break;
-        if (top.depth > FILE_LIST_MAX_DEPTH) continue;
-        let entries: import('node:fs').Dirent[] = [];
-        try {
-          entries = await fsp.readdir(top.abs, { withFileTypes: true });
-        } catch {
-          // 권한 / 손상 디렉토리는 skip — silent
-          continue;
+  ipcMain.handle(
+    'workspace/list-files',
+    async (_evt, raw: unknown): Promise<Result<FileEntry[]>> => {
+      try {
+        const args = ListFilesArgsSchema.parse(raw);
+        const root = path.resolve(args.workspace_root);
+        const stat = await fsp.stat(root).catch(() => null);
+        if (stat === null || !stat.isDirectory()) {
+          throw new Error('workspace_root must be an existing directory');
         }
-        for (const ent of entries) {
+        const cap = args.max_files ?? FILE_LIST_DEFAULT_MAX_FILES;
+        const compiled = (args.ignore_patterns ?? []).map(compileGlob);
+        const out: FileEntry[] = [];
+        // BFS 가 아닌 DFS — 결과 순서는 caller 가 sort 한다.
+        const stack: Array<{ abs: string; rel: string; depth: number }> = [
+          { abs: root, rel: '', depth: 0 },
+        ];
+        while (stack.length > 0) {
           if (out.length >= cap) break;
-          const childRel = top.rel.length === 0 ? ent.name : `${top.rel}/${ent.name}`;
-          // POSIX-style relative path 로 정규화
-          const relForMatch = childRel.split(path.sep).join('/');
-          if (isIgnored(relForMatch, compiled)) continue;
-          const childAbs = path.join(top.abs, ent.name);
-          if (ent.isDirectory()) {
-            stack.push({ abs: childAbs, rel: relForMatch, depth: top.depth + 1 });
+          const top = stack.pop();
+          if (top === undefined) break;
+          if (top.depth > FILE_LIST_MAX_DEPTH) continue;
+          let entries: import('node:fs').Dirent[] = [];
+          try {
+            entries = await fsp.readdir(top.abs, { withFileTypes: true });
+          } catch {
+            // 권한 / 손상 디렉토리는 skip — silent
             continue;
           }
-          if (!ent.isFile()) continue; // symlink / device 등은 skip
-          let size_bytes = 0;
-          let mtime = '';
-          try {
-            const fileStat = await fsp.stat(childAbs);
-            size_bytes = fileStat.size;
-            mtime = fileStat.mtime.toISOString();
-          } catch {
-            continue; // stat 실패 → skip
+          for (const ent of entries) {
+            if (out.length >= cap) break;
+            const childRel = top.rel.length === 0 ? ent.name : `${top.rel}/${ent.name}`;
+            // POSIX-style relative path 로 정규화
+            const relForMatch = childRel.split(path.sep).join('/');
+            if (isIgnored(relForMatch, compiled)) continue;
+            const childAbs = path.join(top.abs, ent.name);
+            if (ent.isDirectory()) {
+              stack.push({ abs: childAbs, rel: relForMatch, depth: top.depth + 1 });
+              continue;
+            }
+            if (!ent.isFile()) continue; // symlink / device 등은 skip
+            let size_bytes = 0;
+            let mtime = '';
+            try {
+              const fileStat = await fsp.stat(childAbs);
+              size_bytes = fileStat.size;
+              mtime = fileStat.mtime.toISOString();
+            } catch {
+              continue; // stat 실패 → skip
+            }
+            out.push({ path: relForMatch, size_bytes, mtime });
           }
-          out.push({ path: relForMatch, size_bytes, mtime });
         }
+        return ok(out);
+      } catch (err) {
+        return fail(err);
       }
-      return ok(out);
-    } catch (err) {
-      return fail(err);
     }
-  });
+  );
 
   // ── workspace/read-file (v0.6.0 — F-019 @ 멘션) ─────────────────────
   // 입력: { workspace_root, rel_path, max_bytes? }
@@ -1800,43 +1720,44 @@ function registerWorkspaceHandlers(electronApp: App): void {
   //   - path traversal 거절 (resolveInsideWorkspace)
   //   - 디렉토리 / 1MB 초과 / binary 파일 거절
   //   - max_bytes 까지만 읽고 truncated=true 표시
-  ipcMain.handle('workspace/read-file', async (_evt, raw: unknown): Promise<Result<FileContent>> => {
-    try {
-      const args = ReadFileArgsSchema.parse(raw);
-      const abs = await resolveInsideWorkspace(args.workspace_root, args.rel_path);
-      const stat = await fsp.stat(abs).catch(() => null);
-      if (stat === null) {
-        throw new Error('file not found');
+  ipcMain.handle(
+    'workspace/read-file',
+    async (_evt, raw: unknown): Promise<Result<FileContent>> => {
+      try {
+        const args = ReadFileArgsSchema.parse(raw);
+        const abs = await resolveInsideWorkspace(args.workspace_root, args.rel_path);
+        const stat = await fsp.stat(abs).catch(() => null);
+        if (stat === null) {
+          throw new Error('file not found');
+        }
+        if (stat.isDirectory()) {
+          throw new Error('path is a directory, not a file');
+        }
+        if (stat.size > FILE_READ_HARD_MAX_BYTES) {
+          throw new Error(`file too large: ${stat.size} bytes (max ${FILE_READ_HARD_MAX_BYTES})`);
+        }
+        const limit = args.max_bytes ?? FILE_READ_DEFAULT_MAX_BYTES;
+        const buf = await fsp.readFile(abs);
+        if (looksBinary(buf)) {
+          throw new Error('binary file rejected');
+        }
+        const truncated = buf.length > limit;
+        const slice = truncated ? buf.subarray(0, limit) : buf;
+        const content = slice.toString('utf8');
+        // line_count = '\n' 개수 + 1 (빈 파일은 1줄로 간주). truncated 인 경우
+        // 실제 파일은 더 많은 줄을 포함할 수 있지만 caller 에 표시되는 snippet
+        // 기준 라인 수가 더 유용하다.
+        let nl = 0;
+        for (let i = 0; i < content.length; i++) {
+          if (content.charCodeAt(i) === 10) nl++;
+        }
+        const line_count = nl + 1;
+        return ok({ content, truncated, line_count });
+      } catch (err) {
+        return fail(err);
       }
-      if (stat.isDirectory()) {
-        throw new Error('path is a directory, not a file');
-      }
-      if (stat.size > FILE_READ_HARD_MAX_BYTES) {
-        throw new Error(
-          `file too large: ${stat.size} bytes (max ${FILE_READ_HARD_MAX_BYTES})`
-        );
-      }
-      const limit = args.max_bytes ?? FILE_READ_DEFAULT_MAX_BYTES;
-      const buf = await fsp.readFile(abs);
-      if (looksBinary(buf)) {
-        throw new Error('binary file rejected');
-      }
-      const truncated = buf.length > limit;
-      const slice = truncated ? buf.subarray(0, limit) : buf;
-      const content = slice.toString('utf8');
-      // line_count = '\n' 개수 + 1 (빈 파일은 1줄로 간주). truncated 인 경우
-      // 실제 파일은 더 많은 줄을 포함할 수 있지만 caller 에 표시되는 snippet
-      // 기준 라인 수가 더 유용하다.
-      let nl = 0;
-      for (let i = 0; i < content.length; i++) {
-        if (content.charCodeAt(i) === 10) nl++;
-      }
-      const line_count = nl + 1;
-      return ok({ content, truncated, line_count });
-    } catch (err) {
-      return fail(err);
     }
-  });
+  );
 }
 
 // ────────────────────────────────────────────────────────────
@@ -1943,30 +1864,24 @@ function registerSessionHandlers(store: SessionStore): void {
 
   // v1.1.11 (Workspace UX): per-session sticky workspace lock toggle.
   // ChatHeader 의 🔒 toggle 이 호출. payload: { sessionId, locked }.
-  ipcMain.handle(
-    'session/set-workspace-locked',
-    (_evt, raw: unknown): Result<{ ok: boolean }> => {
-      try {
-        if (typeof raw !== 'object' || raw === null) {
-          throw new Error('payload must be object { sessionId, locked }');
-        }
-        const obj = raw as { sessionId?: unknown; locked?: unknown };
-        if (typeof obj.sessionId !== 'string' || obj.sessionId.length === 0) {
-          throw new Error('sessionId required');
-        }
-        if (typeof obj.locked !== 'boolean') {
-          throw new Error('locked must be boolean');
-        }
-        const updated = store.setWorkspaceLocked(
-          obj.sessionId as SessionId,
-          obj.locked
-        );
-        return ok({ ok: updated });
-      } catch (err) {
-        return fail(err);
+  ipcMain.handle('session/set-workspace-locked', (_evt, raw: unknown): Result<{ ok: boolean }> => {
+    try {
+      if (typeof raw !== 'object' || raw === null) {
+        throw new Error('payload must be object { sessionId, locked }');
       }
+      const obj = raw as { sessionId?: unknown; locked?: unknown };
+      if (typeof obj.sessionId !== 'string' || obj.sessionId.length === 0) {
+        throw new Error('sessionId required');
+      }
+      if (typeof obj.locked !== 'boolean') {
+        throw new Error('locked must be boolean');
+      }
+      const updated = store.setWorkspaceLocked(obj.sessionId as SessionId, obj.locked);
+      return ok({ ok: updated });
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
   // v1.1.11: 특정 세션의 lock 상태 read — UI 가 mount 시 동기화.
   ipcMain.handle(
@@ -2036,17 +1951,14 @@ function registerSessionHandlers(store: SessionStore): void {
   // v0.7.0 (F-026) — Sidebar 검색 입력 → BM25 ranked turn matches across all
   // sessions. Renderer 는 결과를 클릭해 해당 turn 으로 scroll.
   // q 는 trim+1자 이상, 200자 미만, limit 은 100 미만 으로 Zod 가 강제.
-  ipcMain.handle(
-    'session/search',
-    (_evt, raw: unknown): Result<TurnSearchResult[]> => {
-      try {
-        const { q, limit } = SearchTurnsArgsSchema.parse(raw);
-        return ok(store.searchTurns(q, limit ?? 50));
-      } catch (err) {
-        return fail(err);
-      }
+  ipcMain.handle('session/search', (_evt, raw: unknown): Result<TurnSearchResult[]> => {
+    try {
+      const { q, limit } = SearchTurnsArgsSchema.parse(raw);
+      return ok(store.searchTurns(q, limit ?? 50));
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
   // v0.8.0 — H Permission Dropdown — 세션의 default_level 변경. metadata-only
   // change. 갱신된 Session 을 반환해 caller (renderer) 가 즉시 local state 에
@@ -2281,11 +2193,16 @@ function registerBrowserHandlers(browser: BrowserManager): void {
   // 로 직렬화해 renderer 에 반환. 파일 저장은 renderer / 후속 슬롯에서.
   ipcMain.handle(
     'browser/capture-tab',
-    async (_evt, tabId: unknown): Promise<Result<{
-      png_base64: string;
-      width: number;
-      height: number;
-    } | null>> => {
+    async (
+      _evt,
+      tabId: unknown
+    ): Promise<
+      Result<{
+        png_base64: string;
+        width: number;
+        height: number;
+      } | null>
+    > => {
       try {
         if (typeof tabId !== 'string') {
           throw new Error('tab id must be string');
@@ -2400,9 +2317,7 @@ function registerToolHandlers(tools: ToolHandlerConfig): void {
       // v1.1.2 hotfix (Codex Q8): event.sender.id 를 webContentsId 로 전달.
       // Electron 이 보장하는 신뢰 가능 출처 — renderer 가 spoof 불가. Queue
       // 의 sessionGrants 가 본 ID 버킷에 격리됨.
-      return ok(
-        await tools.queue.enqueue(call, { web_contents_id: event.sender.id })
-      );
+      return ok(await tools.queue.enqueue(call, { web_contents_id: event.sender.id }));
     } catch (err) {
       return fail(err);
     }
@@ -2643,9 +2558,7 @@ function registerUsageHandlers(usageStore: UsageStore): void {
           cost_limit_usd: settings.usage_cost_limit_usd,
         }),
         alert_threshold:
-          typeof settings.usage_alert_threshold === 'number'
-            ? settings.usage_alert_threshold
-            : 0.8,
+          typeof settings.usage_alert_threshold === 'number' ? settings.usage_alert_threshold : 0.8,
       });
     } catch (err) {
       return fail(err);
@@ -2824,7 +2737,7 @@ function registerAiHandlers(cfg: AiHandlerConfig, usage?: UsageStore): void {
         // 테스트 stub 의 evt.sender 가 number 가 아니어도 안전한 fallback.
         const senderId =
           typeof (event as { sender?: { id?: unknown } } | undefined)?.sender?.id === 'number'
-            ? ((event as { sender: { id: number } }).sender.id)
+            ? (event as { sender: { id: number } }).sender.id
             : 0;
         const { stream_id, model, turns, session_id, workspace_root, permission_level } =
           StartStreamArgsSchema.parse(args);
@@ -2914,8 +2827,7 @@ function registerAiHandlers(cfg: AiHandlerConfig, usage?: UsageStore): void {
         // v0.3.0 — settings.default_provider 를 매 stream 마다 fresh 로 읽음.
         // 사용자가 wizard 또는 설정에서 변경하면 즉시 반영. 'auto' 는 종전 동작.
         const settings = readSettings();
-        const userDefaultProvider: DefaultProviderChoice =
-          settings.default_provider ?? 'auto';
+        const userDefaultProvider: DefaultProviderChoice = settings.default_provider ?? 'auto';
         const controller = new AbortController();
         const { provider, source } = await getDefaultProviderFn(
           model,
@@ -2995,10 +2907,7 @@ async function runStreamPump(
   // v1.6.5 — Plugin Hook integration. pre_turn 호출 (best-effort, throw 무시).
   // 본 시점은 실제 provider stream 시작 직전 — plugin 이 ctx.payload 를
   // 통해 turn 의 model/session 정보 확인 가능.
-  if (
-    cfg.pluginManager !== undefined &&
-    cfg.pluginHookRunner !== undefined
-  ) {
+  if (cfg.pluginManager !== undefined && cfg.pluginHookRunner !== undefined) {
     const plugins = cfg.pluginManager.list().loaded;
     if (plugins.length > 0) {
       try {
@@ -3097,10 +3006,7 @@ async function runStreamPump(
 
     // v1.6.5/v1.6.6 — Plugin post_turn hook (best-effort). cost-limit-hook
     // 이 본 ctx.payload.mtd_total_usd / limit_usd 검사 → 한도 초과 시 toast.
-    if (
-      cfg.pluginManager !== undefined &&
-      cfg.pluginHookRunner !== undefined
-    ) {
+    if (cfg.pluginManager !== undefined && cfg.pluginHookRunner !== undefined) {
       const plugins = cfg.pluginManager.list().loaded;
       if (plugins.length > 0) {
         const payload: Record<string, unknown> = {

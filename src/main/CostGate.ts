@@ -53,9 +53,7 @@ export type CostGateOutcome =
     }
   | {
       kind: 'block';
-      reason:
-        | 'limit_exceeded'
-        | 'unknown_model_under_limit';
+      reason: 'limit_exceeded' | 'unknown_model_under_limit';
       /** 사용자에게 보여줄 i18n key 또는 메시지. */
       hint: string;
       /** 사용자가 한도 / 사용량 직접 보도록. */

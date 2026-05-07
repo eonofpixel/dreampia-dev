@@ -571,7 +571,9 @@ export class SessionStore {
 
       let wal_mode: boolean | null = null;
       try {
-        const journalRows = this.db.pragma('journal_mode') as Array<{ journal_mode?: string } | string>;
+        const journalRows = this.db.pragma('journal_mode') as Array<
+          { journal_mode?: string } | string
+        >;
         const j = journalRows[0];
         const journalValue =
           typeof j === 'string'
@@ -625,9 +627,7 @@ export class SessionStore {
     const tx = this.db.transaction((s: Session): Session => {
       const resolvedWorkspaceId = this.upsertWorkspace(s);
       const next: Session =
-        resolvedWorkspaceId === s.workspace_id
-          ? s
-          : { ...s, workspace_id: resolvedWorkspaceId };
+        resolvedWorkspaceId === s.workspace_id ? s : { ...s, workspace_id: resolvedWorkspaceId };
       this.insertSessionRow(next);
       this.insertWorktrees(next);
       this.insertTurns(next);
@@ -796,9 +796,7 @@ export class SessionStore {
    *
    * UI 의 Settings > 권한 패널이 list view 로 표시 + revoke 버튼.
    */
-  listActivePermissionGrants(
-    sessionId: import('@/types').SessionId
-  ): Array<{
+  listActivePermissionGrants(sessionId: import('@/types').SessionId): Array<{
     id: string;
     capability: string;
     target_json: string;
@@ -816,14 +814,14 @@ export class SessionStore {
          ORDER BY granted_at DESC`
       )
       .all({ session_id: sessionId }) as Array<{
-        capability: string;
-        target_json: string;
-        granted_at: string;
-        granted_by: string;
-        expires_at: string | null;
-        reason: string | null;
-        scope: string;
-      }>;
+      capability: string;
+      target_json: string;
+      granted_at: string;
+      granted_by: string;
+      expires_at: string | null;
+      reason: string | null;
+      scope: string;
+    }>;
     return rows.map((r) => {
       let id = '';
       try {
@@ -1211,9 +1209,9 @@ export class SessionStore {
   private upsertWorkspace(s: Session): WorkspaceId {
     const ws = s.workspace;
     // v1.4.10 — 같은 root 가 다른 id 로 이미 존재? 그러면 그 id 채택.
-    const existing = this.db
-      .prepare('SELECT id FROM workspaces WHERE root = ?')
-      .get(ws.root) as { id: string } | undefined;
+    const existing = this.db.prepare('SELECT id FROM workspaces WHERE root = ?').get(ws.root) as
+      | { id: string }
+      | undefined;
     if (existing !== undefined && existing.id !== s.workspace_id) {
       return existing.id as WorkspaceId;
     }
@@ -2210,9 +2208,7 @@ export class SessionStore {
     const body = extractTurnText(turn.content);
     if (body.length === 0) return;
     this.db
-      .prepare(
-        `INSERT INTO turns_fts(turn_id, session_id, role, body) VALUES (?, ?, ?, ?)`
-      )
+      .prepare(`INSERT INTO turns_fts(turn_id, session_id, role, body) VALUES (?, ?, ?, ?)`)
       .run(turn.id, sessionId, turn.role, body);
   }
 

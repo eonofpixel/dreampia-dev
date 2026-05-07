@@ -31,12 +31,7 @@ import { useT } from '../../i18n';
 
 export type DefaultProviderChoice = 'auto' | 'claude' | 'codex' | 'mock';
 
-const PROVIDER_OPTIONS: ReadonlyArray<DefaultProviderChoice> = [
-  'auto',
-  'claude',
-  'codex',
-  'mock',
-];
+const PROVIDER_OPTIONS: ReadonlyArray<DefaultProviderChoice> = ['auto', 'claude', 'codex', 'mock'];
 
 export interface ProviderDropdownProps {
   /**
@@ -59,9 +54,7 @@ export function ProviderDropdown({
   controlled,
 }: ProviderDropdownProps): React.JSX.Element {
   const t = useT();
-  const [value, setValue] = useState<DefaultProviderChoice>(
-    controlled?.value ?? 'auto'
-  );
+  const [value, setValue] = useState<DefaultProviderChoice>(controlled?.value ?? 'auto');
   const [ipcAvailable, setIpcAvailable] = useState(false);
   const [loaded, setLoaded] = useState(controlled !== undefined);
 
@@ -111,8 +104,7 @@ export function ProviderDropdown({
         controlled.onChange(next);
         return;
       }
-      const appApi =
-        typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+      const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
       if (appApi === undefined || typeof appApi.setDefaultProvider !== 'function') {
         return;
       }
@@ -125,8 +117,7 @@ export function ProviderDropdown({
 
   // controlled 모드면 항상 enable. self-managed 일 땐 IPC 가용 + 초기 fetch
   // 완료까지 대기. 외부 disabled 는 모든 것을 오버라이드.
-  const isDisabled =
-    disabled ?? (controlled === undefined && (!ipcAvailable || !loaded));
+  const isDisabled = disabled ?? (controlled === undefined && (!ipcAvailable || !loaded));
   const currentLabel = t(`provider.dropdown.option.${value}`);
 
   return (

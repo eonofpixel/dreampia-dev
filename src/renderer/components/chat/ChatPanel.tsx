@@ -12,13 +12,7 @@
 
 import { useEffect, useRef } from 'react';
 import { ChatInput } from './ChatInput';
-import type {
-  ContentBlock,
-  PermissionLevel,
-  Session,
-  Turn,
-  ToolResultRef,
-} from '@/types';
+import type { ContentBlock, PermissionLevel, Session, Turn, ToolResultRef } from '@/types';
 import { EFFORT_LABELS_KO } from '@/types';
 import { FileReferenceChip } from './FileReferenceChip';
 import { SessionReferenceChip } from './SessionReferenceChip';
@@ -782,9 +776,7 @@ export function WelcomeMessage({
 }: WelcomeMessageProps): React.JSX.Element {
   const t = useT();
   const hasCtas =
-    onOpenAutomation !== undefined ||
-    onOpenPlugins !== undefined ||
-    onOpenHelp !== undefined;
+    onOpenAutomation !== undefined || onOpenPlugins !== undefined || onOpenHelp !== undefined;
   return (
     <div className="mx-auto mt-16 max-w-md text-center" data-testid="welcome-message">
       <div className="text-5xl" aria-hidden="true">
@@ -809,10 +801,7 @@ export function WelcomeMessage({
         })}
       </div>
       {hasCtas && (
-        <div
-          className="mt-6 space-y-2 text-left text-sm"
-          data-testid="welcome-cta-section"
-        >
+        <div className="mt-6 space-y-2 text-left text-sm" data-testid="welcome-cta-section">
           <p className="font-medium text-text-secondary">{t('chat.welcome.cta.label')}</p>
           {onOpenAutomation !== undefined && (
             <CtaChip onClick={onOpenAutomation} testId="welcome-cta-automation">

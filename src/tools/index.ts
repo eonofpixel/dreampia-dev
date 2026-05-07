@@ -65,12 +65,7 @@ export { ToolRegistry } from './Registry';
 export { createContext } from './Context';
 
 // ── Queue ──
-export {
-  ToolQueue,
-  type ToolAuditEvent,
-  type ToolAuditSink,
-  type ToolQueueOptions,
-} from './Queue';
+export { ToolQueue, type ToolAuditEvent, type ToolAuditSink, type ToolQueueOptions } from './Queue';
 
 // ── Built-in tools ──
 export { ShellRunTool, type ShellRunInput, type ShellRunOutput } from './builtin/shellRun';
