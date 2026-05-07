@@ -72,7 +72,8 @@ describe('v1.2.2 — SSE parser', () => {
 
   it('flush 가 미완성 event 강제 emit', () => {
     const parser = new SseParser();
-    [...parser.push('data: incomplete\n')];
+    // push 의 iterator 결과는 무시 — flush 가 잔여 buffer 강제 emit 검증.
+    Array.from(parser.push('data: incomplete\n'));
     const events = [...parser.flush()];
     expect(events[0]?.data).toBe('incomplete');
   });
