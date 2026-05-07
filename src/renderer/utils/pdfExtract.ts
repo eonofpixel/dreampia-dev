@@ -4,8 +4,9 @@
  * Spec: docs/v1.x-roadmap.md (P5 v1.5.x Image/PDF — text 추출).
  *
  * pdfjs-dist 의 legacy build 를 사용 — main thread 에서 동기 worker-less 모드
- * 로 동작. 추출 결과는 page 별 + 전체 합본 string. AI 가 PDF 내용을 인식할
- * 수 있도록 typed block 으로 prepend (별도 슬롯).
+ * 로 동작 + Node test env (jsdom 외) 호환 (modern build 는 DOMMatrix 필요).
+ * legacy 의 `require('crypto')` 폴백 코드는 try/catch 내부라 CSP 환경에서도
+ * 안전 (실제 throw 시 무시). 추출 결과는 page 별 + 전체 합본 string.
  *
  * 사용:
  *   const result = await extractPdfText(arrayBuffer);
