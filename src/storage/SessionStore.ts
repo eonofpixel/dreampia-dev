@@ -228,12 +228,22 @@ interface MetadataExtra {
     partition_id: string;
   };
   plan: {
-    active: boolean;
+    /**
+     * v1.8.4 — legacy optional. column `sessions.plan_active` 가 단일 source.
+     * 신규 row 는 본 필드 직렬화 X (buildStoredMetadata). 기존 row 의 값은
+     * assembleSession 의 spread 후 column 으로 override 되므로 noop.
+     */
+    active?: boolean;
     browser_tool_enabled: boolean;
     current_item_index?: number;
   };
   permission: {
-    default_level: PermissionState['default_level'];
+    /**
+     * v1.8.4 — legacy optional. column `sessions.permission_default_level`
+     * 가 단일 source (NULL 시 'workspace_write' defensive default).
+     * 신규 row 는 본 필드 직렬화 X.
+     */
+    default_level?: PermissionState['default_level'];
     last_denied?: { capability: string; ts: string };
     temporarily_blocked_capabilities: string[];
   };
@@ -1003,26 +1013,17 @@ export class SessionStore {
     if (patch.default_level === undefined) {
       return;
     }
-    const meta = this.parseMetadata(row.metadata_json);
-    const next: StoredMetadata = {
-      ...meta,
-      _extra: {
-        ...meta._extra,
-        permission: {
-          ...meta._extra.permission,
-          default_level: patch.default_level,
-        },
-      },
-    };
     const now = new Date().toISOString();
-    // v1.8.1 — dual-write: column + metadata_json 동시 갱신.
+    // v1.8.4 — column 만 갱신. v1.8.1 dual-write 의 metadata_json patch 제거
+    // (assembleSession 가 column 단일 source 로 read — _extra 갱신은 dead
+    // write 였음). Codex Q11 blind spot 정정.
     this.db
       .prepare(
         `UPDATE sessions
-         SET metadata_json = ?, permission_default_level = ?, updated_at = ?
+         SET permission_default_level = ?, updated_at = ?
          WHERE id = ?`
       )
-      .run(JSON.stringify(next), patch.default_level, now, id);
+      .run(patch.default_level, now, id);
   }
 
   updateSessionMeta(
@@ -1643,15 +1644,18 @@ export class SessionStore {
         layout: s.browser.layout,
         partition_id: s.browser.partition_id,
       },
+      // v1.8.4 — `active` 직렬화 X. column `sessions.plan_active` 가 단일
+      // source. transition 마무리 — v1.8.1 dual-write → v1.8.3 column-only
+      // read → v1.8.4 column-only write.
       plan: {
-        active: s.plan.active,
         browser_tool_enabled: s.plan.browser_tool_enabled,
         ...(s.plan.current_item_index !== undefined && {
           current_item_index: s.plan.current_item_index,
         }),
       },
+      // v1.8.4 — `default_level` 직렬화 X. column
+      // `sessions.permission_default_level` 가 단일 source.
       permission: {
-        default_level: s.permission.default_level,
         ...(s.permission.last_denied !== undefined && {
           last_denied: s.permission.last_denied,
         }),

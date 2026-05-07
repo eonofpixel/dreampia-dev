@@ -2,6 +2,66 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.8.4] — 2026-05-07
+
+**`_extra` write 제거 — column transition 마무리.**
+
+v1.8.1 dual-write → v1.8.3 column-only read → v1.8.4 column-only write.
+`buildStoredMetadata` 가 `_extra.permission.default_level` /
+`_extra.plan.active` 직렬화 중단. `updatePermission` 의 metadata_json
+patch 도 제거 (v1.8.3 부터 read 가 column 만 사용 → 해당 patch 는
+dead-write 였음 — Codex Q11 blind spot 정정).
+
+`MetadataExtraSchema` + `MetadataExtra` interface 의 두 필드는
+**legacy optional** 로 유지 — 즉시 제거 X. 기존 row 의 _extra 측 값을
+schema 가 거부하지 않도록 (Codex Q11 권고 #5: schema 변경은 안전 우선).
+
+### Changed
+- `src/storage/SessionStore.ts:buildStoredMetadata`:
+  - `_extra.plan.active` 직렬화 제거 (`browser_tool_enabled` /
+    `current_item_index` 만 유지).
+  - `_extra.permission.default_level` 직렬화 제거 (`last_denied` /
+    `temporarily_blocked_capabilities` 만 유지).
+- `src/storage/SessionStore.ts:updatePermission`:
+  - metadata_json patch 제거. SQL 이 `permission_default_level` +
+    `updated_at` 만 갱신.
+  - 직전 v1.8.1 의 dual-write SQL ("SET metadata_json = ?,
+    permission_default_level = ?, updated_at = ?") → "SET
+    permission_default_level = ?, updated_at = ?".
+- `src/storage/SessionStore.ts:interface MetadataExtra`:
+  - `plan.active` → optional (`active?: boolean`).
+  - `permission.default_level` → optional.
+- `src/storage/metadataExtraSchema.ts`:
+  - `PlanExtraSchema.active` → `.optional()`.
+  - `PermissionExtraSchema.default_level` → `.optional()`.
+
+### Tests
+기존 `tests/storage/extraColumnPromote.test.ts` 의 v1.8.1 dual-write
+케이스 3개를 v1.8.4 시멘틱으로 변경:
+- "dual-write — INSERT 시 column 과 metadata_json 양쪽에 값" →
+  "v1.8.4 — INSERT 시 column 만 채워지고 _extra 측 두 필드 부재".
+  `meta._extra.{permission.default_level, plan.active}` 가 undefined
+  검증 + 다른 _extra 필드는 유지 검증.
+- "updatePermission — column 도 갱신" → "v1.8.4 — updatePermission 은
+  column 만 갱신, metadata_json 무영향". 호출 전후 `metadata_json`
+  byte-equal 검증.
+- "backfill SQL — pre-existing _extra row" → 동일 의도이지만 setup 변경.
+  `createSession` 이 더이상 _extra 에 값을 안 쓰므로 raw UPDATE 로
+  legacy `_extra.permission.default_level` / `_extra.plan.active` 강제
+  주입 후 마이그레이션 015 backfill SQL 실행 → column 채워짐 검증.
+  마이그레이션 호환성 자체는 영향 없음.
+
+### 회귀
+- 0. typecheck clean.
+- baseline 2052/0 → 2052/0 (테스트 시멘틱만 갱신, 신규/제거 없음).
+
+### Down-grade 안전성 (Codex Q11 #3)
+v1.8.4 이후 신규 row 는 `_extra.permission.default_level` /
+`_extra.plan.active` 부재. v1.8.0 이전 binary 로 down-grade 시
+column 도 mig 015 미적용으로 부재 → 두 필드가 양쪽에서 모두 사라짐
+(데이터 부분 손실 가능). 본 batch 는 down-grade 를 지원 범위에서
+제외 — Codex 권고 "근본 해결이 아니라 지원 범위 문제".
+
 ## [1.8.3] — 2026-05-07
 
 **`_extra` dual-write 정리 — column 만 source of truth.**

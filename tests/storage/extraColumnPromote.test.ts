@@ -1,13 +1,16 @@
 /**
  * v1.8.1 — _extra column promote (B-3 2단계).
+ * v1.8.3 — column 만 source of truth (read fallback 제거).
+ * v1.8.4 — column 만 write (_extra 측 직렬화/갱신 중단).
  *
  * 검증:
  *  - 새 세션 INSERT 시 sessions.permission_default_level / plan_active
- *    columns 가 dual-write 됨.
- *  - 기존 metadata_json._extra 만 있는 row 도 backfill SQL 로 column 에
- *    값이 복사됨.
- *  - assembleSession (loadSession) 이 column 우선 → JSON fallback.
- *  - updatePermission(default_level) 이 column 도 갱신.
+ *    column 에 값. v1.8.4 부터는 _extra 측에는 값 부재.
+ *  - 기존 metadata_json._extra 만 있는 legacy row 도 backfill SQL 로
+ *    column 에 값이 복사됨 (마이그레이션 015 호환).
+ *  - assembleSession (loadSession) 이 column 만 read.
+ *  - updatePermission(default_level) 이 column 만 갱신 — metadata_json
+ *    무영향 (v1.8.4 dead-write 제거).
  *  - 마이그레이션 후 LATEST_SCHEMA_VERSION === 15.
  */
 
@@ -66,7 +69,7 @@ describe('v1.8.1 — _extra column promote', () => {
     expect(store.getSchemaVersion()).toBe(15);
   });
 
-  it('dual-write — INSERT 시 column 과 metadata_json 양쪽에 값', () => {
+  it('v1.8.4 — INSERT 시 column 만 채워지고 _extra 측 두 필드 부재', () => {
     const s = withPermission(
       base,
       'full_access',
@@ -89,14 +92,18 @@ describe('v1.8.1 — _extra column promote', () => {
     expect(row.permission_default_level).toBe('full_access');
     expect(row.plan_active).toBe(1);
 
+    // v1.8.4 — _extra 측 두 promoted 필드는 더이상 직렬화 X.
     const meta = JSON.parse(row.metadata_json) as {
       _extra: {
-        permission: { default_level: string };
-        plan: { active: boolean };
+        permission: Record<string, unknown>;
+        plan: Record<string, unknown>;
       };
     };
-    expect(meta._extra.permission.default_level).toBe('full_access');
-    expect(meta._extra.plan.active).toBe(true);
+    expect(meta._extra.permission.default_level).toBeUndefined();
+    expect(meta._extra.plan.active).toBeUndefined();
+    // 다른 필드는 유지.
+    expect(meta._extra.plan.browser_tool_enabled).toBeDefined();
+    expect(meta._extra.permission.temporarily_blocked_capabilities).toBeDefined();
   });
 
   it('column 우선 read — default_level column 변경 시 우선 적용', () => {
@@ -161,7 +168,7 @@ describe('v1.8.1 — _extra column promote', () => {
     expect(loaded?.permission.default_level).toBe('workspace_write');
   });
 
-  it('updatePermission — column 도 갱신', () => {
+  it('v1.8.4 — updatePermission 은 column 만 갱신, metadata_json 무영향', () => {
     const s = withPermission(
       base,
       'workspace_write',
@@ -170,6 +177,11 @@ describe('v1.8.1 — _extra column promote', () => {
       'ws-promote-4'
     );
     store.createSession(s);
+    // INSERT 직후 metadata_json 스냅샷 — updatePermission 후 변경 X 검증용.
+    const beforeRow = store.getDb()
+      .prepare('SELECT metadata_json FROM sessions WHERE id = ?')
+      .get(s.id) as { metadata_json: string };
+
     store.updatePermission(s.id as SessionId, { default_level: 'full_access' });
 
     const row = store.getDb()
@@ -177,20 +189,19 @@ describe('v1.8.1 — _extra column promote', () => {
       .get(s.id) as { permission_default_level: string; metadata_json: string };
     expect(row.permission_default_level).toBe('full_access');
 
-    const meta = JSON.parse(row.metadata_json) as {
-      _extra: { permission: { default_level: string } };
-    };
-    expect(meta._extra.permission.default_level).toBe('full_access');
+    // v1.8.4 — metadata_json 은 INSERT 직후와 동일 (updatePermission 이
+    // 더이상 _extra 갱신 X). 직전 v1.8.1 dual-write 패턴 폐기.
+    expect(row.metadata_json).toBe(beforeRow.metadata_json);
 
-    // round-trip 검증.
+    // round-trip — column 갱신만으로 정상 read.
     const loaded = store.getSession(s.id as SessionId);
     expect(loaded?.permission.default_level).toBe('full_access');
   });
 
-  it('backfill SQL — pre-existing _extra row 가 column 으로 옮겨짐', () => {
-    // SessionStore 는 항상 column 도 같이 INSERT 하지만, 마이그레이션 015 의
-    // backfill 단계 검증을 위해 raw INSERT 로 metadata_json 만 채우고
-    // column 은 NULL/0 으로 두기.
+  it('backfill SQL — legacy _extra row (pre-v1.8.4) 가 column 으로 옮겨짐', () => {
+    // v1.8.4 의 createSession 은 _extra 측 두 promoted 필드를 더이상
+    // 직렬화 X — 마이그레이션 015 의 legacy 호환 검증을 위해 raw UPDATE
+    // 로 _extra 측에 값을 강제 주입 (pre-v1.8.4 row 시뮬레이션).
     const s = withPermission(
       base,
       'read_only',
@@ -198,14 +209,29 @@ describe('v1.8.1 — _extra column promote', () => {
       '019d0000-0000-7000-8000-00000000ee01',
       'ws-backfill'
     );
-    // 일단 정상 INSERT (column 도 채워짐).
     store.createSession(s);
-    // 강제 NULL 로 되돌려 legacy 상태 재현.
+
+    // metadata_json 에 legacy _extra 필드 강제 주입 + column 은 NULL/0
+    // 으로 되돌리기 → pre-v1.8.4 row 상태.
+    const baseMeta = store.getDb()
+      .prepare('SELECT metadata_json FROM sessions WHERE id = ?')
+      .get(s.id) as { metadata_json: string };
+    const meta = JSON.parse(baseMeta.metadata_json) as {
+      _extra: {
+        permission: Record<string, unknown>;
+        plan: Record<string, unknown>;
+      };
+    };
+    meta._extra.permission.default_level = 'read_only';
+    meta._extra.plan.active = true;
     store.getDb()
       .prepare(
-        'UPDATE sessions SET permission_default_level = NULL, plan_active = 0 WHERE id = ?'
+        `UPDATE sessions
+         SET metadata_json = ?, permission_default_level = NULL, plan_active = 0
+         WHERE id = ?`
       )
-      .run(s.id);
+      .run(JSON.stringify(meta), s.id);
+
     // 015 backfill SQL 을 다시 실행해 column 채워지는지 확인.
     store.getDb().exec(
       `UPDATE sessions
