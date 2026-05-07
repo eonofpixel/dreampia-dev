@@ -71,13 +71,14 @@ test.describe('drive', () => {
       const original = dialog.showOpenDialog.bind(dialog);
       // @ts-expect-error — 글로벌 sentinel 로 호출 횟수 캡처
       globalThis.__pickCalls = 0;
+      // original 은 안 부른다 — 실제 OS 다이얼로그가 뜨면 테스트가 멈춘다.
+      // void 로 unused 경고만 회피.
+      void original;
       dialog.showOpenDialog = (async () => {
-        // @ts-expect-error
+        // @ts-expect-error -- 위에서 globalThis.__pickCalls 를 number 로 주입.
         globalThis.__pickCalls += 1;
         // 사용자가 dialog 를 cancel 한 것처럼 응답.
         return { canceled: true, filePaths: [] };
-        // original 은 안 부른다 — 실제 OS 다이얼로그가 뜨면 테스트가 멈춘다.
-        void original;
       }) as typeof dialog.showOpenDialog;
     });
 
@@ -89,7 +90,7 @@ test.describe('drive', () => {
     await window.waitForTimeout(500);
 
     const calls = await app.evaluate(() => {
-      // @ts-expect-error
+      // @ts-expect-error -- e2e fixture 가 main process 에서 globalThis.__pickCalls 를 주입 (production X).
       return globalThis.__pickCalls as number;
     });
 
