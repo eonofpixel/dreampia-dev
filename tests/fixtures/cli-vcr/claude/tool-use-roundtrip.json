@@ -30,7 +30,7 @@
     },
     {
       "delay_ms": 15,
-      "data": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_vcr_001\",\"name\":\"shell_run\",\"input\":{\"command\":\"ls\"}}],\"usage\":{\"input_tokens\":12,\"output_tokens\":18,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0}}}\n"
+      "data": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_vcr_001\",\"name\":\"shell_run\",\"input\":{\"cmd\":\"ls\"}}],\"usage\":{\"input_tokens\":12,\"output_tokens\":18,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0}}}\n"
     },
     {
       "delay_ms": 5,

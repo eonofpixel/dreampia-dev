@@ -108,7 +108,12 @@ export const SLASH_COMMANDS: ReadonlyArray<SlashCommand> = [
  * 새 모델이 출시되면 여기와 `src/providers/pricing.ts` 양쪽에 추가.
  */
 export const KNOWN_MODELS: ReadonlyArray<string> = [
-  // Claude
+  // Claude (4.x — current)
+  'claude-opus-4-7',
+  'claude-opus-4-6',
+  'claude-sonnet-4-6',
+  'claude-haiku-4-5',
+  // Claude (3.x — legacy)
   'claude-3-5-sonnet-20241022',
   'claude-3-5-sonnet',
   'claude-3-5-haiku',
