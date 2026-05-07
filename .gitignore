@@ -68,6 +68,10 @@ captures/
 *.sqlite-wal
 sessions.sqlite*
 
+# Dev / e2e 의 app userData snapshot (automation_rules 등). 머신 / 세션마다
+# 다르고 영속 X 해도 무방.
+/settings.json
+
 # OMC orchestration artifacts (Claude Code multi-agent runtime — not part of repo)
 .omc/
 .omx/
