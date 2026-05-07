@@ -206,6 +206,60 @@ describe('v1.8.2 — _extra MetadataExtraSchema contract', () => {
     expect(r.success).toBe(false);
   });
 
+  it('v1.4.13 — round-trip 후 _extra.plan 에 checklist 키 부재 (denorm guard)', () => {
+    // _extra.plan.checklist[] 는 한 번도 source 가 아니었으나 audit (v1.8.0)
+    // 의 speculative 권고 이후 명시 가드. plan_items 테이블이 단일 source.
+    // assembleSession 의 buildPlanState 가 loadPlanItems 결과를 PlanState
+    // 의 runtime checklist 로 wrapping 하는 것과 별개 (그건 runtime view).
+    for (const f of listFixtures()) {
+      const store = new SessionStore(':memory:');
+      try {
+        const raw = JSON.parse(readFileSync(join(FIXTURES_DIR, f), 'utf-8')) as {
+          parent_session_id?: string;
+        };
+        if (typeof raw.parent_session_id === 'string') continue;
+        const session = SessionSchema.parse(raw);
+        store.createSession(session);
+        const row = store.getDb()
+          .prepare('SELECT metadata_json FROM sessions WHERE id = ?')
+          .get(session.id) as { metadata_json: string };
+        const meta = JSON.parse(row.metadata_json) as {
+          _extra: { plan: Record<string, unknown> };
+        };
+        expect(meta._extra.plan).not.toHaveProperty('checklist');
+      } finally {
+        store.close();
+      }
+    }
+  });
+
+  it('v1.4.13 — strict schema 가 _extra.plan.checklist 가 들어오면 거부', () => {
+    const sample = {
+      conversation: {
+        current_model: 'sonnet',
+        current_effort: 'medium',
+        current_mode: 'chat',
+      },
+      workspace: { recent_files: [], open_files: [], ignore_patterns: [] },
+      terminal: { panel_open: false, height_px: 200 },
+      browser: {
+        panel_visible: false,
+        layout: 'hidden',
+        partition_id: 'p',
+      },
+      plan: {
+        browser_tool_enabled: false,
+        // 미등록 leaf — strict 거부 대상.
+        checklist: [],
+      },
+      permission: {
+        temporarily_blocked_capabilities: [],
+      },
+    };
+    const r = MetadataExtraSchema.safeParse(sample);
+    expect(r.success).toBe(false);
+  });
+
   it('permission.default_level enum 강제 (잘못된 값 거부)', () => {
     const sample = {
       conversation: {

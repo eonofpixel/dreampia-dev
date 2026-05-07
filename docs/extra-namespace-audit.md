@@ -118,11 +118,20 @@ v1.4.2.x 이후 예정" 명시.
 **특이점**: `plan.checklist[]` 는 별도 테이블 `plan_items`. metadata
 에 남아있는 건 plan self-state.
 
+> **v1.4.13 정정 (2026-05-07)**: 본 audit 의 row "checklist - JSON 유지"
+> 는 v1.4.11 시점 추정이었으나, 실제 `MetadataExtra.plan` interface +
+> `PlanExtraSchema` (zod) 모두 `checklist` 필드를 한 번도 포함한 적이
+> 없음. `plan_items` 테이블이 처음부터 단일 source. `assembleSession`
+> 의 `buildPlanState` 가 `loadPlanItems` 결과를 PlanState 의 runtime
+> `checklist` 로 wrapping 하는 것은 *runtime view* 이지 metadata 직렬화
+> 와 별개. v1.4.13 슬롯에서 명시 contract guard test 추가
+> (`tests/storage/extraSchemaContract.test.ts`).
+
 | 필드 | 추정 타입 | Read 빈도 | Write 빈도 | 권고 |
 |---|---|---|---|---|
-| `active` | `boolean` | **high** (Resolver.ts:242 — 매 permission 결정) | low | **Promote 강력 후보** — boolean scalar, hot path |
+| `active` | `boolean` | **high** (Resolver.ts:242 — 매 permission 결정) | low | **Promote 강력 후보** — boolean scalar, hot path (v1.8.1 promoted, v1.8.4 _extra write 제거) |
 | `browser_tool_enabled` | `boolean` | low | low | **JSON 유지** (UI 토글 미구현) |
-| `checklist` | `PlanItem[]` (recursive) | low (별도 테이블이 source of truth) | low | **JSON 유지** (재귀 array) |
+| ~~`checklist`~~ | (부재) | (해당 없음 — 테이블 source) | (해당 없음) | **v1.4.13 — 본디 부재 확정. contract guard test 로 명시.** |
 | `current_item_index` | `number \| undefined` | low | low | **JSON 유지** (optional) |
 
 **결론**: `plan.active` 는 Phase 1 promote 1순위. 다른 필드는 저빈도

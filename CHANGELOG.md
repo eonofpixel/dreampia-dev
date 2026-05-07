@@ -2,6 +2,51 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.4.13] — 2026-05-07
+
+**`_extra.plan.checklist[]` 비정규화 정리 — code reality alignment.**
+
+v1.4.12 와 동일 발견: v1.8.0 audit 가 "checklist 가 metadata 에 캐시"
+라고 추정했으나 실제 `MetadataExtra.plan` interface + `PlanExtraSchema`
+(zod) 모두 `checklist` 필드 부재. `plan_items` 테이블이 처음부터 단일
+source. `buildStoredMetadata` 직렬화 X. `assembleSession` 의
+`buildPlanState` 가 `loadPlanItems` 결과를 PlanState 의 runtime
+`checklist` 로 wrapping 하는 것은 *runtime view* 이지 metadata 직렬화
+와 별개.
+
+본 슬롯의 작업: 코드 변경 없음 + 명시 contract guard 추가 +
+audit 문서 정정. Codex Q11 #2 권고 ("write stop + ignore-on-read,
+N+1 강제 삭제 보류") 자연 충족.
+
+### Added
+- `tests/storage/extraSchemaContract.test.ts` — 신규 2 guard cases:
+  - "v1.4.13 — round-trip 후 _extra.plan 에 checklist 키 부재
+    (denorm guard)": 모든 fixture round-trip 후 `meta._extra.plan`
+    에 `checklist` property 부재 명시 검증.
+  - "v1.4.13 — strict schema 가 _extra.plan.checklist 가 들어오면
+    거부": `PlanExtraSchema` 의 `.strict()` 가 미등록 leaf 거부.
+
+### Changed
+- `docs/extra-namespace-audit.md` § 3.4: v1.4.13 정정 box 추가. `checklist`
+  row 도 ~~strikethrough~~ + "본디 부재 확정" 로 갱신. `active` row 의
+  권고는 v1.8.1 promoted + v1.8.4 _extra write 제거 진행 상태 명시.
+
+### 회귀
+- 0. typecheck clean.
+- baseline 2054/0 → 2056/0 (+2 신규 guard tests).
+
+### Down-grade 안전성
+v1.4.13 는 코드 변경 없음 — 모든 prior 버전과 binary-compatible.
+Legacy DB 의 _extra 측에 checklist 가 있다면 production read path
+(`assembleSession` 의 `JSON.parse` cast) 는 tolerant — 무시. strict
+schema 는 contract test 에서만 사용 → production 영향 X.
+
+### Batch #4 마무리
+v1.8.4 + v1.4.12 + v1.4.13 + baseline-7-fix 4 슬롯 모두 완료.
+다음 배치는 `docs/v1.x-next-batch.md` 의 후속 후보 (v1.6.23+ chat
+virtualization, v1.7.30+ webhook listener, v1.7.31+ audit retention,
+v1.8.5+ unused field 추가 정리 등) 에서 선택.
+
 ## [1.4.12] — 2026-05-07
 
 **`_extra.permission.grants[]` 비정규화 정리 — code reality alignment.**
