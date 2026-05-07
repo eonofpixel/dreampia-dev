@@ -57,6 +57,27 @@ interface GrantTarget {
 }
 ```
 
+> **`GrantTarget` (저장형) ≠ `ResolvedTarget` / `PermissionTarget` (런타임형) — 의도적 분리.**
+>
+> Storage 측 `GrantTarget` (zod `GrantTargetSchema`, `src/types/permission.ts`)
+> 의 `kind:'global'` variant 는 **`value` 필드 없음** — "모든 곳" 의미가
+> shape 자체로 명시. 한편 런타임 `ResolvedTarget` (`src/permission/Targets.ts:17`)
+> + tool 측 `PermissionTarget` 은 `value: string` 을 **필수** 로 가지며,
+> `kind:'global'` 시 빈 문자열 사용. 이는 ResolvedTarget 이 tool 호출 시점에
+> 해석된 *실제* target (path/url/domain 의 구체 값) 을 담는 vehicle 이라
+> uniform 한 `value` 슬롯이 더 편함. v1.1.0 도입 시 의도적 결정.
+>
+> 두 shape 변환은 `resolvedToGrantTarget()` adapter 가 담당
+> (`src/permission/Targets.ts`). 새 callsite 가 grant 를 저장할 땐 반드시
+> adapter 통과 — 직접 `{ kind:'global', value:'' }` 를 `GrantTarget` 으로
+> 캐스팅하면 zod parse 시 strip 되어 통과하지만 의미상 잘못됨.
+>
+> 회귀 가드: `tests/storage/permissionGrants.idText.test.ts` 의 fixture 는
+> `{ kind:'global' }` (no value) 사용 — canonical storage shape.
+>
+> *근거*: Codex Q13 외부 검토 (2026-05-07) + AI slop cleaner 종료 보고
+> (false-completion 위험 정정).
+
 ### 예시
 
 ```json
