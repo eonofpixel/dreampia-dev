@@ -60,6 +60,13 @@ vi.mock('electron', () => {
     dialog: {
       showOpenDialog: vi.fn(async () => nextDialogResult),
     },
+    // v1.0.4 의 workspace/pick-folder handler 가
+    // `BrowserWindow.fromWebContents(event.sender)` 로 dialog 의 parent window
+    // 를 결정. test 의 fake event 는 sender 를 안 넘기므로 null 반환이면 충분
+    // — handler 가 그 경우 dialog.showOpenDialog(opts) 단일 호출로 fallback.
+    BrowserWindow: {
+      fromWebContents: vi.fn(() => null),
+    },
   };
 });
 

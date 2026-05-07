@@ -2,6 +2,172 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.8.5] — 2026-05-07
+
+**`package.json` version monotonic 정합 — Batch #4 hotfix.**
+
+Codex Q12 PR review (PR #6) 이 식별한 유일한 머지 blocker: v1.8.4 → v1.4.12 → v1.4.13 진행 시 track-슬롯 명명 컨벤션을 따라 `package.json` 도 1.8.4 → 1.4.12 → 1.4.13 으로 함께 다운그레이드 했음. SemVer 측면에서 monotonic 위반 — auto-update / electron-updater / npm dist-tag 경로에서 즉시 위험.
+
+CHANGELOG 의 슬롯 명명 (v1.4.12, v1.4.13) 은 트랙-기반 컨벤션 유지 (코드는 정확히 v1.4 트랙 영역). `package.json.version` 만 monotonic max 인 1.8.5 로 회복 — Batch #4 종결 marker.
+
+### Changed
+- `package.json:version`: `1.4.13` → `1.8.5`.
+
+### 정책 명시
+- 향후 cross-track 슬롯 (예: 1.7.x 트랙 작업이 1.8.x land 후 진행) 시
+  CHANGELOG 슬롯 명은 트랙 기반 유지하되 `package.json.version` 은
+  monotonic 유지 (`Math.max(prev, slot, +1)` 보다 높은 트랙 marker 사용).
+- 본 정책은 별도 release-checklist.md 후속 PR 에서 정식화.
+
+### 회귀
+- 0. 코드 변경 없음 — version string 1자리.
+- baseline 2056/0 유지.
+
+## [1.4.13] — 2026-05-07
+
+**`_extra.plan.checklist[]` 비정규화 정리 — code reality alignment.**
+
+v1.4.12 와 동일 발견: v1.8.0 audit 가 "checklist 가 metadata 에 캐시"
+라고 추정했으나 실제 `MetadataExtra.plan` interface + `PlanExtraSchema`
+(zod) 모두 `checklist` 필드 부재. `plan_items` 테이블이 처음부터 단일
+source. `buildStoredMetadata` 직렬화 X. `assembleSession` 의
+`buildPlanState` 가 `loadPlanItems` 결과를 PlanState 의 runtime
+`checklist` 로 wrapping 하는 것은 *runtime view* 이지 metadata 직렬화
+와 별개.
+
+본 슬롯의 작업: 코드 변경 없음 + 명시 contract guard 추가 +
+audit 문서 정정. Codex Q11 #2 권고 ("write stop + ignore-on-read,
+N+1 강제 삭제 보류") 자연 충족.
+
+### Added
+- `tests/storage/extraSchemaContract.test.ts` — 신규 2 guard cases:
+  - "v1.4.13 — round-trip 후 _extra.plan 에 checklist 키 부재
+    (denorm guard)": 모든 fixture round-trip 후 `meta._extra.plan`
+    에 `checklist` property 부재 명시 검증.
+  - "v1.4.13 — strict schema 가 _extra.plan.checklist 가 들어오면
+    거부": `PlanExtraSchema` 의 `.strict()` 가 미등록 leaf 거부.
+
+### Changed
+- `docs/extra-namespace-audit.md` § 3.4: v1.4.13 정정 box 추가. `checklist`
+  row 도 ~~strikethrough~~ + "본디 부재 확정" 로 갱신. `active` row 의
+  권고는 v1.8.1 promoted + v1.8.4 _extra write 제거 진행 상태 명시.
+
+### 회귀
+- 0. typecheck clean.
+- baseline 2054/0 → 2056/0 (+2 신규 guard tests).
+
+### Down-grade 안전성
+v1.4.13 는 코드 변경 없음 — 모든 prior 버전과 binary-compatible.
+Legacy DB 의 _extra 측에 checklist 가 있다면 production read path
+(`assembleSession` 의 `JSON.parse` cast) 는 tolerant — 무시. strict
+schema 는 contract test 에서만 사용 → production 영향 X.
+
+### Batch #4 마무리
+v1.8.4 + v1.4.12 + v1.4.13 + baseline-7-fix 4 슬롯 모두 완료.
+다음 배치는 `docs/v1.x-next-batch.md` 의 후속 후보 (v1.6.23+ chat
+virtualization, v1.7.30+ webhook listener, v1.7.31+ audit retention,
+v1.8.5+ unused field 추가 정리 등) 에서 선택.
+
+## [1.4.12] — 2026-05-07
+
+**`_extra.permission.grants[]` 비정규화 정리 — code reality alignment.**
+
+v1.8.0 audit 가 "metadata 에 grants 캐시" 라고 추정했으나 실제 코드는
+`MetadataExtra.permission` interface + `PermissionExtraSchema` (zod)
+모두 `grants` 필드를 한 번도 포함한 적 없음. `permission_grants`
+테이블이 처음부터 단일 source. `buildStoredMetadata` 도 직렬화 X,
+`assembleSession` 은 `loadGrants` table 만 사용.
+
+본 슬롯의 작업: 코드 변경 없음 + 명시 contract guard 추가 +
+audit 문서 정정. Codex Q11 #2 권고 ("write stop + ignore-on-read,
+N+1 강제 삭제 보류") 자연 충족.
+
+### Added
+- `tests/storage/extraSchemaContract.test.ts` — 신규 2 guard cases:
+  - "v1.4.12 — round-trip 후 _extra.permission 에 grants 키 부재
+    (denorm guard)": 모든 fixture round-trip 후 `meta._extra.permission`
+    에 `grants` property 부재 명시 검증. fixture 마다 fresh
+    `SessionStore(':memory:')` 로 grant id 충돌 회피.
+  - "v1.4.12 — strict schema 가 _extra.permission.grants 가 들어오면
+    거부": legacy/regression 시나리오 시 `MetadataExtraSchema.safeParse`
+    가 fail. `PermissionExtraSchema` 의 `.strict()` 가 미등록 leaf 거부.
+
+### Changed
+- `docs/extra-namespace-audit.md` § 3.5: v1.4.12 정정 box 추가.
+  audit 의 "metadata 캐시" 가설을 v1.4.11 시점 추정으로 명기 + 실제
+  코드는 처음부터 clean 명시. 표의 `grants` row 도 ~~strikethrough~~ +
+  "본디 부재 확정" 로 갱신.
+
+### 회귀
+- 0. typecheck clean.
+- baseline 2052/0 → 2054/0 (+2 신규 guard tests).
+
+### Down-grade 안전성
+v1.4.12 는 코드 변경 없음 — 모든 prior 버전과 binary-compatible.
+Legacy DB 의 _extra 측에 grants 가 있다면 production read path
+(`assembleSession` 의 `JSON.parse` cast) 는 tolerant — 무시. strict
+schema 는 contract test 에서만 사용 → production 영향 X.
+
+## [1.8.4] — 2026-05-07
+
+**`_extra` write 제거 — column transition 마무리.**
+
+v1.8.1 dual-write → v1.8.3 column-only read → v1.8.4 column-only write.
+`buildStoredMetadata` 가 `_extra.permission.default_level` /
+`_extra.plan.active` 직렬화 중단. `updatePermission` 의 metadata_json
+patch 도 제거 (v1.8.3 부터 read 가 column 만 사용 → 해당 patch 는
+dead-write 였음 — Codex Q11 blind spot 정정).
+
+`MetadataExtraSchema` + `MetadataExtra` interface 의 두 필드는
+**legacy optional** 로 유지 — 즉시 제거 X. 기존 row 의 _extra 측 값을
+schema 가 거부하지 않도록 (Codex Q11 권고 #5: schema 변경은 안전 우선).
+
+### Changed
+- `src/storage/SessionStore.ts:buildStoredMetadata`:
+  - `_extra.plan.active` 직렬화 제거 (`browser_tool_enabled` /
+    `current_item_index` 만 유지).
+  - `_extra.permission.default_level` 직렬화 제거 (`last_denied` /
+    `temporarily_blocked_capabilities` 만 유지).
+- `src/storage/SessionStore.ts:updatePermission`:
+  - metadata_json patch 제거. SQL 이 `permission_default_level` +
+    `updated_at` 만 갱신.
+  - 직전 v1.8.1 의 dual-write SQL ("SET metadata_json = ?,
+    permission_default_level = ?, updated_at = ?") → "SET
+    permission_default_level = ?, updated_at = ?".
+- `src/storage/SessionStore.ts:interface MetadataExtra`:
+  - `plan.active` → optional (`active?: boolean`).
+  - `permission.default_level` → optional.
+- `src/storage/metadataExtraSchema.ts`:
+  - `PlanExtraSchema.active` → `.optional()`.
+  - `PermissionExtraSchema.default_level` → `.optional()`.
+
+### Tests
+기존 `tests/storage/extraColumnPromote.test.ts` 의 v1.8.1 dual-write
+케이스 3개를 v1.8.4 시멘틱으로 변경:
+- "dual-write — INSERT 시 column 과 metadata_json 양쪽에 값" →
+  "v1.8.4 — INSERT 시 column 만 채워지고 _extra 측 두 필드 부재".
+  `meta._extra.{permission.default_level, plan.active}` 가 undefined
+  검증 + 다른 _extra 필드는 유지 검증.
+- "updatePermission — column 도 갱신" → "v1.8.4 — updatePermission 은
+  column 만 갱신, metadata_json 무영향". 호출 전후 `metadata_json`
+  byte-equal 검증.
+- "backfill SQL — pre-existing _extra row" → 동일 의도이지만 setup 변경.
+  `createSession` 이 더이상 _extra 에 값을 안 쓰므로 raw UPDATE 로
+  legacy `_extra.permission.default_level` / `_extra.plan.active` 강제
+  주입 후 마이그레이션 015 backfill SQL 실행 → column 채워짐 검증.
+  마이그레이션 호환성 자체는 영향 없음.
+
+### 회귀
+- 0. typecheck clean.
+- baseline 2052/0 → 2052/0 (테스트 시멘틱만 갱신, 신규/제거 없음).
+
+### Down-grade 안전성 (Codex Q11 #3)
+v1.8.4 이후 신규 row 는 `_extra.permission.default_level` /
+`_extra.plan.active` 부재. v1.8.0 이전 binary 로 down-grade 시
+column 도 mig 015 미적용으로 부재 → 두 필드가 양쪽에서 모두 사라짐
+(데이터 부분 손실 가능). 본 batch 는 down-grade 를 지원 범위에서
+제외 — Codex 권고 "근본 해결이 아니라 지원 범위 문제".
+
 ## [1.8.3] — 2026-05-07
 
 **`_extra` dual-write 정리 — column 만 source of truth.**
