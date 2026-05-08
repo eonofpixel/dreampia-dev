@@ -233,8 +233,7 @@ export class CliProvider implements StreamingProvider {
     const onTimeout = (): void => {
       timedOut = true;
       const ms = this.opts.timeout_ms;
-      errorState.message =
-        `${errorState.message ?? ''}CLI timeout exceeded (${ms}ms)`.trim();
+      errorState.message = `${errorState.message ?? ''}CLI timeout exceeded (${ms}ms)`.trim();
       try {
         child.kill('SIGTERM');
       } catch {
