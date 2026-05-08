@@ -23,15 +23,8 @@
 import { join } from 'node:path';
 import type { LoadedPlugin } from './PluginManager';
 import type { PluginCapabilityGate } from './PluginCapabilityGate';
-import type {
-  PluginHookContext,
-  PluginHookAuditEvent,
-} from './PluginHookRunner';
-import type {
-  WorkerRequest,
-  WorkerEvent,
-  WorkerHookResult,
-} from './pluginWorkerEntry';
+import type { PluginHookContext, PluginHookAuditEvent } from './PluginHookRunner';
+import type { WorkerRequest, WorkerEvent, WorkerHookResult } from './pluginWorkerEntry';
 
 // ────────────────────────────────────────────────────────────
 // Worker handle — utility_process child 의 abstraction.

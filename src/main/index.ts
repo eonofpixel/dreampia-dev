@@ -448,7 +448,9 @@ app.whenReady().then(async () => {
   //   ADR-0003 가 v2.1.0 에서 default 전환 timeline 명시.
   const pluginIsolation = process.env.DREAMPIA_PLUGIN_ISOLATION;
   const useUtilityProcess = pluginIsolation === 'utility_process';
-  const pluginAuditSink = (event: import('./plugins/PluginHookRunner').PluginHookAuditEvent): void => {
+  const pluginAuditSink = (
+    event: import('./plugins/PluginHookRunner').PluginHookAuditEvent
+  ): void => {
     auditLogStore?.recordEvent({
       timestamp: event.timestamp,
       session_id: 'plugin-hook',
