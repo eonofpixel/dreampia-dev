@@ -1619,23 +1619,26 @@ function registerPermissionHandlers(
     }
   });
 
-  ipcMain.handle('permission/grants/revoke', (event, raw: unknown): Result<{ revoked: boolean }> => {
-    try {
-      const args = PermissionGrantsRevokeArgsSchema.parse(raw);
-      if (store === undefined) return ok({ revoked: false });
-      // v1.1.6-prep (SEC audit C1): cross-window grant tampering 차단.
-      // grant 의 session_id 를 lookup 후 ownership check.
-      const ownerSessionId = store.getGrantSessionId(args.grant_id);
-      if (ownerSessionId === null) return ok({ revoked: false });
-      if (!isSessionOwner(election, event, ownerSessionId)) {
-        return ok({ revoked: false });
+  ipcMain.handle(
+    'permission/grants/revoke',
+    (event, raw: unknown): Result<{ revoked: boolean }> => {
+      try {
+        const args = PermissionGrantsRevokeArgsSchema.parse(raw);
+        if (store === undefined) return ok({ revoked: false });
+        // v1.1.6-prep (SEC audit C1): cross-window grant tampering 차단.
+        // grant 의 session_id 를 lookup 후 ownership check.
+        const ownerSessionId = store.getGrantSessionId(args.grant_id);
+        if (ownerSessionId === null) return ok({ revoked: false });
+        if (!isSessionOwner(election, event, ownerSessionId)) {
+          return ok({ revoked: false });
+        }
+        const revoked = store.revokePermissionGrant(args.grant_id, new Date().toISOString());
+        return ok({ revoked });
+      } catch (err) {
+        return fail(err);
       }
-      const revoked = store.revokePermissionGrant(args.grant_id, new Date().toISOString());
-      return ok({ revoked });
-    } catch (err) {
-      return fail(err);
     }
-  });
+  );
 }
 
 // ────────────────────────────────────────────────────────────

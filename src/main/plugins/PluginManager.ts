@@ -150,11 +150,7 @@ export class PluginManager {
     else this.trustedNames.delete(pluginName);
     try {
       const trustPath = join(this.rootDir, TRUST_FILE);
-      const payload = JSON.stringify(
-        { trusted: Array.from(this.trustedNames).sort() },
-        null,
-        2
-      );
+      const payload = JSON.stringify({ trusted: Array.from(this.trustedNames).sort() }, null, 2);
       writeFileSync(trustPath, payload, 'utf-8');
     } catch (err) {
       console.error(`[PluginManager] trust persist failed: ${(err as Error).message}`);

@@ -52,11 +52,7 @@ export interface PluginHookRunnerOptions {
 
 export interface PluginHookAuditEvent {
   timestamp: string;
-  event:
-    | 'plugin.hook_ok'
-    | 'plugin.hook_error'
-    | 'plugin.hook_timeout'
-    | 'plugin.hook_blocked';
+  event: 'plugin.hook_ok' | 'plugin.hook_error' | 'plugin.hook_timeout' | 'plugin.hook_blocked';
   plugin_name: string;
   hook: 'pre_turn' | 'post_turn';
   duration_ms: number;
