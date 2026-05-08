@@ -41,6 +41,7 @@
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:report": "playwright show-report playwright-report",
     "diagnose": "node scripts/dreampia-diagnose.cjs",
+    "db:migrate-down": "node scripts/db-migrate-down.cjs",
     "icons:generate": "node scripts/generate-icons.cjs"
   },
   "dependencies": {
