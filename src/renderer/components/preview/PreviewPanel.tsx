@@ -303,47 +303,50 @@ function PreviewTabs({
 }: PreviewTabsProps): React.JSX.Element {
   const t = useT();
   return (
-    <div
-      className="flex h-9 items-center border-b border-border-primary bg-bg-secondary"
-      role="tablist"
-    >
-      {tabs.map((tab) => {
-        const isActive = tab.tab_id === activeTabId;
-        return (
-          <div
-            key={tab.tab_id}
-            role="tab"
-            aria-selected={isActive}
-            data-active={isActive}
-            className="flex items-center gap-1 border-r border-border-primary pl-3 pr-1 py-1.5 text-xs hover:bg-bg-tertiary data-[active=true]:bg-bg-primary"
-          >
-            <button
-              type="button"
-              onClick={() => onSelect(tab.tab_id)}
-              className="max-w-[140px] truncate"
-              title={tab.url}
-              aria-label={t('preview.tabs.select_aria', {
-                title: tab.title || t('preview.tabs.untitled'),
-              })}
+    // v1.1.7 (a11y) — outer container 는 layout 만. tablist role 은 안쪽 div
+    // 만 carry — WAI-ARIA 명세: tablist 의 required children 은 role=tab only.
+    // 이전엔 같은 element 가 role=tablist + new-tab button 자식 → axe critical
+    // (aria-required-children). 새 탭 button 을 tablist 형제로 분리.
+    <div className="flex h-9 items-center border-b border-border-primary bg-bg-secondary">
+      <div role="tablist" className="flex items-center">
+        {tabs.map((tab) => {
+          const isActive = tab.tab_id === activeTabId;
+          return (
+            <div
+              key={tab.tab_id}
+              role="tab"
+              aria-selected={isActive}
+              data-active={isActive}
+              className="flex items-center gap-1 border-r border-border-primary pl-3 pr-1 py-1.5 text-xs hover:bg-bg-tertiary data-[active=true]:bg-bg-primary"
             >
-              {tab.title || t('preview.tabs.untitled')}
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClose(tab.tab_id);
-              }}
-              aria-label={t('preview.tabs.close_aria', {
-                title: tab.title || t('preview.tabs.untitled'),
-              })}
-              className="rounded p-0.5 text-text-tertiary hover:bg-bg-primary hover:text-text-primary"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        );
-      })}
+              <button
+                type="button"
+                onClick={() => onSelect(tab.tab_id)}
+                className="max-w-[140px] truncate"
+                title={tab.url}
+                aria-label={t('preview.tabs.select_aria', {
+                  title: tab.title || t('preview.tabs.untitled'),
+                })}
+              >
+                {tab.title || t('preview.tabs.untitled')}
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose(tab.tab_id);
+                }}
+                aria-label={t('preview.tabs.close_aria', {
+                  title: tab.title || t('preview.tabs.untitled'),
+                })}
+                className="rounded p-0.5 text-text-tertiary hover:bg-bg-primary hover:text-text-primary"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
       <button
         type="button"
         onClick={onNewTab}

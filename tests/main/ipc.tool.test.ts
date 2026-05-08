@@ -73,15 +73,27 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
   return (await handler(evt, ...args)) as T;
 }
 
+// v1.1.4 — cross-origin 시나리오. event.sender.id 를 명시적으로 다른 값으로
+// 지정해 cancel IPC 가 owner 와 다른 webContents 에서 호출되는 상황 재현.
+async function callAs<T>(senderId: number, channel: string, ...args: unknown[]): Promise<T> {
+  const handler = handlers.get(channel);
+  if (handler === undefined) {
+    throw new Error(`no handler registered for ${channel}`);
+  }
+  const altEvt = { sender: { id: senderId } } as unknown;
+  return (await handler(altEvt, ...args)) as T;
+}
+
 describe('IPC tool handlers', () => {
   let session: Session;
+  let queue: ToolQueue;
 
   beforeEach(() => {
     handlers.clear();
     session = loadSession();
     const registry = new ToolRegistry();
     registry.register(makeTool());
-    const queue = new ToolQueue(registry, () => session);
+    queue = new ToolQueue(registry, () => session);
     registerIpcHandlers(stubApp, undefined, undefined, undefined, undefined, {
       registry,
       queue,
@@ -125,5 +137,57 @@ describe('IPC tool handlers', () => {
       id: 'missing-required-fields',
     });
     expect(result.ok).toBe(false);
+  });
+
+  // v1.1.4 — Codex Q9 deferred. tool/cancel-* IPC 가 event.sender.id 를
+  // queue.cancelCall/cancelTurn 의 requesterWebContentsId 인자로 forward 하는지
+  // IPC layer 에서 검증. queue 자체의 owner check 는 Queue.cancel-origin.test.ts
+  // 가 cover — 본 케이스는 IPC plumbing.
+  describe('tool/cancel-* IPC origin forwarding (Codex Q9)', () => {
+    it('tool/cancel-call: event.sender.id 가 queue.cancelCall 3rd arg 로 전달', async () => {
+      const spy = vi.spyOn(queue, 'cancelCall').mockReturnValue(true);
+      await callAs<Result<boolean>>(
+        42,
+        'tool/cancel-call',
+        '019d0003-0000-7000-8000-0000000000aa',
+        'user_cancelled'
+      );
+      expect(spy).toHaveBeenCalledWith(
+        '019d0003-0000-7000-8000-0000000000aa',
+        'user_cancelled',
+        42
+      );
+    });
+
+    it('tool/cancel-turn: event.sender.id 가 queue.cancelTurn 3rd arg 로 전달', async () => {
+      const spy = vi.spyOn(queue, 'cancelTurn').mockReturnValue(0);
+      await callAs<Result<number>>(
+        99,
+        'tool/cancel-turn',
+        '019d0003-0000-7000-8000-0000000000bb',
+        'user_cancelled'
+      );
+      expect(spy).toHaveBeenCalledWith(
+        '019d0003-0000-7000-8000-0000000000bb',
+        'user_cancelled',
+        99
+      );
+    });
+
+    it('tool/cancel-call: cross-origin 거절은 queue 가 false 반환 → IPC 도 ok(false)', async () => {
+      // queue.cancelCall 이 owner mismatch 시 false 반환하는 것을 그대로
+      // surface — 핸들러가 false 를 throw 로 바꾸지 않음 (renderer 가 정책
+      // 결과로 인지).
+      vi.spyOn(queue, 'cancelCall').mockReturnValue(false);
+      const result = await callAs<Result<boolean>>(
+        22,
+        'tool/cancel-call',
+        '019d0003-0000-7000-8000-0000000000cc',
+        'attack'
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toBe(false);
+    });
   });
 });

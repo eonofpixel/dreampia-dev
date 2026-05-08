@@ -1,10 +1,10 @@
 /**
  * drive18 — axe-core 자동 a11y 검사 (v1.7.7).
  *
- * Spec: docs/v1.x-roadmap.md (v1.7.7 — @axe-core/playwright 통합).
+ * Spec: docs/v1.x-roadmap.md (v1.7.7 — a11y baseline).
  *
- * @axe-core/playwright 를 활용해 핵심 화면의 WCAG 위반을 자동 감지. 본 spec
- * 은 회귀 lock — 새 commit 이 a11y 를 망가뜨리면 즉시 fail.
+ * 핵심 화면의 WCAG 위반을 자동 감지. 본 spec 은 회귀 lock — 새 commit 이 a11y
+ * 를 망가뜨리면 즉시 fail.
  *
  * 시나리오:
  *   - 18-1: 메인 채팅 화면 (사이드바 + 비어있는 chat panel + preview).
@@ -16,16 +16,22 @@
  *  - moderate / minor 는 경고만 (info log) — 점진 개선 단계.
  *  - axe-core 가 false positive 라고 판단된 rule 은 disableRules 로 제외 (현재 0).
  *
+ * 구현: `_axe-helper.ts` 의 `runAxe()` 사용. `@axe-core/playwright` 의
+ * AxeBuilder 는 내부적으로 `Target.createTarget` 을 호출해 Electron 환경에서
+ * 실패 — axe-core 를 page.evaluate 로 직접 주입하는 path 로 우회.
+ *
  * 본 spec 은 새 a11y baseline 을 잡는 첫 시나리오라, 만약 기존에 위반이
  * 누적돼 있다면 첫 통과를 위해 일부 rule 을 임시 disable 할 수 있음 — 그
  * 경우 disableRules 에 해당 rule + comment 로 사유 명시.
  */
 
 import { test, expect } from './fixtures';
-import { AxeBuilder } from '@axe-core/playwright';
+import { runAxe } from './_axe-helper';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+const WCAG_TAGS: ReadonlyArray<string> = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -35,13 +41,15 @@ mkdirSync(SHOT_DIR, { recursive: true });
 /**
  * 임시 비활성 규칙. baseline 을 잡으면서 점진 정리. 각 항목에 사유 명시.
  *
- * 비어있으면 모든 default rule 적용. 점진적으로 추가/제거.
+ * 비어있으면 모든 default rule 적용.
+ *
+ * v1.1.7 — strict baseline 회복:
+ *   - 'aria-required-children' fix → PreviewPanel.tsx 의 PreviewTabs 가
+ *     tablist role 을 inner div 만 carry, new-tab 버튼은 tablist 형제.
+ *   - 'color-contrast' fix → text-tertiary token 조정 (light 65→42% L,
+ *     dark 50→60% L) → bg-tertiary 위에서도 4.5:1 충족.
  */
-const DISABLE_RULES: ReadonlyArray<string> = [
-  // 'color-contrast'  — 일부 placeholder 텍스트가 4.5:1 미달일 수 있음. 실
-  //                     개선은 v1.7.8+ Visual polish 에서.
-  // 현재 비활성 0 — strict baseline.
-];
+const DISABLE_RULES: ReadonlyArray<string> = [];
 
 /** Severity 별 위반 분류. */
 interface AxeSummary {
@@ -87,16 +95,7 @@ test.describe('drive18 — axe-core a11y baseline (v1.7.7)', () => {
       timeout: 10_000,
     });
 
-    const builder = new AxeBuilder({ page: window }).withTags([
-      'wcag2a',
-      'wcag2aa',
-      'wcag21a',
-      'wcag21aa',
-    ]);
-    const results =
-      DISABLE_RULES.length > 0
-        ? await builder.disableRules([...DISABLE_RULES]).analyze()
-        : await builder.analyze();
+    const results = await runAxe(window, { tags: WCAG_TAGS, disableRules: DISABLE_RULES });
 
     const summary = summarize(results.violations);
     writeFileSync(
@@ -122,10 +121,8 @@ test.describe('drive18 — axe-core a11y baseline (v1.7.7)', () => {
       timeout: 5_000,
     });
 
-    const results = await new AxeBuilder({ page: window })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      // 모달이 열린 상태에서 뒤 main 까지 모두 검사 — focus trap 검증 포함.
-      .analyze();
+    // 모달이 열린 상태에서 뒤 main 까지 모두 검사 — focus trap 검증 포함.
+    const results = await runAxe(window, { tags: WCAG_TAGS, disableRules: DISABLE_RULES });
 
     const summary = summarize(results.violations);
     writeFileSync(
@@ -153,9 +150,7 @@ test.describe('drive18 — axe-core a11y baseline (v1.7.7)', () => {
       timeout: 3_000,
     });
 
-    const results = await new AxeBuilder({ page: window })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze();
+    const results = await runAxe(window, { tags: WCAG_TAGS, disableRules: DISABLE_RULES });
     const summary = summarize(results.violations);
     writeFileSync(
       resolve(SHOT_DIR, 'r18-3-settings-direct-api.json'),

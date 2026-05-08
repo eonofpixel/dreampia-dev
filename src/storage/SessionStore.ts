@@ -777,6 +777,19 @@ export class SessionStore {
    * @param grantId permission_grants.target_json 의 id 필드 (UUID).
    * @returns true 면 1개 row update, false 면 미발견.
    */
+
+  /**
+   * v1.1.6-prep (Codex Q11 / SEC audit C1): grant 의 owner session_id 조회.
+   * grants/revoke IPC 핸들러가 ownership check 를 위해 사용. 미존재 시 null.
+   */
+  getGrantSessionId(grantId: string): import('@/types').SessionId | null {
+    const row = this.db
+      .prepare(`SELECT session_id FROM permission_grants WHERE id = ?`)
+      .get(grantId) as { session_id?: string } | undefined;
+    if (row === undefined || row.session_id === undefined) return null;
+    return row.session_id as import('@/types').SessionId;
+  }
+
   revokePermissionGrant(grantId: string, revokedAt: string): boolean {
     // v1.4.1 (B-2) — id 가 PK 로 승격 → `WHERE id = ?` 직접 매칭. 이전엔
     // json_extract(target_json, '$.id') 였음. 동일 결과 + 인덱스 활용.

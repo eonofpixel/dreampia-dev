@@ -22,9 +22,11 @@
  *     audit log. 다른 plugin 의 실행 차단 X.
  */
 
-import { promises as fsp } from 'node:fs';
+import { promises as fsp, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+
+const TRUST_FILE = '.trust.json';
 
 export interface PluginManifest {
   /** Plugin 식별자 — 디렉토리 이름과 일치 권고. */
@@ -33,12 +35,21 @@ export interface PluginManifest {
   version: string;
   /** 사용자 표시용. */
   description?: string;
+  /** v1.1.6 (D1): trust-on-install 검토용. 사용자가 install 시 author 확인. */
+  author?: string;
+  /** v1.1.6 (D1): SPDX license id (e.g., "MIT", "Apache-2.0"). */
+  license?: string;
+  /** v1.1.6 (D1): plugin source / docs url. */
+  homepage?: string;
   /**
    * 본 plugin 이 등록할 hook 목록. 본 MVP 에서는 manifest 만 검증, 실제
    * 호출은 v1.1.15+ 에서.
    *
    * Hook entry 는 manifest 의 'hooks' 필드 키 (pre_turn / post_turn) +
    * value (relative path to JS file from plugin dir).
+   *
+   * v1.1.6 (SEC audit C): path 는 plugin dir 안에 contained 되어야 함 —
+   * `..` / 절대경로 / drive letter 거절 (validateManifest 가 enforce).
    */
   hooks?: {
     pre_turn?: string;
@@ -55,6 +66,13 @@ export interface LoadedPlugin {
   /** Plugin manifest 가 위치한 디렉토리 절대경로. */
   dir: string;
   manifest: PluginManifest;
+  /**
+   * v1.1.6 (D1 — trust-on-install): 사용자가 install 시 trust 부여 여부.
+   * `<rootDir>/.trust.json` 의 plugin name 목록으로 영속. untrusted plugin 은
+   * scan 결과에 포함되지만 hook 실행 path 에서는 제외 — host 는 trusted 만
+   * runHook 으로 전달해야 함.
+   */
+  trusted: boolean;
 }
 
 export interface PluginLoadIssue {
@@ -85,6 +103,8 @@ export class PluginManager {
   private readonly rootDir: string;
   private readonly auditSink: (event: PluginAuditEvent) => void;
   private cache: { loaded: LoadedPlugin[]; issues: PluginLoadIssue[] } | null = null;
+  /** v1.1.6 (D1): 사용자가 명시적으로 trust 한 plugin name 들. */
+  private readonly trustedNames: Set<string> = new Set();
 
   constructor(options: PluginManagerOptions = {}) {
     this.rootDir = options.rootDir ?? join(homedir(), '.dreampia', 'plugins');
@@ -97,6 +117,54 @@ export class PluginManager {
           );
         }
       });
+    this.loadTrustSet();
+  }
+
+  /**
+   * v1.1.6 (D1): `<rootDir>/.trust.json` 에서 trusted plugin 목록 로드.
+   * 파일 미존재 / 손상 시 silent skip — 모든 plugin 이 untrusted 로 시작.
+   */
+  private loadTrustSet(): void {
+    try {
+      const trustPath = join(this.rootDir, TRUST_FILE);
+      if (!existsSync(trustPath)) return;
+      const raw = readFileSync(trustPath, 'utf-8');
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed === null || typeof parsed !== 'object') return;
+      const obj = parsed as Record<string, unknown>;
+      if (!Array.isArray(obj['trusted'])) return;
+      for (const n of obj['trusted']) {
+        if (typeof n === 'string' && n.length > 0) this.trustedNames.add(n);
+      }
+    } catch {
+      // 손상 / 권한 등 — silent skip.
+    }
+  }
+
+  /**
+   * v1.1.6 (D1): 사용자가 plugin 을 trust / untrust 처리. 즉시 file 영속 +
+   * in-memory cache 갱신. 파일 IO 실패 시 false 반환 (UI 가 toast).
+   */
+  setTrust(pluginName: string, trusted: boolean): boolean {
+    if (trusted) this.trustedNames.add(pluginName);
+    else this.trustedNames.delete(pluginName);
+    try {
+      const trustPath = join(this.rootDir, TRUST_FILE);
+      const payload = JSON.stringify({ trusted: Array.from(this.trustedNames).sort() }, null, 2);
+      writeFileSync(trustPath, payload, 'utf-8');
+    } catch (err) {
+      console.error(`[PluginManager] trust persist failed: ${(err as Error).message}`);
+      return false;
+    }
+    if (this.cache !== null) {
+      this.cache = {
+        loaded: this.cache.loaded.map((p) =>
+          p.manifest.name === pluginName ? { ...p, trusted } : p
+        ),
+        issues: this.cache.issues,
+      };
+    }
+    return true;
   }
 
   /**
@@ -174,7 +242,11 @@ export class PluginManager {
         continue;
       }
 
-      loaded.push({ dir, manifest: valid.manifest });
+      loaded.push({
+        dir,
+        manifest: valid.manifest,
+        trusted: this.trustedNames.has(valid.manifest.name),
+      });
       this.auditSink({
         timestamp: new Date().toISOString(),
         event: 'plugin.loaded',
@@ -219,10 +291,31 @@ function validateManifest(
     }
     const hooks = obj.hooks as Record<string, unknown>;
     for (const key of ['pre_turn', 'post_turn']) {
-      if (hooks[key] !== undefined && typeof hooks[key] !== 'string') {
+      const path = hooks[key];
+      if (path === undefined) continue;
+      if (typeof path !== 'string') {
         return { ok: false, reason: `'hooks.${key}' must be string (relative path)` };
       }
+      // v1.1.6 (SEC audit C): path traversal 차단. plugin dir 밖으로 나가는
+      // 경로는 거절. `..` 컴포넌트, 절대경로, drive letter 모두 차단.
+      if (
+        path.includes('..') ||
+        path.startsWith('/') ||
+        path.startsWith('\\') ||
+        /^[a-zA-Z]:/.test(path)
+      ) {
+        return { ok: false, reason: `'hooks.${key}' must be a relative path inside plugin dir` };
+      }
     }
+  }
+  if (obj.author !== undefined && typeof obj.author !== 'string') {
+    return { ok: false, reason: "'author' must be string" };
+  }
+  if (obj.license !== undefined && typeof obj.license !== 'string') {
+    return { ok: false, reason: "'license' must be string" };
+  }
+  if (obj.homepage !== undefined && typeof obj.homepage !== 'string') {
+    return { ok: false, reason: "'homepage' must be string" };
   }
   if (obj.capabilities !== undefined) {
     if (!Array.isArray(obj.capabilities)) {
@@ -239,6 +332,9 @@ function validateManifest(
     version: obj.version,
   };
   if (typeof obj.description === 'string') manifest.description = obj.description;
+  if (typeof obj.author === 'string') manifest.author = obj.author;
+  if (typeof obj.license === 'string') manifest.license = obj.license;
+  if (typeof obj.homepage === 'string') manifest.homepage = obj.homepage;
   if (obj.hooks !== undefined) manifest.hooks = obj.hooks as PluginManifest['hooks'];
   if (Array.isArray(obj.capabilities)) {
     manifest.capabilities = obj.capabilities as string[];

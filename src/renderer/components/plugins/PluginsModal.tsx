@@ -26,7 +26,7 @@ interface PluginManifestShape {
 }
 
 interface PluginListResult {
-  loaded: Array<{ dir: string; manifest: PluginManifestShape }>;
+  loaded: Array<{ dir: string; manifest: PluginManifestShape; trusted: boolean }>;
   issues: Array<{ path: string; reason: string }>;
   rootDir: string;
 }
@@ -70,6 +70,30 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
   useEffect(() => {
     if (open) void fetchList(false);
   }, [open, fetchList]);
+
+  // v1.1.6 (D1) — trust-on-install toggle. 사용자가 plugin 의 manifest +
+  // capabilities 를 검토 후 trust 부여. untrusted plugin 의 hook 은 host 가
+  // 실행 path 에서 제외.
+  const handleToggleTrust = useCallback(
+    async (name: string, nextTrusted: boolean): Promise<void> => {
+      const api = typeof window !== 'undefined' ? window.dreampia?.plugin : undefined;
+      if (api?.trust === undefined) {
+        setError(t('plugins.error.ipc_unavailable'));
+        return;
+      }
+      try {
+        const result = await api.trust(name, nextTrusted);
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        await fetchList(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [t, fetchList]
+  );
 
   if (!open) return null;
 
@@ -134,11 +158,39 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
                         className="rounded border border-border-primary bg-bg-secondary px-3 py-2"
                         data-testid="plugins-modal-loaded-item"
                       >
-                        <div className="flex items-baseline gap-2">
-                          <span className="font-mono text-sm font-semibold">{p.manifest.name}</span>
-                          <span className="font-mono text-[11px] text-text-tertiary">
-                            v{p.manifest.version}
-                          </span>
+                        <div className="flex items-baseline justify-between gap-2">
+                          <div className="flex items-baseline gap-2">
+                            <span className="font-mono text-sm font-semibold">
+                              {p.manifest.name}
+                            </span>
+                            <span className="font-mono text-[11px] text-text-tertiary">
+                              v{p.manifest.version}
+                            </span>
+                            <span
+                              className={
+                                p.trusted
+                                  ? 'rounded bg-emerald-900/30 px-1.5 py-0.5 text-[11px] text-emerald-400'
+                                  : 'rounded bg-yellow-900/30 px-1.5 py-0.5 text-[11px] text-yellow-400'
+                              }
+                              data-testid="plugin-trust-badge"
+                              data-trusted={p.trusted ? 'true' : 'false'}
+                            >
+                              {p.trusted
+                                ? t('plugins.modal.trust_badge_trusted')
+                                : t('plugins.modal.trust_badge_untrusted')}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => void handleToggleTrust(p.manifest.name, !p.trusted)}
+                            className="rounded border border-border-primary bg-bg-tertiary px-2 py-0.5 text-[11px] hover:bg-border-primary"
+                            data-testid="plugin-trust-toggle"
+                            data-plugin-name={p.manifest.name}
+                          >
+                            {p.trusted
+                              ? t('plugins.modal.untrust_button')
+                              : t('plugins.modal.trust_button')}
+                          </button>
                         </div>
                         {p.manifest.description !== undefined && (
                           <p className="mt-1 text-xs text-text-tertiary">

@@ -12,6 +12,7 @@
 
 import { useEffect, useRef } from 'react';
 import { ChatInput } from './ChatInput';
+import { EmptyState as SharedEmptyState } from '../empty/EmptyState';
 import type { ContentBlock, PermissionLevel, Session, Turn, ToolResultRef } from '@/types';
 import { EFFORT_LABELS_KO } from '@/types';
 import { FileReferenceChip } from './FileReferenceChip';
@@ -154,6 +155,13 @@ export interface ChatPanelProps {
   onOpenPlugins?: () => void;
   /** v1.6.22 — empty state CTA: SlashHelpModal 열기. 미지정 시 chip 숨김. */
   onOpenHelp?: () => void;
+  /**
+   * v1.1.4 — turn 영속화 신호. App 이 await persistTurn() 후 turn.id 를 누적
+   * 한 Set. MessagesArea/TurnDisplay 로 forward → `data-persisted="true"` 속성.
+   * e2e 가 SQLite write 완료 시점을 기다리는 데 사용. optional — 미지정 시
+   * 모든 turn 은 not persisted (외부 콜사이트 호환).
+   */
+  persistedTurnIds?: ReadonlySet<string>;
 }
 
 interface MessagesAreaProps {
@@ -181,6 +189,13 @@ interface MessagesAreaProps {
   onOpenAutomation?: () => void;
   onOpenPlugins?: () => void;
   onOpenHelp?: () => void;
+  /**
+   * v1.1.4 — turn 영속화 신호. App 이 await persistTurn() 후 turn.id 를 누적
+   * 한 Set. TurnDisplay 가 `data-persisted="true"` 로 노출. e2e (drive14-3
+   * 등) 가 SQLite write 완료 시점을 기다리는 데 사용. ChatPanel 외부 콜사이트
+   * 호환을 위해 optional — 미지정 시 모든 turn 은 not persisted.
+   */
+  persistedTurnIds?: ReadonlySet<string>;
 }
 
 export function ChatPanel({
@@ -217,10 +232,11 @@ export function ChatPanel({
   onOpenAutomation,
   onOpenPlugins,
   onOpenHelp,
+  persistedTurnIds,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
-      <main className="flex h-full flex-1 flex-col bg-bg-primary">
+      <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-bg-primary">
         {ipcUnavailable && <IpcUnavailableBanner />}
         <EmptyState />
       </main>
@@ -228,7 +244,7 @@ export function ChatPanel({
   }
 
   return (
-    <main className="flex h-full flex-1 flex-col bg-bg-primary">
+    <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-bg-primary">
       <ChatHeader
         session={session}
         cliStatus={cliStatus}
@@ -255,6 +271,7 @@ export function ChatPanel({
         {...(onOpenAutomation !== undefined && { onOpenAutomation })}
         {...(onOpenPlugins !== undefined && { onOpenPlugins })}
         {...(onOpenHelp !== undefined && { onOpenHelp })}
+        {...(persistedTurnIds !== undefined && { persistedTurnIds })}
       />
       <InputArea
         onSubmit={onSubmit}
@@ -307,6 +324,7 @@ function MessagesArea({
   onOpenAutomation,
   onOpenPlugins,
   onOpenHelp,
+  persistedTurnIds,
 }: MessagesAreaProps): React.JSX.Element {
   const t = useT();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -362,6 +380,7 @@ function MessagesArea({
               }
               onPickSession={onPickSession}
               {...(onForkAtTurn !== undefined && { onForkAtTurn })}
+              isPersisted={persistedTurnIds?.has(turn.id) === true}
             />
           ))}
         </div>
@@ -878,6 +897,12 @@ interface TurnDisplayProps {
    * v1.6.19 — turn footer 의 [🌿] 버튼 클릭. 미지정 시 버튼 미노출.
    */
   onForkAtTurn?: (turnId: string) => void;
+  /**
+   * v1.1.4 — 이 turn 이 SQLite 에 영속화되었는지. App.tsx 가 persistTurn()
+   * resolve 후 set. `data-persisted` DOM 속성으로 노출되어 e2e 가 race 없이
+   * SQLite 조회 시점을 기다리는 용도.
+   */
+  isPersisted?: boolean;
 }
 
 function TurnDisplay({
@@ -885,6 +910,7 @@ function TurnDisplay({
   getResult,
   onPickSession,
   onForkAtTurn,
+  isPersisted = false,
 }: TurnDisplayProps): React.JSX.Element | null {
   const t = useT();
   // tool 역할 턴은 렌더링하지 않음 — 결과는 어시스턴트 턴 내 인라인으로 표시
@@ -911,6 +937,7 @@ function TurnDisplay({
       data-testid={'turn-' + turn.role}
       data-status={turn.status}
       data-turn-id={turn.id}
+      data-persisted={isPersisted ? 'true' : 'false'}
     >
       <div
         className={
@@ -1005,12 +1032,14 @@ function TurnDisplay({
   );
 }
 
+// v1.1.7 — 통일된 EmptyState 컴포넌트 사용. 이전엔 ChatPanel 내부에 별도
+// emoji-only EmptyState 가 있어 Sidebar/Settings 등 다른 빈 상태와 paradigm
+// 불일치. 공유 EmptyState 로 통일 (icon + title + description).
 function EmptyState(): React.JSX.Element {
   const t = useT();
   return (
-    <div className="flex h-full flex-col items-center justify-center text-text-tertiary">
-      <div className="text-5xl">💬</div>
-      <p className="mt-4">{t('chat.empty.message')}</p>
+    <div className="flex h-full flex-col items-center justify-center">
+      <SharedEmptyState icon="💬" title={t('chat.empty.message')} />
     </div>
   );
 }

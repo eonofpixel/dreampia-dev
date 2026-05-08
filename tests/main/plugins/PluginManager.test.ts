@@ -165,4 +165,45 @@ describe('v1.1.14 — PluginManager.scan', () => {
     const mgr = makeManager('/custom/path');
     expect(mgr.getRootDir()).toBe('/custom/path');
   });
+
+  // v1.1.6 (D1) — trust-on-install 영속.
+  describe('trust state (D1)', () => {
+    it('새 manager — 모든 plugin 은 untrusted (default)', async () => {
+      writePlugin('p1', { name: 'p1', version: '0.1.0' });
+      const mgr = makeManager();
+      const result = await mgr.scan();
+      expect(result.loaded).toHaveLength(1);
+      expect(result.loaded[0]?.trusted).toBe(false);
+    });
+
+    it('setTrust(name, true) → 다음 scan 의 loaded.trusted = true', async () => {
+      writePlugin('p1', { name: 'p1', version: '0.1.0' });
+      const mgr = makeManager();
+      await mgr.scan();
+      mgr.setTrust('p1', true);
+      const result2 = await mgr.scan();
+      expect(result2.loaded[0]?.trusted).toBe(true);
+    });
+
+    it('setTrust 가 .trust.json 에 영속 → 새 manager 가 trust 로드', async () => {
+      writePlugin('p1', { name: 'p1', version: '0.1.0' });
+      const mgr1 = makeManager();
+      await mgr1.scan();
+      mgr1.setTrust('p1', true);
+      // 새 manager 인스턴스 → constructor 에서 .trust.json 로드.
+      const mgr2 = makeManager();
+      const result = await mgr2.scan();
+      expect(result.loaded[0]?.trusted).toBe(true);
+    });
+
+    it('setTrust(name, false) → trusted 해제', async () => {
+      writePlugin('p1', { name: 'p1', version: '0.1.0' });
+      const mgr = makeManager();
+      await mgr.scan();
+      mgr.setTrust('p1', true);
+      mgr.setTrust('p1', false);
+      const result = await mgr.scan();
+      expect(result.loaded[0]?.trusted).toBe(false);
+    });
+  });
 });

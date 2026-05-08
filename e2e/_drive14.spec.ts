@@ -137,6 +137,15 @@ test.describe('drive14 — Claude CLI tool_use round-trip (VCR)', () => {
       const toolCard = window.getByTestId('tool-call-card');
       await expect(toolCard).toBeVisible({ timeout: 15_000 });
 
+      // v1.1.4 — fire-and-forget persistTurn IIFE (App.tsx:handleStreamComplete)
+      // 와 test 사이 race 를 차단. assistant turn DOM 의 data-persisted='true'
+      // 는 App.tsx 가 await persistTurn() 이후 markTurnPersisted() 로 set.
+      await expect(window.getByTestId('turn-assistant').first()).toHaveAttribute(
+        'data-persisted',
+        'true',
+        { timeout: 10_000 }
+      );
+
       // session/list → 가장 최근 session 의 turns 에 tool_calls 가 있는지.
       // Playwright 의 evaluate 로 renderer 에서 IPC 호출.
       const tool_call_count = await window.evaluate(async () => {

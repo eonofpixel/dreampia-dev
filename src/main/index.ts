@@ -23,6 +23,7 @@ import { classifyUserDataConflict } from './workspaceConflict';
 import { IpcPermissionConfirmer } from './IpcPermissionConfirmer';
 import { PluginManager } from './plugins/PluginManager';
 import { PluginHookRunner } from './plugins/PluginHookRunner';
+import { PluginCapabilityGate } from './plugins/PluginCapabilityGate';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -211,7 +212,10 @@ function createMainWindow(): BrowserWindow {
     // TypeError: Object has been destroyed (실제 dev 실행 중 발견).
     const webContentsId = win.webContents.id;
     windowRuntimes.set(webContentsId, { election });
-    win.on('closed', () => {
+    let runtimeCleared = false;
+    const clearRuntime = (): void => {
+      if (runtimeCleared) return;
+      runtimeCleared = true;
       election.shutdown();
       windowRuntimes.delete(webContentsId);
       // v1.1.2 hotfix (Codex Q8): 닫힌 창의 in-memory permission grants 제거.
@@ -221,7 +225,12 @@ function createMainWindow(): BrowserWindow {
       if (mainWindow === win) {
         mainWindow = null;
       }
-    });
+    };
+    win.on('closed', clearRuntime);
+    // v1.1.6-prep (SEC audit M2): webContents 가 crash / replace 로 destroyed
+    // 되면 closed 가 안 발화. 두 경로 모두에서 cleanup 보장 — clearRuntime 은
+    // idempotent.
+    win.webContents.on('destroyed', clearRuntime);
   }
 
   return win;
@@ -388,8 +397,32 @@ app.whenReady().then(async () => {
   });
   void pluginManager.scan();
 
+  // v1.1.6 (D1) — capability gate. trust-on-install 모델의 보호 layer:
+  // plugin 의 hook 실행 전 manifest.capabilities 가 모두 승인 상태인지 확인.
+  // confirmer = IpcPermissionConfirmer (사용자 승인 modal). 'always' decision
+  // 만 storageDir 의 .granted.json 에 영속.
+  const pluginCapabilityGate = new PluginCapabilityGate({
+    confirmer: permissionConfirmer,
+    storageDir: path.join(app.getPath('userData'), 'plugin-grants'),
+    auditSink: (event) => {
+      auditLogStore?.recordEvent({
+        timestamp: event.timestamp,
+        session_id: 'plugin-loader',
+        event: event.event,
+        capability: event.capability,
+        target_json: JSON.stringify({ plugin: event.plugin_name }),
+        decision_reason: event.event === 'plugin.cap_granted' ? 'granted' : 'denied',
+        ...(event.event !== 'plugin.cap_granted' && {
+          outcome: 'denied',
+        }),
+      });
+    },
+  });
+
   // v1.6.5 — Plugin Hook runtime. ai/start-stream 의 pre/post_turn 호출용.
+  // v1.1.6 (D1): gate wired — manifest.capabilities 미승인 시 hook skip.
   pluginHookRunner = new PluginHookRunner({
+    gate: pluginCapabilityGate,
     auditSink: (event) => {
       auditLogStore?.recordEvent({
         timestamp: event.timestamp,
@@ -401,9 +434,19 @@ app.whenReady().then(async () => {
           hook: event.hook,
           duration_ms: event.duration_ms,
         }),
-        decision_reason: event.event === 'plugin.hook_ok' ? 'ok' : 'error',
+        decision_reason:
+          event.event === 'plugin.hook_ok'
+            ? 'ok'
+            : event.event === 'plugin.hook_blocked'
+              ? 'blocked'
+              : 'error',
         ...(event.event !== 'plugin.hook_ok' && {
-          outcome: event.event === 'plugin.hook_timeout' ? 'timeout' : 'error',
+          outcome:
+            event.event === 'plugin.hook_timeout'
+              ? 'timeout'
+              : event.event === 'plugin.hook_blocked'
+                ? 'denied'
+                : 'error',
           ...(event.error !== undefined && { error: event.error }),
         }),
       });
@@ -434,6 +477,25 @@ app.whenReady().then(async () => {
       ok: true,
       value: { ...result, rootDir: pluginManager.getRootDir() },
     };
+  });
+
+  // v1.1.6 (D1): plugin trust toggle. PluginsModal 의 [Trust] / [Untrust]
+  // 버튼이 호출. 영속은 PluginManager 가 .trust.json 에 write — 다음 부팅
+  // 시 자동 로드.
+  ipcMain.handle('plugin/trust', (_evt, args: unknown) => {
+    if (pluginManager === null) return { ok: false, error: 'plugin manager not initialized' };
+    if (typeof args !== 'object' || args === null) {
+      return { ok: false, error: 'args must be { name, trusted }' };
+    }
+    const obj = args as Record<string, unknown>;
+    if (typeof obj['name'] !== 'string' || obj['name'].length === 0) {
+      return { ok: false, error: "'name' must be non-empty string" };
+    }
+    if (typeof obj['trusted'] !== 'boolean') {
+      return { ok: false, error: "'trusted' must be boolean" };
+    }
+    const persisted = pluginManager.setTrust(obj['name'], obj['trusted']);
+    return { ok: true, value: { persisted } };
   });
 
   toolQueue = new ToolQueue(registry, (id) => sessionStore?.getSession(id) ?? undefined, {
@@ -565,7 +627,9 @@ app.whenReady().then(async () => {
     auditLogStore,
     {
       // v1.1.0 SEC-2 full: permission/* IPC handlers.
+      // v2.0 Phase A1 (L1): respond decision 도 audit_log 에 영속 (granted/denied).
       confirmer: permissionConfirmer,
+      ...(auditLogStore !== null && { audit: auditLogStore }),
     }
   );
   mainWindow = createMainWindow();

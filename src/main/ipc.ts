@@ -1101,12 +1101,12 @@ export function registerIpcHandlers(
   }
   if (browser) registerBrowserHandlers(browser);
   if (ai) registerAiHandlers(ai, usage);
-  if (tools) registerToolHandlers(tools);
+  if (tools) registerToolHandlers(tools, election);
   if (mcp) registerMcpHandlers(mcp);
   if (usage) registerUsageHandlers(usage);
   if (compare) registerCompareHandlers(compare);
   if (audit) registerAuditHandlers(audit);
-  if (permission) registerPermissionHandlers(permission, store);
+  if (permission) registerPermissionHandlers(permission, store, election);
   // v1.7.4 — Automation IPC. 부팅 시 1회 등록 (singleton instance).
   // v1.7.26 — audit store 를 전달해 automation events 가 DB 에 영구 저장됨.
   registerAutomationHandlers(audit);
@@ -1509,9 +1509,49 @@ function registerAutomationHandlers(audit?: AuditLogStore): void {
 export interface PermissionHandlerConfig {
   /** IpcPermissionConfirmer 인스턴스 — respond / listPending 위임. */
   confirmer: import('./IpcPermissionConfirmer').IpcPermissionConfirmer;
+  /**
+   * v2.0 Phase A1 (L1): permission/respond 결정을 audit_log 에 영속.
+   * 미주입 시 audit emit X — Queue 의 tool_use 측만 cover. 사용자 결정
+   * (grant/deny) 의 trace 가 누락. production 은 항상 주입 권장.
+   */
+  audit?: AuditLogStore;
 }
 
-function registerPermissionHandlers(cfg: PermissionHandlerConfig, store?: SessionStore): void {
+/**
+ * v1.1.6-prep (SEC audit C1): grants/list, grants/revoke, tool/execute 의
+ * ownership check. 다중-창 시나리오에서 다른 window 가 내 session 의 grants 를
+ * 조작/탈취하지 못하도록.
+ *
+ * 정책:
+ *  - election 미주입 (legacy/test): 통과 (security boundary = 호출자 책임).
+ *  - session 에 leader 가 election DB 에 없음 (= 단일-창 default — useLeaderElection
+ *    이 explicit acquire 안 한 일반 케이스): 통과. 이 앱 안의 어느 webContents 든
+ *    동등 권한 (security boundary = 이 Electron app process).
+ *  - leader 가 있고 호출자가 leader: 통과.
+ *  - leader 가 있고 호출자가 leader 아님: 거절. multi-window 에서 follower 창이
+ *    leader 의 grants 조작 차단.
+ */
+function isSessionOwner(
+  election: LockHandlerSource | undefined,
+  event: IpcMainInvokeEvent,
+  sessionId: SessionId
+): boolean {
+  if (election === undefined) return true;
+  try {
+    const resolved = resolveElection(election, event);
+    const leader = resolved.getLeader(sessionId);
+    if (leader === null) return true; // no leadership claimed — single-window or unowned
+    return resolved.isLeader(sessionId);
+  } catch {
+    return false;
+  }
+}
+
+function registerPermissionHandlers(
+  cfg: PermissionHandlerConfig,
+  store?: SessionStore,
+  election?: LockHandlerSource
+): void {
   ipcMain.handle('permission/respond', (event, raw: unknown): Result<{ matched: boolean }> => {
     try {
       const args = PermissionRespondArgsSchema.parse(raw);
@@ -1522,7 +1562,28 @@ function registerPermissionHandlers(cfg: PermissionHandlerConfig, store?: Sessio
         typeof (event as { sender?: { id?: unknown } } | undefined)?.sender?.id === 'number'
           ? (event as { sender: { id: number } }).sender.id
           : undefined;
+      // v2.0 Phase A1 (L1): respond 처리 전에 pending request snapshot —
+      // confirmer 가 respond 후 cleanup 하므로 session_id/capability 를 미리 잡아둠.
+      // 다른 webContents 의 pending 도 audit 대상이라 senderId 필터 X (모든 pending).
+      const requestSnapshot =
+        cfg.audit !== undefined
+          ? cfg.confirmer.getPendingRequests().find((r) => r.request_id === args.request_id)
+          : undefined;
       const matched = cfg.confirmer.respond(args.request_id, args.decision, args.reason, senderId);
+      if (cfg.audit !== undefined && matched && requestSnapshot !== undefined) {
+        const denied = args.decision === 'deny';
+        cfg.audit.recordEvent({
+          timestamp: new Date().toISOString(),
+          session_id: requestSnapshot.session_id,
+          turn_id: requestSnapshot.turn_id,
+          event: denied ? 'permission.denied' : 'permission.granted',
+          capability: requestSnapshot.capability,
+          target_json: JSON.stringify(requestSnapshot.target),
+          decision_reason: args.reason ?? args.decision,
+          tool_id: requestSnapshot.tool_id,
+          ...(denied && { outcome: 'denied' }),
+        });
+      }
       return ok({ matched });
     } catch (err) {
       return fail(err);
@@ -1542,26 +1603,42 @@ function registerPermissionHandlers(cfg: PermissionHandlerConfig, store?: Sessio
     }
   });
 
-  ipcMain.handle('permission/grants/list', (_evt, raw: unknown): Result<unknown[]> => {
+  ipcMain.handle('permission/grants/list', (event, raw: unknown): Result<unknown[]> => {
     try {
       const args = PermissionGrantsListArgsSchema.parse(raw);
       if (store === undefined) return ok([]);
-      return ok(store.listActivePermissionGrants(args.session_id as import('@/types').SessionId));
+      const sessionId = args.session_id as SessionId;
+      // v1.1.6-prep (SEC audit C1): cross-window grant enumeration 차단.
+      // 이 webContents 가 sessionId 의 leader 가 아니면 빈 배열 반환.
+      if (!isSessionOwner(election, event, sessionId)) {
+        return ok([]);
+      }
+      return ok(store.listActivePermissionGrants(sessionId));
     } catch (err) {
       return fail(err);
     }
   });
 
-  ipcMain.handle('permission/grants/revoke', (_evt, raw: unknown): Result<{ revoked: boolean }> => {
-    try {
-      const args = PermissionGrantsRevokeArgsSchema.parse(raw);
-      if (store === undefined) return ok({ revoked: false });
-      const revoked = store.revokePermissionGrant(args.grant_id, new Date().toISOString());
-      return ok({ revoked });
-    } catch (err) {
-      return fail(err);
+  ipcMain.handle(
+    'permission/grants/revoke',
+    (event, raw: unknown): Result<{ revoked: boolean }> => {
+      try {
+        const args = PermissionGrantsRevokeArgsSchema.parse(raw);
+        if (store === undefined) return ok({ revoked: false });
+        // v1.1.6-prep (SEC audit C1): cross-window grant tampering 차단.
+        // grant 의 session_id 를 lookup 후 ownership check.
+        const ownerSessionId = store.getGrantSessionId(args.grant_id);
+        if (ownerSessionId === null) return ok({ revoked: false });
+        if (!isSessionOwner(election, event, ownerSessionId)) {
+          return ok({ revoked: false });
+        }
+        const revoked = store.revokePermissionGrant(args.grant_id, new Date().toISOString());
+        return ok({ revoked });
+      } catch (err) {
+        return fail(err);
+      }
     }
-  });
+  );
 }
 
 // ────────────────────────────────────────────────────────────
@@ -2268,7 +2345,7 @@ function toolResultToRef(result: ToolResult): ToolResultRef {
   return ref;
 }
 
-function registerToolHandlers(tools: ToolHandlerConfig): void {
+function registerToolHandlers(tools: ToolHandlerConfig, election?: LockHandlerSource): void {
   // ── tool/* — Tool Queue IPC bridge ─────────────────────────
   // Spec: docs/tools/queue.md
 
@@ -2300,10 +2377,17 @@ function registerToolHandlers(tools: ToolHandlerConfig): void {
   ipcMain.handle('tool/execute', async (event, raw: unknown): Promise<Result<ToolResult>> => {
     try {
       const parsed = ToolCallArgsSchema.parse(raw);
+      const sessionId = parsed.session_id as SessionId;
+      // v1.1.6-prep (SEC audit H3): renderer-supplied session_id 가 caller
+      // webContents 의 leader 와 일치하는지 검증. 다른 session 의 id 를 spoof
+      // 해서 'always' grant 를 그쪽 DB 에 영속하는 cross-session injection 차단.
+      if (!isSessionOwner(election, event, sessionId)) {
+        throw new Error('session_id does not match caller window leader');
+      }
       const call: ToolCall = {
         id: parsed.id as ToolCallId,
         tool_id: parsed.tool_id,
-        session_id: parsed.session_id as SessionId,
+        session_id: sessionId,
         turn_id: parsed.turn_id as TurnId,
         input: parsed.input,
         origin: parsed.origin,
@@ -2908,7 +2992,8 @@ async function runStreamPump(
   // 본 시점은 실제 provider stream 시작 직전 — plugin 이 ctx.payload 를
   // 통해 turn 의 model/session 정보 확인 가능.
   if (cfg.pluginManager !== undefined && cfg.pluginHookRunner !== undefined) {
-    const plugins = cfg.pluginManager.list().loaded;
+    // v1.1.6 (D1): trust-on-install — untrusted plugin 은 hook 미실행.
+    const plugins = cfg.pluginManager.list().loaded.filter((p) => p.trusted);
     if (plugins.length > 0) {
       try {
         await cfg.pluginHookRunner.runHook(plugins, 'pre_turn', {
@@ -2996,6 +3081,9 @@ async function runStreamPump(
     terminalEmitted = true;
   } finally {
     activeStreams.delete(streamId);
+    // v1.1.6 (SEC audit cost_usd bug): persistLatestUsage 가 latestUsage=null 로
+    // 비워서 post_turn hook 의 cost_usd 가 항상 누락됐었음. snapshot 후 영속.
+    const finalCostUsd = latestUsage?.data.total_cost_usd;
     // v0.4.0 — stream 종료 시 마지막 usage event 1건 영속.
     // session_id 가 없는 stream (e.g. detect 단계) 은 자동 skip.
     persistLatestUsage();
@@ -3007,15 +3095,16 @@ async function runStreamPump(
     // v1.6.5/v1.6.6 — Plugin post_turn hook (best-effort). cost-limit-hook
     // 이 본 ctx.payload.mtd_total_usd / limit_usd 검사 → 한도 초과 시 toast.
     if (cfg.pluginManager !== undefined && cfg.pluginHookRunner !== undefined) {
-      const plugins = cfg.pluginManager.list().loaded;
+      // v1.1.6 (D1): trust-on-install — untrusted plugin 은 hook 미실행.
+      const plugins = cfg.pluginManager.list().loaded.filter((p) => p.trusted);
       if (plugins.length > 0) {
         const payload: Record<string, unknown> = {
           session_id: input.session_id ?? '',
           model: input.model,
           stream_id: streamId,
         };
-        if (latestUsage !== null) {
-          payload['cost_usd'] = latestUsage.data.total_cost_usd;
+        if (finalCostUsd !== undefined) {
+          payload['cost_usd'] = finalCostUsd;
         }
         // v1.6.6: usage store 가 있으면 month-to-date 합계 + settings 한도.
         if (usage !== undefined) {

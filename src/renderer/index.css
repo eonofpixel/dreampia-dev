@@ -15,8 +15,12 @@
   --color-bg-elevated: hsl(0 0% 100%);
 
   --color-text-primary: hsl(220 9% 9%);
-  --color-text-secondary: hsl(220 9% 46%);
-  --color-text-tertiary: hsl(220 9% 65%);
+  /* v1.1.7 (a11y) — sidebar nav (text-secondary on bg-secondary) 가 axe 측정
+     contrast 4.39 (target 4.5). 46% L → 43% L 로 조정 → contrast ~4.8:1. */
+  --color-text-secondary: hsl(220 9% 43%);
+  /* v1.1.7 (a11y) — bg-tertiary 위에서 4.5:1 보장. 이전 65% L 은 light bg-tertiary
+     와 contrast ~2.1:1 (axe color-contrast serious). 42% L → contrast ~4.7:1. */
+  --color-text-tertiary: hsl(220 9% 42%);
 
   --color-accent: hsl(195 80% 48%);
   --color-accent-hover: hsl(195 75% 40%);
@@ -42,7 +46,9 @@
 
   --color-text-primary: hsl(220 14% 96%);
   --color-text-secondary: hsl(220 9% 70%);
-  --color-text-tertiary: hsl(220 9% 50%);
+  /* v1.1.7 (a11y) — dark bg-tertiary (L=18%) 위에서 4.5:1 보장. 이전 50% L 은
+     contrast ~3.4:1 (axe serious). 60% L → contrast ~5.6:1. */
+  --color-text-tertiary: hsl(220 9% 60%);
 
   --color-accent: hsl(195 84% 68%);
   --color-accent-hover: hsl(195 88% 78%);

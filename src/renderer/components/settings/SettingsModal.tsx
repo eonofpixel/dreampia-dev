@@ -514,7 +514,7 @@ function DirectApiPanel(): React.JSX.Element {
       </header>
 
       <div
-        className="mb-4 rounded-md border border-amber-600/40 bg-amber-900/20 p-3 text-xs text-amber-200"
+        className="mb-4 rounded-md border border-amber-600/40 bg-amber-100 p-3 text-xs text-amber-900 dark:bg-amber-900/20 dark:text-amber-200"
         data-testid="settings-direct-api-warning"
       >
         {t('settings.direct_api.security_warning')}

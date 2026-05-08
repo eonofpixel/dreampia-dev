@@ -11,18 +11,22 @@
  *  - 실행 중 throw → catch 후 audit log + 다음 plugin 으로 진행.
  *  - timeout (default 5s) 강제 — vm.runInContext 의 timeout 옵션.
  *
- * Sandbox 정책 (MVP):
- *  - vm.createContext({ console, ctx }) — Node 의 require / process / fs 등
- *    proxy X. plugin 이 외부 IO 하려면 manifest.capabilities + 별도 grant
- *    (v1.1.23).
- *  - 본 commit 은 sandbox 안에서 console.log 만 허용 (debug). external IO 는
- *    다음 commit 에서 IpcPermissionConfirmer 통해 승인된 capability 만.
+ * Trust + capability 정책 (D1 — v1.1.6):
+ *  - vm.createContext 는 isolation hint 일뿐 진짜 sandbox 아님 (prototype
+ *    escape 가능). plugin 은 trust-on-install 모델 — 사용자가 install 시
+ *    trust 부여. 실제 보호 layer 는 (a) PluginCapabilityGate 의 capability
+ *    grant 게이트 + (b) install-time manifest 검토.
+ *  - 본 runner 는 hook 실행 전 gate.ensureGranted() 로 manifest.capabilities
+ *    가 모두 승인됐는지 확인. 미승인 / 거절 → hook skip + audit.
+ *  - external IO (network/fs/etc) 는 plugin 이 직접 시도하면 vm 안에서 require
+ *    프록시 부재로 실패. 진짜 IO 는 ctx.notify 같은 host-제공 API 만.
  */
 
 import { promises as fsp } from 'node:fs';
 import { join } from 'node:path';
 import { Script, createContext } from 'node:vm';
 import type { LoadedPlugin } from './PluginManager';
+import type { PluginCapabilityGate } from './PluginCapabilityGate';
 
 export interface PluginHookContext {
   /** Hook 종류. */
@@ -38,11 +42,17 @@ export interface PluginHookRunnerOptions {
   timeout_ms?: number;
   /** 실행 결과 audit. */
   auditSink?: (event: PluginHookAuditEvent) => void;
+  /**
+   * v1.1.6 (D1): manifest.capabilities 를 hook 실행 전 게이트. 미주입 시
+   * gate skip — capability 선언이 있어도 통과 (legacy/test path). production
+   * 은 항상 주입.
+   */
+  gate?: PluginCapabilityGate;
 }
 
 export interface PluginHookAuditEvent {
   timestamp: string;
-  event: 'plugin.hook_ok' | 'plugin.hook_error' | 'plugin.hook_timeout';
+  event: 'plugin.hook_ok' | 'plugin.hook_error' | 'plugin.hook_timeout' | 'plugin.hook_blocked';
   plugin_name: string;
   hook: 'pre_turn' | 'post_turn';
   duration_ms: number;
@@ -52,11 +62,13 @@ export interface PluginHookAuditEvent {
 export class PluginHookRunner {
   private readonly timeoutMs: number;
   private readonly auditSink: (event: PluginHookAuditEvent) => void;
+  private readonly gate: PluginCapabilityGate | undefined;
   /** Plugin 별 컴파일된 Script 캐시 — 매번 fs/eval 비용 회피. */
   private readonly scriptCache = new Map<string, Script>();
 
   constructor(options: PluginHookRunnerOptions = {}) {
     this.timeoutMs = options.timeout_ms ?? 5_000;
+    this.gate = options.gate;
     this.auditSink =
       options.auditSink ??
       ((e): void => {
@@ -81,6 +93,23 @@ export class PluginHookRunner {
       const hookPath = plugin.manifest.hooks?.[kind];
       if (hookPath === undefined) continue;
       const startedAt = Date.now();
+      // v1.1.6 (D1) — capability gate. manifest.capabilities 가 모두 승인된
+      // 상태가 아니면 hook skip + audit. gate 미주입 시 (test/legacy) 통과.
+      if (this.gate !== undefined) {
+        const caps = plugin.manifest.capabilities ?? [];
+        const granted = await this.gate.ensureGranted(plugin.manifest.name, caps);
+        if (!granted) {
+          this.auditSink({
+            timestamp: new Date().toISOString(),
+            event: 'plugin.hook_blocked',
+            plugin_name: plugin.manifest.name,
+            hook: kind,
+            duration_ms: Date.now() - startedAt,
+            error: 'capability not granted',
+          });
+          continue;
+        }
+      }
       try {
         const script = await this.loadScript(plugin, hookPath);
         const sandbox: Record<string, unknown> = {

@@ -542,6 +542,7 @@ const ALLOWED_INVOKE_CHANNELS = [
   // v1.1.15 (Plugin Loader UI) — Sidebar 의 [플러그인] 가 fetch.
   'plugin/list',
   'plugin/rescan',
+  'plugin/trust',
   'lock/acquire',
   'lock/release',
   'lock/get',
@@ -1004,31 +1005,39 @@ const api = {
   plugin: {
     list: (): Promise<
       Result<{
-        loaded: Array<{ dir: string; manifest: PluginManifestShape }>;
+        loaded: Array<{ dir: string; manifest: PluginManifestShape; trusted: boolean }>;
         issues: Array<{ path: string; reason: string }>;
         rootDir: string;
       }>
     > =>
       ipcRenderer.invoke('plugin/list') as Promise<
         Result<{
-          loaded: Array<{ dir: string; manifest: PluginManifestShape }>;
+          loaded: Array<{ dir: string; manifest: PluginManifestShape; trusted: boolean }>;
           issues: Array<{ path: string; reason: string }>;
           rootDir: string;
         }>
       >,
     rescan: (): Promise<
       Result<{
-        loaded: Array<{ dir: string; manifest: PluginManifestShape }>;
+        loaded: Array<{ dir: string; manifest: PluginManifestShape; trusted: boolean }>;
         issues: Array<{ path: string; reason: string }>;
         rootDir: string;
       }>
     > =>
       ipcRenderer.invoke('plugin/rescan') as Promise<
         Result<{
-          loaded: Array<{ dir: string; manifest: PluginManifestShape }>;
+          loaded: Array<{ dir: string; manifest: PluginManifestShape; trusted: boolean }>;
           issues: Array<{ path: string; reason: string }>;
           rootDir: string;
         }>
+      >,
+    /**
+     * v1.1.6 (D1): plugin trust toggle. PluginsModal 의 [Trust] 버튼이 호출.
+     * 영속은 main 의 PluginManager 가 .trust.json 에 write.
+     */
+    trust: (name: string, trusted: boolean): Promise<Result<{ persisted: boolean }>> =>
+      ipcRenderer.invoke('plugin/trust', { name, trusted }) as Promise<
+        Result<{ persisted: boolean }>
       >,
     /**
      * v1.6.5 — plugin hook 의 ctx.notify() 가 main 에서 emit 하면 본 listener

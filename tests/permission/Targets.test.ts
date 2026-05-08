@@ -169,6 +169,35 @@ describe('isExpired', () => {
     const grant = makeGrant('LOCAL_READ', { kind: 'global' });
     expect(isExpired(grant)).toBe(false);
   });
+
+  // v2.0 Phase A (SEC audit M1): timezone offset 문자열 vs UTC `Z` lex compare
+  // bug 회귀 lock. 이전엔 string compare 라 offset-bearing 문자열이 같은 prefix
+  // 일 때 잘못 정렬됨 (e.g., '+09:00' wall-clock 이 UTC 보다 1시간 빨라도
+  // string 으로는 더 큼). 이제 epoch ms 비교 — 정확.
+  it("M1: expires_at '2026-05-08T01:00:00+09:00' (UTC=16:00 전날) vs UTC now → expired", () => {
+    // 절대 시점 비교: +09:00 의 01:00 = UTC 16:00 (전날). now 가 UTC 24:00 (그
+    // 다음 날 0시) 라면 expires < now → expired. lex compare 버그 시 false 반환.
+    const grant = makeGrant('LOCAL_READ', { kind: 'global' }, {
+      expires_at: '2026-05-08T01:00:00+09:00',
+    });
+    expect(isExpired(grant, new Date('2026-05-08T00:00:00.000Z'))).toBe(true);
+  });
+
+  it("M1: expires_at '2030-01-01T00:00:00+09:00' (UTC=2029-12-31 15:00) → not expired vs 2026 now", () => {
+    const grant = makeGrant('LOCAL_READ', { kind: 'global' }, {
+      expires_at: '2030-01-01T00:00:00+09:00',
+    });
+    expect(isExpired(grant, new Date('2026-05-08T00:00:00.000Z'))).toBe(false);
+  });
+
+  it('M1: expires_at -08:00 (UTC -8h) past 시점 → expired', () => {
+    // -08:00 의 23:00 = UTC 다음날 07:00. now=2020-01-02T00:00:00Z 면 absolute
+    // past. lex compare 버그 시 string 비교라 다르게 동작 가능.
+    const grant = makeGrant('LOCAL_READ', { kind: 'global' }, {
+      expires_at: '2020-01-01T23:00:00-08:00',
+    });
+    expect(isExpired(grant, new Date('2020-01-02T08:00:00.000Z'))).toBe(true);
+  });
 });
 
 // ────────────────────────────────────────────────────────────

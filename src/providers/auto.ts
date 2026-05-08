@@ -20,6 +20,8 @@ import { detectCli, type CliDetectionResult, type CliInfo } from './cli/detect';
 import { translateClaudeJsonl } from './cli/translateClaudeJsonl';
 import { translateCodexJsonl } from './cli/translateCodexJsonl';
 import { getCliCommandOverride } from './cli/vcr';
+import { shouldRequireFixture } from './cli/vcrLoader';
+import { existsSync } from 'node:fs';
 import { AnthropicProvider } from './api/AnthropicProvider';
 import { OpenAIProvider } from './api/OpenAIProvider';
 import { MockProvider } from './MockProvider';
@@ -74,6 +76,20 @@ export async function getDefaultProvider(
   // model prefix 로 provider 결정 (claude / codex). detected 는 빈 결과.
   const cliOverride = getCliCommandOverride();
   if (cliOverride !== null) {
+    // v1.1.4-hotfix-1 (SEC audit gap): replay 모드 prod gating. fake CLI 가
+    // fixture 없을 때 exit 5 로 die 하지만, 사용자/CI 에는 generic 에러로 보임.
+    // spawn 전에 명확히 fail-fast — fixture path 가 set 되어있으면 file 존재
+    // 강제, 미설정이면 cliOverride 가 fake-cli 일 때만 경고 (다른 binary
+    // override 는 fixture 무관).
+    if (shouldRequireFixture()) {
+      const fixturePath = process.env.DREAMPIA_VCR_FIXTURE;
+      if (fixturePath !== undefined && fixturePath.length > 0 && !existsSync(fixturePath)) {
+        throw new Error(
+          `VCR replay mode (DREAMPIA_VCR_MODE=replay): fixture not found at ${fixturePath}. ` +
+            `Use DREAMPIA_VCR_MODE=record to capture, or set DREAMPIA_VCR_FIXTURE to a valid path.`
+        );
+      }
+    }
     const lower = model.toLowerCase();
     const codexFamily = ['gpt-', 'o1-', 'o3-', 'codex-'].some((p) => lower.startsWith(p));
     const provider: 'claude' | 'codex' = codexFamily ? 'codex' : 'claude';

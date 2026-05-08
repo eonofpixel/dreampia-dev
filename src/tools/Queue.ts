@@ -63,6 +63,7 @@ import {
 } from './errors';
 import { createContext } from './Context';
 import type { ToolRegistry } from './Registry';
+import { randomUUID } from 'node:crypto';
 
 // ────────────────────────────────────────────────────────────
 // v1.1.1 hotfix (Codex Q7): high-risk capability set
@@ -663,7 +664,10 @@ export class ToolQueue {
     const effectiveDangerous = isDangerous || highRisk;
     const requestedAt = new Date().toISOString();
     const request: PermissionRequest = {
-      request_id: `pcr-${call.id}-${capability}-${Date.now()}`,
+      // v1.1.6-prep (SEC audit M3): Date.now() 만으론 같은 ms 안에서 동일
+      // request_id 충돌 가능 (Windows 의 저해상도 clock + retry 시). UUID
+      // 접미사로 고유성 보장 — owner-binding 이 잘못된 promise 에 라우팅 차단.
+      request_id: `pcr-${call.id}-${capability}-${Date.now()}-${randomUUID()}`,
       session_id: call.session_id,
       turn_id: call.turn_id,
       call_id: call.id,
