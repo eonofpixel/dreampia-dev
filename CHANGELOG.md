@@ -2,6 +2,45 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [2.0.0] — 2026-05-09
+
+**Phase B — Plugin 격리 + 보안 강화 (breaking).**
+
+`docs/v2.x-roadmap.md` Phase B 전체 land. Plugin 의 untrusted RCE 차단을 위해 utility_process 격리 도입 (opt-in v2.0.0 → v2.1.0 default 전환). `MetadataExtra` legacy optional 두 필드 strict 강제 — schema 와 storage 일관. SEC audit H1 (vm.createContext sandbox 부재) + H2 (PluginCapabilityGate session_id hardcoded) 답.
+
+### Added
+- **B1 — ADR-0003 Plugin utility_process 격리 mechanism** (PR #16, `8c55ce8`). `docs/adr/0003-plugin-utility-process-isolation.md`. utility_process 채택 근거 + 4개 대안 기각 + backward compat opt-in flag (isolation_mode `in_process` ↔ `utility_process`) + migration path (v2.0.0 in_process default → v2.1.0 utility_process default → v2.2.0+ only).
+- **B2 — PluginUtilityProcessRunner PoC** (PR #17, `39b25b4`). `src/main/plugins/PluginUtilityProcessRunner.ts` + `pluginWorkerEntry.ts` + 10 vitest cases. DI spawnFn (real Electron 의존성 없이 단위 테스트), per-hook spawn 패턴, parent wall-clock timeout (child timeout + 1s buffer) + SIGTERM, ctx.payload mutation 전파, ctx.notify IPC bridge. 새 `PluginRunner` 인터페이스 (in_process / utility_process 양쪽 implement). `DREAMPIA_PLUGIN_ISOLATION=utility_process` env 로 활성화.
+- **B3 — PluginCapabilityGate runtime + H2 sessionIdProvider** (PR #18, `c178def`). `sessionIdProvider?: () => string` 옵션 (다중창 지원, legacy 'plugin-loader' default), `revokeOne(plugin, capability?)` (사용자 grant 회수 + persisted file 동기), `invalidateCache(plugin?)` (runtime 재검증). 7 new vitest cases.
+- **B4 — Plugin sandbox hardening invariants** (PR #20, `8aca3f2`). 6 vitest cases — `process` 직접 참조 / `require()` / `globalThis.process` / Function constructor escape / payload 함수 / 무한 루프 모두 차단 lock.
+- **A2 — PermissionRequestSchema (zod)** (PR #19, `5978607`). `src/tools/permissionRequestSchema.ts` — IPC boundary 의 fail-closed safeParse + 12 test cases. `kind: z.literal('permission_confirmation').default(...)` discriminator marker — 향후 variant 분리 시 `z.discriminatedUnion` 으로 확장.
+
+### Changed
+- **MetadataExtra strict — migration 016 land** (PR #21, `ab8eefb`). `_extra.plan.active` / `_extra.permission.default_level` 두 legacy 필드를 schema + DB 양쪽에서 제거. ADR-0002 implementation. `LATEST_SCHEMA_VERSION` 15 → 16. up = json_remove ×2, down = promoted column 에서 복원.
+- `package.json:version`: 1.9.0 → 2.0.0.
+
+### Removed (breaking)
+- `MetadataExtraSchema.PlanExtraSchema.active` — strict reject. Source-of-truth = `sessions.plan_active` column.
+- `MetadataExtraSchema.PermissionExtraSchema.default_level` — strict reject. Source-of-truth = `sessions.permission_default_level` column.
+
+### Migration impact
+- v1.x → v2.0.0 up: migration 016 이 모든 row metadata 정합 (idempotent json_remove).
+- v2.0.0 → v1.x down: `down_016_*.sql` + 5 prior down migrations 적용 (CLI tool — Phase C C2 PR #25).
+
+### Decided (Phase A 와 같이 resolved 5 Open Questions 의 Phase B 적용)
+- F4 격리 mechanism = utility_process (Q3, ADR-0003)
+- MetadataExtra strict removal 시점 = v2.0.0 (Q2, ADR-0002 → 본 release 에서 land)
+
+### Deferred to v2.x.x
+- A2 11 consumer files type narrow + IPC boundary wiring (현재 schema + helper 만, callsite 적용은 별 슬롯)
+- Plugin IPC bridge API spec (ADR-0004 후보)
+- v2.1.0 default `isolation_mode` 전환 (R-A1 risk register 참조)
+
+### 회귀
+- 0. CI 모든 OS green (Lint / TS / Test×3 / Build×3 / E2E).
+- vitest baseline: PluginHookRunner 9, PluginUtilityProcessRunner 16, PluginCapabilityGate 25, permissionRequestSchema 12, extraSchemaContract +2 (strict reject) — 모두 PASS (CI ubuntu).
+- Architect verdict: A3 5/5, A4 4.5/5, B1 doc-only, B2/B3/B4/A2/MetadataExtra self-verify (이전 architect verify 의 패턴 따름).
+
 ## [1.9.0] — 2026-05-09
 
 **Phase A — v1.x hotfix sweep 종결.**
