@@ -1,11 +1,94 @@
 ---
-title: Release Checklist (v0.1.2+ Runbook)
+title: Release Checklist (v2.x Runbook + v0.1.2+ archive)
 parent: ./release.md
-status: stable
-last_updated: 2026-05-03
+status: active
+last_updated: 2026-05-09
 ---
 
-# v0.1.2+ Release Runbook
+# v2.x Release Runbook (Phase C C1 — release-checklist 정식화)
+
+> 본 섹션은 v1.9.0 + v2.x 시점의 reproducible release procedure. v1.8.5
+> CHANGELOG (line 17-20) 의 약속을 정식화. 각 phase deliverable 의 ralph
+> 자율 land 워크플로 + ADR 컨벤션 + memory persistence 흐름 통합.
+
+## Pre-flight
+
+- [ ] **Phase deliverable 모두 land** — `docs/v2.x-roadmap.md` 의 해당
+      Phase row 가 모두 ✅
+- [ ] **잔여 PR 정리** — release 에 들어갈 PR 모두 main 에 merge
+- [ ] **Open Questions** — `docs/v2.x-roadmap.md` 의 Open Questions 모두
+      resolved 또는 명시 deferred
+- [ ] **CHANGELOG 초안** — Added / Changed / Deprecated / Removed / Fixed
+      / Security / Decided / Deferred 섹션
+
+## Version bump
+
+| Type | Rule |
+|---|---|
+| patch | X.Y.Z → X.Y.Z+1 |
+| minor | X.Y.Z → X.Y+1.0 |
+| major | X.Y.Z → X+1.0.0 |
+
+monotonic 정합 — package.json:version 은 항상 monotonic. cross-track slot
+명명 (v1.4.13 등) 은 CHANGELOG 만, package.json 은 max 값 (v1.8.5 hotfix
+정책).
+
+## CI evidence
+
+- [ ] Lint (ubuntu) green
+- [ ] TypeScript (ubuntu) green
+- [ ] Test (ubuntu / windows / macos) green
+- [ ] Build (ubuntu / windows / macos) green
+- [ ] E2E (Playwright Electron) green
+- [ ] Architect verify ≥ 4.0 + must-fix 0 (큰 deliverable)
+
+## Manual smoke (packaged build)
+
+- [ ] **VCR / fake-CLI gate** (v1.9.0+) — `DREAMPIA_VCR_MODE=replay`
+      → dialog + exit 1 (`docs/adr/0001-cli-provider-timeout.md` ref;
+      A4 land 됨)
+- [ ] **Plugin isolation toggle** (v2.0.0+) —
+      `DREAMPIA_PLUGIN_ISOLATION=utility_process` → plugin hook 정상
+      (`docs/adr/0003-plugin-utility-process-isolation.md`)
+- [ ] **Auto-update** — production binary 가 GitHub Releases 채널 구독
+
+## DB schema migration (해당 시)
+
+- [ ] up migration smoke
+- [ ] down migration 정의 + revertTo() smoke
+- [ ] Breaking 마이그레이션 release notes 명시 + backup 가이드
+
+## Tag + push
+
+- [ ] `git pull --ff-only` on main
+- [ ] `git tag -a vX.Y.Z -m "<release summary>"`
+- [ ] `git push origin vX.Y.Z`
+- [ ] GitHub Releases 페이지에 release 생성 + CI URLs
+
+## Memory + roadmap
+
+- [ ] `~/.claude/projects/.../memory/project_vXYZ_completion.md`
+- [ ] `MEMORY.md` 인덱스 갱신
+- [ ] `docs/v2.x-roadmap.md` Phase row ✅
+
+## Post-release
+
+- [ ] Defer 항목 다음 슬롯 backlog 에 배정
+- [ ] 사용자 보고 모니터링 (Sentry — v2.1.0 C3 정식화 후)
+
+## v1.9.0 ship 사용 예시 (2026-05-09)
+
+- Pre-flight: A1 ~ A5 ✅, A2 deferred → v2.0.0
+- Bump: 1.8.5 → 1.9.0 (PR #15)
+- CHANGELOG: Added (A1/A3/A4/A5) + Decided (5 OQs) + Deferred (A2)
+- CI: PR #15 green
+- Architect: A3 5/5, A4 4.5/5
+- Tag: v1.9.0 (4475956)
+- Memory: project_v190_completion.md ✓
+
+---
+
+# v0.1.2+ Release Runbook (archive)
 
 > 정착된 v0.1.x release 흐름 — 사용자가 따라할 수 있는 step-by-step.
 >
