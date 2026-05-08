@@ -2774,7 +2774,7 @@ export interface AiHandlerConfig {
    * hook (pre_turn / post_turn) 실행. 미지정 시 hook 호출 X (테스트 호환).
    */
   pluginManager?: import('./plugins/PluginManager').PluginManager;
-  pluginHookRunner?: import('./plugins/PluginHookRunner').PluginHookRunner;
+  pluginHookRunner?: import('./plugins/PluginHookRunner').PluginRunner;
 }
 
 interface ActiveStream {
