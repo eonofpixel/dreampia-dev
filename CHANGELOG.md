@@ -2,6 +2,26 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [2.1.0] — 2026-05-09
+
+**Phase C — 운영 성숙 (release-checklist + tooling + a11y).**
+
+`docs/v2.x-roadmap.md` Phase C 의 5 deliverable 모두 land. v2.0.0 의 breaking 흐름 직후 운영 reproducibility 확보 — release procedure 정식화 + DB tooling + telemetry spec + light theme a11y + e2e 시나리오 lock.
+
+### Added
+- **Phase D — Chat virtualization (`react-virtuoso` opt-in 100+ turns)** (PR #22, `f9a57e9`). 사용자 결정 Q5 (Chat virtualization 최우선) 의 PoC. ChatPanel 의 turn list 가 `TURN_VIRTUALIZATION_THRESHOLD = 100` 기준 conditional — < 100 simple map (overhead 회피), >= 100 `<Virtuoso />` windowing. `followOutput="smooth"` + `initialTopMostItemIndex={turns.length - 1}` 로 auto-scroll 보존. `react-virtuoso ^4.18.6` dep 추가. 기존 e2e fixture 는 작은 list 라 simple path 유지 — 회귀 0. (10000 turn fixture + DevTools 60fps perf 측정은 v2.x.x 후속 슬롯.)
+- **C1 — release-checklist v2.x runbook 정식화** (PR #23, `2987fd3`). v1.8.5 CHANGELOG (line 17-20) 의 약속 이행. `docs/release-checklist.md` 에 v2.x 섹션 prepend (Pre-flight / Version bump / CI evidence / Manual smoke / DB migration / Tag + push / Memory + roadmap / Post-release). 기존 v0.1.2+ runbook 은 archive 로 보존.
+- **C2 — db:migrate-down CLI tool** (PR #25, `01a9774`). `scripts/db-migrate-down.cjs` + `package.json:db:migrate-down` npm script. 사용자가 schema down-grade 가 필요할 때 user-facing path. OS-specific default DB path (Win/macOS/Linux) + `--db <path>` override. 기존 `revertTo()` 함수의 wrapper.
+- **C3 — Sentry custom dashboard spec** (PR #24, `b202068`). `docs/sentry-dashboard.md` — production 배포 후 수집할 metrics + panel 구성 + alert threshold. audit / permission / cli / plugin / storage / boot / cost 7 영역.
+- **C4 — drive18 axe light theme variant** (PR #27, `9651b15`). `e2e/_drive18_axe.spec.ts` 에 18-4/5/6 추가 — `data-theme='light'` 강제 후 메인 채팅 + settings mcp + Direct API 의 critical/serious 회귀 lock.
+- **C5 — e2e regression sweep stubs** (PR #28, `ae9b68e`). 3 stub spec — `_drive_preview_annotation.spec.ts` (DPA-1~4) + `_drive_mcp_manifest_reject.spec.ts` (DMR-1~5) + `_drive_automation_cron_tz.spec.ts` (DACT-1~5). `test.describe.skip` 으로 시나리오 lock + acceptance criteria 명시. 인프라 추가 후 v2.1.x slot 에서 활성.
+
+### Changed
+- `package.json:version`: 2.0.0 → 2.1.0.
+
+### 회귀
+- 0. CI 모든 OS green (Lint / TS / Test×3 / Build×3 / E2E).
+
 ## [2.0.0] — 2026-05-09
 
 **Phase B — Plugin 격리 + 보안 강화 (breaking).**
