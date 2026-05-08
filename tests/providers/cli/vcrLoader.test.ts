@@ -21,6 +21,7 @@ import {
   detectDrift,
   updateFixtureHash,
   shouldRequireFixture,
+  vcrProductionGate,
   VcrFixtureMissingError,
   VcrFixtureInvalidError,
 } from '../../../src/providers/cli/vcrLoader';
@@ -194,5 +195,79 @@ describe('v1.1.10 — VcrLoader.shouldRequireFixture', () => {
   });
   it("'live' → false", () => {
     expect(shouldRequireFixture('live')).toBe(false);
+  });
+});
+
+// v1.9.0 (A4) — VCR production gate. spec: docs/v1.x-completion-audit.md (HIGH).
+// 사용자 결정 2026-05-08: "DREAMPIA_VCR_MODE production: startup fail".
+describe('v1.9.0 — VcrLoader.vcrProductionGate', () => {
+  it('unpackaged + vcrMode unset → ok', () => {
+    const r = vcrProductionGate({ isPackaged: false, vcrMode: undefined });
+    expect(r.ok).toBe(true);
+  });
+  it('unpackaged + vcrMode replay (e2e/dev) → ok', () => {
+    const r = vcrProductionGate({ isPackaged: false, vcrMode: 'replay' });
+    expect(r.ok).toBe(true);
+  });
+  it('packaged + vcrMode unset (production normal) → ok', () => {
+    const r = vcrProductionGate({ isPackaged: true, vcrMode: undefined });
+    expect(r.ok).toBe(true);
+  });
+  it('packaged + vcrMode replay → fail with message', () => {
+    const r = vcrProductionGate({ isPackaged: true, vcrMode: 'replay' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.message).toMatch(/VCR mode detected in production build/);
+      expect(r.message).toMatch(/DREAMPIA_VCR_MODE=replay/);
+      expect(r.message).toMatch(/Test fixtures must not leak into production/);
+    }
+  });
+  it('packaged + vcrMode record → fail (test fixture write 가능성도 차단)', () => {
+    const r = vcrProductionGate({ isPackaged: true, vcrMode: 'record' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toMatch(/DREAMPIA_VCR_MODE=record/);
+  });
+  it('packaged + vcrMode live → fail (any value blocked)', () => {
+    const r = vcrProductionGate({ isPackaged: true, vcrMode: 'live' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toMatch(/DREAMPIA_VCR_MODE=live/);
+  });
+  it('packaged + vcrMode 빈 문자열 → fail (any non-undefined string blocked)', () => {
+    const r = vcrProductionGate({ isPackaged: true, vcrMode: '' });
+    expect(r.ok).toBe(false);
+  });
+
+  // architect verify 2026-05-09 추가: DREAMPIA_CLI_COMMAND 도 같은 보안 경계.
+  it('packaged + cliCommand set → fail (fake-CLI override 차단)', () => {
+    const r = vcrProductionGate({
+      isPackaged: true,
+      vcrMode: undefined,
+      cliCommand: '/path/to/fake-cli',
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.message).toMatch(/Fake CLI override detected/);
+      expect(r.message).toMatch(/DREAMPIA_CLI_COMMAND=/);
+    }
+  });
+  it('packaged + 두 env 모두 set → vcrMode 우선 메시지', () => {
+    const r = vcrProductionGate({
+      isPackaged: true,
+      vcrMode: 'replay',
+      cliCommand: '/path/to/fake-cli',
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.message).toMatch(/VCR mode detected/);
+      expect(r.message).not.toMatch(/Fake CLI override/);
+    }
+  });
+  it('unpackaged + cliCommand set (e2e fixture-vcr) → ok', () => {
+    const r = vcrProductionGate({
+      isPackaged: false,
+      vcrMode: undefined,
+      cliCommand: '/path/to/fake-cli',
+    });
+    expect(r.ok).toBe(true);
   });
 });

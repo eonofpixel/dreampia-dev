@@ -259,6 +259,27 @@ app.whenReady().then(async () => {
     console.warn(`[main] Telemetry bootstrap failed (non-fatal): ${msg}`);
   }
 
+  // v1.9.0 (A4) — VCR production gate.
+  // Spec: docs/v1.x-completion-audit.md (HIGH), 사용자 결정 2026-05-08.
+  // packaged build 에서 DREAMPIA_VCR_MODE 가 set 됐으면 test fixture 누출
+  // 가능성 — startup 즉시 차단. unpackaged (e2e/dev) 는 통과.
+  {
+    const { vcrProductionGate } = await import('../providers/cli/vcrLoader');
+    const gate = vcrProductionGate({
+      isPackaged: app.isPackaged,
+      vcrMode: process.env.DREAMPIA_VCR_MODE,
+      cliCommand: process.env.DREAMPIA_CLI_COMMAND,
+    });
+    if (!gate.ok) {
+      console.error(`[main] STARTUP FAIL (VCR gate): ${gate.message}`);
+      if (app.isPackaged) {
+        dialog.showErrorBox('Dreampia-Dev — VCR 모드 차단', gate.message);
+      }
+      app.exit(1);
+      return;
+    }
+  }
+
   // Open session DB at OS-specific user data dir.
   //   Windows: %APPDATA%/Dreampia-Dev/sessions.sqlite
   //   macOS:   ~/Library/Application Support/Dreampia-Dev/sessions.sqlite
