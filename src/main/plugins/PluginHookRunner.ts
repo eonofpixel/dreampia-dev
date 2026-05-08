@@ -59,6 +59,19 @@ export interface PluginHookAuditEvent {
   error?: string;
 }
 
+/**
+ * v2.0.0 (B2) — Shared shape between in_process (`PluginHookRunner`) 와
+ * utility_process (`PluginUtilityProcessRunner`) runner. ipc.ts / index.ts 가
+ * 본 type 으로 isolation_mode 에 무관하게 동일 호출.
+ */
+export interface PluginRunner {
+  runHook(
+    plugins: ReadonlyArray<LoadedPlugin>,
+    kind: 'pre_turn' | 'post_turn',
+    ctx: PluginHookContext
+  ): Promise<void>;
+}
+
 export class PluginHookRunner {
   private readonly timeoutMs: number;
   private readonly auditSink: (event: PluginHookAuditEvent) => void;

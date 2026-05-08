@@ -22,7 +22,8 @@ import { readSettings, writeSettings } from './settings';
 import { classifyUserDataConflict } from './workspaceConflict';
 import { IpcPermissionConfirmer } from './IpcPermissionConfirmer';
 import { PluginManager } from './plugins/PluginManager';
-import { PluginHookRunner } from './plugins/PluginHookRunner';
+import { PluginHookRunner, type PluginRunner } from './plugins/PluginHookRunner';
+import { PluginUtilityProcessRunner } from './plugins/PluginUtilityProcessRunner';
 import { PluginCapabilityGate } from './plugins/PluginCapabilityGate';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -46,7 +47,7 @@ let toolQueue: ToolQueue | null = null;
 // v1.1.15 (Plugin Loader UI): boot 시 한 번 scan, IPC handler 가 list 반환.
 let pluginManager: PluginManager | null = null;
 // v1.6.5: ai stream 시 pre/post_turn hook 실행 — cfg 통해 ipc.ts 가 사용.
-let pluginHookRunner: PluginHookRunner | null = null;
+let pluginHookRunner: PluginRunner | null = null;
 
 interface WindowRuntime {
   election: LeaderElection;
@@ -442,37 +443,51 @@ app.whenReady().then(async () => {
 
   // v1.6.5 — Plugin Hook runtime. ai/start-stream 의 pre/post_turn 호출용.
   // v1.1.6 (D1): gate wired — manifest.capabilities 미승인 시 hook skip.
-  pluginHookRunner = new PluginHookRunner({
-    gate: pluginCapabilityGate,
-    auditSink: (event) => {
-      auditLogStore?.recordEvent({
-        timestamp: event.timestamp,
-        session_id: 'plugin-hook',
-        event: event.event,
-        capability: 'PLUGIN',
-        target_json: JSON.stringify({
-          plugin: event.plugin_name,
-          hook: event.hook,
-          duration_ms: event.duration_ms,
-        }),
-        decision_reason:
-          event.event === 'plugin.hook_ok'
-            ? 'ok'
+  // v2.0.0 (B2): isolation_mode 옵션 — env DREAMPIA_PLUGIN_ISOLATION 으로
+  //   utility_process 활성화. default in_process (기존 vm.createContext).
+  //   ADR-0003 가 v2.1.0 에서 default 전환 timeline 명시.
+  const pluginIsolation = process.env.DREAMPIA_PLUGIN_ISOLATION;
+  const useUtilityProcess = pluginIsolation === 'utility_process';
+  const pluginAuditSink = (event: import('./plugins/PluginHookRunner').PluginHookAuditEvent): void => {
+    auditLogStore?.recordEvent({
+      timestamp: event.timestamp,
+      session_id: 'plugin-hook',
+      event: event.event,
+      capability: 'PLUGIN',
+      target_json: JSON.stringify({
+        plugin: event.plugin_name,
+        hook: event.hook,
+        duration_ms: event.duration_ms,
+      }),
+      decision_reason:
+        event.event === 'plugin.hook_ok'
+          ? 'ok'
+          : event.event === 'plugin.hook_blocked'
+            ? 'blocked'
+            : 'error',
+      ...(event.event !== 'plugin.hook_ok' && {
+        outcome:
+          event.event === 'plugin.hook_timeout'
+            ? 'timeout'
             : event.event === 'plugin.hook_blocked'
-              ? 'blocked'
+              ? 'denied'
               : 'error',
-        ...(event.event !== 'plugin.hook_ok' && {
-          outcome:
-            event.event === 'plugin.hook_timeout'
-              ? 'timeout'
-              : event.event === 'plugin.hook_blocked'
-                ? 'denied'
-                : 'error',
-          ...(event.error !== undefined && { error: event.error }),
-        }),
-      });
-    },
-  });
+        ...(event.error !== undefined && { error: event.error }),
+      }),
+    });
+  };
+  if (useUtilityProcess) {
+    console.info('[main] Plugin isolation: utility_process (B2 PoC)');
+    pluginHookRunner = new PluginUtilityProcessRunner({
+      gate: pluginCapabilityGate,
+      auditSink: pluginAuditSink,
+    });
+  } else {
+    pluginHookRunner = new PluginHookRunner({
+      gate: pluginCapabilityGate,
+      auditSink: pluginAuditSink,
+    });
+  }
 
   // v1.1.15: plugin/* IPC handlers — preload bridge 가 호출.
   // (registerIpcHandlers 와 별개로 단순 — args 없는 read-only IPC.)
