@@ -161,3 +161,105 @@ test.describe('drive18 — axe-core a11y baseline (v1.7.7)', () => {
     expect.soft(summary.serious).toBe(0);
   });
 });
+
+// ────────────────────────────────────────────────────────────
+// v2.1.0 (Phase C C4) — light theme axe variant.
+//
+// Default theme = dark (index.html). 18-1~3 이 이미 dark mode cover. 본 그룹
+// 18-4~6 은 data-theme='light' 로 강제 전환 후 같은 시나리오 재실행 — light
+// theme color-contrast / focus-indicator / link-color 등이 별도 검증.
+//
+// disableRules 는 light 와 dark 가 다를 수 있어 별도 변수.
+// 현재 비어있음 — strict baseline 시작 시점.
+// ────────────────────────────────────────────────────────────
+
+const DISABLE_RULES_LIGHT: ReadonlyArray<string> = [];
+
+async function setLightTheme(window: import('@playwright/test').Page): Promise<void> {
+  await window.evaluate(() => {
+    document.documentElement.setAttribute('data-theme', 'light');
+  });
+  // 짧은 paint 대기 — theme 변경 후 CSS 변수가 반영될 시간.
+  await window.waitForTimeout(150);
+}
+
+test.describe('drive18 — axe-core a11y baseline (v2.1.0 C4 — light theme)', () => {
+  test('18-4 — 메인 채팅 (light): critical/serious 0', async ({ window }) => {
+    await expect(window.getByTestId('sidebar-search-input')).toBeVisible({
+      timeout: 10_000,
+    });
+    await setLightTheme(window);
+
+    const results = await runAxe(window, {
+      tags: WCAG_TAGS,
+      disableRules: DISABLE_RULES_LIGHT,
+    });
+    const summary = summarize(results.violations);
+    writeFileSync(
+      resolve(SHOT_DIR, 'r18-4-main-light.json'),
+      JSON.stringify({ summary, violations: results.violations }, null, 2),
+      'utf-8'
+    );
+    expect.soft(summary.critical).toBe(0);
+    expect.soft(summary.serious).toBe(0);
+    expect(true).toBe(true);
+  });
+
+  test('18-5 — settings 모달 mcp 탭 (light): critical/serious 0', async ({
+    window,
+  }) => {
+    await expect(window.getByTestId('sidebar-search-input')).toBeVisible({
+      timeout: 10_000,
+    });
+    await setLightTheme(window);
+    await window.evaluate(() => document.body.focus());
+    await window.keyboard.press('ControlOrMeta+,');
+    await expect(window.getByTestId('settings-modal')).toBeVisible({
+      timeout: 5_000,
+    });
+
+    const results = await runAxe(window, {
+      tags: WCAG_TAGS,
+      disableRules: DISABLE_RULES_LIGHT,
+    });
+    const summary = summarize(results.violations);
+    writeFileSync(
+      resolve(SHOT_DIR, 'r18-5-settings-mcp-light.json'),
+      JSON.stringify({ summary, violations: results.violations }, null, 2),
+      'utf-8'
+    );
+    expect.soft(summary.critical).toBe(0);
+    expect.soft(summary.serious).toBe(0);
+  });
+
+  test('18-6 — settings [Direct API] (light): critical/serious 0', async ({
+    window,
+  }) => {
+    await expect(window.getByTestId('sidebar-search-input')).toBeVisible({
+      timeout: 10_000,
+    });
+    await setLightTheme(window);
+    await window.evaluate(() => document.body.focus());
+    await window.keyboard.press('ControlOrMeta+,');
+    await expect(window.getByTestId('settings-modal')).toBeVisible({
+      timeout: 5_000,
+    });
+    await window.getByTestId('settings-tab-direct_api').click();
+    await expect(window.getByTestId('settings-direct-api-panel')).toBeVisible({
+      timeout: 3_000,
+    });
+
+    const results = await runAxe(window, {
+      tags: WCAG_TAGS,
+      disableRules: DISABLE_RULES_LIGHT,
+    });
+    const summary = summarize(results.violations);
+    writeFileSync(
+      resolve(SHOT_DIR, 'r18-6-settings-direct-api-light.json'),
+      JSON.stringify({ summary, violations: results.violations }, null, 2),
+      'utf-8'
+    );
+    expect.soft(summary.critical).toBe(0);
+    expect.soft(summary.serious).toBe(0);
+  });
+});
