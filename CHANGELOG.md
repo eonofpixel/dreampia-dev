@@ -2,6 +2,35 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [1.9.0] — 2026-05-09
+
+**Phase A — v1.x hotfix sweep 종결.**
+
+`docs/v2.x-roadmap.md` Phase A 의 5개 deliverable (A1~A5) 가 본 minor 에서 모두 land. Plugin 격리 (Phase B → v2.0.0 breaking) 직전의 안정 마일스톤. 사용자 결정 5/5 (`Open Questions` resolved 2026-05-08) 반영.
+
+### Added
+- **A3 — `CliProviderOptions.timeout_ms`** (PR #12, `107312c`). CLI subprocess auto-timeout — 설정 시 spawn 후 N ms 경과하면 SIGTERM kill + `error` StreamEvent emit ("CLI timeout exceeded (Xms)"). default `undefined` (opt-in, backward-compat). `signal` (user-cancel) 과 분리된 의미: cancel 은 silent return, timeout 은 명시 error. `DREAMPIA_CLI_TIMEOUT_MS` env 로 production / e2e 둘 다 override 가능. ADR-0001 (첫 ADR — convention 도입). vitest drive16-4 timeout + opt-in regression. e2e drive16-3 (`fixtures-vcr.ts:cliTimeoutMs` option).
+- **A4 — VCR / fake-CLI production gate** (PR #13, `c0b9bbb`). `vcrProductionGate({ isPackaged, vcrMode, cliCommand })` pure function. `app.isPackaged === true` + (`DREAMPIA_VCR_MODE` set OR `DREAMPIA_CLI_COMMAND` set) → `console.error` + `dialog.showErrorBox` + `app.exit(1)` (boot, `SessionStore` init 보다 먼저). 사용자 결정: "startup fail (가장 안전)". sister vulnerability (`DREAMPIA_CLI_COMMAND` fake-CLI inject) 도 같은 gate 로 차단 — architect verify 4.5/5 발견. truth table 10 cases 28/28 PASS.
+- **A5 — ADR-0002 MetadataExtra legacy optional** (PR #14, `4303d78`). `plan.active` / `permission.default_level` strict removal 시점 명시. v1.9.x = legacy optional 유지 (pre-v1.8.4 row 호환), v2.0.0 = Phase B breaking 흐름과 함께 schema 두 줄 삭제 + 마이그레이션 015+ 가 모든 row metadata strip. Compatibility matrix (v1.7.x ~ v2.0.0).
+- **A1 — L1 respond audit log** (PR #11, `ff811f1`, retroactive 인식). `permission/respond` IPC handler 가 `requestSnapshot` 후 `auditLogStore.recordEvent({ event: 'permission.granted'|'permission.denied', ... })` emit. `tests/main/ipc.permission-respond-audit.test.ts` 4/4 PASS (granted/denied/no-audit/no-match). 본래 PR #11 sweep 의 일부였으나 `v1.x-completion-audit.md` 가 stale 해 v1.9.0 ralph 세션 inventory 가 재발견.
+
+### Decided (Open Questions resolved)
+- **semver 분리**: Phase A → v1.9.0 (non-breaking sweep), Phase B → v2.0.0 (Plugin API breaking).
+- **MetadataExtra strict**: v2.0.0 (Phase B 흐름).
+- **F4 격리**: utility_process (Electron-native, V8 isolate).
+- **VCR_MODE production**: startup fail (가장 안전).
+- **Phase D 우선순위**: Chat virtualization 최우선 (v1.6.23+ 후보).
+
+### Deferred
+- **A2 — PermissionRequest discriminator** → v2.0.0. ralph 세션 inventory 결과 모든 variants (Tool / Plugin / High-risk) 가 uniform shape — type narrowing 가치 minimal. zod schema 는 v2.0.0 Phase B 의 IPC validation 강화 work 와 통합 land.
+
+### Changed
+- `package.json:version`: `1.8.5` → `1.9.0`.
+
+### 회귀
+- 0. CI 모든 OS green (Lint / TS / Test×3 / Build×3 / E2E).
+- ralph 세션 자체 검증: vitest CLI subset 27/27 (A3) → 28/28 (A4) → 4/4 (A1 회귀 lock). architect verdict A3=5/5, A4=4.5/5, A5=self-verify.
+
 ## [1.8.5] — 2026-05-07
 
 **`package.json` version monotonic 정합 — Batch #4 hotfix.**
