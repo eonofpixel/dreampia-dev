@@ -169,7 +169,12 @@ export function mostSpecific(grants: readonly PermissionGrant[]): PermissionGran
  */
 export function isExpired(grant: PermissionGrant, now: Date = new Date()): boolean {
   if (grant.revoked_at) return true;
-  if (grant.expires_at && grant.expires_at < now.toISOString()) return true;
+  if (grant.expires_at) {
+    // v1.1.6-prep (SEC audit M1): ISO-8601 lexicographic compare 는 offset-bearing
+    // 문자열(`+09:00`) 과 UTC `Z` 가 섞이면 잘못 정렬. 시점 비교는 항상 epoch ms
+    // 로 — TZ 무관하게 정확.
+    if (new Date(grant.expires_at).getTime() < now.getTime()) return true;
+  }
   return false;
 }
 

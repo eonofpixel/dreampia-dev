@@ -15,6 +15,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 import type { PermissionConfirmer, PermissionGrantDuration, PermissionRequest } from '../../tools';
 
@@ -194,7 +195,12 @@ export class PluginCapabilityGate {
       return false;
     }
     const request: PermissionRequest = {
-      request_id: `plugin-${pluginName}-${capability}-${Date.now()}`,
+      // v1.1.6-prep (SEC audit M3 — same as Queue.ts): Date.now() 충돌 차단.
+      request_id: `plugin-${pluginName}-${capability}-${Date.now()}-${randomUUID()}`,
+      // TODO v1.1.6 (SEC audit H2): hardcoded 'plugin-loader' session_id 는
+      // confirmer 의 owner-binding (webContentsId 매핑) 에서 무의미. broadcast +
+      // first-response wins 패턴으로 재설계 필요. 현재는 첫 창 의존 — plugin
+      // 활성화 전 windows 가 없으면 silent deny.
       session_id: 'plugin-loader' as PermissionRequest['session_id'],
       turn_id: 'plugin-grant' as PermissionRequest['turn_id'],
       call_id: `plugin-${pluginName}` as PermissionRequest['call_id'],

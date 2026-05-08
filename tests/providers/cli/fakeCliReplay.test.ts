@@ -68,6 +68,15 @@ const FIXTURE_FAILURE_STDERR = resolve(
   'claude',
   'failure-stderr-error.json'
 );
+const FIXTURE_SLOW_STREAM = resolve(
+  __dirname,
+  '..',
+  '..',
+  'fixtures',
+  'cli-vcr',
+  'claude',
+  'slow-stream.json'
+);
 
 function makeUserTurn(text: string): Turn {
   return {
@@ -325,6 +334,53 @@ describe('v1.1.5 — fake CLI replay (Tier 2 integration)', () => {
         // event emit (exit code !== 0 이거나 stderr 에 'error' 포함).
         const errors = events.filter((e) => e.type === 'error');
         expect(errors.length).toBeGreaterThan(0);
+      } finally {
+        if (originalEnv === undefined) delete process.env.DREAMPIA_VCR_FIXTURE;
+        else process.env.DREAMPIA_VCR_FIXTURE = originalEnv;
+      }
+    },
+    20_000
+  );
+
+  // v1.1.4-hotfix-1 — drive16-3: cancel mid-stream → CliProvider 가 SIGTERM
+  // 으로 fake CLI 종료. 첫 chunk 만 받고 abort → message_complete 없음 +
+  // 부분 events 만 도착. (architect 권고: timeout 시나리오는 CliProvider 자체
+  // timeout option 부재로 e2e 미작성, abort 단위 cover 로 충분.)
+  it(
+    'drive16-3: cancel mid-stream → SIGTERM transmitted, no message_complete',
+    async () => {
+      const controller = new AbortController();
+      const provider = new CliProvider({
+        binaryPath: execPath,
+        provider: 'claude',
+        translate: translateClaudeJsonl,
+        preArgs: [FAKE_CLI],
+        signal: controller.signal,
+      });
+
+      const originalEnv = process.env.DREAMPIA_VCR_FIXTURE;
+      process.env.DREAMPIA_VCR_FIXTURE = FIXTURE_SLOW_STREAM;
+      try {
+        const events: StreamEvent[] = [];
+        const iterator = provider.stream({
+          turns: [makeUserTurn('긴응답')],
+          model: 'claude-sonnet-4-6',
+        });
+        // 첫 message_start 또는 text_delta 도착 후 abort 발화.
+        for await (const ev of iterator) {
+          events.push(ev);
+          if (ev.type === 'text_delta' || ev.type === 'message_start') {
+            controller.abort();
+          }
+          // abort 후 도착한 후속 events 도 일단 수집.
+        }
+
+        // 핵심 invariant: message_complete 가 없어야 함 (abort 됐으니).
+        const completes = events.filter((e) => e.type === 'message_complete');
+        expect(completes.length).toBe(0);
+
+        // 일부 events 는 도착했어야 함 (적어도 message_start).
+        expect(events.length).toBeGreaterThan(0);
       } finally {
         if (originalEnv === undefined) delete process.env.DREAMPIA_VCR_FIXTURE;
         else process.env.DREAMPIA_VCR_FIXTURE = originalEnv;

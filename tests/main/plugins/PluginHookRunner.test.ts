@@ -47,6 +47,7 @@ function makePlugin(name: string, hookSrc: string, hookKind: 'pre_turn' | 'post_
       version: '0.1.0',
       hooks: { [hookKind]: 'index.js' },
     },
+    trusted: true,
   };
 }
 
@@ -89,6 +90,7 @@ describe('v1.1.22 — PluginHookRunner', () => {
     const noHook: LoadedPlugin = {
       dir: scratchDir,
       manifest: { name: 'no-hook', version: '0.1.0' },
+      trusted: true,
     };
     const runner = makeRunner();
     await runner.runHook([noHook], 'pre_turn', {
@@ -139,5 +141,48 @@ describe('v1.1.22 — PluginHookRunner', () => {
     runner.clearScriptCache();
     await runner.runHook([plugin], 'pre_turn', ctx);
     expect(ctx.payload.run).toBe(2);
+  });
+
+  // v1.1.6 (D1) — capability gate wiring (SEC audit A).
+  it('gate denied → hook skip + audit plugin.hook_blocked', async () => {
+    const plugin = makePlugin('blocked', `ctx.payload.ran = true;`);
+    plugin.manifest.capabilities = ['network'];
+    const fakeGate = {
+      ensureGranted: async (_name: string, _caps: ReadonlyArray<string>): Promise<boolean> => false,
+    };
+    const runner = new PluginHookRunner({
+      timeout_ms: 1_000,
+      auditSink: (e): void => {
+        auditEvents.push(e);
+      },
+      gate: fakeGate as unknown as import('../../../src/main/plugins/PluginCapabilityGate').PluginCapabilityGate,
+    });
+    const ctx = { kind: 'pre_turn' as const, payload: {} as Record<string, unknown> };
+    await runner.runHook([plugin], 'pre_turn', ctx);
+    expect(ctx.payload.ran).toBeUndefined();
+    const blockedEvent = auditEvents.find((e) => e.event === 'plugin.hook_blocked');
+    expect(blockedEvent).toBeDefined();
+    expect(blockedEvent?.plugin_name).toBe('blocked');
+    const okEvent = auditEvents.find((e) => e.event === 'plugin.hook_ok');
+    expect(okEvent).toBeUndefined();
+  });
+
+  it('gate granted → hook runs (control)', async () => {
+    const plugin = makePlugin('granted', `ctx.payload.ran = true;`);
+    plugin.manifest.capabilities = ['network'];
+    const fakeGate = {
+      ensureGranted: async (_name: string, _caps: ReadonlyArray<string>): Promise<boolean> => true,
+    };
+    const runner = new PluginHookRunner({
+      timeout_ms: 1_000,
+      auditSink: (e): void => {
+        auditEvents.push(e);
+      },
+      gate: fakeGate as unknown as import('../../../src/main/plugins/PluginCapabilityGate').PluginCapabilityGate,
+    });
+    const ctx = { kind: 'pre_turn' as const, payload: {} as Record<string, unknown> };
+    await runner.runHook([plugin], 'pre_turn', ctx);
+    expect(ctx.payload.ran).toBe(true);
+    expect(auditEvents.find((e) => e.event === 'plugin.hook_ok')).toBeDefined();
   });
 });

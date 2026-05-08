@@ -108,17 +108,19 @@ test.describe('chat flow (V2)', () => {
     const input = window.getByTestId('chat-input');
     await expect(input).toBeVisible({ timeout: 10_000 });
 
-    // 사용자 fixture 의 workspace_root = userDataDir 안에 settings.json 이 있다.
-    // @s 를 입력하면 file 멘션 후보로 settings.json 가 나타나야 한다.
+    // v1.0.14 — fixture workspace 에 sample.txt, session.md, src.ts 가 seed.
+    // (이전엔 workspace_root = userDataDir 라 settings.json 도 보였지만
+    //  META-4 hotfix 로 workspaceDir/userDataDir 가 분리됨 — fixtures.ts:64-78
+    //  참조.) @s 입력 시 sample.txt, session.md, src.ts 가 후보로 떠야 한다.
     await input.click();
     await input.fill('@s');
     // popover 등장.
     await expect(window.getByTestId('mention-popover')).toBeVisible({
       timeout: 5_000,
     });
-    // settings.json 항목 존재. (e2e fixture 가 미리 써놓은 파일)
+    // 현재 fixture seed 에 존재하는 파일 — sample.txt 항목.
     await expect(
-      window.getByTestId('mention-option-file-settings.json')
+      window.getByTestId('mention-option-file-sample.txt')
     ).toBeVisible({ timeout: 5_000 });
   });
 

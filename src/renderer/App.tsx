@@ -167,7 +167,26 @@ export function App(): React.JSX.Element {
   // the database holds the source of truth, but we shadow it locally
   // so streaming text_delta events update synchronously.
   const [activeSessionId, setActiveSessionId] = useState<string>('');
+
+  // v1.1.4 — turn 영속화 신호. await persistTurn() 이 resolve 된 turn 의 id
+  // 를 누적. ChatPanel/TurnDisplay 가 `data-persisted="true"` 속성으로 노출 →
+  // e2e (drive14-3 등) 가 이 신호를 기다린 후 SQLite 조회. fire-and-forget
+  // persistTurn IIFE (handleStreamComplete) 와 test 의 race 를 차단.
+  const [persistedTurnIds, setPersistedTurnIds] = useState<ReadonlySet<string>>(new Set());
+  const markTurnPersisted = useCallback((turnId: string): void => {
+    setPersistedTurnIds((prev) => {
+      if (prev.has(turnId)) return prev;
+      const next = new Set(prev);
+      next.add(turnId);
+      return next;
+    });
+  }, []);
   const [activeSession, setActiveSession] = useState<Session | null>(null);
+  // v1.1.13 (Workspace UX): per-session sticky workspace lock state.
+  // 활성 session 이 바뀔 때마다 IPC `session/get-workspace-locked` 동기화 (effect 는 아래쪽).
+  // v1.1.5 (boot recovery): defaultWorkspace useMemo 가 본 값을 읽어 잠긴 세션 활성 시
+  // session.workspace.root 로 자동 복귀하므로 state 선언이 useMemo 보다 앞서야 한다.
+  const [workspaceLocked, setWorkspaceLocked] = useState<boolean>(false);
   // Onboarding 추천 prompt → ChatInput 자동 채움. 새 prompt 가 도착할 때마다
   // 식별 가능하도록 Date.now() 같은 monotonic 값으로 들고 다닐 수 있지만,
   // ChatInput 의 useEffect 가 빈 문자열 무시하므로 string 자체로 충분.
@@ -336,12 +355,23 @@ export function App(): React.JSX.Element {
   // 새 세션은 항상 (사용자 선택 > launch) 우선순위로 root 결정.
   // packaged + settings 없음 + 사용자가 picker 로 선택 안함 = null.
   // null 이면 새 채팅 생성 disabled.
+  //
+  // v1.1.5 (Workspace UX boot recovery): 잠긴 세션이 활성 상태면 picked/launch
+  // 무시하고 session.workspace 로 강제 복귀. session 전환 시 사용자가 의도한
+  // workspace 자동 적용 — sidebar 라벨 / ChatHeader 라벨 / mention root /
+  // streaming cwd 모두 동기화. unlock 하면 picked/launch 로 fallback.
   const defaultWorkspace = useMemo<WorkspaceInfo | null>(() => {
+    if (workspaceLocked && activeSession !== null) {
+      return {
+        root: activeSession.workspace.root,
+        name: activeSession.workspace.name,
+      };
+    }
     if (pickedWorkspace !== null) {
       return { root: pickedWorkspace.path, name: pickedWorkspace.name };
     }
     return launchWorkspace;
-  }, [pickedWorkspace, launchWorkspace]);
+  }, [workspaceLocked, activeSession, pickedWorkspace, launchWorkspace]);
 
   // Phase 3 audit (HIGH): packaged 에서 workspace 가 null 이면 자동으로
   // picker 띄우기. 단 한 번만 시도 — 사용자가 picker 취소하면 onboarding
@@ -536,13 +566,15 @@ export function App(): React.JSX.Element {
       if (activeSessionId === '') return;
       void (async () => {
         await persistTurn(activeSessionId as SessionId, turn);
+        markTurnPersisted(turn.id);
         if (toolResultTurn !== undefined) {
           handleTurnUpdate(toolResultTurn);
           await persistTurn(activeSessionId as SessionId, toolResultTurn);
+          markTurnPersisted(toolResultTurn.id);
         }
       })();
     },
-    [activeSessionId, handleTurnUpdate, persistTurn]
+    [activeSessionId, handleTurnUpdate, persistTurn, markTurnPersisted]
   );
 
   const {
@@ -636,11 +668,10 @@ export function App(): React.JSX.Element {
     [activeSession?.id, persistUpdatePermission]
   );
 
-  // v1.1.13 (Workspace UX): per-session sticky workspace lock state.
+  // v1.1.13 (Workspace UX): per-session sticky workspace lock 의 effect.
   // 활성 session 이 바뀔 때마다 IPC `session/get-workspace-locked` 동기화.
-  // toggle 시 IPC `session/set-workspace-locked` 호출 + local 갱신.
-  const [workspaceLocked, setWorkspaceLocked] = useState<boolean>(false);
-
+  // toggle 시 IPC `session/set-workspace-locked` 호출 + local 갱신 (handleToggleWorkspaceLock 아래).
+  // state 자체는 위쪽 (defaultWorkspace useMemo 의존) 에서 선언.
   useEffect(() => {
     if (activeSession === null) {
       setWorkspaceLocked(false);
@@ -667,6 +698,19 @@ export function App(): React.JSX.Element {
     // 자체는 streaming chunk 마다 새 reference 라 dep 으로 넣으면 fetch 폭주.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSession?.id]);
+
+  // v1.1.5 (Workspace UX): pickWorkspace 호출에 lock 가드. 활성 세션이 잠겨있으면
+  // 폴더 변경 차단 + 사용자에게 unlock 가이드 toast. lock 의 의미를 강제 — 잠긴
+  // 세션은 항상 자기 workspace.
+  const handlePickWorkspace = useCallback(async (): Promise<void> => {
+    if (workspaceLocked) {
+      toasts.warning(t('toast.workspace_lock.pick_blocked'), {
+        detail: t('toast.workspace_lock.pick_blocked_detail'),
+      });
+      return;
+    }
+    await pickWorkspace();
+  }, [workspaceLocked, pickWorkspace, toasts, t]);
 
   const handleToggleWorkspaceLock = useCallback((): void => {
     if (activeSession === null) return;
@@ -846,6 +890,7 @@ export function App(): React.JSX.Element {
 
       // 2) Persist user turn (refresh updates Sidebar's updated_at order).
       await persistTurn(activeSession.id, userTurn);
+      markTurnPersisted(userTurn.id);
 
       // 3) Kick off streaming; assistant turn shadowed locally,
       //    persisted on message_complete (handleStreamComplete).
@@ -866,7 +911,15 @@ export function App(): React.JSX.Element {
         permissionLevel: activeSession.permission.default_level,
       });
     },
-    [activeSession, defaultWorkspace, isStreaming, persistTurn, startStream, provider]
+    [
+      activeSession,
+      defaultWorkspace,
+      isStreaming,
+      persistTurn,
+      startStream,
+      provider,
+      markTurnPersisted,
+    ]
   );
 
   // Surface IPC errors in the console; UI-level error states come later.
@@ -1072,13 +1125,17 @@ export function App(): React.JSX.Element {
               },
             }
       );
-      void persistTurn(activeSession.id, userTurn);
-      void persistTurn(activeSession.id, assistantTurn);
+      void persistTurn(activeSession.id, userTurn).then(() => {
+        markTurnPersisted(userTurn.id);
+      });
+      void persistTurn(activeSession.id, assistantTurn).then(() => {
+        markTurnPersisted(assistantTurn.id);
+      });
       void side; // side 정보는 향후 metadata 활용 — 현재는 turn append 만.
       setCompareModalOpen(false);
       compareHook.reset();
     },
-    [activeSession, compareHook, persistTurn]
+    [activeSession, compareHook, persistTurn, markTurnPersisted]
   );
 
   // Phase 3 B2: Wizard 완료 시 호출 — settings 영속 + 옵션으로 첫 채팅 생성.
@@ -1295,7 +1352,8 @@ export function App(): React.JSX.Element {
             onPickWorkspace={() => {
               // v1.0.5 — [프로젝트] 폴더 항목 클릭 시 workspace 변경 picker.
               // 사용자가 다른 폴더 선택하면 settings.workspace_root 영속 + 재계산.
-              void pickWorkspace();
+              // v1.1.5 — 잠긴 세션 시 차단 + unlock toast (handlePickWorkspace).
+              void handlePickWorkspace();
             }}
             onOpenCompare={() => {
               // v1.0.13 (FAKE-2): [비교] 항목 클릭 — Compare modal 열기.
@@ -1349,7 +1407,8 @@ export function App(): React.JSX.Element {
             workspaceName={chatHeaderWorkspaceName}
             {...(sessionWorkspaceName !== undefined && { sessionWorkspaceName })}
             onPickWorkspace={() => {
-              void pickWorkspace();
+              // v1.1.5 — 잠긴 세션 시 차단 + unlock toast (handlePickWorkspace).
+              void handlePickWorkspace();
             }}
             previewVisible={previewVisible}
             onTogglePreview={() => setPreviewVisible((v) => !v)}
@@ -1368,6 +1427,7 @@ export function App(): React.JSX.Element {
             })}
             pendingFocusTurnId={pendingFocusTurnId}
             onTurnFocused={handleTurnFocused}
+            persistedTurnIds={persistedTurnIds}
             onChangePermission={(next) => {
               void handleChangePermission(next);
             }}
