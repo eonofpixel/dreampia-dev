@@ -11,6 +11,18 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { Virtuoso } from 'react-virtuoso';
+
+/**
+ * v2.x (Phase D — Chat virtualization).
+ *
+ * turns.length >= 본 threshold 시 react-virtuoso 로 windowing 활성. 작은
+ * list 는 simple map (Virtuoso 의 wrapper overhead 회피). 100 은 일반
+ * 사용자 세션의 평균 turn 수보다 충분히 높아 대부분 simple path.
+ *
+ * Spec: docs/v2.x-roadmap.md (Phase D, 사용자 결정 Q5).
+ */
+export const TURN_VIRTUALIZATION_THRESHOLD = 100;
 import { ChatInput } from './ChatInput';
 import { EmptyState as SharedEmptyState } from '../empty/EmptyState';
 import type { ContentBlock, PermissionLevel, Session, Turn, ToolResultRef } from '@/types';
@@ -370,20 +382,48 @@ function MessagesArea({
           {...(onOpenHelp !== undefined && { onOpenHelp })}
         />
       ) : (
-        <div className="mx-auto max-w-3xl space-y-4">
-          {turns.map((turn, index) => (
-            <TurnDisplay
-              key={turn.id}
-              turn={turn}
-              getResult={(callId: string): ToolResultRef | undefined =>
-                findToolResult(turns, index, callId)
-              }
-              onPickSession={onPickSession}
-              {...(onForkAtTurn !== undefined && { onForkAtTurn })}
-              isPersisted={persistedTurnIds?.has(turn.id) === true}
-            />
-          ))}
-        </div>
+        // v2.x (Phase D — Chat virtualization, Open Questions Q5).
+        // turns.length 가 threshold 초과 시 react-virtuoso 로 windowing —
+        // 10000 turn 도 60fps scroll. 작은 list 는 simple map (overhead 회피).
+        // testid 호환을 위해 두 path 모두 TurnDisplay 를 동일 props 로 사용.
+        turns.length >= TURN_VIRTUALIZATION_THRESHOLD ? (
+          <Virtuoso
+            data={turns}
+            className="mx-auto max-w-3xl"
+            style={{ height: '100%' }}
+            followOutput="smooth"
+            initialTopMostItemIndex={turns.length - 1}
+            itemContent={(index, turn) => (
+              <div className="pb-4">
+                <TurnDisplay
+                  turn={turn}
+                  getResult={(callId: string): ToolResultRef | undefined =>
+                    findToolResult(turns, index, callId)
+                  }
+                  onPickSession={onPickSession}
+                  {...(onForkAtTurn !== undefined && { onForkAtTurn })}
+                  isPersisted={persistedTurnIds?.has(turn.id) === true}
+                />
+              </div>
+            )}
+            data-testid="chat-turns-virtuoso"
+          />
+        ) : (
+          <div className="mx-auto max-w-3xl space-y-4">
+            {turns.map((turn, index) => (
+              <TurnDisplay
+                key={turn.id}
+                turn={turn}
+                getResult={(callId: string): ToolResultRef | undefined =>
+                  findToolResult(turns, index, callId)
+                }
+                onPickSession={onPickSession}
+                {...(onForkAtTurn !== undefined && { onForkAtTurn })}
+                isPersisted={persistedTurnIds?.has(turn.id) === true}
+              />
+            ))}
+          </div>
+        )
       )}
       <div ref={bottomRef} />
     </div>
