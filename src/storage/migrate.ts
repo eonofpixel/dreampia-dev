@@ -29,6 +29,7 @@ import sql012 from './migrations/012_workspace_id_sha256_marker.sql?raw';
 import sql013 from './migrations/013_permission_grants_id_text.sql?raw';
 import sql014 from './migrations/014_conversation_columns_promote.sql?raw';
 import sql015 from './migrations/015_extra_promote_v1.sql?raw';
+import sql016 from './migrations/016_metadata_extra_strict_strip.sql?raw';
 
 // v1.4.3 — down migrations. 일부 (markers 8-12) 만 backfill, 1-7 은 후속.
 import down008 from './migrations/down_008_workspace_id_deterministic.sql?raw';
@@ -39,6 +40,7 @@ import down012 from './migrations/down_012_workspace_id_sha256_marker.sql?raw';
 import down013 from './migrations/down_013_permission_grants_id_text.sql?raw';
 import down014 from './migrations/down_014_conversation_columns_promote.sql?raw';
 import down015 from './migrations/down_015_extra_promote_v1.sql?raw';
+import down016 from './migrations/down_016_metadata_extra_strict_strip.sql?raw';
 
 // ────────────────────────────────────────────────────────────
 // Migration registry
@@ -120,6 +122,13 @@ const MIGRATIONS: readonly Migration[] = [
     description: 'v1.8.1 — sessions.permission_default_level + plan_active promote (B-3 2단계)',
     up: sql015,
     down: down015,
+  },
+  {
+    version: 16,
+    description:
+      'v2.0.0 — metadata_json._extra strict strip (plan.active + permission.default_level) — ADR-0002',
+    up: sql016,
+    down: down016,
   },
 ] as const;
 
