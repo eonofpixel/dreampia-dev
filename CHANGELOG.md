@@ -9,6 +9,7 @@
 `docs/v2.x-roadmap.md` Phase C 의 5 deliverable 모두 land. v2.0.0 의 breaking 흐름 직후 운영 reproducibility 확보 — release procedure 정식화 + DB tooling + telemetry spec + light theme a11y + e2e 시나리오 lock.
 
 ### Added
+- **Phase D — Chat virtualization (`react-virtuoso` opt-in 100+ turns)** (PR #22, `f9a57e9`). 사용자 결정 Q5 (Chat virtualization 최우선) 의 PoC. ChatPanel 의 turn list 가 `TURN_VIRTUALIZATION_THRESHOLD = 100` 기준 conditional — < 100 simple map (overhead 회피), >= 100 `<Virtuoso />` windowing. `followOutput="smooth"` + `initialTopMostItemIndex={turns.length - 1}` 로 auto-scroll 보존. `react-virtuoso ^4.18.6` dep 추가. 기존 e2e fixture 는 작은 list 라 simple path 유지 — 회귀 0. (10000 turn fixture + DevTools 60fps perf 측정은 v2.x.x 후속 슬롯.)
 - **C1 — release-checklist v2.x runbook 정식화** (PR #23, `2987fd3`). v1.8.5 CHANGELOG (line 17-20) 의 약속 이행. `docs/release-checklist.md` 에 v2.x 섹션 prepend (Pre-flight / Version bump / CI evidence / Manual smoke / DB migration / Tag + push / Memory + roadmap / Post-release). 기존 v0.1.2+ runbook 은 archive 로 보존.
 - **C2 — db:migrate-down CLI tool** (PR #25, `01a9774`). `scripts/db-migrate-down.cjs` + `package.json:db:migrate-down` npm script. 사용자가 schema down-grade 가 필요할 때 user-facing path. OS-specific default DB path (Win/macOS/Linux) + `--db <path>` override. 기존 `revertTo()` 함수의 wrapper.
 - **C3 — Sentry custom dashboard spec** (PR #24, `b202068`). `docs/sentry-dashboard.md` — production 배포 후 수집할 metrics + panel 구성 + alert threshold. audit / permission / cli / plugin / storage / boot / cost 7 영역.
