@@ -220,3 +220,53 @@ export function updateFixtureHash(fixturePath: string, capturedEvents: StreamEve
 export function shouldRequireFixture(mode: VcrMode = getVcrMode()): boolean {
   return mode === 'replay';
 }
+
+/**
+ * v1.9.0 (A4) — VCR / fake-CLI production gate.
+ *
+ * Spec: docs/v1.x-completion-audit.md (HIGH severity), 사용자 결정 2026-05-08:
+ *   "DREAMPIA_VCR_MODE production: startup fail (test fixture prod 누출 차단)".
+ *
+ * 차단 대상 env (architect verify 2026-05-09: 같은 보안 경계 — fake-CLI 우회):
+ *   - `DREAMPIA_VCR_MODE`     — VCR replay/record/live 모드
+ *   - `DREAMPIA_CLI_COMMAND`  — CliProvider binary override (test fake CLI)
+ *
+ * Returns `{ ok: false, message }` 면 호출자 (main/index.ts) 가 dialog 표시
+ * 후 `app.exit(1)` 로 즉시 종료해야 한다.
+ *
+ * 통과 조건 (모두 ok):
+ *  - unpackaged build (app.isPackaged === false): VCR env set 여부 무관
+ *  - packaged build + 두 env 모두 undefined
+ *
+ * 차단 조건 (fail):
+ *  - packaged build + 두 env 중 하나라도 string (값 무관 — typo / silent
+ *    coercion 차단; getVcrMode 가 unknown → replay 로 강제하는 거동 보호)
+ *
+ * Pure function — `app` 모듈 의존성 없이 호출자가 isPackaged 를 주입한다.
+ * 단위 테스트가 쉽고 main/index.ts 내 wiring 이 최소화된다.
+ */
+export function vcrProductionGate(args: {
+  isPackaged: boolean;
+  vcrMode: string | undefined;
+  cliCommand?: string | undefined;
+}): { ok: true } | { ok: false; message: string } {
+  if (!args.isPackaged) return { ok: true };
+  if (args.vcrMode !== undefined) {
+    return {
+      ok: false,
+      message:
+        `VCR mode detected in production build (DREAMPIA_VCR_MODE=${args.vcrMode}). ` +
+        `Test fixtures must not leak into production. Application will exit.`,
+    };
+  }
+  if (args.cliCommand !== undefined) {
+    return {
+      ok: false,
+      message:
+        `Fake CLI override detected in production build ` +
+        `(DREAMPIA_CLI_COMMAND=${args.cliCommand}). ` +
+        `Test harness must not leak into production. Application will exit.`,
+    };
+  }
+  return { ok: true };
+}
