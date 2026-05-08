@@ -68,11 +68,8 @@ const BrowserExtraSchema = z
 
 const PlanExtraSchema = z
   .object({
-    /**
-     * v1.8.4 legacy optional. column `sessions.plan_active` 가 단일 source.
-     * 신규 row 는 본 필드 직렬화 X — 기존 row 만 read 호환용.
-     */
-    active: z.boolean().optional(),
+    // v2.0.0 (ADR-0002): plan.active 제거. column `sessions.plan_active` 가
+    // 단일 source. migration 016 이 모든 row 의 _extra 에서 strip.
     browser_tool_enabled: z.boolean(),
     current_item_index: z.number().optional(),
   })
@@ -80,11 +77,9 @@ const PlanExtraSchema = z
 
 const PermissionExtraSchema = z
   .object({
-    /**
-     * v1.8.4 legacy optional. column `sessions.permission_default_level`
-     * 가 단일 source. 신규 row 는 본 필드 직렬화 X.
-     */
-    default_level: z.enum(['read_only', 'workspace_write', 'full_access', 'custom']).optional(),
+    // v2.0.0 (ADR-0002): permission.default_level 제거. column
+    // `sessions.permission_default_level` 가 단일 source. migration 016 이
+    // 모든 row 의 _extra 에서 strip.
     last_denied: z.object({ capability: z.string(), ts: z.string() }).optional(),
     temporarily_blocked_capabilities: z.array(z.string()),
   })

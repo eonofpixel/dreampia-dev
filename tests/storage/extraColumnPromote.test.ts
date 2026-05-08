@@ -64,9 +64,9 @@ describe('v1.8.1 — _extra column promote', () => {
     store.close();
   });
 
-  it('migration registry — LATEST_SCHEMA_VERSION === 15', () => {
-    expect(LATEST_SCHEMA_VERSION).toBe(15);
-    expect(store.getSchemaVersion()).toBe(15);
+  it('migration registry — LATEST_SCHEMA_VERSION === 16 (v2.0.0 ADR-0002 strict strip)', () => {
+    expect(LATEST_SCHEMA_VERSION).toBe(16);
+    expect(store.getSchemaVersion()).toBe(16);
   });
 
   it('v1.8.4 — INSERT 시 column 만 채워지고 _extra 측 두 필드 부재', () => {

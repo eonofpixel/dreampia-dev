@@ -85,9 +85,8 @@ describe('v1.8.2 — _extra MetadataExtraSchema contract', () => {
         layout: 'hidden',
         partition_id: 'p',
       },
-      plan: { active: false, browser_tool_enabled: false },
+      plan: { browser_tool_enabled: false },
       permission: {
-        default_level: 'workspace_write',
         temporarily_blocked_capabilities: [],
       },
       // 미등록 namespace.
@@ -117,9 +116,8 @@ describe('v1.8.2 — _extra MetadataExtraSchema contract', () => {
         layout: 'hidden',
         partition_id: 'p',
       },
-      plan: { active: false, browser_tool_enabled: false },
+      plan: { browser_tool_enabled: false },
       permission: {
-        default_level: 'workspace_write',
         temporarily_blocked_capabilities: [],
       },
     };
@@ -141,9 +139,8 @@ describe('v1.8.2 — _extra MetadataExtraSchema contract', () => {
         layout: 'hidden',
         partition_id: 'p',
       },
-      plan: { active: false, browser_tool_enabled: false },
+      plan: { browser_tool_enabled: false },
       permission: {
-        default_level: 'workspace_write',
         temporarily_blocked_capabilities: [],
       },
     };
@@ -260,7 +257,7 @@ describe('v1.8.2 — _extra MetadataExtraSchema contract', () => {
     expect(r.success).toBe(false);
   });
 
-  it('permission.default_level enum 강제 (잘못된 값 거부)', () => {
+  it('v2.0.0 (ADR-0002) — permission.default_level 가 들어오면 거부 (legacy strict removal)', () => {
     const sample = {
       conversation: {
         current_model: 'sonnet',
@@ -274,9 +271,39 @@ describe('v1.8.2 — _extra MetadataExtraSchema contract', () => {
         layout: 'hidden',
         partition_id: 'p',
       },
-      plan: { active: false, browser_tool_enabled: false },
+      plan: { browser_tool_enabled: false },
       permission: {
-        default_level: 'totally_made_up',
+        // legacy field — column `sessions.permission_default_level` 단일 source.
+        // strict schema 가 reject 해야 함.
+        default_level: 'workspace_write',
+        temporarily_blocked_capabilities: [],
+      },
+    };
+    const r = MetadataExtraSchema.safeParse(sample);
+    expect(r.success).toBe(false);
+  });
+
+  it('v2.0.0 (ADR-0002) — plan.active 가 들어오면 거부 (legacy strict removal)', () => {
+    const sample = {
+      conversation: {
+        current_model: 'sonnet',
+        current_effort: 'medium',
+        current_mode: 'chat',
+      },
+      workspace: { recent_files: [], open_files: [], ignore_patterns: [] },
+      terminal: { panel_open: false, height_px: 200 },
+      browser: {
+        panel_visible: false,
+        layout: 'hidden',
+        partition_id: 'p',
+      },
+      plan: {
+        // legacy field — column `sessions.plan_active` 단일 source.
+        // strict schema 가 reject 해야 함.
+        active: true,
+        browser_tool_enabled: false,
+      },
+      permission: {
         temporarily_blocked_capabilities: [],
       },
     };
