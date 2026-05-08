@@ -93,6 +93,7 @@ export async function getDefaultProvider(
     const lower = model.toLowerCase();
     const codexFamily = ['gpt-', 'o1-', 'o3-', 'codex-'].some((p) => lower.startsWith(p));
     const provider: 'claude' | 'codex' = codexFamily ? 'codex' : 'claude';
+    const timeoutMs = parseTimeoutMsEnv();
     return {
       provider: new CliProvider({
         binaryPath: cliOverride.command,
@@ -101,6 +102,7 @@ export async function getDefaultProvider(
         ...(signal !== undefined && { signal }),
         ...(cwd !== undefined && { cwd }),
         ...(permissionLevel !== undefined && { permissionLevel }),
+        ...(timeoutMs !== undefined && { timeout_ms: timeoutMs }),
         preArgs: cliOverride.pre_args,
       }),
       source: provider === 'claude' ? 'claude-cli' : 'codex-cli',
@@ -251,6 +253,7 @@ function makeCliProvider(
   cwd?: string,
   permissionLevel?: PermissionLevel
 ): CliProvider {
+  const timeoutMs = parseTimeoutMsEnv();
   return new CliProvider({
     binaryPath: info.path,
     provider,
@@ -258,5 +261,24 @@ function makeCliProvider(
     ...(signal !== undefined && { signal }),
     ...(cwd !== undefined && { cwd }),
     ...(permissionLevel !== undefined && { permissionLevel }),
+    ...(timeoutMs !== undefined && { timeout_ms: timeoutMs }),
   });
+}
+
+/**
+ * v1.9.0 (A3) — `DREAMPIA_CLI_TIMEOUT_MS` env 파싱.
+ *
+ * - 미설정 / 빈 문자열 / parse 실패 / `<= 0` → `undefined` (timeout 없음, opt-in)
+ * - 양수 정수 → 그대로 ms 로 적용
+ *
+ * Spec: docs/adr/0001-cli-provider-timeout.md
+ *
+ * Future: settings.json `cli_timeout_ms` 가 env 보다 우선하도록 확장.
+ */
+function parseTimeoutMsEnv(): number | undefined {
+  const raw = process.env.DREAMPIA_CLI_TIMEOUT_MS;
+  if (raw === undefined || raw.length === 0) return undefined;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.floor(n);
 }

@@ -49,6 +49,12 @@ export interface MakeVcrTestOptions {
    * lock — Codex Q5 picking 의 한국어 폴더 처리 검증.
    */
   koreanWorkspace?: boolean;
+  /**
+   * v1.9.0 (A3 / drive16-3): `DREAMPIA_CLI_TIMEOUT_MS` 주입. set 시
+   * CliProvider 가 spawn 후 N ms 경과 시 SIGTERM + error event.
+   * undefined → env 미설정 (timeout 없음).
+   */
+  cliTimeoutMs?: number;
 }
 
 /**
@@ -132,6 +138,10 @@ export function makeVcrTest(fixtureRelPath: string, options: MakeVcrTestOptions 
           DREAMPIA_CLI_COMMAND: process.execPath,
           DREAMPIA_CLI_PREARGS: FAKE_CLI,
           DREAMPIA_VCR_FIXTURE: vcrFixture,
+          // v1.9.0 (A3): drive16-3 timeout spec 만 set. 그 외 spec 은 undefined.
+          ...(options.cliTimeoutMs !== undefined && {
+            DREAMPIA_CLI_TIMEOUT_MS: String(options.cliTimeoutMs),
+          }),
         },
       });
 

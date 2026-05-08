@@ -59,6 +59,18 @@ export interface CliProviderOptions {
   /** Mid-stream 취소용 (MAIN process 가 IPC 'ai/stop-stream' 에서 사용). */
   signal?: AbortSignal;
   /**
+   * v1.9.0 (A3) — 자동 timeout (ms). Set 되면 spawn 후 timeout_ms 경과 시
+   * SIGTERM kill + `error` StreamEvent emit. `undefined` = 무제한 (backward-compat).
+   *
+   * `signal` (user-cancel) 과 분리된 의미:
+   *   signal abort → silent return (UI 가 'cancelled' 표시)
+   *   timeout      → `error` event ("CLI timeout exceeded (Xms)") + return
+   *
+   * Production wire: auto.ts 가 DREAMPIA_CLI_TIMEOUT_MS env 로 override 가능.
+   * Spec: docs/adr/0001-cli-provider-timeout.md
+   */
+  timeout_ms?: number;
+  /**
    * Session permission level — provider CLI 의 sandbox / tool-policy 옵션으로 매핑된다.
    *
    * Codex: '--sandbox <mode>' 로 전달.
@@ -160,6 +172,10 @@ export class CliProvider implements StreamingProvider {
     const errorState: { message: string | null } = { message: null };
     let receivedComplete = false;
     let aborted = false;
+    // v1.9.0 (A3) — auto timeout. aborted 와 분리된 flag — error event emit
+    // 여부가 다르고, close handler 의 exit-code 합성 분기에서 제외 대상.
+    let timedOut = false;
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
     const wakeUp = (): void => {
       const fn = resolveNext;
@@ -212,6 +228,25 @@ export class CliProvider implements StreamingProvider {
       }
     }
 
+    // v1.9.0 (A3) — timeout_ms 설정 시 자동 SIGTERM + error event.
+    // signal abort 와 달리 errorState.message 를 set 해 emit 경로를 탄다.
+    const onTimeout = (): void => {
+      timedOut = true;
+      const ms = this.opts.timeout_ms;
+      errorState.message =
+        `${errorState.message ?? ''}CLI timeout exceeded (${ms}ms)`.trim();
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        // ignore — child 가 이미 종료됐을 수 있음.
+      }
+      ended = true;
+      wakeUp();
+    };
+    if (this.opts.timeout_ms !== undefined && this.opts.timeout_ms > 0) {
+      timeoutHandle = setTimeout(onTimeout, this.opts.timeout_ms);
+    }
+
     child.stdout?.on('data', (chunk: Buffer) => {
       const lines = parser.push(chunk.toString());
       for (const parsed of lines) {
@@ -232,19 +267,30 @@ export class CliProvider implements StreamingProvider {
     });
 
     child.on('error', (err) => {
+      // v1.9.0 (A3): child 에러로 종료될 때도 timer 누수 방지.
+      if (timeoutHandle !== null) {
+        clearTimeout(timeoutHandle);
+        timeoutHandle = null;
+      }
       errorState.message = err.message;
       ended = true;
       wakeUp();
     });
 
     child.on('close', (code) => {
+      // child 가 자연 종료했으니 pending timeout 정리.
+      if (timeoutHandle !== null) {
+        clearTimeout(timeoutHandle);
+        timeoutHandle = null;
+      }
       // 마지막 라인 flush
       for (const parsed of parser.flush()) {
         for (const ev of this.opts.translate(parsed, ctx)) {
           enqueue(ev);
         }
       }
-      if (code !== 0 && code !== null && !aborted) {
+      // v1.9.0 (A3): timedOut 도 SIGTERM 으로 종료시킨 거라 exit-code 메시지 합성 X.
+      if (code !== 0 && code !== null && !aborted && !timedOut) {
         errorState.message = `${errorState.message ?? ''} (exit code ${code})`.trim();
       }
       ended = true;
@@ -266,6 +312,11 @@ export class CliProvider implements StreamingProvider {
     } finally {
       if (this.opts.signal !== undefined) {
         this.opts.signal.removeEventListener('abort', onAbort);
+      }
+      // v1.9.0 (A3): 어떤 경로로 빠져나오든 timer leak 방지.
+      if (timeoutHandle !== null) {
+        clearTimeout(timeoutHandle);
+        timeoutHandle = null;
       }
     }
 

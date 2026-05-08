@@ -344,8 +344,7 @@ describe('v1.1.5 — fake CLI replay (Tier 2 integration)', () => {
 
   // v1.1.4-hotfix-1 — drive16-3: cancel mid-stream → CliProvider 가 SIGTERM
   // 으로 fake CLI 종료. 첫 chunk 만 받고 abort → message_complete 없음 +
-  // 부분 events 만 도착. (architect 권고: timeout 시나리오는 CliProvider 자체
-  // timeout option 부재로 e2e 미작성, abort 단위 cover 로 충분.)
+  // 부분 events 만 도착. (v1.9.0 / A3: 자동 timeout 은 별도 it 케이스로 분리.)
   it(
     'drive16-3: cancel mid-stream → SIGTERM transmitted, no message_complete',
     async () => {
@@ -381,6 +380,95 @@ describe('v1.1.5 — fake CLI replay (Tier 2 integration)', () => {
 
         // 일부 events 는 도착했어야 함 (적어도 message_start).
         expect(events.length).toBeGreaterThan(0);
+      } finally {
+        if (originalEnv === undefined) delete process.env.DREAMPIA_VCR_FIXTURE;
+        else process.env.DREAMPIA_VCR_FIXTURE = originalEnv;
+      }
+    },
+    20_000
+  );
+
+  // v1.9.0 (A3) — drive16-4: timeout_ms 경과 시 SIGTERM + error event emit.
+  // 사용자-cancel (signal) 과 분리: timeout 은 명시적 error 메시지 표면화한다.
+  // slow-stream.json 의 3rd chunk 가 855ms 에 도착하므로 timeout_ms=300 이면
+  // 첫번째 / 두번째 chunk 는 통과, 3rd chunk 도착 전 timeout fire.
+  it(
+    'drive16-4: timeout_ms 경과 시 error event + no message_complete',
+    async () => {
+      const provider = new CliProvider({
+        binaryPath: execPath,
+        provider: 'claude',
+        translate: translateClaudeJsonl,
+        preArgs: [FAKE_CLI],
+        timeout_ms: 300,
+      });
+
+      const originalEnv = process.env.DREAMPIA_VCR_FIXTURE;
+      process.env.DREAMPIA_VCR_FIXTURE = FIXTURE_SLOW_STREAM;
+      try {
+        const events: StreamEvent[] = [];
+        const iterator = provider.stream({
+          turns: [makeUserTurn('긴응답')],
+          model: 'claude-sonnet-4-6',
+        });
+        for await (const ev of iterator) {
+          events.push(ev);
+        }
+
+        // 핵심 invariant 1: error event 가 timeout 메시지로 표면화 됨.
+        const errorEvents = events.filter((e) => e.type === 'error');
+        expect(errorEvents.length).toBe(1);
+        const errorEvent = errorEvents[0];
+        if (errorEvent !== undefined && errorEvent.type === 'error') {
+          expect(errorEvent.error).toMatch(/CLI timeout exceeded \(300ms\)/);
+        }
+
+        // 핵심 invariant 2: message_complete 없음 (timeout 됐으니).
+        const completes = events.filter((e) => e.type === 'message_complete');
+        expect(completes.length).toBe(0);
+
+        // 핵심 invariant 3: timeout 이전 chunk 들은 도착 (message_start 최소).
+        expect(events.length).toBeGreaterThan(1);
+      } finally {
+        if (originalEnv === undefined) delete process.env.DREAMPIA_VCR_FIXTURE;
+        else process.env.DREAMPIA_VCR_FIXTURE = originalEnv;
+      }
+    },
+    20_000
+  );
+
+  // v1.9.0 (A3) — timeout_ms=undefined 시 기존 happy path 가 그대로 흐른다 (regression guard).
+  it(
+    'drive16-4 regression: timeout_ms 미설정 시 message_complete 정상 도달',
+    async () => {
+      const provider = new CliProvider({
+        binaryPath: execPath,
+        provider: 'claude',
+        translate: translateClaudeJsonl,
+        preArgs: [FAKE_CLI],
+        // timeout_ms 의도적 미지정 (opt-in default).
+      });
+
+      const originalEnv = process.env.DREAMPIA_VCR_FIXTURE;
+      process.env.DREAMPIA_VCR_FIXTURE = FIXTURE_SLOW_STREAM;
+      try {
+        const events: StreamEvent[] = [];
+        for await (const ev of provider.stream({
+          turns: [makeUserTurn('긴응답')],
+          model: 'claude-sonnet-4-6',
+        })) {
+          events.push(ev);
+        }
+
+        // timeout 없으면 모든 chunk + message_complete 도달.
+        const completes = events.filter((e) => e.type === 'message_complete');
+        expect(completes.length).toBe(1);
+
+        // timeout error event 부재 — opt-in default 가 enforced.
+        const timeoutErrors = events.filter(
+          (e) => e.type === 'error' && /timeout/i.test(e.error)
+        );
+        expect(timeoutErrors.length).toBe(0);
       } finally {
         if (originalEnv === undefined) delete process.env.DREAMPIA_VCR_FIXTURE;
         else process.env.DREAMPIA_VCR_FIXTURE = originalEnv;
