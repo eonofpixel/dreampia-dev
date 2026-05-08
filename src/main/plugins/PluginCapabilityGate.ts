@@ -13,7 +13,15 @@
  *    'session' 은 영속 X (의도된 한정 grant).
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -37,6 +45,13 @@ export interface PluginCapabilityGateOptions {
    * `path.join(app.getPath('userData'), 'plugin-grants')` 주입.
    */
   storageDir?: string;
+  /**
+   * v2.0.0 (B3) — `PermissionRequest.session_id` provider. 호출 시점마다 평가.
+   * 다중창 시 active window 의 session id 반환하면 IpcPermissionConfirmer 의
+   * webContents 라우팅과 일치 (SEC audit H2). 미지정 시 'plugin-loader'
+   * (legacy) — 단일창 시나리오 backward compat.
+   */
+  sessionIdProvider?: () => string;
 }
 
 interface GrantedFileShape {
@@ -50,6 +65,7 @@ export class PluginCapabilityGate {
   private readonly confirmer: PermissionConfirmer | undefined;
   private readonly auditSink: (event: PluginCapabilityAuditEvent) => void;
   private readonly storageDir: string | undefined;
+  private readonly sessionIdProvider: () => string;
   /** Plugin name → 승인된 capability set (in-memory, process 생애). */
   private readonly granted = new Map<string, Set<string>>();
   /** Plugin name → 명시적으로 거절된 capability set (재요청 차단). */
@@ -63,6 +79,8 @@ export class PluginCapabilityGate {
   constructor(options: PluginCapabilityGateOptions = {}) {
     this.confirmer = options.confirmer;
     this.storageDir = options.storageDir;
+    // v2.0.0 (B3) — sessionIdProvider default 는 legacy 'plugin-loader'.
+    this.sessionIdProvider = options.sessionIdProvider ?? ((): string => 'plugin-loader');
     this.auditSink =
       options.auditSink ??
       ((e): void => {
@@ -184,6 +202,94 @@ export class PluginCapabilityGate {
     this.persisted.clear();
   }
 
+  /**
+   * v2.0.0 (B3) — 사용자가 grant 회수. 영속 file 도 update.
+   *
+   * 동작:
+   *   - in-memory granted / denied 양쪽에서 capability 제거 (re-request 가능 상태)
+   *   - persisted set 에서도 제거 + `.granted.json` 재기록 (남은 caps 유지)
+   *     persisted set 이 비면 파일 삭제
+   *   - 다음 ensureGranted 호출 시 confirmer 재요청
+   *
+   * @param pluginName  플러그인 식별자
+   * @param capability  회수할 capability. 미지정 시 plugin 의 모든 cap 회수.
+   */
+  revokeOne(pluginName: string, capability?: string): void {
+    if (capability === undefined) {
+      // 전체 회수.
+      this.granted.delete(pluginName);
+      this.denied.delete(pluginName);
+      this.persisted.delete(pluginName);
+      this.deletePersistedFile(pluginName);
+      return;
+    }
+    this.granted.get(pluginName)?.delete(capability);
+    this.denied.get(pluginName)?.delete(capability);
+    const persistedSet = this.persisted.get(pluginName);
+    if (persistedSet !== undefined) {
+      persistedSet.delete(capability);
+      this.rewritePersistedFile(pluginName, persistedSet);
+    }
+  }
+
+  /**
+   * v2.0.0 (B3) — runtime cap 재검증을 위한 cache invalidation.
+   *
+   * 다음 ensureGranted() 호출 시 in-memory cache 가 비어있으므로 confirmer
+   * 재요청 (또는 file 영속 reload 후 통과). 외부에서 `.granted.json` 을
+   * 수동 수정한 경우 또는 UI 가 grant 회수 후 재검증 강제하고 싶을 때.
+   *
+   * @param pluginName  특정 plugin 만 invalidate. 미지정 시 전체.
+   */
+  invalidateCache(pluginName?: string): void {
+    if (pluginName === undefined) {
+      this.granted.clear();
+      this.denied.clear();
+      // persisted (영속 추적용) 는 유지 — file 재로드 시 채워짐.
+      this.persisted.clear();
+    } else {
+      this.granted.delete(pluginName);
+      this.denied.delete(pluginName);
+      this.persisted.delete(pluginName);
+    }
+    // 파일에서 다시 읽음 — 외부에서 .granted.json 을 수정/삭제했을 수 있음.
+    if (this.storageDir !== undefined) {
+      this.loadAllPersisted(this.storageDir);
+    }
+  }
+
+  private deletePersistedFile(pluginName: string): void {
+    if (this.storageDir === undefined) return;
+    const file = join(this.storageDir, pluginName, GRANTED_FILENAME);
+    if (!existsSync(file)) return;
+    try {
+      unlinkSync(file);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[PluginCapabilityGate] revoke file delete failed for ${pluginName}: ${msg}`);
+    }
+  }
+
+  private rewritePersistedFile(pluginName: string, persistedSet: Set<string>): void {
+    if (this.storageDir === undefined) return;
+    const pluginDir = join(this.storageDir, pluginName);
+    const file = join(pluginDir, GRANTED_FILENAME);
+    if (persistedSet.size === 0) {
+      this.deletePersistedFile(pluginName);
+      return;
+    }
+    try {
+      mkdirSync(pluginDir, { recursive: true });
+      const data: GrantedFileShape = {
+        capabilities: Array.from(persistedSet).sort(),
+      };
+      writeFileSync(file, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[PluginCapabilityGate] rewrite failed for ${pluginName}: ${msg}`);
+    }
+  }
+
   private async requestOne(pluginName: string, capability: string): Promise<boolean> {
     if (this.confirmer === undefined) {
       this.auditSink({
@@ -194,14 +300,13 @@ export class PluginCapabilityGate {
       });
       return false;
     }
+    // v2.0.0 (B3): sessionIdProvider 를 매 요청마다 평가 — 다중창 시 active
+    // window 의 session id 반환. legacy default 는 'plugin-loader'.
+    const sessionId = this.sessionIdProvider();
     const request: PermissionRequest = {
       // v1.1.6-prep (SEC audit M3 — same as Queue.ts): Date.now() 충돌 차단.
       request_id: `plugin-${pluginName}-${capability}-${Date.now()}-${randomUUID()}`,
-      // TODO v1.1.6 (SEC audit H2): hardcoded 'plugin-loader' session_id 는
-      // confirmer 의 owner-binding (webContentsId 매핑) 에서 무의미. broadcast +
-      // first-response wins 패턴으로 재설계 필요. 현재는 첫 창 의존 — plugin
-      // 활성화 전 windows 가 없으면 silent deny.
-      session_id: 'plugin-loader' as PermissionRequest['session_id'],
+      session_id: sessionId as PermissionRequest['session_id'],
       turn_id: 'plugin-grant' as PermissionRequest['turn_id'],
       call_id: `plugin-${pluginName}` as PermissionRequest['call_id'],
       tool_id: `plugin/${pluginName}`,

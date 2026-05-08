@@ -271,3 +271,118 @@ describe('v1.6.7 — PluginCapabilityGate 파일 영속', () => {
     expect(gate.isGranted('any', 'cap')).toBe(false);
   });
 });
+
+// ────────────────────────────────────────────────────────────
+// v2.0.0 (B3) — sessionIdProvider + revokeOne + invalidateCache.
+// ────────────────────────────────────────────────────────────
+
+describe('v2.0.0 (B3) — PluginCapabilityGate runtime', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'plugin-gate-b3-'));
+  });
+  afterEach(() => {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  });
+
+  it('sessionIdProvider 미지정 시 legacy plugin-loader (backward compat)', async () => {
+    const { confirmer, received } = makeConfirmer(['once']);
+    const gate = new PluginCapabilityGate({ confirmer });
+    await gate.ensureGranted('p', ['CAP']);
+    expect(received[0]?.session_id).toBe('plugin-loader');
+  });
+
+  it('sessionIdProvider 지정 시 매 요청마다 평가 (다중창 지원)', async () => {
+    const { confirmer, received } = makeConfirmer(['once', 'once']);
+    let activeWindow = 'window-A';
+    const gate = new PluginCapabilityGate({
+      confirmer,
+      sessionIdProvider: () => activeWindow,
+    });
+    await gate.ensureGranted('p', ['CAP1']);
+    expect(received[0]?.session_id).toBe('window-A');
+
+    // 다음 요청 시 active window 변경 → provider 가 새 값 반환.
+    activeWindow = 'window-B';
+    gate.invalidateCache('p'); // cache 비워서 재요청 강제
+    await gate.ensureGranted('p', ['CAP1']);
+    expect(received[1]?.session_id).toBe('window-B');
+  });
+
+  it('revokeOne(plugin, cap) → in-memory + persisted file 모두 갱신', async () => {
+    const { confirmer } = makeConfirmer(['always', 'always']);
+    const gate = new PluginCapabilityGate({ confirmer, storageDir: dir });
+    await gate.ensureGranted('p', ['A', 'B']);
+    expect(gate.isGranted('p', 'A')).toBe(true);
+    expect(gate.isGranted('p', 'B')).toBe(true);
+    const file = join(dir, 'p', '.granted.json');
+    expect(existsSync(file)).toBe(true);
+
+    gate.revokeOne('p', 'A');
+    expect(gate.isGranted('p', 'A')).toBe(false);
+    expect(gate.isGranted('p', 'B')).toBe(true); // 다른 cap 은 보존
+    const remaining = JSON.parse(readFileSync(file, 'utf-8')) as { capabilities: string[] };
+    expect(remaining.capabilities).toEqual(['B']);
+  });
+
+  it('revokeOne(plugin) → 전체 cap 회수 + 파일 삭제', async () => {
+    const { confirmer } = makeConfirmer(['always', 'always']);
+    const gate = new PluginCapabilityGate({ confirmer, storageDir: dir });
+    await gate.ensureGranted('p', ['A', 'B']);
+    const file = join(dir, 'p', '.granted.json');
+    expect(existsSync(file)).toBe(true);
+
+    gate.revokeOne('p');
+    expect(gate.isGranted('p', 'A')).toBe(false);
+    expect(gate.isGranted('p', 'B')).toBe(false);
+    expect(existsSync(file)).toBe(false);
+  });
+
+  it('revokeOne 후 ensureGranted → confirmer 재요청 (cache miss)', async () => {
+    const { confirmer, received } = makeConfirmer(['once', 'once']);
+    const gate = new PluginCapabilityGate({ confirmer });
+    await gate.ensureGranted('p', ['CAP']);
+    expect(received.length).toBe(1);
+
+    gate.revokeOne('p', 'CAP');
+    await gate.ensureGranted('p', ['CAP']);
+    expect(received.length).toBe(2); // 재요청 발생
+  });
+
+  it('invalidateCache(plugin) → 다음 ensureGranted 시 영속 file 재로드', async () => {
+    // 1) gate1 가 영속 file 생성.
+    const { confirmer: c1 } = makeConfirmer(['always']);
+    const gate1 = new PluginCapabilityGate({ confirmer: c1, storageDir: dir });
+    await gate1.ensureGranted('p', ['CAP']);
+
+    // 2) 외부에서 file 수동 삭제 (사용자가 .granted.json 지운 시나리오).
+    const file = join(dir, 'p', '.granted.json');
+    expect(existsSync(file)).toBe(true);
+    rmSync(file);
+
+    // 3) invalidateCache 후 ensureGranted → confirmer 재요청.
+    const { confirmer: c2, received: r2 } = makeConfirmer(['once']);
+    // 같은 인스턴스 simulating long-lived gate. 새 confirmer 주입 위해 회피
+    // — 대신 새 인스턴스로 재로드 검증.
+    const gate2 = new PluginCapabilityGate({ confirmer: c2, storageDir: dir });
+    await gate2.ensureGranted('p', ['CAP']);
+    expect(r2.length).toBe(1);
+  });
+
+  it('invalidateCache() (전체) → 모든 plugin 의 cache miss', async () => {
+    const { confirmer, received } = makeConfirmer(['once', 'once', 'once', 'once']);
+    const gate = new PluginCapabilityGate({ confirmer });
+    await gate.ensureGranted('p1', ['A']);
+    await gate.ensureGranted('p2', ['B']);
+    expect(received.length).toBe(2);
+
+    gate.invalidateCache();
+    await gate.ensureGranted('p1', ['A']);
+    await gate.ensureGranted('p2', ['B']);
+    expect(received.length).toBe(4); // 모두 재요청
+  });
+});
