@@ -2,6 +2,32 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [2.2.0] — 2026-05-09
+
+**Architectural foundations — 5 ADR + perf + IPC boundary 강화.**
+
+post-Phase-D 시점의 design backbone 정식화. 향후 v2.x.x 시리즈의 implementation 가이드. cross-AI sync, MCP marketplace, Plugin event stream, tool-call unification 의 spec 모두 land.
+
+### Added — Architecture Decision Records
+- **ADR-0004 — Plugin IPC bridge API spec** (PR #31, `43d6031`). plugin 이 격리된 채 host API 사용 — capability-based JSON-RPC pattern + 8 method 초기 spec.
+- **ADR-0005 — Plugin host event stream** (PR #34, `6856474`). topic-based subscription (audit / permission / workspace.file_change / session.turn_complete / tool.use).
+- **ADR-0006 — MCP capability negotiation + marketplace foundation** (PR #35, `0554e8f`). server-side capability declaration + client-side gate + tool conflict resolution + signed manifest 길.
+- **ADR-0007 — Cross-AI session sync (Claude ↔ Codex)** (PR #36, `f3c218c`). Turn shape neutrality 강화 + CLI auth state sync + Provider switch self-check + Compare merge.
+- **ADR-0008 — Tool-call schema unification across providers** (PR #37, `4eb2ce2`). canonical ToolCall schema + provider-specific adapter contract + streaming partial input normalization.
+
+### Added — Tests + perf
+- **Phase D 10000 turn render perf smoke** (PR #30, `46a01d2`). 4 vitest cases — render < 5s + DOM windowing 검증 + 50 turn simple map path.
+- **A2 IPC boundary parsePermissionRequest wiring** (PR #32, `a14bb13`). `IpcPermissionConfirmer.confirm()` 진입 시 fail-closed validation. malformed request → send X + 즉시 deny. 2 new vitest cases.
+
+### Changed
+- `package.json:version`: 2.1.0 → 2.2.0.
+
+### 회귀
+- 0. CI 모든 OS green (Lint / TS / Test×3 / Build×3 / E2E).
+
+### Deferred
+- **v2.2.0 default isolation_mode 전환** (PR #33) — utility_process default 활성 시 E2E timeout. v2.x.x 후속 슬롯에서 dist 빌드 path 검증 후 재시도.
+
 ## [2.1.0] — 2026-05-09
 
 **Phase C — 운영 성숙 (release-checklist + tooling + a11y).**
