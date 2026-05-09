@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-09T00:00:00.000Z",
+  "publishers": [
+    {
+      "publisher_id": "token.actions.githubusercontent.com:repo:eonofpixel/sample-fs-mcp:ref:refs/tags/v*",
+      "display_name": "Dreampia Sample (FS)",
+      "trusted_identities": [
+        {
+          "issuer": "https://token.actions.githubusercontent.com",
+          "subject_pattern": "repo:eonofpixel/sample-fs-mcp:ref:refs/tags/v*"
+        }
+      ],
+      "added_at": "2026-05-09T00:00:00.000Z"
+    },
+    {
+      "publisher_id": "token.actions.githubusercontent.com:repo:eonofpixel/sample-audit-mcp:ref:refs/tags/v*",
+      "display_name": "Dreampia Sample (Audit)",
+      "trusted_identities": [
+        {
+          "issuer": "https://token.actions.githubusercontent.com",
+          "subject_pattern": "repo:eonofpixel/sample-audit-mcp:ref:refs/tags/v*"
+        }
+      ],
+      "added_at": "2026-05-09T00:00:00.000Z"
+    }
+  ]
+}

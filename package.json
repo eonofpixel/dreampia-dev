@@ -46,6 +46,8 @@
   },
   "dependencies": {
     "@sentry/node": "^10.51.0",
+    "@sigstore/tuf": "^4.0.2",
+    "@sigstore/verify": "^3.1.0",
     "better-sqlite3": "12.9.0",
     "croner": "^10.0.1",
     "electron-updater": "^6.8.3",

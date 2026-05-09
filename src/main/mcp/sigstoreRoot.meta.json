@@ -1,0 +1,11 @@
+{
+  "generated_at": "2026-05-09T11:50:09.259Z",
+  "media_type": "application/vnd.dev.sigstore.trustedroot+json;version=0.1",
+  "tlog_count": 2,
+  "cert_authorities_count": 2,
+  "ctlog_count": 2,
+  "timestamp_authorities_count": 1,
+  "mirror_url": "https://tuf-repo-cdn.sigstore.dev",
+  "package_version": "4.0.2",
+  "note": "Refreshed by scripts/refresh-sigstore-root.cjs. Release checklist warns if generated_at is older than 6 months (AC-6.7)."
+}
