@@ -446,8 +446,31 @@ app.whenReady().then(async () => {
   // v2.0.0 (B2): isolation_mode 옵션 — env DREAMPIA_PLUGIN_ISOLATION 으로
   //   utility_process 활성화. default in_process (기존 vm.createContext).
   //   ADR-0003 가 v2.1.0 에서 default 전환 timeline 명시.
-  const pluginIsolation = process.env.DREAMPIA_PLUGIN_ISOLATION;
-  const useUtilityProcess = pluginIsolation === 'utility_process';
+  // v2.3.0 (US-700 wiring): settings.pluginIsolationMode 우선 (default 'utility_process').
+  //   env 가 set 되면 override. settings 에 정의되지 않으면 v2.3.0 default 적용.
+  //   PluginWorkerPool / dispatcher / eventBus 는 v2.3.0 에 spec/test 완비 (US-502/503/504),
+  //   PluginManager 통합 (per-hook → long-lived) 은 v2.4.0 에서 진행.
+  const v23Settings = readSettings();
+  const pluginIsolationEnv = process.env.DREAMPIA_PLUGIN_ISOLATION;
+  const isValidIsolationMode = (
+    v: string | undefined
+  ): v is 'utility_process' | 'in_process' | 'auto' =>
+    v === 'utility_process' || v === 'in_process' || v === 'auto';
+  const settingsIsolationMode = isValidIsolationMode(v23Settings.pluginIsolationMode)
+    ? v23Settings.pluginIsolationMode
+    : undefined;
+  const resolvedIsolation = isValidIsolationMode(pluginIsolationEnv)
+    ? pluginIsolationEnv
+    : (settingsIsolationMode ?? 'utility_process');
+  const useUtilityProcess = resolvedIsolation === 'utility_process' || resolvedIsolation === 'auto';
+
+  // v2.3.0 (US-201 / G2 codex production gating): mcpVerificationMode='off' 는
+  //   production 빌드에서 silent 무시 → 'warn' 으로 강등 (보안 가드).
+  //   debug builds (`NODE_ENV !== 'production'`) 에서만 그대로 허용.
+  if (v23Settings.mcpVerificationMode === 'off' && process.env.NODE_ENV === 'production') {
+    console.warn('[main] mcpVerificationMode=off ignored in production build — coerced to warn');
+    writeSettings({ mcpVerificationMode: 'warn' });
+  }
   const pluginAuditSink = (
     event: import('./plugins/PluginHookRunner').PluginHookAuditEvent
   ): void => {
