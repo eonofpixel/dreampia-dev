@@ -25,6 +25,7 @@ import { PluginsModal } from './components/plugins/PluginsModal';
 import { AutomationModal } from './components/automation/AutomationModal';
 import { BackfillPromptModal } from './components/workspace/BackfillPromptModal';
 import { ToastContainer } from './components/toast/ToastContainer';
+import { MigrationToast } from './components/MigrationToast';
 import { useToasts, ToastsProvider } from './hooks/useToasts';
 import {
   CostLimitModal,
@@ -1527,6 +1528,24 @@ export function App(): React.JSX.Element {
       />
       {/* v1.1.16 — 통일된 toast container. fixed top-right. */}
       <ToastContainer toasts={toasts.list} onDismiss={toasts.dismiss} />
+      {/* v2.3.0 (US-602) — 첫 실행 plugin isolation migration toast.
+          dismissed 추적은 localStorage (key: dreampia.v2.3.0.migrationToastDismissed).
+          v2.4.0 에서 settings IPC 와이어링으로 round-trip 시 main 의
+          pluginIsolationMigrationToastDismissed 와 동기화 예정. */}
+      <MigrationToast
+        dismissed={
+          typeof window !== 'undefined' &&
+          window.localStorage?.getItem('dreampia.v2.3.0.migrationToastDismissed') === '1'
+        }
+        onDismiss={async () => {
+          try {
+            window.localStorage?.setItem('dreampia.v2.3.0.migrationToastDismissed', '1');
+            return { ok: true };
+          } catch (err) {
+            return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+          }
+        }}
+      />
       {/* v1.1.0 SEC-2 full: 비-dangerous 권한 요청 inline approval card.
           Codex (5c) — chat panel 문맥. 위치는 fixed bottom-right 으로 chat
           입력 가리지 않도록. */}

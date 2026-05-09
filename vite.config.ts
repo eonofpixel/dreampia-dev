@@ -58,6 +58,38 @@ export default defineConfig({
         },
       },
       {
+        // v2.3.0 (US-700 hotfix): pluginWorkerEntry — utility_process 가
+        // utilityProcess.fork() 로 spawn 하는 child entry. main 번들에
+        // inline 되면 안 되고 dist/main/plugins/pluginWorkerEntry.js 위치에
+        // 별도 파일로 emit 되어야 함 (PluginUtilityProcessRunner.ts:115 의
+        // workerEntryPath default = join(__dirname, 'pluginWorkerEntry.js')
+        // 참조). v2.0.0 latent issue — v2.3.0 default 'utility_process'
+        // 전환에서 surface.
+        entry: resolve(__dirname, 'src/main/plugins/pluginWorkerEntry.ts'),
+        vite: {
+          resolve: {
+            alias: {
+              '@': resolve(__dirname, 'src'),
+              '@/main': resolve(__dirname, 'src/main'),
+              '@/types': resolve(__dirname, 'src/types'),
+            },
+          },
+          build: {
+            outDir: resolve(__dirname, 'dist/main/plugins'),
+            sourcemap: true,
+            emptyOutDir: false,
+            lib: {
+              entry: resolve(__dirname, 'src/main/plugins/pluginWorkerEntry.ts'),
+              formats: ['es'],
+              fileName: () => 'pluginWorkerEntry.js',
+            },
+            rollupOptions: {
+              external: ['electron', 'better-sqlite3', 'node:path', 'node:fs'],
+            },
+          },
+        },
+      },
+      {
         // Preload script — CommonJS (.cjs) 강제.
         // Electron preload + sandbox=true 는 ESM 미지원.
         // package.json 의 "type":"module" 때문에 .js 는 ESM 로 해석되므로
