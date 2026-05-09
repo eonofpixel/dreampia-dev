@@ -2556,6 +2556,86 @@ function registerMcpHandlers(mcp: McpManager): void {
       return fail(err);
     }
   });
+
+  // ────────────────────────────────────────────────────────────
+  // v2.3.0 (US-104) — installed plugin record surface (marketplace UI).
+  // Lazy-init store at userData path. Records are written by the install
+  // path (v2.4.0); v2.3.x ships the read surface so the marketplace UI
+  // can fetch (returns empty array until install path lands).
+  // ────────────────────────────────────────────────────────────
+
+  let recordStore: import('./mcp/installedPluginRecordStore').InstalledPluginRecordStore | null =
+    null;
+  const getRecordStore = async (): Promise<
+    import('./mcp/installedPluginRecordStore').InstalledPluginRecordStore
+  > => {
+    if (recordStore !== null) return recordStore;
+    const { InstalledPluginRecordStore } = await import('./mcp/installedPluginRecordStore');
+    const userData = app.getPath('userData');
+    recordStore = new InstalledPluginRecordStore({
+      storageDir: path.join(userData, 'installed-plugin-records'),
+    });
+    return recordStore;
+  };
+
+  ipcMain.handle(
+    'mcp/list-installed',
+    async (): Promise<Result<import('@/types/installedPluginRecord').InstalledPluginRecord[]>> => {
+      try {
+        const store = await getRecordStore();
+        return ok(store.listAll());
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'mcp/get-record',
+    async (
+      _evt,
+      package_id: unknown
+    ): Promise<Result<import('@/types/installedPluginRecord').InstalledPluginRecord | null>> => {
+      try {
+        if (typeof package_id !== 'string' || package_id.length === 0) {
+          return fail(new Error('package_id required'));
+        }
+        const store = await getRecordStore();
+        return ok(store.get(package_id));
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'mcp/request-revoke',
+    async (_evt, server_id: unknown): Promise<Result<{ grant_epoch: number }>> => {
+      try {
+        if (typeof server_id !== 'string' || server_id.length === 0) {
+          return fail(new Error('server_id required'));
+        }
+        // v2.4.0 follow-up: route through McpCapabilityGate.revokeOne(server_id)
+        // + Pool.notifyRevoke. v2.3.x stub: returns epoch=0 since no Pool runs.
+        return ok({ grant_epoch: 0 });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'mcp/request-refresh-revocations',
+    async (): Promise<Result<{ applied: boolean; feed_version: number | null }>> => {
+      try {
+        // v2.4.0 follow-up: invoke signedRevocationFeed.applyOnce(). v2.3.x
+        // stub: no scheduler running → reports no-change.
+        return ok({ applied: false, feed_version: null });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
 }
 
 interface McpDiscoveryResult {
