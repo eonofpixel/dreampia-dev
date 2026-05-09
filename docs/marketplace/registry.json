@@ -1,0 +1,27 @@
+{
+  "$schema": "./SCHEMA.md",
+  "schema_version": 1,
+  "generated_at": "2026-05-09T00:00:00.000Z",
+  "entries": [
+    {
+      "package_id": "@dreampia/sample-fs-mcp",
+      "name": "Sample File System MCP",
+      "description": "Reference MCP server demonstrating manifest verification + capability negotiation. Read-only file system access scoped to user-approved roots.",
+      "manifest_url": "https://github.com/eonofpixel/sample-fs-mcp/releases/latest/download/manifest.json",
+      "homepage": "https://github.com/eonofpixel/sample-fs-mcp",
+      "publisher_id": "token.actions.githubusercontent.com:repo:eonofpixel/sample-fs-mcp:ref:refs/tags/v*",
+      "categories": ["filesystem", "reference"],
+      "added_at": "2026-05-09T00:00:00.000Z"
+    },
+    {
+      "package_id": "@dreampia/sample-audit-mcp",
+      "name": "Sample Audit MCP",
+      "description": "Reference MCP server emitting structured audit events. Demonstrates host.audit.write capability + signed manifest workflow.",
+      "manifest_url": "https://github.com/eonofpixel/sample-audit-mcp/releases/latest/download/manifest.json",
+      "homepage": "https://github.com/eonofpixel/sample-audit-mcp",
+      "publisher_id": "token.actions.githubusercontent.com:repo:eonofpixel/sample-audit-mcp:ref:refs/tags/v*",
+      "categories": ["audit", "reference"],
+      "added_at": "2026-05-09T00:00:00.000Z"
+    }
+  ]
+}

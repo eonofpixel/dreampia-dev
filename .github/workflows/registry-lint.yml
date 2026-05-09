@@ -1,0 +1,21 @@
+name: Registry Lint
+
+on:
+  pull_request:
+    paths:
+      - 'docs/marketplace/**'
+      - 'scripts/lint-registry.cjs'
+      - '.github/workflows/registry-lint.yml'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # No npm install needed — script is dep-free CJS.
+      - name: Lint registry + trusted_identities
+        run: node scripts/lint-registry.cjs

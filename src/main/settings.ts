@@ -162,6 +162,47 @@ export interface AppSettings {
    * - true → 이미 완료 또는 dismiss → 부팅 시 modal skip.
    */
   workspace_backfill_done?: boolean;
+  /**
+   * v2.3.0 (US-600) — Plugin 격리 모드 default (G4 / PR #33 redo).
+   *   - 'utility_process' (default v2.3.0+): utilityProcess.fork() 하위 프로세스 실행
+   *   - 'in_process': 메인 프로세스 내 실행 (legacy v2.0.0 이전)
+   *   - 'auto': utility_process 우선 시도, 첫 실패 시 user consent 후 in_process fallback
+   *
+   * env DREAMPIA_PLUGIN_ISOLATION 가 설정돼 있으면 그것이 우선 (legacy override).
+   * undefined 시 readSettings 가 'utility_process' 로 hydrate.
+   */
+  pluginIsolationMode?: 'in_process' | 'utility_process' | 'auto';
+  /**
+   * v2.3.0 (US-201) — MCP manifest 검증 모드 (G2).
+   *   - 'strict' (default): identity_mismatch / signature_invalid / unsigned-no-bundle = reject install
+   *   - 'warn': 같은 조건 = audit-warn-allow
+   *   - 'off': verify 전부 skip (verification_status='unverified' 로 기록)
+   *
+   * undefined 시 readSettings 가 'strict' 로 hydrate.
+   */
+  mcpVerificationMode?: 'strict' | 'warn' | 'off';
+  /**
+   * v2.3.0 (US-601) — per-plugin 격리 모드 / 다운그레이드 consent override (G6).
+   * 키는 plugin_id. 값은 plugins.<id>.isolationMode / isolationDowngradeConsent /
+   * quarantined 등을 담는 sparse object.
+   *
+   * isolationMode 가 정의되면 global pluginIsolationMode 보다 우선.
+   * isolationDowngradeConsent 는 user 가 utility_process → in_process downgrade 모달에서
+   * 명시 confirm 한 ISO 8601 timestamp.
+   * quarantined 는 ADR-0009 crash-loop 가드 (true 면 자동 spawn skip).
+   */
+  plugins?: {
+    [plugin_id: string]: {
+      isolationMode?: 'in_process' | 'utility_process' | 'auto';
+      isolationDowngradeConsent?: string;
+      quarantined?: boolean;
+    };
+  };
+  /**
+   * v2.3.0 (US-602) — 첫 실행 plugin isolation migration toast 가 표시됐는지 추적.
+   * undefined → 다음 부팅 시 toast 표시. true → 이미 표시됨, 다시 표시 안함.
+   */
+  pluginIsolationMigrationToastDismissed?: boolean;
 }
 
 /**
@@ -277,6 +318,54 @@ export function readSettings(): AppSettings {
       // v1.4.8 — workspace_backfill_done. boolean 만 인정.
       if (typeof obj['workspace_backfill_done'] === 'boolean') {
         next.workspace_backfill_done = obj['workspace_backfill_done'];
+      }
+      // v2.3.0 (US-600) — pluginIsolationMode. 알 수 없는 enum 값은 silent drop → default.
+      const pim = obj['pluginIsolationMode'];
+      if (pim === 'in_process' || pim === 'utility_process' || pim === 'auto') {
+        next.pluginIsolationMode = pim;
+      }
+      // v2.3.0 (US-201) — mcpVerificationMode. 알 수 없는 enum 값은 silent drop.
+      const mvm = obj['mcpVerificationMode'];
+      if (mvm === 'strict' || mvm === 'warn' || mvm === 'off') {
+        next.mcpVerificationMode = mvm;
+      }
+      // v2.3.0 (US-601) — per-plugin overrides. plain Record. 손상된 항목 silent drop.
+      if (
+        obj['plugins'] !== null &&
+        typeof obj['plugins'] === 'object' &&
+        !Array.isArray(obj['plugins'])
+      ) {
+        const raw = obj['plugins'] as Record<string, unknown>;
+        const validated: NonNullable<AppSettings['plugins']> = {};
+        for (const [plugin_id, value] of Object.entries(raw)) {
+          if (typeof plugin_id !== 'string' || plugin_id.length === 0) continue;
+          if (value === null || typeof value !== 'object' || Array.isArray(value)) continue;
+          const v = value as Record<string, unknown>;
+          const persisted: NonNullable<AppSettings['plugins']>[string] = {};
+          const im = v['isolationMode'];
+          if (im === 'in_process' || im === 'utility_process' || im === 'auto') {
+            persisted.isolationMode = im;
+          }
+          if (
+            typeof v['isolationDowngradeConsent'] === 'string' &&
+            v['isolationDowngradeConsent'].length > 0
+          ) {
+            persisted.isolationDowngradeConsent = v['isolationDowngradeConsent'];
+          }
+          if (typeof v['quarantined'] === 'boolean') {
+            persisted.quarantined = v['quarantined'];
+          }
+          if (Object.keys(persisted).length > 0) {
+            validated[plugin_id] = persisted;
+          }
+        }
+        if (Object.keys(validated).length > 0) {
+          next.plugins = validated;
+        }
+      }
+      // v2.3.0 (US-602) — pluginIsolationMigrationToastDismissed. boolean 만 인정.
+      if (typeof obj['pluginIsolationMigrationToastDismissed'] === 'boolean') {
+        next.pluginIsolationMigrationToastDismissed = obj['pluginIsolationMigrationToastDismissed'];
       }
       // v1.7.14 — automation_rules. 손상된 항목 silent drop.
       if (Array.isArray(obj['automation_rules'])) {
