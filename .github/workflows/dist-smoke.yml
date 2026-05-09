@@ -1,0 +1,30 @@
+name: Dist Smoke
+
+on:
+  pull_request:
+    paths:
+      - 'src/main/plugins/**'
+      - 'src/main/mcp/**'
+      - 'vite.config.ts'
+      - 'electron.vite.config.ts'
+      - 'scripts/dist-self-test.cjs'
+      - '.github/workflows/dist-smoke.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Probe — plugin worker entry
+        run: node scripts/dist-self-test.cjs plugin-spawn
+      - name: Probe — sigstore root
+        run: node scripts/dist-self-test.cjs sigstore-root

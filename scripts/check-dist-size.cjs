@@ -38,7 +38,10 @@ function walk(dir) {
     if (e.isDirectory()) {
       out.push(...walk(full));
     } else if (e.isFile()) {
-      out.push({ rel: path.relative(DIST, full).replace(/\\/g, '/'), size: fs.statSync(full).size });
+      out.push({
+        rel: path.relative(DIST, full).replace(/\\/g, '/'),
+        size: fs.statSync(full).size,
+      });
     }
   }
   return out;
@@ -85,13 +88,17 @@ function main() {
     };
     fs.writeFileSync(BASELINE, JSON.stringify(baseline, null, 2) + '\n', 'utf-8');
     console.log(`[check-dist-size] baseline written: ${BASELINE}`);
-    console.log(`  total: ${fmtBytes(summary.total)}, main: ${fmtBytes(summary.mainBundle)}, files: ${summary.fileCount}`);
+    console.log(
+      `  total: ${fmtBytes(summary.total)}, main: ${fmtBytes(summary.mainBundle)}, files: ${summary.fileCount}`
+    );
     process.exit(0);
   }
 
   if (!fs.existsSync(BASELINE)) {
     console.warn('[check-dist-size] no baseline found — skipping comparison.');
-    console.log(`  current total: ${fmtBytes(summary.total)}, main: ${fmtBytes(summary.mainBundle)}`);
+    console.log(
+      `  current total: ${fmtBytes(summary.total)}, main: ${fmtBytes(summary.mainBundle)}`
+    );
     process.exit(0);
   }
 
@@ -100,12 +107,18 @@ function main() {
   const mainDelta = summary.mainBundle - baseline.main_bundle_bytes;
 
   console.log('[check-dist-size]');
-  console.log(`  total:  ${fmtBytes(summary.total)} (Δ ${totalDelta >= 0 ? '+' : ''}${fmtBytes(Math.abs(totalDelta))})`);
-  console.log(`  main:   ${fmtBytes(summary.mainBundle)} (Δ ${mainDelta >= 0 ? '+' : ''}${fmtBytes(Math.abs(mainDelta))})`);
+  console.log(
+    `  total:  ${fmtBytes(summary.total)} (Δ ${totalDelta >= 0 ? '+' : ''}${fmtBytes(Math.abs(totalDelta))})`
+  );
+  console.log(
+    `  main:   ${fmtBytes(summary.mainBundle)} (Δ ${mainDelta >= 0 ? '+' : ''}${fmtBytes(Math.abs(mainDelta))})`
+  );
   console.log(`  budget: ±${fmtBytes(MAX_DELTA_BYTES)}`);
 
   if (Math.abs(mainDelta) > MAX_DELTA_BYTES) {
-    console.error(`[check-dist-size] FAIL: main bundle delta ${fmtBytes(mainDelta)} exceeds budget ${fmtBytes(MAX_DELTA_BYTES)}`);
+    console.error(
+      `[check-dist-size] FAIL: main bundle delta ${fmtBytes(mainDelta)} exceeds budget ${fmtBytes(MAX_DELTA_BYTES)}`
+    );
     process.exit(1);
   }
   process.exit(0);

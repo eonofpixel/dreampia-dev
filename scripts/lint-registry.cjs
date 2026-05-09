@@ -62,12 +62,16 @@ function lintRegistry(reg) {
       errors.push(`${tag}: not an object`);
       continue;
     }
-    if (!PACKAGE_ID_RE.test(e.package_id || '')) errors.push(`${tag}.package_id invalid: ${e.package_id}`);
-    if (typeof e.name !== 'string' || e.name.length === 0 || e.name.length > 128) errors.push(`${tag}.name invalid`);
-    if (typeof e.description !== 'string' || e.description.length > 1024) errors.push(`${tag}.description invalid`);
+    if (!PACKAGE_ID_RE.test(e.package_id || ''))
+      errors.push(`${tag}.package_id invalid: ${e.package_id}`);
+    if (typeof e.name !== 'string' || e.name.length === 0 || e.name.length > 128)
+      errors.push(`${tag}.name invalid`);
+    if (typeof e.description !== 'string' || e.description.length > 1024)
+      errors.push(`${tag}.description invalid`);
     if (!isHttpsUrl(e.manifest_url)) errors.push(`${tag}.manifest_url must be https URL`);
     if (!isHttpsUrl(e.homepage)) errors.push(`${tag}.homepage must be https URL`);
-    if (typeof e.publisher_id !== 'string' || e.publisher_id.length === 0) errors.push(`${tag}.publisher_id missing`);
+    if (typeof e.publisher_id !== 'string' || e.publisher_id.length === 0)
+      errors.push(`${tag}.publisher_id missing`);
     if (!Array.isArray(e.categories) || e.categories.length > 16) {
       errors.push(`${tag}.categories invalid (max 16)`);
     } else {
@@ -99,8 +103,10 @@ function lintTrusted(tr) {
       errors.push(`${tag}: not an object`);
       continue;
     }
-    if (typeof p.publisher_id !== 'string' || p.publisher_id.length === 0) errors.push(`${tag}.publisher_id missing`);
-    if (typeof p.display_name !== 'string' || p.display_name.length === 0) errors.push(`${tag}.display_name missing`);
+    if (typeof p.publisher_id !== 'string' || p.publisher_id.length === 0)
+      errors.push(`${tag}.publisher_id missing`);
+    if (typeof p.display_name !== 'string' || p.display_name.length === 0)
+      errors.push(`${tag}.display_name missing`);
     if (!Array.isArray(p.trusted_identities) || p.trusted_identities.length === 0) {
       errors.push(`${tag}.trusted_identities must be non-empty array`);
     } else {
@@ -112,13 +118,18 @@ function lintTrusted(tr) {
           continue;
         }
         if (!isHttpsUrl(id.issuer)) errors.push(`${idTag}.issuer must be https URL`);
-        if (typeof id.subject_pattern !== 'string' || id.subject_pattern.length === 0 || id.subject_pattern.length > 512) {
+        if (
+          typeof id.subject_pattern !== 'string' ||
+          id.subject_pattern.length === 0 ||
+          id.subject_pattern.length > 512
+        ) {
           errors.push(`${idTag}.subject_pattern invalid (1..512 chars)`);
         }
       }
     }
     if (!isIso8601(p.added_at)) errors.push(`${tag}.added_at must be ISO 8601`);
-    if (seenPub.has(p.publisher_id)) errors.push(`${tag} duplicate publisher_id: ${p.publisher_id}`);
+    if (seenPub.has(p.publisher_id))
+      errors.push(`${tag} duplicate publisher_id: ${p.publisher_id}`);
     seenPub.add(p.publisher_id);
   }
 }
@@ -131,7 +142,7 @@ function crossCheck(reg, tr) {
     const e = reg.entries[i];
     if (!knownPubs.has(e.publisher_id)) {
       errors.push(
-        `registry.entries[${i}].publisher_id "${e.publisher_id}" not present in trusted_identities.publishers[]`,
+        `registry.entries[${i}].publisher_id "${e.publisher_id}" not present in trusted_identities.publishers[]`
       );
     }
   }

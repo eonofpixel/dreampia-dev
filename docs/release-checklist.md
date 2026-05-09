@@ -86,6 +86,20 @@ monotonic 정합 — package.json:version 은 항상 monotonic. cross-track slot
 - Tag: v1.9.0 (4475956)
 - Memory: project_v190_completion.md ✓
 
+## v2.3.0 ship 사용 예시 (2026-05-09 — Plugin GA cycle)
+
+- Pre-flight: 6 BLOCKER gates G1-G6 codex-validated; ADR-0009 (worker lifecycle) status=accepted; PRD 37 stories
+- Bump: 2.2.0 → 2.3.0 (PR #41)
+- CHANGELOG (`docs/migration/v2.2-to-v2.3.md`): plugin isolation default flip, Sigstore manifest verify, signed revocation feed (6h cadence), per-plugin isolation override, ADR-0009 worker pool, schema additions, roll-back path
+- ADRs: 0009 (Plugin Worker Lifecycle) accepted in PR #40
+- CI: typecheck 0 errors, lint 0 errors, prettier (CI scope) clean, registry-lint green
+- New tests: Phase 1 (39) + Phase 2-6 partial (48) + Phase 5 worker pool (28) + Phase 6 telemetry (10) ≈ 125 new unit tests
+- Architect verification: docs/security-reviews/v2.3.0-trust-boundary.md captures invariants per ADR-0009 + G1-G6
+- Sigstore TUF root: refreshed via `node scripts/refresh-sigstore-root.cjs` (last_refresh in `src/main/mcp/sigstoreRoot.meta.json`); release-checklist gate: warn if `now - generated_at > 6mo`
+- Tag: v2.3.0 (TBD on PR merge — user action)
+- Memory: project_v230_phase1.md + project_v230_phase2.md (incremental progress)
+- Deferred to v2.4.0+: full marketplace search/discovery UX, federated registries, `mcpVerificationMode='off'` production gating, ADR-0007 (cross-AI session sync), ADR-0008 (tool-call schema unification)
+
 ---
 
 # v0.1.2+ Release Runbook (archive)
