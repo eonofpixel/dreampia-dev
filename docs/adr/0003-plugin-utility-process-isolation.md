@@ -68,8 +68,9 @@ R-A1 risk register: "utility_process 격리가 plugin API breaking change
 | 시점 | default `isolation_mode` | 의미 |
 |------|--------------------------|------|
 | v2.0.0 | `in_process` (legacy 호환) | utility_process 는 explicit opt-in |
-| v2.1.0 | `utility_process` (default) | in_process 는 explicit opt-out |
-| v2.2.0+ | `utility_process` only | in_process path 제거 |
+| v2.1.0 | `in_process` (default) | utility_process 는 explicit opt-in (timeline 연기) |
+| v2.2.0 | `utility_process` (default) | in_process 는 explicit opt-out (`DREAMPIA_PLUGIN_ISOLATION=in_process`) |
+| v2.3.0+ | `utility_process` only | in_process path 제거 |
 
 env override: `DREAMPIA_PLUGIN_ISOLATION=utility_process|in_process`.
 

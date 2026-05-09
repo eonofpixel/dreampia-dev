@@ -444,10 +444,12 @@ app.whenReady().then(async () => {
   // v1.6.5 — Plugin Hook runtime. ai/start-stream 의 pre/post_turn 호출용.
   // v1.1.6 (D1): gate wired — manifest.capabilities 미승인 시 hook skip.
   // v2.0.0 (B2): isolation_mode 옵션 — env DREAMPIA_PLUGIN_ISOLATION 으로
-  //   utility_process 활성화. default in_process (기존 vm.createContext).
-  //   ADR-0003 가 v2.1.0 에서 default 전환 timeline 명시.
+  //   utility_process 활성화. v2.0.0 default = in_process.
+  // v2.2.0+ (ADR-0003 migration timeline): default = utility_process. legacy
+  //   in_process 는 explicit opt-out (`DREAMPIA_PLUGIN_ISOLATION=in_process`).
+  //   v2.x.x 후속에서 in_process path 제거 예정.
   const pluginIsolation = process.env.DREAMPIA_PLUGIN_ISOLATION;
-  const useUtilityProcess = pluginIsolation === 'utility_process';
+  const useUtilityProcess = pluginIsolation !== 'in_process';
   const pluginAuditSink = (
     event: import('./plugins/PluginHookRunner').PluginHookAuditEvent
   ): void => {
