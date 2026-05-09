@@ -1302,7 +1302,9 @@ const api = {
      * confirm, etc.). Returns null if no record matches.
      */
     getRecord: (package_id: string): Promise<Result<InstalledPluginRecord | null>> =>
-      ipcRenderer.invoke('mcp/get-record', package_id) as Promise<Result<InstalledPluginRecord | null>>,
+      ipcRenderer.invoke('mcp/get-record', package_id) as Promise<
+        Result<InstalledPluginRecord | null>
+      >,
 
     /**
      * v2.3.0 (US-104) — user-initiated revoke from Marketplace UI. Main process
@@ -1311,15 +1313,21 @@ const api = {
      * so renderer can update local cache without a follow-up listInstalled poll.
      */
     requestRevoke: (server_id: string): Promise<Result<{ grant_epoch: number }>> =>
-      ipcRenderer.invoke('mcp/request-revoke', server_id) as Promise<Result<{ grant_epoch: number }>>,
+      ipcRenderer.invoke('mcp/request-revoke', server_id) as Promise<
+        Result<{ grant_epoch: number }>
+      >,
 
     /**
      * v2.3.0 (US-104) — user-initiated revocation feed refresh ("Check for
      * plugin updates" button). Triggers `signedRevocationFeed.poll({ manual: true })`
      * out of band from the 6h schedule. Returns whether a new feed was applied.
      */
-    requestRefreshRevocations: (): Promise<Result<{ applied: boolean; feed_version: number | null }>> =>
-      ipcRenderer.invoke('mcp/request-refresh-revocations') as Promise<Result<{ applied: boolean; feed_version: number | null }>>,
+    requestRefreshRevocations: (): Promise<
+      Result<{ applied: boolean; feed_version: number | null }>
+    > =>
+      ipcRenderer.invoke('mcp/request-refresh-revocations') as Promise<
+        Result<{ applied: boolean; feed_version: number | null }>
+      >,
   },
 
   /**

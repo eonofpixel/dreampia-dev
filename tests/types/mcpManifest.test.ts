@@ -102,7 +102,7 @@ describe('v2.3.0 US-101 — manifestToRecordPartial', () => {
     expect(partial.verification_status).toBe('verified');
     expect(partial.last_verified_at).toBe('2026-05-09T12:00:00.000Z');
     expect(partial.publisher_id).toBe(
-      'token.actions.githubusercontent.com:repo:eonofpixel/sample-mcp:ref:refs/tags/v1.2.3',
+      'token.actions.githubusercontent.com:repo:eonofpixel/sample-mcp:ref:refs/tags/v1.2.3'
     );
     expect(partial.package_id).toBe('@eonofpixel/sample-mcp');
     expect(partial.version).toBe('1.2.3');
@@ -123,7 +123,7 @@ describe('v2.3.0 US-101 — manifestToRecordPartial', () => {
     expect(partial.verification_status).toBe('identity_mismatch');
     expect(partial.last_verified_at).toBeNull();
     expect(partial.publisher_id).toBe(
-      'token.actions.githubusercontent.com:repo:eonofpixel/sample-mcp:ref:refs/tags/v*',
+      'token.actions.githubusercontent.com:repo:eonofpixel/sample-mcp:ref:refs/tags/v*'
     );
   });
 

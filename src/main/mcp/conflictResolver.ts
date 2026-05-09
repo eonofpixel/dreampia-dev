@@ -35,7 +35,7 @@ export interface CapabilityConflictPolicy {
 export function resolveCapabilityConflict(
   requested: readonly string[],
   currentGranted: readonly string[],
-  policy: CapabilityConflictPolicy = {},
+  policy: CapabilityConflictPolicy = {}
 ): CapabilityConflictDecision {
   const granted = new Set(currentGranted);
   const denied = policy.deniedCapabilities ?? new Set<string>();

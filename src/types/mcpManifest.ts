@@ -27,15 +27,13 @@ import type { InstalledPluginRecord } from './installedPluginRecord';
 // Sub-schemas
 // ────────────────────────────────────────────────────────────
 
-const Sha256HexSchema = z
-  .string()
-  .regex(/^[0-9a-f]{64}$/, 'Must be lowercase 64-char sha256 hex');
+const Sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/, 'Must be lowercase 64-char sha256 hex');
 
 const SemverSchema = z
   .string()
   .regex(
     /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/,
-    'Must be semver',
+    'Must be semver'
   );
 
 const PackageIdSchema = z
@@ -49,7 +47,11 @@ const PackageIdSchema = z
  * `host.session.subscribe`). McpCapabilityGate validates against host-side
  * registry of known capabilities at grant time.
  */
-const CapabilitySchema = z.string().min(1).max(128).regex(/^[a-z]+(\.[a-z_]+)+$/);
+const CapabilitySchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[a-z]+(\.[a-z_]+)+$/);
 
 /**
  * Signing method. Only `sigstore-keyless-oidc` for v2.3.0. Future methods (e.g.
@@ -106,7 +108,11 @@ const EntrypointSchema = z
     /** sha256 of the artifact tarball. Verifier confirms before extraction. */
     artifact_digest: Sha256HexSchema,
     /** Bytes of the artifact tarball. Sanity check; does not replace digest. */
-    artifact_size_bytes: z.number().int().positive().max(50 * 1024 * 1024),
+    artifact_size_bytes: z
+      .number()
+      .int()
+      .positive()
+      .max(50 * 1024 * 1024),
   })
   .strict();
 
@@ -199,7 +205,7 @@ export interface ManifestVerifier {
   verify(
     manifest: McpManifest,
     sigstoreBundle: unknown | null,
-    mode: McpVerificationMode,
+    mode: McpVerificationMode
   ): Promise<ManifestVerificationResult>;
 }
 
@@ -211,10 +217,16 @@ export interface ManifestVerifier {
 export function manifestToRecordPartial(
   manifest: McpManifest,
   manifestDigest: string,
-  result: ManifestVerificationResult,
+  result: ManifestVerificationResult
 ): Pick<
   InstalledPluginRecord,
-  'package_id' | 'publisher_id' | 'version' | 'artifact_digest' | 'manifest_digest' | 'verification_status' | 'last_verified_at'
+  | 'package_id'
+  | 'publisher_id'
+  | 'version'
+  | 'artifact_digest'
+  | 'manifest_digest'
+  | 'verification_status'
+  | 'last_verified_at'
 > {
   const publisher_id =
     result.kind === 'verified'

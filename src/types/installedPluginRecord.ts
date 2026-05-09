@@ -27,9 +27,7 @@ import { ISO8601Schema } from './common';
 // ────────────────────────────────────────────────────────────
 
 /** Hex sha256 digest. Lowercase, exactly 64 chars. */
-const Sha256HexSchema = z
-  .string()
-  .regex(/^[0-9a-f]{64}$/, 'Must be lowercase 64-char sha256 hex');
+const Sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/, 'Must be lowercase 64-char sha256 hex');
 
 /**
  * Semver version string. Permissive (matches semver.org BNF) but rejects empty
@@ -40,7 +38,7 @@ const SemverSchema = z
   .string()
   .regex(
     /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/,
-    'Must be semver (e.g. 1.2.3 or 1.2.3-beta.1)',
+    'Must be semver (e.g. 1.2.3 or 1.2.3-beta.1)'
   );
 
 /**

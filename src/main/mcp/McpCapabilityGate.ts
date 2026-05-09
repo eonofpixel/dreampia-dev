@@ -21,7 +21,15 @@
  *   - InstalledPluginRecord materialization (caller composes manifest+verify result).
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 
 const GRANTED_FILENAME = 'granted.json';
@@ -68,7 +76,9 @@ export class McpCapabilityGate {
       options.auditSink ??
       ((e): void => {
         if (e.event !== 'mcp.cap_granted') {
-          console.warn(`[McpCapabilityGate] ${e.event} ${e.server_id}/${e.capability ?? '*'} epoch=${e.grant_epoch}`);
+          console.warn(
+            `[McpCapabilityGate] ${e.event} ${e.server_id}/${e.capability ?? '*'} epoch=${e.grant_epoch}`
+          );
         }
       });
     if (this.storageDir !== undefined) {
@@ -104,9 +114,10 @@ export class McpCapabilityGate {
         if (parsed === null || typeof parsed !== 'object') continue;
         const obj = parsed as Record<string, unknown>;
         if (!Array.isArray(obj['capabilities'])) continue;
-        if (typeof obj['grant_epoch'] !== 'number' || !Number.isFinite(obj['grant_epoch'])) continue;
+        if (typeof obj['grant_epoch'] !== 'number' || !Number.isFinite(obj['grant_epoch']))
+          continue;
         const caps = obj['capabilities'].filter(
-          (x): x is string => typeof x === 'string' && x.length > 0,
+          (x): x is string => typeof x === 'string' && x.length > 0
         );
         this.state.set(entry, {
           capabilities: new Set(caps),
