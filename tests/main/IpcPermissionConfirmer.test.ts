@@ -16,10 +16,14 @@ import { describe, it, expect, vi } from 'vitest';
 import { IpcPermissionConfirmer } from '../../src/main/IpcPermissionConfirmer';
 import type { PermissionRequest } from '../../src/tools';
 
+// v2.x (A2 wiring): session_id 는 UUIDv7 강제 (PermissionRequestSchema).
+// 본 fixture 의 session_id 는 valid UUIDv7 — IPC boundary parse 통과 위함.
+const VALID_SESSION_ID = '01890c1c-9c47-7a3f-bf24-aabbccddeeff';
+
 function sampleRequest(overrides: Partial<PermissionRequest> = {}): PermissionRequest {
   return {
     request_id: 'req-1',
-    session_id: 's1' as PermissionRequest['session_id'],
+    session_id: VALID_SESSION_ID as PermissionRequest['session_id'],
     turn_id: 't1' as PermissionRequest['turn_id'],
     call_id: 'c1' as PermissionRequest['call_id'],
     tool_id: 'mock.tool',
@@ -103,6 +107,40 @@ describe('IpcPermissionConfirmer', () => {
     });
     const matched = confirmer.respond('non-existent', 'once');
     expect(matched).toBe(false);
+  });
+
+  // v2.x (A2 wiring): IPC boundary parsePermissionRequest fail-closed.
+  it('malformed request (invalid session_id) → 즉시 deny + send X (fail-closed)', async () => {
+    const sendSpy = vi.fn().mockReturnValue(true);
+    const confirmer = new IpcPermissionConfirmer({
+      send: sendSpy,
+      timeout_ms: 1_000_000,
+    });
+    // session_id 가 UUIDv7 아님 (legacy 's1'). schema parse fail.
+    const malformed = sampleRequest({
+      request_id: 'malformed-1',
+      session_id: 's1' as PermissionRequest['session_id'],
+    });
+    const response = await confirmer.confirm(malformed);
+    expect(response.decision).toBe('deny');
+    expect(response.request_id).toBe('malformed-1');
+    // send 가 호출되지 않았음 — renderer 에 잘못된 shape 안 새는지 검증.
+    expect(sendSpy).not.toHaveBeenCalled();
+  });
+
+  it('malformed request (target.kind invalid) → 즉시 deny', async () => {
+    const sendSpy = vi.fn().mockReturnValue(true);
+    const confirmer = new IpcPermissionConfirmer({
+      send: sendSpy,
+      timeout_ms: 1_000_000,
+    });
+    const malformed = sampleRequest({
+      request_id: 'malformed-2',
+      target: { kind: 'badkind' as 'path', value: '/tmp' },
+    });
+    const response = await confirmer.confirm(malformed);
+    expect(response.decision).toBe('deny');
+    expect(sendSpy).not.toHaveBeenCalled();
   });
 
   it('drainAllAsDeny — 모든 pending deny', async () => {
