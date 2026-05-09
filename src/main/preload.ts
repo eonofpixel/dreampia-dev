@@ -14,6 +14,8 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { Session, SessionId, Turn } from '@/types';
+// v2.3.0 (US-104) — installed plugin record surface
+import type { InstalledPluginRecord } from '@/types/installedPluginRecord';
 import type {
   ConversationPatch,
   PermissionPatch,
@@ -570,6 +572,11 @@ const ALLOWED_INVOKE_CHANNELS = [
   'mcp/remove',
   'mcp/restart',
   'mcp/get-logs',
+  // v2.3.0 (US-104) — installed plugin record surface for marketplace UI
+  'mcp/list-installed',
+  'mcp/get-record',
+  'mcp/request-revoke',
+  'mcp/request-refresh-revocations',
   // v0.4.0 — usage / cost telemetry
   'usage/summary',
   'usage/daily',
@@ -1278,6 +1285,49 @@ const api = {
      */
     discover: (): Promise<Result<McpDiscoveryShape>> =>
       ipcRenderer.invoke('mcp/discover') as Promise<Result<McpDiscoveryShape>>,
+
+    /**
+     * v2.3.0 (US-104) — installed plugin record surface for Marketplace UI.
+     *
+     * Returns the cross-phase identity record for every installed MCP server.
+     * Spec: .omc/plans/v2.3.0-plugin-ga.md §3.1 AC-6.9 + §4 Phase 1.4.
+     * Reads from `~/.dreampia/installed-plugin-records/<package_id>.json` (main
+     * process). Renderer never touches disk directly.
+     */
+    listInstalled: (): Promise<Result<InstalledPluginRecord[]>> =>
+      ipcRenderer.invoke('mcp/list-installed') as Promise<Result<InstalledPluginRecord[]>>,
+
+    /**
+     * v2.3.0 (US-104) — fetch single record by package_id (refresh after revoke
+     * confirm, etc.). Returns null if no record matches.
+     */
+    getRecord: (package_id: string): Promise<Result<InstalledPluginRecord | null>> =>
+      ipcRenderer.invoke('mcp/get-record', package_id) as Promise<
+        Result<InstalledPluginRecord | null>
+      >,
+
+    /**
+     * v2.3.0 (US-104) — user-initiated revoke from Marketplace UI. Main process
+     * routes to `McpCapabilityGate.revokeOne(server_id)` (entire server) which
+     * synchronously bumps grant_epoch (G5) + persists. Returns the new epoch
+     * so renderer can update local cache without a follow-up listInstalled poll.
+     */
+    requestRevoke: (server_id: string): Promise<Result<{ grant_epoch: number }>> =>
+      ipcRenderer.invoke('mcp/request-revoke', server_id) as Promise<
+        Result<{ grant_epoch: number }>
+      >,
+
+    /**
+     * v2.3.0 (US-104) — user-initiated revocation feed refresh ("Check for
+     * plugin updates" button). Triggers `signedRevocationFeed.poll({ manual: true })`
+     * out of band from the 6h schedule. Returns whether a new feed was applied.
+     */
+    requestRefreshRevocations: (): Promise<
+      Result<{ applied: boolean; feed_version: number | null }>
+    > =>
+      ipcRenderer.invoke('mcp/request-refresh-revocations') as Promise<
+        Result<{ applied: boolean; feed_version: number | null }>
+      >,
   },
 
   /**
