@@ -25,6 +25,7 @@ import type {
   PermissionResponse,
   PermissionGrantDuration,
 } from '@/tools';
+import { parsePermissionRequest } from '../tools/permissionRequestSchema';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
@@ -64,8 +65,20 @@ export class IpcPermissionConfirmer implements PermissionConfirmer {
 
   /**
    * Queue 가 호출. PermissionRequest 를 renderer 로 송신 + Promise 반환.
+   *
+   * v2.x (A2 wiring) — IPC boundary 에서 parsePermissionRequest 로 fail-closed
+   * validation. malformed request (caller bug or future schema drift) 시 즉시
+   * deny — renderer 에 잘못된 shape 가 새지 않음. parse 통과 시 원본 request
+   * 그대로 전송 (caller 가 expectations 유지).
    */
   async confirm(request: PermissionRequest): Promise<PermissionResponse> {
+    const parsed = parsePermissionRequest(request);
+    if (parsed === null) {
+      console.error(
+        `[IpcPermissionConfirmer] parsePermissionRequest fail — malformed request rejected (id=${request.request_id})`
+      );
+      return { request_id: request.request_id, decision: 'deny' };
+    }
     return new Promise<PermissionResponse>((resolve) => {
       const timeoutHandle = setTimeout(() => {
         if (!this.pending.has(request.request_id)) return;
