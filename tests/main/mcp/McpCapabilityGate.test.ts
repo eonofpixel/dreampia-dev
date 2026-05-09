@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { McpCapabilityGate } from '../../../src/main/mcp/McpCapabilityGate';
@@ -160,19 +160,13 @@ describe('v2.3.0 US-102 — persistence', () => {
 
   it('corrupt JSON file is silently skipped on load (graceful degrade)', () => {
     const serverDir = join(tmpRoot, 'broken-server');
-    mkdirSyncSafe(serverDir);
-    const fs = require('node:fs') as typeof import('node:fs');
-    fs.writeFileSync(join(serverDir, 'granted.json'), '{ not: valid json', 'utf-8');
+    mkdirSync(serverDir, { recursive: true });
+    writeFileSync(join(serverDir, 'granted.json'), '{ not: valid json', 'utf-8');
     const gate = new McpCapabilityGate({ storageDir: tmpRoot });
     expect(gate.isGranted('broken-server', 'anything')).toBe(false);
     expect(gate.getGrantEpoch('broken-server')).toBe(0);
   });
 });
-
-function mkdirSyncSafe(p: string): void {
-  const fs = require('node:fs') as typeof import('node:fs');
-  fs.mkdirSync(p, { recursive: true });
-}
 
 describe('v2.3.0 US-102 — multi-server isolation', () => {
   it('grant on server-a does not leak to server-b', () => {
