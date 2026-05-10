@@ -488,6 +488,7 @@ export function CodePanel({
               editable={editing && !truncated}
               onChange={(next) => setDraft(next)}
               onSave={editing && isDirty && !saving ? handleSave : undefined}
+              onToggleEdit={!truncated ? () => setEditing((v) => !v) : undefined}
             />
           )}
         </div>

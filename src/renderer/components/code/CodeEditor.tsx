@@ -56,6 +56,13 @@ export interface CodeEditorProps {
    * 필수. 미지정 시 단축키 자체가 비활성 (기본 OS 동작).
    */
   onSave?: () => void;
+  /**
+   * v2.7.0 sub-PR — Mod+E (Cmd/Ctrl+E) 단축키 호출. CodePanel 의 편집 모드
+   * 토글. caller 가 truncated/eligibility 가드 — 미지정 시 단축키 비활성.
+   * Mod+S 와 동일한 paradigm: preventDefault 로 OS/브라우저의 일부 default
+   * (예: Edge 의 Find Toolbar) 차단.
+   */
+  onToggleEdit?: () => void;
 }
 
 function resolveDarkMode(prop: 'light' | 'dark' | undefined): boolean {
@@ -72,17 +79,20 @@ export function CodeEditor({
   editable = false,
   onChange,
   onSave,
+  onToggleEdit,
 }: CodeEditorProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
 
-  // editable / onChange / onSave 가 prop 변경으로 흔들려도 view 를 재생성하지
-  // 않도록 최신 핸들러를 ref 로 보관. keymap / updateListener 안에서
-  // .current 호출.
+  // editable / onChange / onSave / onToggleEdit 가 prop 변경으로 흔들려도
+  // view 를 재생성하지 않도록 최신 핸들러를 ref 로 보관. keymap /
+  // updateListener 안에서 .current 호출.
   const onChangeRef = useRef<typeof onChange>(onChange);
   onChangeRef.current = onChange;
   const onSaveRef = useRef<typeof onSave>(onSave);
   onSaveRef.current = onSave;
+  const onToggleEditRef = useRef<typeof onToggleEdit>(onToggleEdit);
+  onToggleEditRef.current = onToggleEdit;
 
   // Compartment: editable / theme / language 를 runtime 에 reconfigure.
   const editableCompartment = useRef(new Compartment());
@@ -119,6 +129,20 @@ export function CodeEditor({
           preventDefault: true,
           run: (): boolean => {
             onSaveRef.current?.();
+            return true;
+          },
+        },
+        {
+          // v2.7.0 sub-PR — Mod+E 편집 모드 토글. onToggleEdit 미지정 시
+          // run 이 false 반환 → 다른 keymap 으로 fallthrough (단, defaultKeymap
+          // 에 Mod-e 바인딩 없어 결과적으로 OS default 동작). preventDefault
+          // 는 핸들러 등록 시에만.
+          key: 'Mod-e',
+          preventDefault: true,
+          run: (): boolean => {
+            const fn = onToggleEditRef.current;
+            if (fn === undefined) return false;
+            fn();
             return true;
           },
         },
