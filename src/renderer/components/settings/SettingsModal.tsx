@@ -38,6 +38,7 @@ import {
   Stethoscope,
   Info,
   KeyRound,
+  Sparkles,
 } from 'lucide-react';
 import { McpSettingsPanel } from './McpSettings';
 import { UsageSettingsPanel } from './UsageSettings';
@@ -45,6 +46,7 @@ import { KeyboardSettings } from './KeyboardSettings';
 import { LanguageSettings } from './LanguageSettings';
 import { DiagnoseSettings } from './DiagnoseSettings';
 import { AboutPanel } from './AboutPanel';
+import { WhatsNewSettings } from './WhatsNewSettings';
 import { type PermissionLevel } from '@/types';
 import { useT, formatErrorDetail } from '../../i18n';
 import { useOptionalToasts } from '../../hooks/useToasts';
@@ -61,6 +63,7 @@ export type SettingsTabId =
   | 'language'
   | 'diagnose'
   | 'about'
+  | 'whats_new'
   | 'onboarding';
 
 export interface SettingsModalProps {
@@ -114,6 +117,14 @@ const TAB_ORDER: ReadonlyArray<TabSpec> = [
   // 자동 업데이트 status. diagnose ↔ onboarding 사이에 두어 "정체성 확인 → 설정
   // 처음부터 다시" 동선.
   { id: 'about', labelKey: 'settings.tab.about', icon: <Info className="h-4 w-4" /> },
+  // v2.7.x sub-PR — What's new 탭. Code mode 도입 + 이모지 정리 사용자 알림
+  // (점수 결정 #5 — CHANGELOG + What's new 패널 채택). about ↔ onboarding
+  // 사이에 두어 "정체성 → 변화 → 다시 시작" 동선.
+  {
+    id: 'whats_new',
+    labelKey: 'settings.tab.whats_new',
+    icon: <Sparkles className="h-4 w-4" />,
+  },
   { id: 'onboarding', labelKey: 'settings.tab.onboarding', icon: <Compass className="h-4 w-4" /> },
 ];
 
@@ -201,6 +212,7 @@ export function SettingsModal({
             {activeTab === 'language' && <LanguageSettings />}
             {activeTab === 'diagnose' && <DiagnoseSettings />}
             {activeTab === 'about' && <AboutPanel />}
+            {activeTab === 'whats_new' && <WhatsNewSettings />}
             {activeTab === 'onboarding' && (
               <OnboardingPanel onReopenOnboarding={onReopenOnboarding} />
             )}

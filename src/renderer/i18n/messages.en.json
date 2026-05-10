@@ -163,6 +163,8 @@
   "settings.tab.language": "Language",
   "settings.tab.diagnose": "Diagnose",
   "settings.tab.about": "About",
+  "settings.tab.whats_new": "What's new",
+  "settings.whats_new.title": "Highlights of this update",
   "settings.loading": "Loading...",
   "settings.theme.title": "Theme",
   "settings.theme.description": "Pick a UI color mode. System mode follows your OS dark/light setting automatically.",
