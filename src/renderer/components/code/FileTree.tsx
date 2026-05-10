@@ -49,6 +49,35 @@ const MAX_FILES = 2000;
  */
 const VIRTUALIZATION_THRESHOLD = 100;
 
+/**
+ * v2.7.x sub-PR — Resizable FileTree. drag handle 으로 너비 조정 + localStorage
+ * 영속. range 는 사용자 화면 비율을 보호하기 위해 [180, 480] 으로 clamp.
+ */
+const TREE_WIDTH_DEFAULT = 260;
+const TREE_WIDTH_MIN = 180;
+const TREE_WIDTH_MAX = 480;
+const TREE_WIDTH_STORAGE_KEY = 'dreampia.codeMode.fileTreeWidth';
+
+function loadStoredWidth(): number {
+  try {
+    const raw = localStorage.getItem(TREE_WIDTH_STORAGE_KEY);
+    if (raw === null) return TREE_WIDTH_DEFAULT;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return TREE_WIDTH_DEFAULT;
+    return Math.max(TREE_WIDTH_MIN, Math.min(TREE_WIDTH_MAX, n));
+  } catch {
+    return TREE_WIDTH_DEFAULT;
+  }
+}
+
+function saveStoredWidth(width: number): void {
+  try {
+    localStorage.setItem(TREE_WIDTH_STORAGE_KEY, String(Math.round(width)));
+  } catch {
+    // localStorage 가용 불가 — 무시
+  }
+}
+
 export function FileTree({
   workspaceRoot,
   ignorePatterns,
@@ -104,10 +133,42 @@ export function FileTree({
     return entries.filter((e) => e.path.toLowerCase().includes(q));
   }, [entries, query]);
 
+  // v2.7.x sub-PR — resize state. lazy init 으로 localStorage 1회만 읽음.
+  const [width, setWidth] = useState<number>(() => loadStoredWidth());
+  const dragStartRef = useRef<{ x: number; w: number } | null>(null);
+
+  const handleHandleMouseDown = (event: React.MouseEvent<HTMLDivElement>): void => {
+    event.preventDefault();
+    dragStartRef.current = { x: event.clientX, w: width };
+    const onMove = (e: MouseEvent): void => {
+      if (dragStartRef.current === null) return;
+      const delta = e.clientX - dragStartRef.current.x;
+      const next = Math.max(
+        TREE_WIDTH_MIN,
+        Math.min(TREE_WIDTH_MAX, dragStartRef.current.w + delta)
+      );
+      setWidth(next);
+    };
+    const onUp = (): void => {
+      dragStartRef.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      // 영속은 drag 종료 시 한 번만 — 매 mousemove 마다 쓰지 않음.
+      setWidth((current) => {
+        saveStoredWidth(current);
+        return current;
+      });
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
   return (
     <div
-      className="flex h-full w-[260px] shrink-0 flex-col border-r border-border-primary bg-bg-secondary"
+      className="relative flex h-full shrink-0 flex-col border-r border-border-primary bg-bg-secondary"
+      style={{ width }}
       data-testid="code-file-tree"
+      data-tree-width={width}
     >
       <div className="border-b border-border-primary p-2">
         <input
@@ -173,6 +234,15 @@ export function FileTree({
         {filtered.length} / {entries.length}
         {entries.length === MAX_FILES && ' (한도 도달)'}
       </footer>
+      {/* v2.7.x sub-PR — drag-to-resize handle. button element 로 a11y
+          interactive 요건 충족. 4px wide hit area on the right edge. */}
+      <button
+        type="button"
+        aria-label="파일 트리 너비 조정"
+        className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-accent/40 focus:bg-accent/40 focus:outline-none"
+        data-testid="code-file-tree-resize-handle"
+        onMouseDown={handleHandleMouseDown}
+      />
     </div>
   );
 }

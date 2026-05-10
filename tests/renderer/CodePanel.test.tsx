@@ -272,6 +272,43 @@ describe('CodePanel (Phase 2)', () => {
   });
 
   // ────────────────────────────────────────────────────────────
+  // v2.7.0 Phase 3 sub-PR — FileTree resize handle (localStorage width)
+  // ────────────────────────────────────────────────────────────
+
+  it('Phase 3 resize: handle is rendered with default width', () => {
+    render(<CodePanel workspaceRoot="/proj" />);
+    const handle = screen.getByTestId('code-file-tree-resize-handle');
+    expect(handle).toBeInTheDocument();
+    const tree = screen.getByTestId('code-file-tree');
+    expect(tree.getAttribute('data-tree-width')).toBe('260');
+  });
+
+  it('Phase 3 resize: stored width loads from localStorage on mount', () => {
+    localStorage.setItem('dreampia.codeMode.fileTreeWidth', '320');
+    render(<CodePanel workspaceRoot="/proj" />);
+    const tree = screen.getByTestId('code-file-tree');
+    expect(tree.getAttribute('data-tree-width')).toBe('320');
+  });
+
+  it('Phase 3 resize: stored width is clamped to safe range', () => {
+    // Below min → clamped up.
+    localStorage.setItem('dreampia.codeMode.fileTreeWidth', '50');
+    const { unmount } = render(<CodePanel workspaceRoot="/proj" />);
+    expect(screen.getByTestId('code-file-tree').getAttribute('data-tree-width')).toBe('180');
+    unmount();
+    // Above max → clamped down.
+    localStorage.setItem('dreampia.codeMode.fileTreeWidth', '9999');
+    render(<CodePanel workspaceRoot="/proj-other" />);
+    expect(screen.getByTestId('code-file-tree').getAttribute('data-tree-width')).toBe('480');
+  });
+
+  it('Phase 3 resize: invalid stored value falls back to default', () => {
+    localStorage.setItem('dreampia.codeMode.fileTreeWidth', 'banana');
+    render(<CodePanel workspaceRoot="/proj" />);
+    expect(screen.getByTestId('code-file-tree').getAttribute('data-tree-width')).toBe('260');
+  });
+
+  // ────────────────────────────────────────────────────────────
   // v2.7.0 Phase 3 sub-PR — Last-opened file restore (localStorage)
   // ────────────────────────────────────────────────────────────
 
