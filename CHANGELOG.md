@@ -2,6 +2,119 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [2.7.0] — 2026-05-11
+
+**Code mode 편집 foundation — 편집 + atomic write IPC + diff + 외부 변경 감지 + 키보드 + i18n.**
+
+Code mode 의 편집 layer 와 사용자 가시 polish. v2.6.0 의 read-only baseline 을 production-ready editing 환경으로 확장.
+
+### Added
+- **`workspace/write-file` IPC** — atomic write (tmp → rename), `expected_mtime` optimistic concurrency check, 1MB cap, `resolveInsideWorkspace` path-traversal 거절. preload `window.dreampia.workspace.writeFile()` 노출.
+- **`workspace/stat-file` IPC** — lightweight metadata-only stat (read 없음, polling 친화적). 외부 변경 감지 backbone.
+- **CodeEditor editable Compartment** — read-only ↔ editable runtime 전환, view 재생성 없음. `onChange` callback + `onSave` (Mod+S) + `onToggleEdit` (Mod+E) 단축키.
+- **CodePanel 편집 모드** — Edit 토글 / Save / Revert / Dirty marker / Conflict banner / 5초 폴링 외부 변경 banner / Diff 토글.
+- **DiffViewer** (`@codemirror/merge`) — disk ↔ draft inline unified diff, mergeControls=false (read-only).
+- **Last-opened file 자동 복원** — 워크스페이스 별 localStorage `dreampia.codeMode.lastFile.<root>` 저장, mount 시 자동 loadFile + stale entry 자동 정리.
+- **What's new 패널** (Settings → 새로운 변화) — curated release highlight 목록, 다국어 본문.
+- **FileTree resize handle** — drag-to-resize 4px 핸들, localStorage 영속, [180, 480]px clamp.
+- **i18n 46 신규 키** — Code mode UI 24 + What's new 22. en locale Code mode 깨짐 수정.
+
+### Fixed
+- `Result.error` 타입 (string) 을 `.error.message` 로 잘못 access 하던 두 곳 수정 (FileTree, CodePanel).
+- PluginSecuritySettings + IsolationDowngradeModal + PluginsModal 의 잔존 emoji 2건 (eslint guard 가 캐치).
+
+### Changed
+- `package.json:version`: 2.4.0 → 2.7.0 (Code mode 도입을 위한 minor 3회 단계 통합 release).
+- `PreviewPanel` 을 dispatcher + `BrowserPreview` 분리 — Rules of Hooks 안전.
+
+### Tests
+- 60+ 신규 테스트: workspace-write IPC 13 + CodePanel edit/diff/external/restore/resize 21 + Sidebar Code 진입 3 + PreviewPanel mode 4 + WhatsNewSettings 6 + languageDetect 27. 전체 vitest **150 files / 1,563 tests**.
+
+## [2.6.0] — 2026-05-10
+
+**Code mode foundation — CodeMirror 6 + FileTree + 읽기 전용 에디터.**
+
+Codex `file-open preview` 패턴 정통 구현. PreviewPanel 의 새 `mode='code'` 분기에서 좌측 FileTree + 우측 read-only CodeEditor.
+
+### Added
+- 신규 디렉토리 `src/renderer/components/code/`:
+  - `languageDetect.ts` — 15개 확장자 → CodeMirror lang factory.
+  - `CodeEditor.tsx` — read-only baseline.
+  - `FileTree.tsx` — 기존 v0.6.0 `workspace/list-files` IPC 재사용 (신규 fs IPC 미작성), threshold-100 virtualization.
+  - `CodePanel.tsx` — FileTree + CodeEditor 합성, Browser 복귀 버튼.
+- CodeMirror 6 stack (13 패키지, 약 500KB) — Monaco 보다 6배 작음. JS/TS/JSON/HTML/CSS/Markdown/Python lang + oneDark theme.
+
+### Tests
+- 34 신규 테스트 (CodePanel 7 + languageDetect 27).
+
+## [2.5.0] — 2026-05-10
+
+**Code mode 진입점 + PreviewPanel dispatcher 분리.**
+
+Sidebar 에 [Code] 항목 신설, 우측 PreviewPanel 이 'browser' / 'code' 모드 분기. 점수 기반 결정 (옵션 D — 4번째 패널 X, 모달 X, mode 확장).
+
+### Added
+- Sidebar `Code` nav item + App.tsx `previewMode` state + `onOpenCode` 핸들러.
+- PreviewPanel `mode` prop 분기 + `BrowserPreview` 함수 분리 (Rules of Hooks 안전).
+- i18n 6 키 (Code mode 진입 + 모드 전환 aria 라벨).
+
+### Tests
+- 7 신규 테스트 (Sidebar Code 항목 3 + PreviewPanel mode 4).
+
+## [2.4.1] — 2026-05-10
+
+**이모지 정리 + Lucide 아이콘 통일.**
+
+UI 전반의 시각 일관성 회복. 30+ 위치의 이모지 → Lucide 아이콘 통일, ESLint guard 로 재유입 차단.
+
+### Added
+- ESLint `no-restricted-syntax` 룰 (src/renderer/** 한정) — Literal/JSXText/TemplateElement 의 emoji range 차단. PR review 시점 자동 검증.
+
+### Changed
+- 11 파일에서 30+ 이모지 → Lucide 아이콘 (Toast, Chat, Workspace, Migration, Permission, Onboarding, Preview, Annotation, Tool, ShellRun, Marketplace).
+
+## [2.4.0] — 2026-05-10
+
+**v2.3.0 wiring 완성 + Plugin Security UX + 7 production 버그 fix.**
+
+v2.3.0 가 spec/build 위주로 land 됐고 functional reality 가 ~40% 였던 것을 100% 까지 끌어올린 release. 7 wiring task 모두 land + UI 디자인 시스템 통일 + Security 설정 GUI 노출. v2.3.0 release 가 ship 했으나 production 에서 즉시 throw 되던 latent 버그 4건 발견 + fix.
+
+### Added — wiring + new modules
+- **PluginPoolRunner** (`src/main/plugins/PluginPoolRunner.ts`) — long-lived utility_process worker via HostPluginWorkerPool + onQuarantine + telemetry hook. `DREAMPIA_PLUGIN_POOL=1` env opt-in. pluginWorkerEntry 가 host-rpc protocol (host-ping / host-shutdown / host-rpc/run-hook) 추가로 처리. v2.5.0 default 전환 예정.
+- **Sigstore install path** (`src/main/mcp/installPath.ts`, `loadVerifier.ts`) — manifest schema → SigstoreManifestVerifier verify → mode policy (strict/warn/off) → InstalledPluginRecord persist. `mcp/install` IPC + preload binding. mode=off 는 production NODE_ENV 에서 'warn' 으로 강등.
+- **signedRevocationFeed scheduler** (`src/main/mcp/revocationFeedScheduler.ts`) — boot poll + 6h interval + manual `mcp/request-refresh-revocations` IPC. cache file at `userData/revocation-feed-cache.json`. `DREAMPIA_REVOCATION_FEED_URL` env opt-in.
+- **PluginSecuritySettings 패널** (`src/renderer/components/plugins/PluginSecuritySettings.tsx`) — PluginsModal Marketplace 탭 상단 mount. 3 setting GUI: mcpVerificationMode (strict/warn/off radio), pluginIsolationMode (utility_process/auto/in_process radio), mcpRevocationFeedPublisher (issuer + subject_pattern input + Save/Clear).
+- **mcpRevocationFeedPublisher 설정 (보안 강화)** — feed bundle verify 시 `**` permissive default 대신 user 가 설정한 publisher identity 강제 가능. settings 미설정 시 boot 시 console.warn.
+- **IPC 4개**: `app:get-plugin-security` / `app:set-mcp-verification-mode` / `app:set-plugin-isolation-mode` / `app:set-mcp-revocation-feed-publisher`.
+- **plugin/request-downgrade IPC** — IsolationDowngradeModal confirm 시 호출. settings.plugins[id].isolationMode + isolationDowngradeConsent + InstalledPluginRecord.isolation_mode 동기.
+- **mcp/install IPC** — Sigstore install pipeline 진입점. mode 명시 또는 settings.mcpVerificationMode 사용.
+- **Tailwind 재작성 (5 컴포넌트)** — InstalledPluginList / IsolationDowngradeModal / RevokeModal / MigrationToast / PluginSecuritySettings. v2.3.0 에 BEM 클래스만 있고 stylesheet 가 없어 raw text dump 로 렌더되던 문제 수정.
+
+### Fixed — production 버그 7건
+- **#1** Telemetry audit `error` key 덮어쓰기 — `error_message` + `stderr_tail` 둘 다 spread 시 두 번째가 첫 번째 덮음. join 으로 결합.
+- **#2** plugin/request-downgrade 가 `record.isolation_mode` 미동기화 → marketplace badge 가 reinstall 전까지 갱신 안 됨. record 도 patch.
+- **#3** mcp/request-revoke stub 상태 (epoch=0 fixed) → revoke 무동작. McpCapabilityGate.revokeOne + record.revocation_status='revoked' 동기화.
+- **#4** (v2.3.0 latent) `loadVerifier` 가 raw JSON 을 `toTrustMaterial` 에 직접 전달 — TUF root 의 publicKey.rawBytes (JSON 시 base64 string) 가 Uint8Array 기대와 불일치 → 첫 sigstore verify 시 throw. `TrustedRoot.fromJSON()` 으로 deserialize.
+- **#5** (v2.3.0 latent) `McpCapabilityGate` 가 scoped `@org/pkg` server_id 영속 누락 — `loadAllPersisted` 가 flat readdir 만 함. nested scope dir walk 추가.
+- **#6** (v2.3.0 production blocker) `__dirname is not defined` ESM 호환성 — vite ESM 번들 + bare `__dirname` 참조 → v2.3.0 default `utility_process` 부팅 즉시 ReferenceError. `dirname(fileURLToPath(import.meta.url))` 로 fix. **v2.3.0 ship 이 default 부팅에서 즉시 crash 했을 것**.
+- **#7** (v2.3.0 latent) `revokeOne(undefined)` 가 영속 파일 deletion → grant_epoch 단조성 위반 (G5 invariant). empty caps + bumped epoch 으로 영속.
+
+### Changed
+- `package.json:version`: 2.3.1 → 2.4.0.
+- `pluginWorkerEntry.ts` message handler 가 `handleHostMessage` 함수로 추출 — host-rpc protocol 단위 테스트 가능.
+- `copy-build-assets.cjs` 가 sigstoreRoot.json 을 `dist/main/` 과 `dist/main/mcp/` 둘 다에 copy — vite 평면 번들링과 src 트리 호환.
+- `PluginUtilityProcessRunner.spawnFn` 시그니처에 `ctx: { plugin_id, telemetrySink? }` 추가 — `attachIsolationTelemetry` 자동 와이어 (G4 silent fallback 차단).
+
+### Tests
+- 86 신규 테스트 (전부 green): installPath 17, revocationFeedScheduler 8, PluginPoolRunner 8, pluginWorkerEntry.protocol 20, IsolationDowngradeModal 9, installRevokeRoundtrip 6, loadVerifier 5, MigrationToast 6, PluginSecuritySettings 9. 전체 vitest **2354/2354** (215 파일).
+- 자동화 QA 스크립트 (`scripts/qa-v240-flows.mjs`) — 사용자 실 userData 에서 install → list → downgrade → revoke 6/6 step pass. tsx 로 src TypeScript 직접 import.
+- 시각 GUI QA 직접 통과 — 패키지된 `Dreampia-Dev.exe` 로 marketplace badge + RevokeModal + Security 패널 toggle + settings.json 영속 확인.
+
+### Deferred (v2.5+)
+- pool runner default 전환 (현재 env opt-in)
+- 실 Sigstore `bundle.sigstore` 생성 (GitHub Actions OIDC workflow 필요)
+- McpCapabilityGate ↔ GrantLedger 통합
+
 ## [2.2.0] — 2026-05-09
 
 **Architectural foundations — 5 ADR + perf + IPC boundary 강화.**

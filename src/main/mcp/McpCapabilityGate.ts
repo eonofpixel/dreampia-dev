@@ -27,7 +27,6 @@ import {
   readFileSync,
   readdirSync,
   statSync,
-  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -91,6 +90,16 @@ export class McpCapabilityGate {
    * Corrupt JSON / missing capabilities array / non-numeric epoch are silently
    * skipped (treated as "no grant"). Same forgiving policy as PluginCapabilityGate
    * — fresh state recovers on next legitimate grant.
+   *
+   * Supports two layouts:
+   *   - Flat:   <storageDir>/<server_id>/granted.json           (e.g. server-a)
+   *   - Scoped: <storageDir>/@scope/<name>/granted.json         (npm scoped packages)
+   * The scoped layout is needed because mcp/request-revoke IPC passes the
+   * `package_id` (which may be `@org/pkg`) as `server_id`, and grantOne writes
+   * via mkdirSync(...{recursive:true}) creating the nested dirs naturally.
+   * Without recursive load, the in-memory state silently loses scoped grants
+   * on every process restart (closes a real production bug exposed by the
+   * v2.4.0 install→revoke roundtrip integration test).
    */
   private loadAllPersisted(dir: string): void {
     if (!existsSync(dir)) return;
@@ -101,31 +110,55 @@ export class McpCapabilityGate {
       return;
     }
     for (const entry of entries) {
-      const serverDir = join(dir, entry);
+      const candidate = join(dir, entry);
       try {
-        if (!statSync(serverDir).isDirectory()) continue;
+        if (!statSync(candidate).isDirectory()) continue;
       } catch {
         continue;
       }
-      const file = join(serverDir, GRANTED_FILENAME);
-      if (!existsSync(file)) continue;
-      try {
-        const parsed: unknown = JSON.parse(readFileSync(file, 'utf-8'));
-        if (parsed === null || typeof parsed !== 'object') continue;
-        const obj = parsed as Record<string, unknown>;
-        if (!Array.isArray(obj['capabilities'])) continue;
-        if (typeof obj['grant_epoch'] !== 'number' || !Number.isFinite(obj['grant_epoch']))
+      // Scoped layout: entry starts with '@' — recurse one level so that
+      // <storageDir>/@scope/<name>/granted.json is discovered. Server id is
+      // reconstructed as `@scope/<name>` to match the in-memory key.
+      if (entry.startsWith('@')) {
+        let inner: string[];
+        try {
+          inner = readdirSync(candidate);
+        } catch {
           continue;
-        const caps = obj['capabilities'].filter(
-          (x): x is string => typeof x === 'string' && x.length > 0
-        );
-        this.state.set(entry, {
-          capabilities: new Set(caps),
-          grant_epoch: obj['grant_epoch'],
-        });
-      } catch {
-        // corrupt → skip
+        }
+        for (const sub of inner) {
+          const subDir = join(candidate, sub);
+          try {
+            if (!statSync(subDir).isDirectory()) continue;
+          } catch {
+            continue;
+          }
+          this.loadOnePersisted(`${entry}/${sub}`, join(subDir, GRANTED_FILENAME));
+        }
+        continue;
       }
+      // Flat layout.
+      this.loadOnePersisted(entry, join(candidate, GRANTED_FILENAME));
+    }
+  }
+
+  private loadOnePersisted(server_id: string, file: string): void {
+    if (!existsSync(file)) return;
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(file, 'utf-8'));
+      if (parsed === null || typeof parsed !== 'object') return;
+      const obj = parsed as Record<string, unknown>;
+      if (!Array.isArray(obj['capabilities'])) return;
+      if (typeof obj['grant_epoch'] !== 'number' || !Number.isFinite(obj['grant_epoch'])) return;
+      const caps = obj['capabilities'].filter(
+        (x): x is string => typeof x === 'string' && x.length > 0
+      );
+      this.state.set(server_id, {
+        capabilities: new Set(caps),
+        grant_epoch: obj['grant_epoch'],
+      });
+    } catch {
+      // corrupt → skip
     }
   }
 
@@ -156,18 +189,6 @@ export class McpCapabilityGate {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[McpCapabilityGate] persist failed for ${server_id}: ${msg}`);
-    }
-  }
-
-  private deletePersistedFile(server_id: string): void {
-    if (this.storageDir === undefined) return;
-    const file = join(this.storageDir, server_id, GRANTED_FILENAME);
-    if (!existsSync(file)) return;
-    try {
-      unlinkSync(file);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[McpCapabilityGate] delete failed for ${server_id}: ${msg}`);
     }
   }
 
@@ -208,7 +229,14 @@ export class McpCapabilityGate {
     s.grant_epoch += 1;
     if (capability === undefined) {
       s.capabilities.clear();
-      this.deletePersistedFile(server_id);
+      // v2.4.0 fix: persist empty-cap state (with bumped epoch) instead of
+      // deleting the file. The class invariant promises "monotonic counter
+      // persisted across restarts" (G5) — deleting the file would lose the
+      // bumped epoch, so a future re-grant + revoke would replay the same
+      // epoch number and any stale RPC carrying that epoch as a snapshot
+      // could match. Persisting empty caps keeps monotonicity honest.
+      // For full cleanup (e.g. plugin uninstall), callers use clearAll().
+      this.writePersisted(server_id, s);
       this.auditSink({
         timestamp: new Date().toISOString(),
         event: 'mcp.cap_revoked_all',

@@ -117,40 +117,208 @@ export async function executeHook(
 // Bootstrap — utility_process entry only (test 시 import 만)
 // ────────────────────────────────────────────────────────────
 
+// ────────────────────────────────────────────────────────────
+// v2.4.0 (Task 1) — long-lived worker protocol (PluginWorkerPool).
+//
+// In addition to the legacy per-hook { type: 'run-hook' } message (used by
+// PluginUtilityProcessRunner.ts), the worker entry now answers:
+//   - { type: 'host-ping', seq }       → { type: 'plugin-pong', seq }
+//   - { type: 'host-shutdown', reason } → process.exit(0)
+//   - { type: 'host-rpc', call_id, method='run-hook', params: {plugin_name,
+//       plugin_dir, hook_kind, hook_path, payload, timeout_ms} }
+//       → { type: 'plugin-rpc-result', call_id, result: { payload, duration_ms } }
+//       → { type: 'plugin-rpc-error',  call_id, error: { code, message } }
+//
+// Long-lived workers do NOT exit after one hook — they wait for shutdown.
+// ────────────────────────────────────────────────────────────
+
+interface HostPingMessage {
+  type: 'host-ping';
+  seq: number;
+}
+interface HostShutdownMessage {
+  type: 'host-shutdown';
+  reason: 'reload' | 'memory-cap' | 'quarantine' | 'app-exit';
+}
+interface HostRpcMessage {
+  type: 'host-rpc';
+  call_id: string;
+  method: string;
+  params: unknown;
+}
+interface HostRevokeMessage {
+  type: 'host-revoke';
+  capability?: string;
+  grant_epoch: number;
+}
+type LongLivedHostMessage =
+  | HostPingMessage
+  | HostShutdownMessage
+  | HostRpcMessage
+  | HostRevokeMessage;
+
+interface PluginPongMessage {
+  type: 'plugin-pong';
+  seq: number;
+}
+interface PluginRpcResultMessage {
+  type: 'plugin-rpc-result';
+  call_id: string;
+  result: unknown;
+}
+interface PluginRpcErrorMessage {
+  type: 'plugin-rpc-error';
+  call_id: string;
+  error: { code: string; message: string };
+}
+type LongLivedPluginMessage = PluginPongMessage | PluginRpcResultMessage | PluginRpcErrorMessage;
+
+type AnyHostMessage = WorkerRequest | LongLivedHostMessage;
+type AnyPluginMessage = WorkerEvent | LongLivedPluginMessage;
+
 // Electron utility_process 에선 `process.parentPort` (Electron 글로벌 type)
 // 가 message bridge. vitest 에서 import 했을 땐 parentPort 부재 — guard 로 skip.
 // parentPort 의 정확한 타입은 Electron 의 ambient declaration 이 제공하지만
 // node 환경 vitest 가 import 시 type 모름 → unknown 캐스트로 안전 우회.
 type ParentPortLike = {
-  on: (event: 'message', listener: (e: { data: WorkerRequest }) => void) => void;
-  postMessage: (msg: WorkerEvent) => void;
+  on: (event: 'message', listener: (e: { data: AnyHostMessage }) => void) => void;
+  postMessage: (msg: AnyPluginMessage) => void;
 };
+
+/**
+ * Translate a host-rpc 'run-hook' params object into the legacy
+ * WorkerRunHookRequest shape so executeHook can be reused without copy-paste.
+ *
+ * Exported for unit tests — the parentPort bootstrap below routes here.
+ */
+export function rpcParamsToRunHookRequest(
+  call_id: string,
+  params: unknown
+): WorkerRunHookRequest | null {
+  if (typeof params !== 'object' || params === null) return null;
+  const p = params as Record<string, unknown>;
+  if (
+    typeof p['plugin_name'] !== 'string' ||
+    typeof p['plugin_dir'] !== 'string' ||
+    typeof p['hook_path'] !== 'string' ||
+    typeof p['timeout_ms'] !== 'number' ||
+    (p['hook_kind'] !== 'pre_turn' && p['hook_kind'] !== 'post_turn') ||
+    typeof p['payload'] !== 'object' ||
+    p['payload'] === null
+  ) {
+    return null;
+  }
+  return {
+    type: 'run-hook',
+    hook_id: call_id,
+    plugin_name: p['plugin_name'],
+    plugin_dir: p['plugin_dir'],
+    hook_kind: p['hook_kind'],
+    hook_path: p['hook_path'],
+    payload: p['payload'] as Record<string, unknown>,
+    timeout_ms: p['timeout_ms'],
+  };
+}
+
+/**
+ * Pure message handler for the long-lived worker protocol. Returns a Promise
+ * that resolves when any async work (executeHook) is done. Caller (parentPort
+ * bootstrap below + unit tests) supplies a `postMessage` callback and an
+ * optional `onShutdown` to control process.exit timing.
+ *
+ * Exported so unit tests can drive the host-rpc protocol without spawning a
+ * real utility_process.
+ */
+export async function handleHostMessage(
+  req: AnyHostMessage,
+  postMessage: (msg: AnyPluginMessage) => void,
+  onShutdown?: () => void
+): Promise<void> {
+  if (req.type === 'host-ping') {
+    postMessage({ type: 'plugin-pong', seq: req.seq });
+    return;
+  }
+  if (req.type === 'host-shutdown') {
+    onShutdown?.();
+    return;
+  }
+  if (req.type === 'host-revoke') {
+    // Long-lived workers respect revoke by aborting any pending hook.
+    // For v2.4.0 minimum: no-op — host dispatcher already aborts in-flight
+    // RPCs via AbortRegistry. Future: wire into per-call AbortController.
+    return;
+  }
+  if (req.type === 'host-rpc') {
+    if (req.method === 'run-hook') {
+      const runReq = rpcParamsToRunHookRequest(req.call_id, req.params);
+      if (runReq === null) {
+        postMessage({
+          type: 'plugin-rpc-error',
+          call_id: req.call_id,
+          error: { code: 'INVALID_PARAMS', message: 'malformed run-hook params' },
+        });
+        return;
+      }
+      const notify = (message: string, kind?: 'info' | 'warning' | 'error'): void => {
+        postMessage({
+          type: 'notify',
+          hook_id: runReq.hook_id,
+          message,
+          ...(kind !== undefined && { kind }),
+        });
+      };
+      const result = await executeHook(runReq, notify);
+      if (result.success) {
+        postMessage({
+          type: 'plugin-rpc-result',
+          call_id: req.call_id,
+          result: { payload: result.payload, duration_ms: result.duration_ms },
+        });
+      } else {
+        postMessage({
+          type: 'plugin-rpc-error',
+          call_id: req.call_id,
+          error: {
+            code: result.timed_out === true ? 'HOOK_TIMEOUT' : 'HOOK_ERROR',
+            message: result.error ?? 'unknown',
+          },
+        });
+      }
+      return;
+    }
+    postMessage({
+      type: 'plugin-rpc-error',
+      call_id: req.call_id,
+      error: { code: 'METHOD_NOT_FOUND', message: `unknown method: ${req.method}` },
+    });
+    return;
+  }
+  // Legacy per-hook protocol.
+  if (req.type === 'shutdown') {
+    onShutdown?.();
+    return;
+  }
+  if (req.type === 'run-hook') {
+    const notify = (message: string, kind?: 'info' | 'warning' | 'error'): void => {
+      postMessage({
+        type: 'notify',
+        hook_id: req.hook_id,
+        message,
+        ...(kind !== undefined && { kind }),
+      });
+    };
+    const result = await executeHook(req, notify);
+    postMessage(result);
+    onShutdown?.();
+    return;
+  }
+}
 
 const electronProcess = process as unknown as { parentPort?: ParentPortLike };
 if (electronProcess.parentPort !== undefined) {
   const parentPort = electronProcess.parentPort;
   parentPort.on('message', (e) => {
-    const req = e.data;
-    if (req.type === 'shutdown') {
-      // graceful — 즉시 exit. parent 가 child.kill() 또는 자연 종료 기대.
-      // 본 child 는 한 hook 만 처리하는 short-lived 모델이라 자연 종료 충분.
-      process.exit(0);
-      return;
-    }
-    if (req.type === 'run-hook') {
-      const notify = (message: string, kind?: 'info' | 'warning' | 'error'): void => {
-        parentPort.postMessage({
-          type: 'notify',
-          hook_id: req.hook_id,
-          message,
-          ...(kind !== undefined && { kind }),
-        });
-      };
-      void executeHook(req, notify).then((result) => {
-        parentPort.postMessage(result);
-        // 한 hook 처리 후 자연 종료 (short-lived per-hook spawn 모델).
-        process.exit(0);
-      });
-    }
+    void handleHostMessage(e.data, parentPort.postMessage.bind(parentPort), () => process.exit(0));
   });
 }
+

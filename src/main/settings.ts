@@ -203,6 +203,30 @@ export interface AppSettings {
    * undefined → 다음 부팅 시 toast 표시. true → 이미 표시됨, 다시 표시 안함.
    */
   pluginIsolationMigrationToastDismissed?: boolean;
+  /**
+   * v2.4.0 — signed revocation feed publisher identity policy.
+   *
+   * The feed bundle (sibling .sigstore artifact) is verified against the
+   * bundled TUF root, but identity policy decides WHICH publisher's signature
+   * is acceptable. Without this setting, verifyFeedBundle accepts any verified
+   * bundle (subject_pattern '**'), which means any compromised Sigstore-aware
+   * publisher could push a revocation feed.
+   *
+   * When set, the feed bundle's cert claims must:
+   *   - issuer: URL-equal match
+   *   - subject_pattern: glob-match (npm-style: `*` = single segment, `**` = multi)
+   *
+   * Recommended value (e.g. for the official feed):
+   *   issuer: "https://token.actions.githubusercontent.com"
+   *   subject_pattern: "repo:eonofpixel/dreampia-feed:ref:refs/heads/main"
+   *
+   * Undefined → permissive ('**' subject_pattern, any issuer). v2.5+ default
+   * candidate: ship a publisher identity bundled with the trusted root.
+   */
+  mcpRevocationFeedPublisher?: {
+    issuer: string;
+    subject_pattern: string;
+  };
 }
 
 /**
@@ -366,6 +390,31 @@ export function readSettings(): AppSettings {
       // v2.3.0 (US-602) — pluginIsolationMigrationToastDismissed. boolean 만 인정.
       if (typeof obj['pluginIsolationMigrationToastDismissed'] === 'boolean') {
         next.pluginIsolationMigrationToastDismissed = obj['pluginIsolationMigrationToastDismissed'];
+      }
+      // v2.4.0 — mcpRevocationFeedPublisher. 두 필드 모두 string 일 때만 hydrate.
+      if (
+        obj['mcpRevocationFeedPublisher'] !== null &&
+        typeof obj['mcpRevocationFeedPublisher'] === 'object' &&
+        !Array.isArray(obj['mcpRevocationFeedPublisher'])
+      ) {
+        const fp = obj['mcpRevocationFeedPublisher'] as Record<string, unknown>;
+        if (
+          typeof fp['issuer'] === 'string' &&
+          fp['issuer'].length > 0 &&
+          typeof fp['subject_pattern'] === 'string' &&
+          fp['subject_pattern'].length > 0
+        ) {
+          // Sanity: issuer must be a URL.
+          try {
+            new URL(fp['issuer']);
+            next.mcpRevocationFeedPublisher = {
+              issuer: fp['issuer'],
+              subject_pattern: fp['subject_pattern'],
+            };
+          } catch {
+            // Invalid URL — silent drop (corrupt setting won't break boot).
+          }
+        }
       }
       // v1.7.14 — automation_rules. 손상된 항목 silent drop.
       if (Array.isArray(obj['automation_rules'])) {

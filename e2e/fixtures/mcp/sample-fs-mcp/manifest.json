@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "package_id": "@eonofpixel/sample-fs-mcp",
+  "name": "sample-fs-mcp",
+  "version": "1.0.0",
+  "description": "v2.3.0 US-204 Sigstore install fixture — minimal MCP server",
+  "capabilities": [
+    "host.fs.read"
+  ],
+  "entrypoint": {
+    "file": "index.js",
+    "artifact_digest": "ab2ccdf1587b3f1c80d6414ec1980057386c9295da39b566eefdaf53e18275fe",
+    "artifact_size_bytes": 912
+  },
+  "signing": {
+    "method": "sigstore-keyless-oidc",
+    "identity": {
+      "issuer": "https://token.actions.githubusercontent.com",
+      "subject_pattern": "repo:eonofpixel/sample-fs-mcp:ref:refs/tags/v*"
+    }
+  },
+  "runtime": {
+    "node": "^20.0.0 || ^22.0.0",
+    "requires_native_modules": false,
+    "preferred_isolation": "utility_process"
+  }
+}

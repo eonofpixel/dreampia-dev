@@ -1,0 +1,4 @@
+# Sigstore bundle is regenerated per release via gh attestation OIDC
+# (requires GitHub Actions id-token: write). Never commit — see README.md.
+bundle.sigstore
+unsigned.json

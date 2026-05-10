@@ -139,12 +139,28 @@ describe('v2.3.0 US-102 — persistence', () => {
     expect(gate2.getGrantEpoch('server-a')).toBe(1);
   });
 
-  it('revokeOne(undefined) deletes the persistence file', () => {
+  it('revokeOne(undefined) keeps persistence file with empty caps + bumped epoch (G5 monotonicity)', () => {
+    // v2.4.0 — previously this test asserted the file was DELETED, but that
+    // violated the class invariant "monotonic counter persisted across restarts".
+    // Deleting meant a re-grant after full revoke would replay epoch=0 and
+    // break stale-RPC detection. The fix: persist empty-cap state with the
+    // bumped epoch so monotonicity holds across restarts.
     const gate = new McpCapabilityGate({ storageDir: tmpRoot });
     gate.grantOne('server-a', 'host.fs.read');
     expect(existsSync(join(tmpRoot, 'server-a', 'granted.json'))).toBe(true);
-    gate.revokeOne('server-a');
-    expect(existsSync(join(tmpRoot, 'server-a', 'granted.json'))).toBe(false);
+    const newEpoch = gate.revokeOne('server-a');
+    expect(newEpoch).toBe(1);
+    // File still present.
+    expect(existsSync(join(tmpRoot, 'server-a', 'granted.json'))).toBe(true);
+    const persisted = JSON.parse(
+      readFileSync(join(tmpRoot, 'server-a', 'granted.json'), 'utf-8')
+    );
+    expect(persisted.capabilities).toEqual([]);
+    expect(persisted.grant_epoch).toBe(1);
+    // Reopened gate sees the bumped epoch.
+    const reopened = new McpCapabilityGate({ storageDir: tmpRoot });
+    expect(reopened.getGrantEpoch('server-a')).toBe(1);
+    expect(reopened.isGranted('server-a', 'host.fs.read')).toBe(false);
   });
 
   it('persisted file shape: { capabilities: sorted[], grant_epoch: number }', () => {

@@ -20,11 +20,23 @@
  * 가능하게.
  */
 
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { LoadedPlugin } from './PluginManager';
 import type { PluginCapabilityGate } from './PluginCapabilityGate';
 import type { PluginHookContext, PluginHookAuditEvent } from './PluginHookRunner';
 import type { WorkerRequest, WorkerEvent, WorkerHookResult } from './pluginWorkerEntry';
+import {
+  attachIsolationTelemetry,
+  type IsolationTelemetryEvent,
+  type UtilityProcessLike,
+} from './pluginIsolationTelemetry';
+
+// ESM-safe __dirname equivalent. Required because vite bundles main process
+// as ESM (package.json "type":"module") and the bare `__dirname` global is
+// undefined in ESM modules. Without this, constructor crashes at startup with
+// "ReferenceError: __dirname is not defined" (caught during v2.4.0 manual GUI QA).
+const __dirname_esm = dirname(fileURLToPath(import.meta.url));
 
 // ────────────────────────────────────────────────────────────
 // Worker handle — utility_process child 의 abstraction.
@@ -38,7 +50,17 @@ export interface PluginWorkerHandle {
   kill: () => void;
 }
 
-export type PluginWorkerSpawnFn = (entryPath: string) => PluginWorkerHandle;
+export interface PluginWorkerSpawnContext {
+  /** Owning plugin name — passed through to telemetry / audit. */
+  plugin_id: string;
+  /** Optional telemetry sink — caller wires audit. Production: see makeDefaultSpawnFn. */
+  telemetrySink?: (event: IsolationTelemetryEvent) => void;
+}
+
+export type PluginWorkerSpawnFn = (
+  entryPath: string,
+  ctx: PluginWorkerSpawnContext
+) => PluginWorkerHandle;
 
 // ────────────────────────────────────────────────────────────
 // Options
@@ -61,6 +83,12 @@ export interface PluginUtilityProcessRunnerOptions {
    * `pluginWorkerEntry.js` (compiled).
    */
   workerEntryPath?: string;
+  /**
+   * v2.4.0 (Task 5) — utility_process spawn/exit/error telemetry. main/index.ts
+   * wires this to AuditLogStore so silent in_process fallback (G4 codex
+   * regression) is impossible.
+   */
+  telemetrySink?: (event: IsolationTelemetryEvent) => void;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -70,11 +98,24 @@ export interface PluginUtilityProcessRunnerOptions {
 /**
  * Lazy import — electron 은 main process 에서만 사용 가능. test (node 환경)
  * 가 본 모듈 import 했을 때 electron 시도하면 fail.
+ *
+ * v2.4.0 (Task 5): ctx.telemetrySink 가 주어지면 attachIsolationTelemetry 가
+ * 3-event (spawn/exit/error) 를 sink 에 forward. G4 codex tightening — silent
+ * fallback 차단 + structured stderr_tail 보존.
  */
-function defaultSpawnFn(entryPath: string): PluginWorkerHandle {
+function defaultSpawnFn(entryPath: string, ctx: PluginWorkerSpawnContext): PluginWorkerHandle {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { utilityProcess } = require('electron') as typeof import('electron');
   const child = utilityProcess.fork(entryPath);
+  if (ctx.telemetrySink !== undefined) {
+    // Cast: electron's UtilityProcess implements the structural shape of
+    // UtilityProcessLike (on('spawn'|'exit'|'error', ...), pid, optional stderr).
+    attachIsolationTelemetry(
+      child as unknown as UtilityProcessLike,
+      ctx.plugin_id,
+      ctx.telemetrySink
+    );
+  }
   return {
     postMessage: (msg) => {
       child.postMessage(msg);
@@ -107,12 +148,14 @@ export class PluginUtilityProcessRunner {
   private readonly gate: PluginCapabilityGate | undefined;
   private readonly spawnFn: PluginWorkerSpawnFn;
   private readonly workerEntryPath: string;
+  private readonly telemetrySink: ((event: IsolationTelemetryEvent) => void) | undefined;
 
   constructor(options: PluginUtilityProcessRunnerOptions = {}) {
     this.timeoutMs = options.timeout_ms ?? 5_000;
     this.gate = options.gate;
     this.spawnFn = options.spawnFn ?? defaultSpawnFn;
-    this.workerEntryPath = options.workerEntryPath ?? join(__dirname, 'pluginWorkerEntry.js');
+    this.workerEntryPath = options.workerEntryPath ?? join(__dirname_esm, 'pluginWorkerEntry.js');
+    this.telemetrySink = options.telemetrySink;
     this.auditSink =
       options.auditSink ??
       ((e): void => {
@@ -201,7 +244,11 @@ export class PluginUtilityProcessRunner {
     startedAt: number
   ): Promise<WorkerHookResult> {
     return new Promise<WorkerHookResult>((resolve) => {
-      const child = this.spawnFn(this.workerEntryPath);
+      const spawnCtx: PluginWorkerSpawnContext = {
+        plugin_id: plugin.manifest.name,
+        ...(this.telemetrySink !== undefined && { telemetrySink: this.telemetrySink }),
+      };
+      const child = this.spawnFn(this.workerEntryPath, spawnCtx);
       let resolved = false;
       const settle = (r: WorkerHookResult): void => {
         if (resolved) return;

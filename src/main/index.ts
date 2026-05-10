@@ -10,7 +10,12 @@ import { autoUpdater } from 'electron-updater';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { registerIpcHandlers, shutdownAiHandlers, shutdownCompareHandlers } from './ipc';
+import {
+  registerIpcHandlers,
+  shutdownAiHandlers,
+  shutdownCompareHandlers,
+  setRevocationFeedRunner,
+} from './ipc';
 import { BrowserManager } from './BrowserManager';
 import { McpManager, createSettingsAdapter } from './mcp';
 import { AuditLogStore, CompareStore, LeaderElection, SessionStore, UsageStore } from '@/storage';
@@ -25,6 +30,11 @@ import { PluginManager } from './plugins/PluginManager';
 import { PluginHookRunner, type PluginRunner } from './plugins/PluginHookRunner';
 import { PluginUtilityProcessRunner } from './plugins/PluginUtilityProcessRunner';
 import { PluginCapabilityGate } from './plugins/PluginCapabilityGate';
+import { PluginPoolRunner } from './plugins/PluginPoolRunner';
+import { HostEventBus } from './plugins/eventBus';
+import { HostAbortRegistry } from './plugins/hostBridge/abortRegistry';
+import { makeOnQuarantineHook } from './plugins/onQuarantineHook';
+import type { GrantLedger } from './plugins/poolInterfaces';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -48,6 +58,8 @@ let toolQueue: ToolQueue | null = null;
 let pluginManager: PluginManager | null = null;
 // v1.6.5: ai stream 시 pre/post_turn hook 실행 — cfg 통해 ipc.ts 가 사용.
 let pluginHookRunner: PluginRunner | null = null;
+// v2.4.0 (Task 3): SignedRevocationFeed 6h scheduler. before-quit 에서 stop.
+let revocationFeedStop: (() => void) | null = null;
 
 interface WindowRuntime {
   election: LeaderElection;
@@ -131,6 +143,28 @@ async function checkSavedWorkspaceConflictAtBoot(): Promise<void> {
   } catch (err) {
     console.error('[checkSavedWorkspaceConflictAtBoot] failed:', err);
   }
+}
+
+/**
+ * v2.4.0 (Task 1) — minimal in-memory GrantLedger for PluginPoolRunner.
+ *
+ * Pool requires a GrantLedger to bump epochs on revoke + detect stale RPCs.
+ * For v2.4.0, plugin grants are still owned by PluginCapabilityGate (per-plugin
+ * capability set). Future v2.5+ unifies into a shared ledger; until then this
+ * shim satisfies the pool's interface contract without changing the gate.
+ */
+function makeInMemoryGrantLedger(): GrantLedger {
+  const epochs = new Map<string, number>();
+  return {
+    bumpEpoch: (plugin_id: string): number => {
+      const next = (epochs.get(plugin_id) ?? 0) + 1;
+      epochs.set(plugin_id, next);
+      return next;
+    },
+    currentEpoch: (plugin_id: string): number => epochs.get(plugin_id) ?? 0,
+    isStaleAt: (plugin_id: string, snapshot_epoch: number): boolean =>
+      snapshot_epoch < (epochs.get(plugin_id) ?? 0),
+  };
 }
 
 function setupAutoUpdater(): void {
@@ -501,11 +535,67 @@ app.whenReady().then(async () => {
       }),
     });
   };
-  if (useUtilityProcess) {
-    console.info('[main] Plugin isolation: utility_process (B2 PoC)');
+  // v2.4.0 (Task 5) — utility_process spawn/exit/error 3-event telemetry.
+  // attachIsolationTelemetry forward 를 audit_log 로 영속 (G4 codex).
+  const isolationTelemetrySink = (
+    event: import('./plugins/pluginIsolationTelemetry').IsolationTelemetryEvent
+  ): void => {
+    // Combine error_message + stderr_tail into a single error string so neither
+    // is silently dropped when both are present (previously the second spread
+    // overwrote the first).
+    const errorParts: string[] = [];
+    if (event.error_message !== undefined) errorParts.push(event.error_message);
+    if (event.stderr_tail !== undefined) errorParts.push(`stderr_tail: ${event.stderr_tail}`);
+    const combinedError = errorParts.length > 0 ? errorParts.join(' | ') : undefined;
+    auditLogStore?.recordEvent({
+      timestamp: event.timestamp,
+      session_id: 'plugin-isolation',
+      event: `plugin.isolation_${event.event}`,
+      capability: 'PLUGIN',
+      target_json: JSON.stringify({
+        plugin_id: event.plugin_id,
+        pid: event.pid,
+        exit_code: event.exit_code,
+        signal: event.signal,
+      }),
+      decision_reason: event.event,
+      outcome: event.event,
+      ...(combinedError !== undefined && { error: combinedError }),
+    });
+  };
+  // v2.4.0 (Task 1) — pool runner opt-in via env DREAMPIA_PLUGIN_POOL=1.
+  // Default stays per-hook PluginUtilityProcessRunner until v2.5.0 flips it.
+  const poolEnabled = useUtilityProcess && process.env.DREAMPIA_PLUGIN_POOL === '1';
+  if (poolEnabled) {
+    console.info('[main] Plugin isolation: utility_process + long-lived pool (v2.4.0 Task 1)');
+    const grantLedger = makeInMemoryGrantLedger();
+    const subscriptionRegistry = new HostEventBus({ onDeliver: () => {} });
+    const abortRegistry = new HostAbortRegistry();
+    pluginHookRunner = new PluginPoolRunner({
+      gate: pluginCapabilityGate,
+      auditSink: pluginAuditSink,
+      poolDeps: { grantLedger, subscriptionRegistry, abortRegistry },
+      isolationTelemetrySink,
+      onQuarantine: makeOnQuarantineHook(),
+      poolAuditSink: (poolEvent) => {
+        auditLogStore?.recordEvent({
+          timestamp: poolEvent.timestamp,
+          session_id: 'plugin-pool',
+          event: poolEvent.event,
+          capability: 'PLUGIN',
+          target_json: JSON.stringify({ plugin_id: poolEvent.plugin_id, pid: poolEvent.pid }),
+          decision_reason: poolEvent.event,
+          outcome: poolEvent.event,
+          ...(poolEvent.detail !== undefined && { error: poolEvent.detail }),
+        });
+      },
+    });
+  } else if (useUtilityProcess) {
+    console.info('[main] Plugin isolation: utility_process per-hook (B2 PoC)');
     pluginHookRunner = new PluginUtilityProcessRunner({
       gate: pluginCapabilityGate,
       auditSink: pluginAuditSink,
+      telemetrySink: isolationTelemetrySink,
     });
   } else {
     pluginHookRunner = new PluginHookRunner({
@@ -557,6 +647,70 @@ app.whenReady().then(async () => {
     }
     const persisted = pluginManager.setTrust(obj['name'], obj['trusted']);
     return { ok: true, value: { persisted } };
+  });
+
+  // v2.4.0 (Task 6 — IsolationDowngradeModal wiring, G6).
+  // Renderer 의 IsolationDowngradeModal 이 confirm 시 호출. settings.json 의
+  // plugins[plugin_id].isolationMode='in_process' + isolationDowngradeConsent
+  // 을 영속. resolveIsolationMode 가 다음 spawn 시 per-plugin override 로 in_process
+  // runner 를 선택. audit log 에 user-consent_in_process_downgrade 기록.
+  ipcMain.handle('plugin/request-downgrade', async (_evt, args: unknown) => {
+    if (typeof args !== 'object' || args === null) {
+      return { ok: false, error: 'args must be { plugin_id }' };
+    }
+    const obj = args as Record<string, unknown>;
+    if (typeof obj['plugin_id'] !== 'string' || obj['plugin_id'].length === 0) {
+      return { ok: false, error: "'plugin_id' must be non-empty string" };
+    }
+    const plugin_id = obj['plugin_id'];
+    const consent_at = new Date().toISOString();
+    try {
+      const current = readSettings();
+      const plugins = current.plugins ?? {};
+      const entry = plugins[plugin_id] ?? {};
+      writeSettings({
+        plugins: {
+          ...plugins,
+          [plugin_id]: {
+            ...entry,
+            isolationMode: 'in_process',
+            isolationDowngradeConsent: consent_at,
+          },
+        },
+      });
+      // Sync InstalledPluginRecord.isolation_mode so the marketplace badge
+      // ("runs in main process") flips on the next listInstalled fetch.
+      // Without this, the record is the source of truth for the UI but the
+      // settings override is the source of truth for resolveIsolationMode —
+      // they would diverge until re-install.
+      try {
+        const { InstalledPluginRecordStore } = await import('./mcp/installedPluginRecordStore');
+        const recordStore = new InstalledPluginRecordStore({
+          storageDir: path.join(app.getPath('userData'), 'installed-plugin-records'),
+        });
+        const rec = recordStore.get(plugin_id);
+        if (rec !== null && rec.isolation_mode !== 'in_process') {
+          recordStore.put({ ...rec, isolation_mode: 'in_process' });
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[plugin/request-downgrade] record sync failed: ${msg}`);
+      }
+      auditLogStore?.recordEvent({
+        timestamp: consent_at,
+        session_id: 'plugin-isolation',
+        event: 'plugin.isolation_downgraded',
+        capability: 'PLUGIN',
+        target_json: JSON.stringify({ plugin_id }),
+        decision_reason: 'user_consent_in_process_downgrade',
+        outcome: 'granted',
+      });
+      return { ok: true, value: { persisted: true, consent_at } };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[plugin/request-downgrade] persist failed: ${msg}`);
+      return { ok: false, error: msg };
+    }
   });
 
   toolQueue = new ToolQueue(registry, (id) => sessionStore?.getSession(id) ?? undefined, {
@@ -724,6 +878,67 @@ app.whenReady().then(async () => {
   // packaged build 에서만 GitHub Releases 폴링. dev/e2e 엔 영향 X.
   setupAutoUpdater();
 
+  // v2.4.0 (Task 3) — SignedRevocationFeed scheduler. Boots immediate poll +
+  // 6h interval. ipc.ts mcp/request-refresh-revocations IPC reuses the same
+  // runner via setRevocationFeedRunner. Air-gap safe: feed URL undefined →
+  // fetchFeed throws benign error → applyOnce returns rejected:'fetch_failed'.
+  void (async () => {
+    try {
+      const { startRevocationFeedScheduler } = await import('./mcp/revocationFeedScheduler');
+      const { InstalledPluginRecordStore } = await import('./mcp/installedPluginRecordStore');
+      const { loadSigstoreVerifier } = await import('./mcp/loadVerifier');
+      const recordStore = new InstalledPluginRecordStore({
+        storageDir: path.join(app.getPath('userData'), 'installed-plugin-records'),
+      });
+      const cachePath = path.join(app.getPath('userData'), 'revocation-feed-cache.json');
+      const feedUrl = process.env.DREAMPIA_REVOCATION_FEED_URL;
+      // v2.4.0 — feed publisher identity from settings. When unset, the
+      // scheduler falls back to a permissive ('**') wildcard. Production
+      // deployments should set this in settings.json.
+      const feedPublisherIdentity = readSettings().mcpRevocationFeedPublisher;
+      if (feedPublisherIdentity === undefined) {
+        console.warn(
+          '[main] revocation feed: settings.mcpRevocationFeedPublisher unset — bundle verify uses permissive wildcard (any verified publisher accepted). Set { issuer, subject_pattern } for tighter trust.'
+        );
+      }
+      const { runner, stop } = startRevocationFeedScheduler({
+        cachePath,
+        feedUrl,
+        recordStore,
+        verifier: loadSigstoreVerifier,
+        ...(feedPublisherIdentity !== undefined && { feedPublisherIdentity }),
+        emitToast: (entry) => {
+          const win = mainWindow;
+          if (win === null || win.isDestroyed()) return;
+          win.webContents.send('plugin/notify', {
+            message: `Plugin revoked: ${entry.package_id}@${entry.version} (${entry.reason})`,
+            kind: 'warning',
+          });
+        },
+        audit: (event) => {
+          auditLogStore?.recordEvent({
+            timestamp: event.timestamp,
+            session_id: 'mcp-revocation-feed',
+            event: `revocation.${event.kind}`,
+            capability: 'NETWORK_MCP',
+            target_json: JSON.stringify({
+              trigger: event.trigger,
+              feed_version: event.feed_version,
+            }),
+            decision_reason: event.kind,
+            outcome: event.kind,
+            ...(event.reason !== undefined && { error: event.reason }),
+          });
+        },
+      });
+      revocationFeedStop = stop;
+      setRevocationFeedRunner(runner);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[main] revocation feed scheduler bootstrap failed: ${msg}`);
+    }
+  })();
+
   app.on('activate', () => {
     // macOS: re-create window when dock icon clicked
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -755,6 +970,21 @@ app.on('before-quit', () => {
     void mcpManager.shutdown();
     mcpManager = null;
   }
+  // v2.4.0 (Task 3) — SignedRevocationFeed scheduler interval 정리.
+  if (revocationFeedStop !== null) {
+    try {
+      revocationFeedStop();
+    } catch (err) {
+      console.warn('[main] revocation scheduler stop error:', err);
+    }
+    revocationFeedStop = null;
+    setRevocationFeedRunner(null);
+  }
+  // v2.4.0 (Task 1) — PluginPoolRunner: long-lived workers shut down + flush.
+  if (pluginHookRunner !== null && pluginHookRunner instanceof PluginPoolRunner) {
+    void pluginHookRunner.shutdown();
+  }
+  pluginHookRunner = null;
   browserManager?.shutdown();
   browserManager = null;
   for (const runtime of windowRuntimes.values()) {

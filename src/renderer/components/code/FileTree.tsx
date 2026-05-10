@@ -128,7 +128,7 @@ export function FileTree({
         setLoading(false);
       }
     })();
-  }, [workspaceRoot, ignorePatterns]);
+  }, [workspaceRoot, ignorePatterns, t]);
 
   const filtered = useMemo(() => {
     if (query.length === 0) return entries;
