@@ -140,7 +140,7 @@ export function FileTree({
   const [width, setWidth] = useState<number>(() => loadStoredWidth());
   const dragStartRef = useRef<{ x: number; w: number } | null>(null);
 
-  const handleHandleMouseDown = (event: React.MouseEvent<HTMLDivElement>): void => {
+  const handleHandleMouseDown = (event: React.MouseEvent<HTMLButtonElement>): void => {
     event.preventDefault();
     dragStartRef.current = { x: event.clientX, w: width };
     const onMove = (e: MouseEvent): void => {

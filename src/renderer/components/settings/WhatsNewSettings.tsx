@@ -15,42 +15,42 @@ import { Sparkles } from 'lucide-react';
 
 import { useT } from '../../i18n';
 
-interface ReleaseHighlight {
+interface ReleaseHighlightSpec {
   /** "v2.7.0" 형식의 시맨틱 버전 라벨. */
   version: string;
   /** ISO 8601 또는 사람이 읽기 좋은 짧은 날짜. */
   date: string;
-  /** 한 줄 설명 — 헤딩 아래 노출. */
-  tagline: string;
-  /**
-   * 강조 항목들. 마크다운 X — 단순 string[] 로 안전. 사용자 친화적 요약체로
-   * 작성 (구현 디테일 X).
-   */
-  bullets: ReadonlyArray<string>;
+  /** 한 줄 설명 — 헤딩 아래 노출. i18n 키 (locale-aware). */
+  taglineKey: string;
+  /** 강조 항목들 — 모두 i18n 키. 길이는 release 마다 다를 수 있음. */
+  bulletKeys: ReadonlyArray<string>;
 }
 
-const RELEASES: ReadonlyArray<ReleaseHighlight> = [
+// 새 release 가 있을 때마다 RELEASES 배열 상단에 entry 추가, 동시에
+// messages.{ko,en}.json 에 동일 key 쌍 추가. 점 (`.`) 은 JSON key 안에서
+// nested path 로 보일 뿐 — 실제 lookup 은 단일 key 그대로.
+const RELEASES: ReadonlyArray<ReleaseHighlightSpec> = [
   {
     version: 'v2.7.0',
     date: '2026-05-10',
-    tagline: '코드 모드: 편집 + 자동 저장 + 외부 변경 감지',
-    bullets: [
-      'Code 모드: 사이드바에서 [코드] 진입 → 우측 패널이 파일 트리 + 에디터로 전환',
-      'CodeMirror 6 — 신택스 하이라이트 (TS/JS/JSON/HTML/CSS/MD/Python 등)',
-      '편집 모드 ⇄ 보기 모드 토글 — Mod+S 로 저장, Mod+E 로 토글',
-      '비교(Diff) 보기 — 디스크와 편집 중 내용 inline 비교',
-      '외부 변경 감지 — 파일이 다른 곳에서 바뀌면 banner 알림',
-      '마지막 열린 파일 자동 복원 (워크스페이스 별)',
+    taglineKey: 'settings.whats_new.v270.tagline',
+    bulletKeys: [
+      'settings.whats_new.v270.bullet_0',
+      'settings.whats_new.v270.bullet_1',
+      'settings.whats_new.v270.bullet_2',
+      'settings.whats_new.v270.bullet_3',
+      'settings.whats_new.v270.bullet_4',
+      'settings.whats_new.v270.bullet_5',
     ],
   },
   {
     version: 'v2.4.1',
     date: '2026-05-10',
-    tagline: '아이콘 통일 + 시각 일관성',
-    bullets: [
-      '이모지를 모두 제거하고 Lucide 아이콘으로 통일 (30+ 위치)',
-      '토스트 / 배지 / 워크스페이스 / 권한 모달 / 온보딩 / 미리보기 전반',
-      '재유입 차단 — 코드 리뷰 시점 자동 검증 lint 룰',
+    taglineKey: 'settings.whats_new.v241.tagline',
+    bulletKeys: [
+      'settings.whats_new.v241.bullet_0',
+      'settings.whats_new.v241.bullet_1',
+      'settings.whats_new.v241.bullet_2',
     ],
   },
 ];
@@ -81,18 +81,18 @@ export function WhatsNewSettings(): React.JSX.Element {
               </span>
               <span className="text-[11px] text-text-tertiary">{release.date}</span>
             </div>
-            <p className="mb-2 text-sm text-text-secondary">{release.tagline}</p>
+            <p className="mb-2 text-sm text-text-secondary">{t(release.taglineKey)}</p>
             <ul className="space-y-1 text-xs text-text-secondary">
-              {release.bullets.map((bullet, idx) => (
+              {release.bulletKeys.map((bulletKey, idx) => (
                 <li
-                  key={idx}
+                  key={bulletKey}
                   className="flex gap-2"
                   data-testid={`whats-new-bullet-${release.version}-${idx}`}
                 >
                   <span aria-hidden className="select-none text-text-tertiary">
                     —
                   </span>
-                  <span>{bullet}</span>
+                  <span>{t(bulletKey)}</span>
                 </li>
               ))}
             </ul>
