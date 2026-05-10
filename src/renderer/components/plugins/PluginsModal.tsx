@@ -14,10 +14,13 @@
  *   - Per-plugin enable/disable toggle.
  */
 
+import { X } from 'lucide-react';
 import { useEffect, useState, useCallback } from 'react';
 import { useT } from '../../i18n';
 import { InstalledPluginList } from '../marketplace/InstalledPluginList';
 import { RevokeModal } from '../marketplace/RevokeModal';
+import { IsolationDowngradeModal } from '../marketplace/IsolationDowngradeModal';
+import { PluginSecuritySettings } from './PluginSecuritySettings';
 import type { InstalledPluginRecord } from '../../../types/installedPluginRecord';
 
 type ModalTab = 'local' | 'marketplace';
@@ -50,7 +53,9 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
   const [activeTab, setActiveTab] = useState<ModalTab>('local');
   // v2.4.0 — revoke modal target. null = closed.
   const [revokeTarget, setRevokeTarget] = useState<InstalledPluginRecord | null>(null);
-  // v2.4.0 — counter to force InstalledPluginList refetch after revoke.
+  // v2.4.0 (Task 6) — isolation downgrade modal target. null = closed.
+  const [downgradeTarget, setDowngradeTarget] = useState<InstalledPluginRecord | null>(null);
+  // v2.4.0 — counter to force InstalledPluginList refetch after revoke / downgrade.
   const [marketplaceVersion, setMarketplaceVersion] = useState<number>(0);
 
   const fetchList = useCallback(
@@ -122,11 +127,11 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
           <button
             type="button"
             onClick={onClose}
-            className="rounded px-2 py-1 text-sm hover:bg-bg-tertiary"
+            className="rounded p-1 text-sm hover:bg-bg-tertiary"
             aria-label={t('common.close')}
             data-testid="plugins-modal-close"
           >
-            ✕
+            <X aria-hidden="true" className="h-3.5 w-3.5" />
           </button>
         </header>
         {/* v2.4.0 — tab strip: Local plugins ↔ MCP Marketplace */}
@@ -167,12 +172,14 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
         </div>
         {activeTab === 'marketplace' && (
           <div
-            className="flex-1 overflow-y-auto px-5 py-4 text-sm"
+            className="flex-1 overflow-y-auto px-5 py-4 text-sm space-y-4"
             data-testid="plugins-modal-marketplace-pane"
           >
+            <PluginSecuritySettings />
             <InstalledPluginList
               key={marketplaceVersion}
               onRequestRevoke={(record) => setRevokeTarget(record)}
+              onRequestDowngrade={(record) => setDowngradeTarget(record)}
             />
           </div>
         )}
@@ -339,6 +346,32 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
             if (result.ok) {
               setMarketplaceVersion((v) => v + 1);
               return { ok: true, grant_epoch: result.value.grant_epoch };
+            }
+            return { ok: false, reason: result.error };
+          } catch (err) {
+            return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+          }
+        }}
+      />
+      {/* v2.4.0 (Task 6, G6) — IsolationDowngradeModal mounted at root so the
+          marketplace row's "Run in main process" button can open it. onConfirm
+          calls plugin.requestDowngrade which writes settings.plugins[id].isolationMode
+          + isolationDowngradeConsent + emits audit. On success bumps marketplaceVersion
+          so InstalledPluginList refetches and the row's badge updates. */}
+      <IsolationDowngradeModal
+        open={downgradeTarget !== null}
+        package_id={downgradeTarget?.package_id ?? ''}
+        onClose={() => setDowngradeTarget(null)}
+        onConfirm={async () => {
+          const api = typeof window !== 'undefined' ? window.dreampia?.plugin : undefined;
+          if (downgradeTarget === null || api === undefined || api.requestDowngrade === undefined) {
+            return { ok: false, reason: 'IPC bridge unavailable' };
+          }
+          try {
+            const result = await api.requestDowngrade(downgradeTarget.package_id);
+            if (result.ok) {
+              setMarketplaceVersion((v) => v + 1);
+              return { ok: true };
             }
             return { ok: false, reason: result.error };
           } catch (err) {

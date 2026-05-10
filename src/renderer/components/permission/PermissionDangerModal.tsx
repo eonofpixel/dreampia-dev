@@ -8,6 +8,7 @@
  * 사용자가 명시적으로 dismiss 못 하도록 차단. accept / deny 명시 응답 필수.
  */
 
+import { AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useT } from '../../i18n';
 import type { PermissionRequestUi, PermissionDecisionUi } from '../../hooks/usePermissionRequests';
@@ -42,10 +43,11 @@ export function PermissionDangerModal({
     >
       <div className="w-[520px] max-w-[95vw] rounded-lg border border-red-600/60 bg-bg-primary p-5 shadow-xl">
         <h3
-          className="mb-2 text-base font-semibold text-red-300"
+          className="mb-2 flex items-center gap-1.5 text-base font-semibold text-red-300"
           data-testid="permission-danger-modal-title"
         >
-          ⚠ {t('permission.danger.title', { tool: request.tool_display_name })}
+          <AlertTriangle aria-hidden="true" className="h-4 w-4 shrink-0" />
+          <span>{t('permission.danger.title', { tool: request.tool_display_name })}</span>
         </h3>
 
         <p className="mb-3 text-sm text-text-secondary">{t('permission.danger.body')}</p>

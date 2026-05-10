@@ -274,6 +274,11 @@ export function App(): React.JSX.Element {
   // 이전엔 schema (browser.panel_visible) 만 있고 UI/IPC 0 — 사용자가 닫을
   // 방법 없었음. 사이드바 토글 패턴 그대로 차용.
   const [previewVisible, setPreviewVisible] = useState(true);
+  // v2.5.0 (Phase 1 — Code mode) — Codex 의 file-open preview 패턴 (옵션 D).
+  // Sidebar 의 [Code] 클릭이 'code' 로 토글, [Browser]/Open Demo 가 'browser'
+  // 로 복귀. PreviewPanel 이 mode prop 으로 분기.
+  // Decision doc: ../CODE_TAB_DECISION.md.
+  const [previewMode, setPreviewMode] = useState<'browser' | 'code'>('browser');
   // v1.6.4 — Fullscreen toggle (Mod+Shift+F). 진입 시 sidebar+preview 모두
   // 숨기고 chat 만 풀폭. 진입 직전 sidebar/preview 상태를 ref 에 저장 →
   // 토글 OFF 시 정확히 복원. ref 만으로 충분 (별도 상태 없이 snapshot 의
@@ -1371,6 +1376,13 @@ export function App(): React.JSX.Element {
             onOpenPlugins={() => setPluginsModalOpen(true)}
             onOpenAutomation={() => setAutomationModalOpen(true)}
             onOpenHelp={() => setSlashHelpOpen(true)}
+            onOpenCode={() => {
+              // v2.5.0 (Phase 1 — Code mode). Codex 패턴 (옵션 D): 우측 패널을
+              // 'code' 모드로 전환 + preview 가 숨겨져 있었다면 다시 노출.
+              // Phase 2 에서 file tree + CodeMirror 가 placeholder 를 대체.
+              setPreviewMode('code');
+              setPreviewVisible(true);
+            }}
             isLoadingSessions={sessionsLoading}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
@@ -1458,6 +1470,10 @@ export function App(): React.JSX.Element {
           <PreviewPanel
             sessionId={(activeSession?.id ?? null) as SessionId | null}
             browser={activeSession?.browser ?? null}
+            mode={previewMode}
+            onSwitchMode={setPreviewMode}
+            {...(mentionWorkspaceRoot !== undefined && { workspaceRoot: mentionWorkspaceRoot })}
+            {...(mentionIgnorePatterns !== undefined && { ignorePatterns: mentionIgnorePatterns })}
             onAnnotation={(block) => {
               // v1.6.13 — typed block 으로 정식 prepend.
               setPendingBlocks((prev) => [...prev, block]);

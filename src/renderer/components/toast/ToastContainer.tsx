@@ -11,14 +11,17 @@
  *   <ToastContainer toasts={toasts.list} onDismiss={toasts.dismiss} />
  */
 
+import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
+import type { ComponentType, SVGProps } from 'react';
+
 import type { ToastItem, ToastKind } from '../../hooks/useToasts';
 import { useT } from '../../i18n';
 
-const KIND_ICON: Record<ToastKind, string> = {
-  error: '✖',
-  warning: '⚠',
-  info: 'ℹ',
-  success: '✓',
+const KIND_ICON: Record<ToastKind, ComponentType<SVGProps<SVGSVGElement>>> = {
+  error: XCircle,
+  warning: AlertTriangle,
+  info: Info,
+  success: CheckCircle2,
 };
 
 const KIND_CLASS: Record<ToastKind, string> = {
@@ -55,9 +58,16 @@ export function ToastContainer({
           data-toast-kind={toast.kind}
         >
           <div className="flex items-start gap-2">
-            <span aria-hidden className="text-sm leading-tight">
-              {KIND_ICON[toast.kind]}
-            </span>
+            {(() => {
+              const Icon = KIND_ICON[toast.kind];
+              return (
+                <Icon
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0 leading-tight"
+                  data-testid={`toast-icon-${toast.kind}`}
+                />
+              );
+            })()}
             <div className="flex-1 min-w-0 text-xs">
               <p className="font-medium leading-snug">{toast.message}</p>
               {toast.detail !== undefined && toast.detail.length > 0 && (
@@ -80,11 +90,11 @@ export function ToastContainer({
             <button
               type="button"
               onClick={() => onDismiss(toast.id)}
-              className="shrink-0 rounded px-1 text-[12px] leading-none opacity-70 hover:opacity-100"
+              className="shrink-0 rounded p-0.5 leading-none opacity-70 hover:opacity-100"
               aria-label={t('toast.dismiss_aria')}
               data-testid="toast-dismiss"
             >
-              ✕
+              <X aria-hidden="true" className="h-3 w-3" />
             </button>
           </div>
         </div>

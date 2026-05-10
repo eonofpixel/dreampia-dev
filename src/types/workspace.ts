@@ -139,3 +139,32 @@ export interface FileContent {
   truncated: boolean;
   line_count: number;
 }
+
+/**
+ * `workspace/write-file` IPC 가 반환하는 결과 (v2.7.0 Phase 3).
+ *
+ * `mtime` 은 디스크에 기록된 후의 ISO 8601 timestamp — 클라이언트가 다음 저장
+ * 시 expected_mtime 으로 보내 optimistic concurrency check 를 수행할 수 있다.
+ * `size_bytes` 는 새로 기록된 본문 길이 (UTF-8 byte 단위).
+ *
+ * Spec: ../CODE_TAB_DECISION.md (Phase 3 편집 모드).
+ */
+export interface FileWriteResult {
+  mtime: string;
+  size_bytes: number;
+  /** expected_mtime 이 주어졌고 디스크 mtime 과 다르면 'mtime_mismatch'. */
+  conflict?: 'mtime_mismatch';
+}
+
+/**
+ * `workspace/stat-file` IPC 결과 (v2.7.0 Phase 3 sub-PR).
+ *
+ * 외부 변경 감지용 — renderer 가 주기적으로 호출해 mtime 변화를 추적한다.
+ * 파일이 없거나 디렉토리면 `exists: false`. content/binary 검사는 안 한다 —
+ * 가벼운 metadata-only 호출.
+ */
+export interface FileStatResult {
+  exists: boolean;
+  mtime?: string;
+  size_bytes?: number;
+}

@@ -495,6 +495,30 @@ interface ReadFileArgsShape {
   rel_path: string;
   max_bytes?: number;
 }
+// v2.7.0 (Phase 3) — Code mode 편집 모드. content 는 UTF-8 string. expected_mtime
+// 가 주어지면 optimistic concurrency check (외부 변경 감지). conflict 면 ok=true
+// + value.conflict='mtime_mismatch' (실패가 아닌 정보성 응답).
+interface WriteFileArgsShape {
+  workspace_root: string;
+  rel_path: string;
+  content: string;
+  expected_mtime?: string;
+}
+interface FileWriteResultShape {
+  mtime: string;
+  size_bytes: number;
+  conflict?: 'mtime_mismatch';
+}
+// v2.7.0 (Phase 3 sub-PR) — 외부 변경 감지용 lightweight stat.
+interface StatFileArgsShape {
+  workspace_root: string;
+  rel_path: string;
+}
+interface FileStatResultShape {
+  exists: boolean;
+  mtime?: string;
+  size_bytes?: number;
+}
 
 // Whitelist of IPC channels (security)
 const ALLOWED_INVOKE_CHANNELS = [
@@ -525,6 +549,10 @@ const ALLOWED_INVOKE_CHANNELS = [
   // v0.6.0 (F-019) — @ mention 가 사용하는 file enumeration / read.
   'workspace/list-files',
   'workspace/read-file',
+  // v2.7.0 (Phase 3) — Code mode 편집 모드 저장. workspace-scoped + atomic.
+  'workspace/write-file',
+  // v2.7.0 (Phase 3 sub-PR) — 외부 변경 감지 (renderer 폴링). lightweight stat.
+  'workspace/stat-file',
   'session/list',
   'session/get',
   'session/create',
@@ -545,6 +573,14 @@ const ALLOWED_INVOKE_CHANNELS = [
   'plugin/list',
   'plugin/rescan',
   'plugin/trust',
+  // v2.4.0 (Task 6) — per-plugin isolation downgrade consent (G6).
+  'plugin/request-downgrade',
+  // v2.4.0 — plugin security settings (mcpVerificationMode + pluginIsolationMode +
+  // mcpRevocationFeedPublisher).
+  'app:get-plugin-security',
+  'app:set-mcp-verification-mode',
+  'app:set-plugin-isolation-mode',
+  'app:set-mcp-revocation-feed-publisher',
   'lock/acquire',
   'lock/release',
   'lock/get',
@@ -577,6 +613,8 @@ const ALLOWED_INVOKE_CHANNELS = [
   'mcp/get-record',
   'mcp/request-revoke',
   'mcp/request-refresh-revocations',
+  // v2.4.0 (Task 2) — Sigstore-verified install path
+  'mcp/install',
   // v0.4.0 — usage / cost telemetry
   'usage/summary',
   'usage/daily',
@@ -912,6 +950,24 @@ const api = {
      */
     readFile: (args: ReadFileArgsShape): Promise<Result<FileContentShape>> =>
       ipcRenderer.invoke('workspace/read-file', args) as Promise<Result<FileContentShape>>,
+
+    /**
+     * v2.7.0 (Phase 3) — workspace 내 단일 파일 write. resolveInsideWorkspace 로
+     * traversal 거절. expected_mtime 가 주어졌고 디스크 mtime 과 다르면 실제
+     * write 는 수행하지 않고 conflict='mtime_mismatch' + 디스크 현재 metadata
+     * 를 반환 (caller 가 사용자에게 confirm 후 expected_mtime 빼고 재호출).
+     * atomic: tmp 파일 → rename. 부모 디렉토리는 자동 생성 (workspace 내).
+     */
+    writeFile: (args: WriteFileArgsShape): Promise<Result<FileWriteResultShape>> =>
+      ipcRenderer.invoke('workspace/write-file', args) as Promise<Result<FileWriteResultShape>>,
+
+    /**
+     * v2.7.0 (Phase 3 sub-PR) — 외부 변경 감지용 lightweight stat. 파일 read
+     * 없이 metadata 만 조회. 파일이 없거나 traversal 거절될 때 ok=true +
+     * value.exists=false (또는 error). renderer 폴링 patrón 에 적합.
+     */
+    statFile: (args: StatFileArgsShape): Promise<Result<FileStatResultShape>> =>
+      ipcRenderer.invoke('workspace/stat-file', args) as Promise<Result<FileStatResultShape>>,
   },
 
   /**
@@ -1045,6 +1101,50 @@ const api = {
     trust: (name: string, trusted: boolean): Promise<Result<{ persisted: boolean }>> =>
       ipcRenderer.invoke('plugin/trust', { name, trusted }) as Promise<
         Result<{ persisted: boolean }>
+      >,
+    /**
+     * v2.4.0 (Task 6) — per-plugin isolation downgrade (G6 codex tightening).
+     * IsolationDowngradeModal 의 confirm 버튼이 호출. main 이
+     * settings.plugins[plugin_id].isolationMode='in_process' +
+     * isolationDowngradeConsent=ISO 8601 timestamp 을 영속.
+     * 다음 spawn 부터 in_process runner 가 적용된다.
+     */
+    requestDowngrade: (
+      plugin_id: string
+    ): Promise<Result<{ persisted: boolean; consent_at: string }>> =>
+      ipcRenderer.invoke('plugin/request-downgrade', { plugin_id }) as Promise<
+        Result<{ persisted: boolean; consent_at: string }>
+      >,
+    /**
+     * v2.4.0 — plugin security settings: read all three at once.
+     * Returns the current mcpVerificationMode + pluginIsolationMode +
+     * mcpRevocationFeedPublisher (null when unset → permissive default).
+     */
+    getSecurity: (): Promise<
+      Result<{
+        mcpVerificationMode: 'strict' | 'warn' | 'off';
+        pluginIsolationMode: 'utility_process' | 'in_process' | 'auto';
+        mcpRevocationFeedPublisher: { issuer: string; subject_pattern: string } | null;
+      }>
+    > =>
+      ipcRenderer.invoke('app:get-plugin-security') as Promise<
+        Result<{
+          mcpVerificationMode: 'strict' | 'warn' | 'off';
+          pluginIsolationMode: 'utility_process' | 'in_process' | 'auto';
+          mcpRevocationFeedPublisher: { issuer: string; subject_pattern: string } | null;
+        }>
+      >,
+    setMcpVerificationMode: (mode: 'strict' | 'warn' | 'off'): Promise<Result<void>> =>
+      ipcRenderer.invoke('app:set-mcp-verification-mode', mode) as Promise<Result<void>>,
+    setPluginIsolationMode: (
+      mode: 'utility_process' | 'in_process' | 'auto'
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('app:set-plugin-isolation-mode', mode) as Promise<Result<void>>,
+    setMcpRevocationFeedPublisher: (
+      identity: { issuer: string; subject_pattern: string } | null
+    ): Promise<Result<void>> =>
+      ipcRenderer.invoke('app:set-mcp-revocation-feed-publisher', identity) as Promise<
+        Result<void>
       >,
     /**
      * v1.6.5 — plugin hook 의 ctx.notify() 가 main 에서 emit 하면 본 listener
@@ -1327,6 +1427,36 @@ const api = {
     > =>
       ipcRenderer.invoke('mcp/request-refresh-revocations') as Promise<
         Result<{ applied: boolean; feed_version: number | null }>
+      >,
+
+    /**
+     * v2.4.0 (Task 2) — Sigstore-verified install path (US-204).
+     *
+     * Verifies a manifest + bundle against the bundled TUF root, applies the
+     * mode policy (strict/warn/off), and persists an InstalledPluginRecord on
+     * success. mode defaults to settings.mcpVerificationMode ('strict').
+     */
+    install: (args: {
+      manifest: unknown;
+      bundle: unknown | null;
+      mode?: 'strict' | 'warn' | 'off';
+    }): Promise<
+      Result<{
+        kind: 'installed' | 'rejected';
+        verification_status?: string;
+        package_id?: string;
+        reason?: string;
+        details?: string;
+      }>
+    > =>
+      ipcRenderer.invoke('mcp/install', args) as Promise<
+        Result<{
+          kind: 'installed' | 'rejected';
+          verification_status?: string;
+          package_id?: string;
+          reason?: string;
+          details?: string;
+        }>
       >,
   },
 

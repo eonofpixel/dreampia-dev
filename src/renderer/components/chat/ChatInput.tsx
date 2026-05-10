@@ -851,5 +851,5 @@ function summarizeMentionLimits(limits: MentionLimitsApplied): string | null {
   }
   if (parts.length === 0) return null;
   const kb = Math.round(limits.cumulative_bytes / 1024);
-  return `⚠ 멘션 제외됨 — ${parts.join(', ')}. 누적 ${kb} KB 사용.`;
+  return `멘션 제외됨 — ${parts.join(', ')}. 누적 ${kb} KB 사용.`;
 }

@@ -15,7 +15,7 @@
  * renderer-side UX wiring.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -49,6 +49,105 @@ describe('PreviewPanel', () => {
       expect(screen.getByText('미리보기할 페이지가 없어요')).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: '예시 URL 열기' })).toBeInTheDocument();
+  });
+
+  it('v2.4.0: inspector toolbar renders when handlers are provided', async () => {
+    render(
+      <PreviewPanel
+        sessionId={SID}
+        browser={null}
+        onAnnotation={() => {}}
+        onScreenshot={() => {}}
+        onDomDump={() => {}}
+      />
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('preview-inspector-toolbar')).toBeInTheDocument();
+    });
+    // All three buttons present.
+    expect(screen.getByTestId('preview-annotation-start')).toBeInTheDocument();
+    expect(screen.getByTestId('preview-screenshot-capture')).toBeInTheDocument();
+    expect(screen.getByTestId('preview-dom-dump')).toBeInTheDocument();
+    // No active tab → camera + dom buttons disabled, hint shown.
+    expect(screen.getByTestId('preview-screenshot-capture')).toBeDisabled();
+    expect(screen.getByTestId('preview-dom-dump')).toBeDisabled();
+    expect(screen.getByText(/Open a URL to enable capture tools/i)).toBeInTheDocument();
+  });
+
+  it('v2.4.0: inspector toolbar hidden when no handlers provided', async () => {
+    render(<PreviewPanel sessionId={SID} browser={null} />);
+    await waitFor(() => {
+      expect(screen.getByText('미리보기할 페이지가 없어요')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('preview-inspector-toolbar')).not.toBeInTheDocument();
+  });
+
+  it('v2.4.0: capture buttons enable when an active tab exists', async () => {
+    __mockStore.browserTabs.set('seed-1', {
+      tab_id: 'seed-1',
+      session_id: SID,
+      url: 'https://example.com',
+      title: 'Example',
+      favicon_url: null,
+      status: 'ready',
+      can_go_back: false,
+      can_go_forward: false,
+    });
+    const user = userEvent.setup();
+    render(
+      <PreviewPanel
+        sessionId={SID}
+        browser={null}
+        onAnnotation={() => {}}
+        onScreenshot={() => {}}
+        onDomDump={() => {}}
+      />
+    );
+    await waitFor(() => screen.getByText('Example'));
+    await user.click(screen.getByText('Example'));
+    await waitFor(() => {
+      expect(screen.getByTestId('preview-screenshot-capture')).not.toBeDisabled();
+      expect(screen.getByTestId('preview-dom-dump')).not.toBeDisabled();
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────
+  // v2.5.0 Phase 1 — Code mode (옵션 D, Codex file-open preview 패턴)
+  // Decision doc: ../../CODE_TAB_DECISION.md
+  // ────────────────────────────────────────────────────────────
+  it('v2.5.0: mode="code" renders Code placeholder instead of browser', () => {
+    render(<PreviewPanel sessionId={SID} browser={null} mode="code" />);
+    const codePanel = screen.getByTestId('preview-panel-code');
+    expect(codePanel).toBeInTheDocument();
+    expect(codePanel).toHaveAttribute('data-mode', 'code');
+    expect(screen.getByText(/코드 보기|Code/)).toBeInTheDocument();
+    // Browser-mode chrome (PreviewTabs / BrowserControls) must not render in code mode.
+    expect(screen.queryByRole('button', { name: '예시 URL 열기' })).not.toBeInTheDocument();
+  });
+
+  it('v2.5.0: mode="code" with onSwitchMode shows Browser-return button', async () => {
+    const user = userEvent.setup();
+    const onSwitchMode = vi.fn();
+    render(
+      <PreviewPanel sessionId={SID} browser={null} mode="code" onSwitchMode={onSwitchMode} />
+    );
+    const btn = screen.getByTestId('preview-mode-browser');
+    expect(btn).toBeInTheDocument();
+    await user.click(btn);
+    expect(onSwitchMode).toHaveBeenCalledWith('browser');
+  });
+
+  it('v2.5.0: mode="code" without onSwitchMode hides Browser-return button', () => {
+    render(<PreviewPanel sessionId={SID} browser={null} mode="code" />);
+    expect(screen.queryByTestId('preview-mode-browser')).not.toBeInTheDocument();
+  });
+
+  it('v2.5.0: default mode (no prop) keeps existing browser behavior', async () => {
+    render(<PreviewPanel sessionId={SID} browser={null} />);
+    await waitFor(() => {
+      expect(screen.getByText('미리보기할 페이지가 없어요')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('preview-panel-code')).not.toBeInTheDocument();
   });
 
   it('"예시 URL 열기" creates a new tab', async () => {

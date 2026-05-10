@@ -136,6 +136,46 @@ describe('Sidebar', () => {
   });
 
   // ────────────────────────────────────────────────────────────
+  // v2.5.0 Phase 1 — Code nav item (Codex file-open preview 패턴, 옵션 D)
+  // Decision doc: ../../CODE_TAB_DECISION.md
+  // ────────────────────────────────────────────────────────────
+
+  describe('Code nav (v2.5.0 Phase 1)', () => {
+    it('hides Code nav item when onOpenCode undefined', () => {
+      render(<Sidebar sessions={[]} onSelectSession={() => {}} onNewChat={() => {}} />);
+      expect(screen.queryByTestId('sidebar-open-code')).not.toBeInTheDocument();
+    });
+
+    it('shows Code nav item when onOpenCode provided', () => {
+      render(
+        <Sidebar
+          sessions={[]}
+          onSelectSession={() => {}}
+          onNewChat={() => {}}
+          onOpenCode={() => {}}
+        />
+      );
+      expect(screen.getByTestId('sidebar-open-code')).toBeInTheDocument();
+      expect(screen.getByText('코드')).toBeInTheDocument();
+    });
+
+    it('calls onOpenCode when clicked', async () => {
+      const user = userEvent.setup();
+      const onOpenCode = vi.fn();
+      render(
+        <Sidebar
+          sessions={[]}
+          onSelectSession={() => {}}
+          onNewChat={() => {}}
+          onOpenCode={onOpenCode}
+        />
+      );
+      await user.click(screen.getByTestId('sidebar-open-code'));
+      expect(onOpenCode).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────
   // v0.3.0 — [온보딩 다시 보기] 버튼
   // ────────────────────────────────────────────────────────────
 

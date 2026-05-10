@@ -16,6 +16,7 @@ import {
   Loader2,
   ChevronRight,
   ChevronDown,
+  Wrench,
 } from 'lucide-react';
 import type { ToolCallRef, ToolResultRef } from '@/types';
 import { formatDuration, safeJsonStringify, STATUS_LABELS_KO } from './toolDisplayHelpers';
@@ -104,8 +105,9 @@ export function ToolCallCard({ call, result }: ToolCallCardProps): React.JSX.Ele
         <ChevronIcon className="h-3 w-3 shrink-0 text-text-tertiary" aria-hidden="true" />
 
         {/* Tool name */}
-        <span className="font-mono font-medium text-text-primary truncate flex-1">
-          🔧 {call.tool_id}
+        <span className="flex items-center gap-1 font-mono font-medium text-text-primary truncate flex-1">
+          <Wrench aria-hidden="true" className="h-3 w-3 shrink-0 text-text-tertiary" />
+          <span className="truncate">{call.tool_id}</span>
         </span>
 
         {/* Status badge */}

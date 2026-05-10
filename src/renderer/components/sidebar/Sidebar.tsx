@@ -8,17 +8,18 @@
 
 import type { Session } from '@/types';
 import {
-  Plus,
-  Puzzle,
-  Bot,
-  Folder,
-  Pin,
-  Settings,
-  Compass,
   BarChart3,
-  Server,
+  Bot,
+  Code2,
+  Compass,
+  Folder,
   GitCompareArrows,
   HelpCircle,
+  Pin,
+  Plus,
+  Puzzle,
+  Server,
+  Settings,
 } from 'lucide-react';
 import { SearchSection, type SearchResultEntry } from './SearchSection';
 import { useMcp } from '../../hooks/useMcp';
@@ -78,6 +79,16 @@ export interface SidebarProps {
   onOpenHelp?: () => void;
 
   /**
+   * v2.5.0 (Phase 1 — Code mode) — [Code] 네비 클릭 시 호출. PreviewPanel 의
+   * mode 를 'code' 로 전환해 우측 패널에 파일 트리 + 에디터 placeholder 를 노출.
+   * Codex 의 file open preview 패턴 (codex_preview_state_10) 을 정통으로 따른다.
+   * 미지정 시 nav item 자체를 숨김 (legacy 동작 유지).
+   *
+   * Decision doc: CODE_TAB_DECISION.md (옵션 D — PreviewPanel 코드 모드 확장).
+   */
+  onOpenCode?: () => void;
+
+  /**
    * v1.7.5 — sessions list loading 중. true 면 chats 영역에
    * SidebarSessionsSkeleton 표시 (sessions.length === 0 의 empty text 대신).
    */
@@ -114,6 +125,7 @@ export function Sidebar({
   onOpenPlugins,
   onOpenAutomation,
   onOpenHelp,
+  onOpenCode,
   isLoadingSessions = false,
   searchQuery = '',
   onSearchQueryChange,
@@ -185,6 +197,14 @@ export function Sidebar({
             label={t('sidebar.nav.compare')}
             onClick={onOpenCompare}
             testId="sidebar-open-compare"
+          />
+        )}
+        {onOpenCode !== undefined && (
+          <SidebarNavItem
+            icon={<Code2 className="h-4 w-4" />}
+            label={t('sidebar.nav.code')}
+            onClick={onOpenCode}
+            testId="sidebar-open-code"
           />
         )}
         <SidebarNavItem

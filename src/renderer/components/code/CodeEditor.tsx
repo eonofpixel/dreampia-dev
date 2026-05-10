@@ -1,0 +1,212 @@
+/**
+ * CodeEditor — CodeMirror 6 wrapper.
+ *
+ * Phase 2 (v2.6.0) — read-only.
+ * Phase 3 (v2.7.0) — `editable` prop 으로 편집 모드 전환 + onChange callback.
+ *
+ * 두 모드의 분기는 Compartment 로 처리해 view 를 destroy/recreate 하지 않고
+ * runtime 토글이 가능. content prop 변경 (외부 reload, 부모 setContent) 은
+ * EditorView.dispatch 로 doc 만 교체.
+ *
+ * 한계 (Phase 3 scope, decision doc 준수):
+ *   - search/replace UI (Cmd+F popover) 는 keymap 만 — 별도 UI 미제공
+ *   - linting / autocomplete 미연결 (CodeMirror lang 만 syntax highlight)
+ *   - 다중 커서 / vim 모드 미지원
+ *
+ * 테마: dreampia theme attribute 가 'dark' 면 oneDark 적용. light 모드는
+ * CodeMirror 의 내장 light 사용.
+ *
+ * Decision doc: ../../../../CODE_TAB_DECISION.md.
+ */
+
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { bracketMatching, foldGutter, foldKeymap, indentOnInput } from '@codemirror/language';
+import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
+import { Compartment, EditorState } from '@codemirror/state';
+import { oneDark } from '@codemirror/theme-one-dark';
+import {
+  EditorView,
+  drawSelection,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  keymap,
+  lineNumbers,
+} from '@codemirror/view';
+import { useEffect, useMemo, useRef } from 'react';
+
+import { detectLanguageExtension } from './languageDetect';
+
+export interface CodeEditorProps {
+  /** UTF-8 source text. binary/oversize 는 호출자가 미리 거절. */
+  content: string;
+  /** 확장자 감지용 — 'src/foo/bar.ts' 같은 워크스페이스 상대 경로. */
+  relPath?: string;
+  /** dark theme 강제 토글. 미지정 시 document data-theme 값 사용. */
+  theme?: 'light' | 'dark';
+  /** truncated 인 경우 푸터 배너 노출. */
+  truncated?: boolean;
+  /** v2.7.0 — 편집 가능 여부. default false (read-only). */
+  editable?: boolean;
+  /** v2.7.0 — 편집 시 호출. editable=false 면 호출되지 않음. */
+  onChange?: (next: string) => void;
+  /**
+   * v2.7.0 sub-PR — Mod+S (Cmd/Ctrl+S) 단축키 호출. editable=true 일 때만
+   * 의미 있음 (read-only 모드에선 호출돼도 caller 가 자체 가드). 기본 keymap
+   * 의 Mod-s 는 OS 의 "Save Page As" 다이얼로그를 열 수 있어 preventDefault
+   * 필수. 미지정 시 단축키 자체가 비활성 (기본 OS 동작).
+   */
+  onSave?: () => void;
+}
+
+function resolveDarkMode(prop: 'light' | 'dark' | undefined): boolean {
+  if (prop !== undefined) return prop === 'dark';
+  if (typeof document === 'undefined') return false;
+  return document.documentElement.getAttribute('data-theme') === 'dark';
+}
+
+export function CodeEditor({
+  content,
+  relPath,
+  theme,
+  truncated = false,
+  editable = false,
+  onChange,
+  onSave,
+}: CodeEditorProps): React.JSX.Element {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const viewRef = useRef<EditorView | null>(null);
+
+  // editable / onChange / onSave 가 prop 변경으로 흔들려도 view 를 재생성하지
+  // 않도록 최신 핸들러를 ref 로 보관. keymap / updateListener 안에서
+  // .current 호출.
+  const onChangeRef = useRef<typeof onChange>(onChange);
+  onChangeRef.current = onChange;
+  const onSaveRef = useRef<typeof onSave>(onSave);
+  onSaveRef.current = onSave;
+
+  // Compartment: editable / theme / language 를 runtime 에 reconfigure.
+  const editableCompartment = useRef(new Compartment());
+  const themeCompartment = useRef(new Compartment());
+  const langCompartment = useRef(new Compartment());
+
+  const langExt = useMemo(
+    () => (relPath !== undefined ? detectLanguageExtension(relPath) : undefined),
+    [relPath]
+  );
+
+  const isDark = resolveDarkMode(theme);
+
+  // ── Mount once ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (hostRef.current === null) return;
+    const baseExtensions = [
+      lineNumbers(),
+      highlightActiveLineGutter(),
+      foldGutter(),
+      drawSelection(),
+      indentOnInput(),
+      bracketMatching(),
+      highlightActiveLine(),
+      highlightSelectionMatches(),
+      history(),
+      keymap.of([
+        {
+          // v2.7.0 sub-PR — Mod+S 저장. preventDefault=true 로 OS 의 "Save
+          // Page As" 다이얼로그 차단. onSave 미지정 시에도 항상 동작 (handler
+          // 가 no-op 일 뿐, OS 다이얼로그 차단은 유지) — 안 차단하면 사용자
+          // 가 일반 textarea 처럼 저장하려다 브라우저 chrome 으로 빠짐.
+          key: 'Mod-s',
+          preventDefault: true,
+          run: (): boolean => {
+            onSaveRef.current?.();
+            return true;
+          },
+        },
+        ...defaultKeymap,
+        ...historyKeymap,
+        ...foldKeymap,
+        ...searchKeymap,
+      ]),
+      EditorView.theme({
+        '&': { height: '100%', fontSize: '12px' },
+        '.cm-scroller': { fontFamily: 'var(--font-mono, ui-monospace, monospace)' },
+      }),
+      EditorView.updateListener.of((update) => {
+        if (update.docChanged) {
+          const next = update.state.doc.toString();
+          onChangeRef.current?.(next);
+        }
+      }),
+      editableCompartment.current.of(buildEditableExtensions(editable)),
+      themeCompartment.current.of(isDark ? [oneDark] : []),
+      langCompartment.current.of(langExt ?? []),
+    ];
+
+    const state = EditorState.create({ doc: content, extensions: baseExtensions });
+    const view = new EditorView({ state, parent: hostRef.current });
+    viewRef.current = view;
+    return (): void => {
+      view.destroy();
+      viewRef.current = null;
+    };
+    // 마운트 시 한 번만 — content/editable/theme/lang 후속 변경은 별도 effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── content prop 외부 변경 시 doc 교체 ───────────────────────────
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view === null) return;
+    const current = view.state.doc.toString();
+    if (current === content) return;
+    view.dispatch({
+      changes: { from: 0, to: current.length, insert: content },
+    });
+  }, [content]);
+
+  // ── editable / theme / language 토글 ────────────────────────────
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view === null) return;
+    view.dispatch({
+      effects: editableCompartment.current.reconfigure(buildEditableExtensions(editable)),
+    });
+  }, [editable]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view === null) return;
+    view.dispatch({
+      effects: themeCompartment.current.reconfigure(isDark ? [oneDark] : []),
+    });
+  }, [isDark]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view === null) return;
+    view.dispatch({
+      effects: langCompartment.current.reconfigure(langExt ?? []),
+    });
+  }, [langExt]);
+
+  return (
+    <div className="flex h-full flex-col" data-testid="code-editor">
+      <div ref={hostRef} className="flex-1 overflow-hidden" data-testid="code-editor-host" />
+      {truncated && (
+        <div
+          className="border-t border-border-primary bg-bg-secondary px-3 py-1.5 text-[11px] text-text-tertiary"
+          data-testid="code-editor-truncated"
+        >
+          파일이 잘렸습니다. 전체 내용을 보려면 터미널에서 직접 열어주세요.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function buildEditableExtensions(editable: boolean): readonly [
+  ReturnType<typeof EditorView.editable.of>,
+  ReturnType<typeof EditorState.readOnly.of>,
+] {
+  return [EditorView.editable.of(editable), EditorState.readOnly.of(!editable)];
+}

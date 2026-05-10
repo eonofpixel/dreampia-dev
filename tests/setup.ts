@@ -242,6 +242,12 @@ const mockStore = {
   // popover 가 실제 파일 검색 흐름을 검증할 수 있다.
   workspaceFiles: [] as MockFileEntry[],
   workspaceFileContents: new Map<string, MockFileContent>(),
+  // v2.7.0 (Phase 3) — workspace.writeFile mock 분기.
+  writeFileBehavior: undefined as 'success' | 'mtime_mismatch' | 'fail' | undefined,
+  lastWrittenFile: null as { rel_path: string; content: string } | null,
+  // v2.7.0 (Phase 3 sub-PR) — workspace.statFile mock data. 외부 변경 감지
+  // 폴링 테스트에서 path → mtime 을 set + 변경해 시뮬레이션.
+  workspaceFileStats: new Map<string, { mtime: string; size_bytes: number }>(),
 
   // ── onboarding (Phase 3 B2) ────────────────────────────
   // 첫 실행 wizard 표시 여부. 기본 true — App.tsx 회귀 테스트가 wizard 와
@@ -498,6 +504,9 @@ beforeEach(() => {
   mockStore.workspacePickNext = undefined;
   mockStore.workspaceFiles = [];
   mockStore.workspaceFileContents.clear();
+  mockStore.writeFileBehavior = undefined;
+  mockStore.lastWrittenFile = null;
+  mockStore.workspaceFileStats.clear();
   mockStore.searchResults.clear();
   mockStore.searchError = null;
   mockStore.onboardingCompleted = true;
@@ -862,6 +871,69 @@ if (typeof window !== 'undefined') {
               return { ok: false, error: `file not found: ${args.rel_path}` };
             }
             return { ok: true, value: content };
+          }
+        ),
+
+        // v2.7.0 (Phase 3 sub-PR) — workspace.statFile mock. mockStore.statFile
+        // map 으로 path → { mtime, size_bytes } injection. exists=false 는
+        // map 미존재 시 자동 반환.
+        statFile: vi.fn(
+          async (args: {
+            workspace_root: string;
+            rel_path: string;
+          }): Promise<
+            Result<{ exists: boolean; mtime?: string; size_bytes?: number }>
+          > => {
+            const stat = mockStore.workspaceFileStats.get(args.rel_path);
+            if (stat === undefined) {
+              return { ok: true, value: { exists: false } };
+            }
+            return {
+              ok: true,
+              value: {
+                exists: true,
+                mtime: stat.mtime,
+                size_bytes: stat.size_bytes,
+              },
+            };
+          }
+        ),
+
+        // v2.7.0 (Phase 3) — workspace.writeFile mock. mockStore.writeFileBehavior
+        // 로 'success' (default) | 'mtime_mismatch' | 'fail' 분기 가능.
+        // success 면 mockStore.workspaceFileContents 갱신 + mtime injection.
+        writeFile: vi.fn(
+          async (args: {
+            workspace_root: string;
+            rel_path: string;
+            content: string;
+            expected_mtime?: string;
+          }): Promise<
+            Result<{ mtime: string; size_bytes: number; conflict?: 'mtime_mismatch' }>
+          > => {
+            const behavior = mockStore.writeFileBehavior ?? 'success';
+            if (behavior === 'fail') {
+              return { ok: false, error: 'simulated write failure' };
+            }
+            if (behavior === 'mtime_mismatch') {
+              return {
+                ok: true,
+                value: {
+                  mtime: '2099-01-01T00:00:00.000Z',
+                  size_bytes: 0,
+                  conflict: 'mtime_mismatch',
+                },
+              };
+            }
+            const mtime = new Date().toISOString();
+            const size_bytes = Buffer.byteLength(args.content, 'utf8');
+            mockStore.workspaceFileContents.set(args.rel_path, {
+              content: args.content,
+              truncated: false,
+              line_count: args.content.split('\n').length,
+            });
+            mockStore.lastWrittenFile = { rel_path: args.rel_path, content: args.content };
+            return { ok: true, value: { mtime, size_bytes } };
           }
         ),
       },

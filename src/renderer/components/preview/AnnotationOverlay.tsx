@@ -14,6 +14,7 @@
  *     필요해 별도 슬롯. 본 commit 은 좌표 기반 bbox 만.
  */
 
+import { Ruler, X } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 import { useT } from '../../i18n';
 
@@ -169,17 +170,17 @@ export function AnnotationOverlay({
           // toolbar 영역에서는 drag 시작 안 되도록 stopPropagation.
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <span aria-hidden>📐</span>
+          <Ruler aria-hidden="true" className="h-3 w-3" />
           <span>{t('preview.annotation.toolbar_label')}</span>
           {onToggle !== undefined && (
             <button
               type="button"
               onClick={onToggle}
-              className="rounded px-1 hover:bg-bg-tertiary"
+              className="rounded p-0.5 hover:bg-bg-tertiary"
               data-testid="annotation-overlay-toggle-off"
               aria-label={t('preview.annotation.exit_aria')}
             >
-              ✕
+              <X aria-hidden="true" className="h-3 w-3" />
             </button>
           )}
         </div>

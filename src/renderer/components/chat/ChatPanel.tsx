@@ -10,6 +10,17 @@
  *       docs/ia/onboarding.md (CLI 감지)
  */
 
+import {
+  AlertTriangle,
+  Eye,
+  EyeOff,
+  Folder,
+  GitBranch,
+  Hand,
+  Lock,
+  LockOpen,
+  MessageSquare,
+} from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 
@@ -565,12 +576,12 @@ function ChatHeader({
           <div className="relative shrink-0 group">
             <button
               type="button"
-              className="rounded bg-yellow-900/30 px-1.5 py-0.5 text-[11px] leading-none text-yellow-400 hover:bg-yellow-900/50"
+              className="rounded bg-yellow-900/30 px-1 py-0.5 leading-none text-yellow-400 hover:bg-yellow-900/50"
               title={t('chat.header.drift_tooltip', { name: sessionWorkspaceName })}
               aria-label={t('chat.header.drift_aria', { name: sessionWorkspaceName })}
               data-testid="workspace-drift-badge"
             >
-              ⚠
+              <AlertTriangle aria-hidden="true" className="h-3.5 w-3.5" />
             </button>
             <div
               className="invisible absolute right-0 top-full z-20 mt-1 w-72 rounded-md border border-yellow-600/50 bg-bg-primary p-3 text-xs shadow-lg group-focus-within:visible group-hover:visible"
@@ -590,10 +601,11 @@ function ChatHeader({
                 <button
                   type="button"
                   onClick={onToggleWorkspaceLock}
-                  className="w-full rounded border border-border-primary bg-bg-secondary px-2 py-1 text-left hover:bg-bg-tertiary"
+                  className="flex w-full items-center gap-1.5 rounded border border-border-primary bg-bg-secondary px-2 py-1 text-left hover:bg-bg-tertiary"
                   data-testid="workspace-drift-menu-lock"
                 >
-                  🔒 {t('chat.header.drift_menu_lock')}
+                  <Lock aria-hidden="true" className="h-3.5 w-3.5" />
+                  <span>{t('chat.header.drift_menu_lock')}</span>
                 </button>
               )}
             </div>
@@ -603,12 +615,13 @@ function ChatHeader({
           <button
             type="button"
             onClick={onPickWorkspace}
-            className="max-w-[160px] shrink-0 truncate rounded bg-bg-tertiary px-2 py-0.5 hover:bg-border-primary"
+            className="flex max-w-[160px] shrink-0 items-center gap-1.5 truncate rounded bg-bg-tertiary px-2 py-0.5 hover:bg-border-primary"
             title={t('chat.header.workspace_tooltip', { name: workspaceName })}
             aria-label={t('chat.header.workspace_pick_aria')}
             data-testid="workspace-pick-button"
           >
-            📁 {workspaceName}
+            <Folder aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{workspaceName}</span>
           </button>
         )}
         {/*
@@ -635,7 +648,11 @@ function ChatHeader({
             data-testid="workspace-lock-toggle"
             data-locked={workspaceLocked ? 'true' : 'false'}
           >
-            {workspaceLocked ? '🔒' : '🔓'}
+            {workspaceLocked ? (
+              <Lock aria-hidden="true" className="h-4 w-4" />
+            ) : (
+              <LockOpen aria-hidden="true" className="h-4 w-4" />
+            )}
           </button>
         )}
         <PermissionDropdown
@@ -680,7 +697,11 @@ function ChatHeader({
             aria-pressed={previewVisible === true}
             data-testid="preview-toggle-button"
           >
-            {previewVisible === true ? '👁' : '👁‍🗨'}
+            {previewVisible === true ? (
+              <Eye aria-hidden="true" className="h-4 w-4" />
+            ) : (
+              <EyeOff aria-hidden="true" className="h-4 w-4" />
+            )}
           </button>
         )}
         {/*
@@ -696,7 +717,7 @@ function ChatHeader({
             aria-label={t('chat.header.fork_aria')}
             data-testid="chat-fork-button"
           >
-            🌿
+            <GitBranch aria-hidden="true" className="h-4 w-4" />
           </button>
         )}
       </div>
@@ -836,8 +857,8 @@ export function WelcomeMessage({
     onOpenAutomation !== undefined || onOpenPlugins !== undefined || onOpenHelp !== undefined;
   return (
     <div className="mx-auto mt-16 max-w-md text-center" data-testid="welcome-message">
-      <div className="text-5xl" aria-hidden="true">
-        👋
+      <div className="flex justify-center text-text-tertiary" aria-hidden="true">
+        <Hand className="h-12 w-12" />
       </div>
       <h2 className="mt-4 text-xl font-semibold">{t('chat.welcome.greeting')}</h2>
       <p className="mt-1 text-sm text-text-secondary">
@@ -1059,9 +1080,9 @@ function TurnDisplay({
               title={t('chat.turn.fork_tooltip')}
               aria-label={t('chat.turn.fork_aria')}
               data-testid={`turn-fork-button-${turn.id}`}
-              className="rounded-md px-1.5 py-0.5 text-xs hover:bg-bg-tertiary"
+              className="rounded-md p-1 hover:bg-bg-tertiary"
             >
-              🌿
+              <GitBranch aria-hidden="true" className="h-3.5 w-3.5" />
             </button>
           </div>
         )}
@@ -1077,7 +1098,10 @@ function EmptyState(): React.JSX.Element {
   const t = useT();
   return (
     <div className="flex h-full flex-col items-center justify-center">
-      <SharedEmptyState icon="💬" title={t('chat.empty.message')} />
+      <SharedEmptyState
+        icon={<MessageSquare aria-hidden="true" className="h-8 w-8" />}
+        title={t('chat.empty.message')}
+      />
     </div>
   );
 }

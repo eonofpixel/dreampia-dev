@@ -28,10 +28,22 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, RotateCw, Plus, Maximize2, X, Camera, Code } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Camera,
+  Code,
+  Globe,
+  Maximize2,
+  Plus,
+  RotateCw,
+  Ruler,
+  X,
+} from 'lucide-react';
 import type { BrowserState, SessionId } from '@/types';
 import { useBrowser, type BrowserTabUI } from '../../hooks/useBrowser';
 import { useT } from '../../i18n';
+import { CodePanel } from '../code/CodePanel';
 import { AnnotationOverlay, type AnnotationBox } from './AnnotationOverlay';
 import type { AnnotationBlock, DomDumpBlock } from '@/types/conversation';
 
@@ -56,9 +68,55 @@ export interface PreviewPanelProps {
    * 미지정 시 DOM 캡처 버튼 미노출.
    */
   onDomDump?: (block: DomDumpBlock) => void;
+  /**
+   * v2.5.0 (Phase 1 — Code mode) — Codex 의 file-open preview 패턴 (옵션 D).
+   * 'browser' (default) 는 기존 WebContentsView 호스팅. 'code' 는 우측 패널을
+   * 코드 보기 placeholder 로 전환. Phase 2 에서 CodeMirror 6 + 파일 트리가
+   * 이 placeholder 를 대체한다.
+   *
+   * Decision doc: CODE_TAB_DECISION.md.
+   */
+  mode?: 'browser' | 'code';
+  /**
+   * v2.5.0 — Code 모드에서 헤더의 [브라우저] 버튼 클릭 시 호출. App.tsx 가
+   * setPreviewMode('browser') 로 wire. 미지정 시 모드 전환 버튼 미노출.
+   */
+  onSwitchMode?: (next: 'browser' | 'code') => void;
+  /**
+   * v2.6.0 (Phase 2) — Code 모드의 FileTree 가 사용하는 워크스페이스 절대
+   * 루트. mention 의 동일 prop 과 같은 값을 전달 (App.tsx 의
+   * mentionWorkspaceRoot). undefined 면 FileTree 가 안내 문구 표시.
+   */
+  workspaceRoot?: string;
+  /**
+   * v2.6.0 (Phase 2) — workspace.listFiles 에 전달할 ignore 패턴.
+   * mention 과 동일한 set 재사용 (node_modules, .git 등 자동 prune).
+   */
+  ignorePatterns?: ReadonlyArray<string>;
 }
 
-export function PreviewPanel({
+/**
+ * v2.5.0 Phase 1 / v2.6.0 Phase 2 — mode dispatcher.
+ *
+ * Code 모드 vs Browser 모드를 별도 자식 컴포넌트로 분기해 hooks 규칙
+ * (Rules of Hooks) 을 안전하게 지킨다. 두 분기는 서로 다른 hook 집합을
+ * 갖기 때문에 한 함수 안에서 conditional return 으로 처리하면 react-hooks
+ * 린트 violation. 분기 전 호출되는 hook 자체가 없도록 wrapper 만 분리.
+ */
+export function PreviewPanel(props: PreviewPanelProps): React.JSX.Element {
+  if (props.mode === 'code') {
+    return (
+      <CodePanel
+        {...(props.workspaceRoot !== undefined && { workspaceRoot: props.workspaceRoot })}
+        {...(props.ignorePatterns !== undefined && { ignorePatterns: props.ignorePatterns })}
+        {...(props.onSwitchMode !== undefined && { onSwitchMode: props.onSwitchMode })}
+      />
+    );
+  }
+  return <BrowserPreview {...props} />;
+}
+
+function BrowserPreview({
   sessionId,
   browser,
   onAnnotation,
@@ -211,6 +269,75 @@ export function PreviewPanel({
         </div>
       )}
 
+      {/*
+       * v2.4.0 — Inspector toolbar. Floating absolute 버튼들이 empty state 와
+       * 충돌하던 문제를 fix: 항상 보이는 header bar 로 통합. 활성 탭이 없으면
+       * camera/dom 은 disabled 로 hint, annotation 은 활성 (overlay-only 도구).
+       * v2.3.0 까지 ad-hoc absolute 위치였는데 layout shift 일으키고 빈 상태에서
+       * 보이지도 않아 user 가 발견 불가했음.
+       */}
+      {(onAnnotation !== undefined || onScreenshot !== undefined || onDomDump !== undefined) && (
+        <div
+          className="flex items-center gap-1 border-b border-border-primary bg-bg-secondary px-2 py-1"
+          role="toolbar"
+          aria-label={t('preview.aside_aria')}
+          data-testid="preview-inspector-toolbar"
+        >
+          {onAnnotation !== undefined && (
+            <button
+              type="button"
+              onClick={handleAnnotationToggle}
+              className={
+                annotationActive
+                  ? 'rounded border border-blue-500/60 bg-blue-900/30 px-2 py-1 text-[11px] text-blue-300'
+                  : 'rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-[11px] text-text-secondary hover:bg-border-primary'
+              }
+              aria-label={t('preview.annotation.start_aria')}
+              aria-pressed={annotationActive}
+              data-testid="preview-annotation-start"
+              title={t('preview.annotation.start_aria')}
+            >
+              <Ruler aria-hidden="true" className="h-3 w-3" />
+            </button>
+          )}
+          {onScreenshot !== undefined && (
+            <button
+              type="button"
+              onClick={() => {
+                void handleCapture();
+              }}
+              disabled={capturing || activeTab === null}
+              className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-[11px] text-text-secondary hover:bg-border-primary disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label={t('preview.screenshot_capture_aria')}
+              data-testid="preview-screenshot-capture"
+              title={t('preview.screenshot_capture_aria')}
+            >
+              <Camera className="h-3 w-3" />
+            </button>
+          )}
+          {onDomDump !== undefined && (
+            <button
+              type="button"
+              onClick={() => {
+                void handleDumpDom();
+              }}
+              disabled={activeTab === null}
+              className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-[11px] text-text-secondary hover:bg-border-primary disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label={t('preview.dom_dump_capture_aria')}
+              data-testid="preview-dom-dump"
+              title={t('preview.dom_dump_capture_aria')}
+            >
+              <Code className="h-3 w-3" />
+            </button>
+          )}
+          {activeTab === null && (
+            <span className="ml-1 text-[10px] text-text-tertiary">
+              Open a URL to enable capture tools
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="relative flex flex-1 min-h-0">
         <BrowserPaneAnchor
           activeTabId={activeTabId}
@@ -234,50 +361,6 @@ export function PreviewPanel({
           />
         )}
       </div>
-      {/*
-       * Annotation 모드 진입 토글 — 우상단 corner 의 작은 버튼. 우측 panel 하단
-       * 에 별도 toolbar 두지 않아 layout 영향 0.
-       */}
-      {onAnnotation !== undefined && !annotationActive && (
-        <button
-          type="button"
-          onClick={handleAnnotationToggle}
-          className="absolute right-3 top-12 z-20 rounded-md border border-border-primary bg-bg-primary/90 px-2 py-1 text-xs text-text-secondary hover:bg-bg-tertiary"
-          aria-label={t('preview.annotation.start_aria')}
-          data-testid="preview-annotation-start"
-        >
-          📐
-        </button>
-      )}
-      {/* v1.6.12 — Screenshot 캡처 버튼. annotation 버튼 옆. */}
-      {onScreenshot !== undefined && activeTab !== null && (
-        <button
-          type="button"
-          onClick={() => {
-            void handleCapture();
-          }}
-          disabled={capturing}
-          className="absolute right-12 top-12 z-20 rounded-md border border-border-primary bg-bg-primary/90 px-2 py-1 text-xs text-text-secondary hover:bg-bg-tertiary disabled:opacity-50"
-          aria-label={t('preview.screenshot_capture_aria')}
-          data-testid="preview-screenshot-capture"
-        >
-          <Camera className="h-3 w-3" />
-        </button>
-      )}
-      {/* v1.6.14 — DOM 캡처 버튼 (annotation/screenshot 옆). */}
-      {onDomDump !== undefined && activeTab !== null && (
-        <button
-          type="button"
-          onClick={() => {
-            void handleDumpDom();
-          }}
-          className="absolute right-[5.25rem] top-12 z-20 rounded-md border border-border-primary bg-bg-primary/90 px-2 py-1 text-xs text-text-secondary hover:bg-bg-tertiary"
-          aria-label={t('preview.dom_dump_capture_aria')}
-          data-testid="preview-dom-dump"
-        >
-          <Code className="h-3 w-3" />
-        </button>
-      )}
     </aside>
   );
 }
@@ -562,7 +645,9 @@ function EmptyPreview({ onOpenDemo }: { onOpenDemo: () => void }): React.JSX.Ele
   const t = useT();
   return (
     <div className="text-center">
-      <div className="text-5xl">🌐</div>
+      <div className="flex justify-center text-text-tertiary">
+        <Globe aria-hidden="true" className="h-12 w-12" />
+      </div>
       <p className="mt-4">{t('preview.empty.title')}</p>
       <p className="mt-2 text-xs">{t('preview.empty.hint')}</p>
       <button

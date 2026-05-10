@@ -28,6 +28,8 @@ import {
   X,
   Folder,
   FolderOpen,
+  Hand,
+  Search,
   Server,
   Sparkles,
   Terminal,
@@ -465,8 +467,8 @@ function WelcomeStep({ onNext }: { onNext: () => void }): React.JSX.Element {
   const t = useT();
   return (
     <section className="text-center" data-testid="onboarding-step-welcome">
-      <div className="text-5xl" aria-hidden="true">
-        👋
+      <div className="flex justify-center text-text-tertiary" aria-hidden="true">
+        <Hand className="h-12 w-12" />
       </div>
       <h1 id="onboarding-title" className="mt-4 text-xl font-semibold text-text-primary">
         {t('onboarding.welcome.title')}
@@ -506,8 +508,12 @@ function CliDetectionStep({
         <h2 className="text-base font-semibold text-text-primary">CLI 감지</h2>
       </header>
       {cliStatus === null || detecting ? (
-        <p className="text-sm text-text-secondary" data-testid="cli-detecting">
-          🔍 CLI 감지 중...
+        <p
+          className="flex items-center gap-1.5 text-sm text-text-secondary"
+          data-testid="cli-detecting"
+        >
+          <Search aria-hidden="true" className="h-4 w-4" />
+          <span>CLI 감지 중...</span>
         </p>
       ) : (
         <div className="space-y-3 text-sm">

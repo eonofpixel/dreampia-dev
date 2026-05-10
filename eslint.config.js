@@ -76,6 +76,43 @@ export default [
     },
   },
   {
+    // v2.4.1 — emoji guard. UI-facing source must use Lucide icons (or
+    // semantic SVG components), not emoji or symbol literals. This catches
+    // re-introduction during PR review. Scoped to renderer/ only — main
+    // process / IPC / tool definitions may include occasional symbols.
+    //
+    // Range covers:
+    //   U+2600–U+27BF  : misc symbols & dingbats (⚠ ✓ ✕ ✖ ℹ ★ etc.)
+    //   U+1F300–U+1FAFF: full emoji blocks (encoded as surrogate pairs)
+    //
+    // Decision doc: ../CODE_TAB_DECISION.md (트랙 B Phase 0d)
+    files: ['src/renderer/**/*.{ts,tsx}'],
+    ignores: ['src/renderer/**/*.test.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "Literal[value=/[\\u2600-\\u27BF\\uD83C-\\uDBFF\\uDC00-\\uDFFF]/]",
+          message:
+            'Avoid emoji/symbol literals in renderer source. Use Lucide icons (lucide-react) for UI affordances.',
+        },
+        {
+          selector:
+            "JSXText[value=/[\\u2600-\\u27BF\\uD83C-\\uDBFF\\uDC00-\\uDFFF]/]",
+          message:
+            'Avoid emoji/symbol in JSX text. Use Lucide icons (lucide-react).',
+        },
+        {
+          selector:
+            "TemplateElement[value.raw=/[\\u2600-\\u27BF\\uD83C-\\uDBFF\\uDC00-\\uDFFF]/]",
+          message:
+            'Avoid emoji/symbol in template literals returned to UI. Use Lucide icons or remove the symbol.',
+        },
+      ],
+    },
+  },
+  {
     // Playwright fixtures use `({}, use) => …` (empty destructure declares
     // no fixture deps) and a `use` callback that name-collides with React's
     // `use()` hook. Both are false positives in e2e/.

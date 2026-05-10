@@ -98,7 +98,12 @@ import {
   type ProviderFactory,
 } from './compare/orchestrator';
 import type { BrowserManager, BrowserTabState } from './BrowserManager';
-import type { FileContent, FileEntry } from '@/types/workspace';
+import type {
+  FileContent,
+  FileEntry,
+  FileStatResult,
+  FileWriteResult,
+} from '@/types/workspace';
 import type {
   ConversationPatch,
   PermissionPatch,
@@ -353,6 +358,27 @@ const ReadFileArgsSchema = z
     workspace_root: z.string().min(1),
     rel_path: z.string().min(1),
     max_bytes: z.number().int().positive().max(FILE_READ_HARD_MAX_BYTES).optional(),
+  })
+  .strict();
+
+// v2.7.0 (Phase 3) — workspace/write-file. content 는 UTF-8 string. expected_mtime
+// 가 주어지면 optimistic concurrency check (외부 변경 감지). content 길이 한도는
+// FILE_READ_HARD_MAX_BYTES 와 동일 (1MB) — chat/preview surface 에 부적절한 거대
+// 파일은 거절.
+const WriteFileArgsSchema = z
+  .object({
+    workspace_root: z.string().min(1),
+    rel_path: z.string().min(1),
+    content: z.string().max(FILE_READ_HARD_MAX_BYTES),
+    expected_mtime: z.string().optional(),
+  })
+  .strict();
+
+// v2.7.0 (Phase 3 sub-PR) — 외부 변경 감지용 가벼운 stat. content/binary 검사 X.
+const StatFileArgsSchema = z
+  .object({
+    workspace_root: z.string().min(1),
+    rel_path: z.string().min(1),
   })
   .strict();
 
@@ -707,6 +733,92 @@ export function registerIpcHandlers(
       return fail(err);
     }
   });
+
+  // ────────────────────────────────────────────────────────────
+  // v2.4.0 — plugin security settings (mcpVerificationMode +
+  // pluginIsolationMode + mcpRevocationFeedPublisher).
+  //
+  // Renderer 의 PluginSecuritySettings 패널이 사용. 모든 enum 값은
+  // 명시적 검증 + 위반 시 throw. URL 검증은 new URL() 시도.
+  // ────────────────────────────────────────────────────────────
+
+  ipcMain.handle(
+    'app:get-plugin-security',
+    (): Result<{
+      mcpVerificationMode: 'strict' | 'warn' | 'off';
+      pluginIsolationMode: 'utility_process' | 'in_process' | 'auto';
+      mcpRevocationFeedPublisher: { issuer: string; subject_pattern: string } | null;
+    }> => {
+      try {
+        const s = readSettings();
+        return ok({
+          mcpVerificationMode: s.mcpVerificationMode ?? 'strict',
+          pluginIsolationMode: s.pluginIsolationMode ?? 'utility_process',
+          mcpRevocationFeedPublisher: s.mcpRevocationFeedPublisher ?? null,
+        });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle('app:set-mcp-verification-mode', (_evt, raw: unknown): Result<void> => {
+    try {
+      if (raw !== 'strict' && raw !== 'warn' && raw !== 'off') {
+        throw new Error("mcpVerificationMode must be one of: 'strict', 'warn', 'off'");
+      }
+      writeSettings({ mcpVerificationMode: raw });
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle('app:set-plugin-isolation-mode', (_evt, raw: unknown): Result<void> => {
+    try {
+      if (raw !== 'utility_process' && raw !== 'in_process' && raw !== 'auto') {
+        throw new Error("pluginIsolationMode must be one of: 'utility_process', 'in_process', 'auto'");
+      }
+      writeSettings({ pluginIsolationMode: raw });
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  ipcMain.handle(
+    'app:set-mcp-revocation-feed-publisher',
+    (_evt, raw: unknown): Result<void> => {
+      try {
+        // null/undefined → clear the setting (revert to permissive default).
+        if (raw === null || raw === undefined) {
+          writeSettings({ mcpRevocationFeedPublisher: undefined });
+          return ok(undefined);
+        }
+        if (typeof raw !== 'object') {
+          throw new Error('mcpRevocationFeedPublisher must be { issuer, subject_pattern } or null');
+        }
+        const obj = raw as Record<string, unknown>;
+        if (typeof obj['issuer'] !== 'string' || obj['issuer'].length === 0) {
+          throw new Error("'issuer' must be non-empty URL string");
+        }
+        if (typeof obj['subject_pattern'] !== 'string' || obj['subject_pattern'].length === 0) {
+          throw new Error("'subject_pattern' must be non-empty string");
+        }
+        // Sanity-check issuer URL.
+        new URL(obj['issuer']);
+        writeSettings({
+          mcpRevocationFeedPublisher: {
+            issuer: obj['issuer'],
+            subject_pattern: obj['subject_pattern'],
+          },
+        });
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
 
   // v0.11.0 (B2) — Settings 모달 [언어] 탭. 'ko' default. 알 수 없는 값은
   // throw — renderer 가 ok=false 로 받아 silent fallback.
@@ -1102,7 +1214,7 @@ export function registerIpcHandlers(
   if (browser) registerBrowserHandlers(browser);
   if (ai) registerAiHandlers(ai, usage);
   if (tools) registerToolHandlers(tools, election);
-  if (mcp) registerMcpHandlers(mcp);
+  if (mcp) registerMcpHandlers(mcp, audit ?? null);
   if (usage) registerUsageHandlers(usage);
   if (compare) registerCompareHandlers(compare);
   if (audit) registerAuditHandlers(audit);
@@ -1835,6 +1947,98 @@ function registerWorkspaceHandlers(electronApp: App): void {
       }
     }
   );
+
+  // ── workspace/write-file (v2.7.0 — Phase 3 편집 모드) ────────────────
+  // 입력: { workspace_root, rel_path, content, expected_mtime? }
+  // 출력: FileWriteResult { mtime, size_bytes, conflict? }
+  // 안전성:
+  //   - resolveInsideWorkspace 로 path traversal 거절
+  //   - content > 1MB 거절 (zod schema 단계에서 cap)
+  //   - 디렉토리 경로 거절
+  //   - expected_mtime 와 디스크 mtime 불일치 시 conflict='mtime_mismatch' 반환
+  //     (실제 write 는 수행 X — caller 가 사용자에게 confirm 후 expected_mtime
+  //     없이 재호출해 강제 덮어쓰기 가능)
+  //   - atomic write: tmp 파일에 쓰고 rename (concurrent reader 가 partial
+  //     content 보지 않도록)
+  //
+  // Decision doc: ../CODE_TAB_DECISION.md (Phase 3 편집 모드 결정).
+  ipcMain.handle(
+    'workspace/write-file',
+    async (_evt, raw: unknown): Promise<Result<FileWriteResult>> => {
+      try {
+        const args = WriteFileArgsSchema.parse(raw);
+        const abs = await resolveInsideWorkspace(args.workspace_root, args.rel_path);
+
+        // 디렉토리 거절: 기존 경로가 디렉토리면 write 시도하지 않음.
+        const existing = await fsp.stat(abs).catch(() => null);
+        if (existing !== null && existing.isDirectory()) {
+          throw new Error('path is a directory, not a file');
+        }
+
+        // expected_mtime 충돌 검사. 파일이 없으면 (existing === null) skip —
+        // 신규 파일 생성도 본 IPC 가 처리.
+        if (
+          args.expected_mtime !== undefined &&
+          existing !== null &&
+          existing.mtime.toISOString() !== args.expected_mtime
+        ) {
+          return ok({
+            mtime: existing.mtime.toISOString(),
+            size_bytes: existing.size,
+            conflict: 'mtime_mismatch',
+          });
+        }
+
+        // atomic write: tmp file → rename. tmp suffix 는 pid + 시각으로 충돌
+        // 방지. 같은 디렉토리 안에서 rename 해야 cross-device 이슈 없음.
+        const dir = path.dirname(abs);
+        // 부모 디렉토리가 없을 수도 있음 (사용자가 새 파일 생성 시). recursive
+        // 생성을 허용 — workspace_root 안에 있음은 이미 위에서 검증.
+        await fsp.mkdir(dir, { recursive: true });
+        const tmp = path.join(dir, `.${path.basename(abs)}.tmp.${process.pid}.${Date.now()}`);
+        await fsp.writeFile(tmp, args.content, 'utf8');
+        await fsp.rename(tmp, abs);
+
+        const after = await fsp.stat(abs);
+        return ok({
+          mtime: after.mtime.toISOString(),
+          size_bytes: after.size,
+        });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  // ── workspace/stat-file (v2.7.0 — Phase 3 sub-PR 외부 변경 감지) ───────
+  // 입력: { workspace_root, rel_path }
+  // 출력: FileStatResult { exists, mtime?, size_bytes? }
+  // - 파일이 없으면 exists=false (정상 응답, error 아님 — 폴링이라 흔함)
+  // - 디렉토리면 exists=true 지만 size_bytes 는 디렉토리 size 그대로
+  //   (사용자 expectation 외 — 호출자는 보통 file 만 stat)
+  // - 더 가벼운 호출 (read 없음) — 폴링 friendly.
+  //
+  // Decision doc: ../CODE_TAB_DECISION.md (외부 변경 감지 chokidar 대신 polling).
+  ipcMain.handle(
+    'workspace/stat-file',
+    async (_evt, raw: unknown): Promise<Result<FileStatResult>> => {
+      try {
+        const args = StatFileArgsSchema.parse(raw);
+        const abs = await resolveInsideWorkspace(args.workspace_root, args.rel_path);
+        const stat = await fsp.stat(abs).catch(() => null);
+        if (stat === null) {
+          return ok({ exists: false });
+        }
+        return ok({
+          exists: true,
+          mtime: stat.mtime.toISOString(),
+          size_bytes: stat.size,
+        });
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
 }
 
 // ────────────────────────────────────────────────────────────
@@ -2481,7 +2685,54 @@ function registerToolHandlers(tools: ToolHandlerConfig, election?: LockHandlerSo
 //   - mcp/get-logs   — getServerLogs(id)
 // ────────────────────────────────────────────────────────────
 
-function registerMcpHandlers(mcp: McpManager): void {
+/**
+ * v2.4.0 (Task 3) — main/index.ts wires the SignedRevocationFeed once on boot
+ * and registers it via this setter. The mcp/request-refresh-revocations IPC
+ * pulls the runner via getRevocationFeedRunner() to call applyOnce on demand.
+ */
+let revocationFeedRunner: import('./mcp/signedRevocationFeed').SignedRevocationFeed | null = null;
+export function setRevocationFeedRunner(
+  runner: import('./mcp/signedRevocationFeed').SignedRevocationFeed | null
+): void {
+  revocationFeedRunner = runner;
+}
+function getRevocationFeedRunner():
+  | import('./mcp/signedRevocationFeed').SignedRevocationFeed
+  | null {
+  return revocationFeedRunner;
+}
+
+/**
+ * v2.4.0 (Task 2 follow-up) — McpCapabilityGate lazy singleton for revoke flow.
+ * Lazily constructed on first revoke call so test/e2e environments without
+ * userData don't pay the cost. Persisted at userData/mcp-grants/.
+ */
+let mcpCapabilityGate: import('./mcp/McpCapabilityGate').McpCapabilityGate | null = null;
+async function getMcpCapabilityGate(): Promise<
+  import('./mcp/McpCapabilityGate').McpCapabilityGate
+> {
+  if (mcpCapabilityGate !== null) return mcpCapabilityGate;
+  const { McpCapabilityGate } = await import('./mcp/McpCapabilityGate');
+  mcpCapabilityGate = new McpCapabilityGate({
+    storageDir: path.join(app.getPath('userData'), 'mcp-grants'),
+  });
+  return mcpCapabilityGate;
+}
+
+/**
+ * v2.4.0 (Task 2) — Sigstore install path verifier factory. Lazy-loads the
+ * bundled TUF root once per process. Reused across every install IPC call.
+ */
+function getSigstoreVerifierFactory(): () => Promise<
+  import('../types/mcpManifest').ManifestVerifier
+> {
+  return async () => {
+    const { loadSigstoreVerifier } = await import('./mcp/loadVerifier');
+    return loadSigstoreVerifier();
+  };
+}
+
+function registerMcpHandlers(mcp: McpManager, audit: AuditLogStore | null): void {
   ipcMain.handle('mcp/list', (): Result<McpServerState[]> => {
     try {
       return ok(mcp.listServers());
@@ -2615,9 +2866,38 @@ function registerMcpHandlers(mcp: McpManager): void {
         if (typeof server_id !== 'string' || server_id.length === 0) {
           return fail(new Error('server_id required'));
         }
-        // v2.4.0 follow-up: route through McpCapabilityGate.revokeOne(server_id)
-        // + Pool.notifyRevoke. v2.3.x stub: returns epoch=0 since no Pool runs.
-        return ok({ grant_epoch: 0 });
+        // v2.4.0 (Task 2 follow-up) — route through McpCapabilityGate.revokeOne
+        // to actually bump grant_epoch + persist. PluginPoolRunner.notifyRevoke
+        // wiring lands when pool becomes default (v2.5.0+).
+        const gate = await getMcpCapabilityGate();
+        const new_epoch = gate.revokeOne(server_id);
+        // Mark the InstalledPluginRecord as revoked so the marketplace badge
+        // updates without waiting for the next signed-feed refresh.
+        try {
+          const store = await getRecordStore();
+          const rec = store.get(server_id);
+          if (rec !== null && rec.revocation_status !== 'revoked') {
+            store.put({
+              ...rec,
+              revocation_status: 'revoked',
+              verification_status: 'revoked',
+              last_revocation_check_at: new Date().toISOString(),
+            });
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`[mcp/request-revoke] record sync failed: ${msg}`);
+        }
+        audit?.recordEvent({
+          timestamp: new Date().toISOString(),
+          session_id: 'mcp-revoke',
+          event: 'mcp.user_revoke',
+          capability: 'NETWORK_MCP',
+          target_json: JSON.stringify({ server_id, grant_epoch: new_epoch }),
+          decision_reason: 'user_revoked',
+          outcome: 'revoked',
+        });
+        return ok({ grant_epoch: new_epoch });
       } catch (err) {
         return fail(err);
       }
@@ -2628,9 +2908,112 @@ function registerMcpHandlers(mcp: McpManager): void {
     'mcp/request-refresh-revocations',
     async (): Promise<Result<{ applied: boolean; feed_version: number | null }>> => {
       try {
-        // v2.4.0 follow-up: invoke signedRevocationFeed.applyOnce(). v2.3.x
-        // stub: no scheduler running → reports no-change.
-        return ok({ applied: false, feed_version: null });
+        const feed = getRevocationFeedRunner();
+        if (feed === null) {
+          // Scheduler not yet wired (test/early-boot path).
+          return ok({ applied: false, feed_version: null });
+        }
+        const result = await feed.applyOnce();
+        if (result.kind === 'applied') {
+          return ok({ applied: true, feed_version: result.feed_version });
+        }
+        if (result.kind === 'no_change') {
+          return ok({ applied: false, feed_version: result.feed_version });
+        }
+        // rejected — surface as failure.
+        return fail(new Error(`${result.reason}: ${'details' in result ? result.details : ''}`));
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  // ────────────────────────────────────────────────────────────
+  // v2.4.0 (Task 2) — Sigstore-verified install path (US-204).
+  //
+  // Verifies manifest + bundle, applies mode policy, persists InstalledPluginRecord.
+  // mode defaults to settings.mcpVerificationMode ('strict' if unset). Production
+  // 빌드에서 'off' 는 startup 시 'warn' 으로 강등 — 본 핸들러도 동일 가드.
+  // ────────────────────────────────────────────────────────────
+
+  ipcMain.handle(
+    'mcp/install',
+    async (
+      _evt,
+      raw: unknown
+    ): Promise<
+      Result<{
+        kind: 'installed' | 'rejected';
+        verification_status?: string;
+        package_id?: string;
+        reason?: string;
+        details?: string;
+      }>
+    > => {
+      try {
+        if (typeof raw !== 'object' || raw === null) {
+          return fail(new Error('args must be { manifest, bundle, mode? }'));
+        }
+        const args = raw as Record<string, unknown>;
+        if (args['manifest'] === undefined) {
+          return fail(new Error("'manifest' required"));
+        }
+        const settings = readSettings();
+        const requestedMode = args['mode'];
+        let mode: 'strict' | 'warn' | 'off' =
+          requestedMode === 'strict' || requestedMode === 'warn' || requestedMode === 'off'
+            ? requestedMode
+            : (settings.mcpVerificationMode ?? 'strict');
+        // production gate: 'off' → 'warn' (mirrors startup gate in main/index.ts).
+        if (mode === 'off' && process.env.NODE_ENV === 'production') {
+          mode = 'warn';
+        }
+
+        const { installMcpPlugin } = await import('./mcp/installPath');
+        const store = await getRecordStore();
+        const verifierFactory = getSigstoreVerifierFactory();
+        const result = await installMcpPlugin(
+          {
+            manifest: args['manifest'],
+            bundle: args['bundle'] ?? null,
+            mode,
+          },
+          {
+            verifierFactory,
+            recordStore: store,
+            audit: (event) => {
+              audit?.recordEvent({
+                timestamp: event.timestamp,
+                session_id: 'mcp-install',
+                event:
+                  event.outcome === 'installed'
+                    ? 'mcp.install_ok'
+                    : 'mcp.install_rejected',
+                capability: 'NETWORK_MCP',
+                target_json: JSON.stringify({
+                  package_id: event.package_id,
+                  mode: event.mode,
+                  verification_status: event.verification_status,
+                }),
+                decision_reason: event.outcome,
+                outcome: event.outcome,
+                ...(event.reason !== undefined && { error: event.reason }),
+              });
+            },
+          }
+        );
+        if (result.kind === 'installed') {
+          return ok({
+            kind: 'installed',
+            verification_status: result.verification_status,
+            package_id: result.record.package_id,
+          });
+        }
+        return ok({
+          kind: 'rejected',
+          reason: result.reason,
+          details: result.details,
+        });
       } catch (err) {
         return fail(err);
       }
