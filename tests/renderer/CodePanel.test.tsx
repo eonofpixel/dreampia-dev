@@ -34,6 +34,13 @@ describe('CodePanel (Phase 2)', () => {
   beforeEach(() => {
     __mockStore.workspaceFiles = [];
     __mockStore.workspaceFileContents.clear();
+    // v2.7.0 sub-PR — last-opened file persistence 사용. 테스트 간 잔존 상태
+    // 가 다음 테스트의 mount 시 자동 restore 로 흘러 들어가지 않도록 격리.
+    try {
+      localStorage.clear();
+    } catch {
+      // jsdom 외 환경 — 무시
+    }
   });
 
   it('renders empty FileTree prompt when workspaceRoot undefined', () => {
@@ -262,6 +269,75 @@ describe('CodePanel (Phase 2)', () => {
     await user.click(screen.getByTestId('code-edit-toggle'));
     // Editing toggled but draft still == disk; marker still hidden.
     expect(screen.queryByTestId('code-dirty-marker')).not.toBeInTheDocument();
+  });
+
+  // ────────────────────────────────────────────────────────────
+  // v2.7.0 Phase 3 sub-PR — Last-opened file restore (localStorage)
+  // ────────────────────────────────────────────────────────────
+
+  it('Phase 3 restore: persists selection on file load', async () => {
+    const user = userEvent.setup();
+    __mockStore.workspaceFiles = [
+      { path: 'a.ts', size_bytes: 12, mtime: '2026-05-10T00:00:00.000Z' },
+    ];
+    __mockStore.workspaceFileContents.set('a.ts', {
+      content: 'const x = 1;\n',
+      truncated: false,
+      line_count: 1,
+    });
+    render(<CodePanel workspaceRoot="/proj" />);
+    await waitFor(() => screen.getByTestId('code-file-row-a.ts'));
+    await user.click(screen.getByTestId('code-file-row-a.ts'));
+    await waitFor(() => screen.getByTestId('code-editor'));
+    expect(localStorage.getItem('dreampia.codeMode.lastFile./proj')).toBe('a.ts');
+  });
+
+  it('Phase 3 restore: auto-loads last file when workspace opens', async () => {
+    __mockStore.workspaceFiles = [
+      { path: 'a.ts', size_bytes: 12, mtime: '2026-05-10T00:00:00.000Z' },
+      { path: 'b.ts', size_bytes: 12, mtime: '2026-05-10T00:00:00.000Z' },
+    ];
+    __mockStore.workspaceFileContents.set('a.ts', {
+      content: 'const a = 1;\n',
+      truncated: false,
+      line_count: 1,
+    });
+    __mockStore.workspaceFileContents.set('b.ts', {
+      content: 'const b = 1;\n',
+      truncated: false,
+      line_count: 1,
+    });
+    // Seed: last opened was b.ts.
+    localStorage.setItem('dreampia.codeMode.lastFile./proj', 'b.ts');
+    render(<CodePanel workspaceRoot="/proj" />);
+    // Editor should mount with b.ts auto-loaded — no user click needed.
+    await waitFor(() => {
+      expect(screen.getByTestId('code-active-language').textContent).toContain('TypeScript');
+      // The selected row reflects b.ts.
+      expect(screen.getByTestId('code-file-row-b.ts')).toHaveAttribute(
+        'data-selected',
+        'true'
+      );
+    });
+  });
+
+  it('Phase 3 restore: missing file clears stale storage entry', async () => {
+    __mockStore.workspaceFiles = [
+      { path: 'a.ts', size_bytes: 12, mtime: '2026-05-10T00:00:00.000Z' },
+    ];
+    __mockStore.workspaceFileContents.set('a.ts', {
+      content: 'const a = 1;\n',
+      truncated: false,
+      line_count: 1,
+    });
+    // Seed a stale entry pointing to a file the mock will fail to read.
+    localStorage.setItem('dreampia.codeMode.lastFile./proj', 'gone.ts');
+    render(<CodePanel workspaceRoot="/proj" />);
+    // After the failing readFile, the entry should be cleared.
+    await waitFor(() => {
+      expect(screen.getByTestId('code-editor-error')).toBeInTheDocument();
+    });
+    expect(localStorage.getItem('dreampia.codeMode.lastFile./proj')).toBeNull();
   });
 
   // ────────────────────────────────────────────────────────────

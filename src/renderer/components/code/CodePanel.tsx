@@ -38,6 +38,35 @@ interface FileWriteResult {
   conflict?: 'mtime_mismatch';
 }
 
+// v2.7.0 Phase 3 sub-PR — last-opened file persistence (per workspace).
+// Renderer-only localStorage 저장 — IPC 비용 없음. 워크스페이스 별 키.
+// 파일이 사라졌으면 readFile 실패 → 사용자에게 에러 노출 + entry 자동 삭제.
+const LAST_FILE_STORAGE_PREFIX = 'dreampia.codeMode.lastFile.';
+
+function loadLastOpenedFile(workspaceRoot: string): string | null {
+  try {
+    return localStorage.getItem(LAST_FILE_STORAGE_PREFIX + workspaceRoot);
+  } catch {
+    return null;
+  }
+}
+
+function saveLastOpenedFile(workspaceRoot: string, relPath: string): void {
+  try {
+    localStorage.setItem(LAST_FILE_STORAGE_PREFIX + workspaceRoot, relPath);
+  } catch {
+    // localStorage 가 가득 차거나 접근 불가 — 무시 (UX-non-critical).
+  }
+}
+
+function clearLastOpenedFile(workspaceRoot: string): void {
+  try {
+    localStorage.removeItem(LAST_FILE_STORAGE_PREFIX + workspaceRoot);
+  } catch {
+    // ignore
+  }
+}
+
 export interface CodePanelProps {
   /** 워크스페이스 절대 루트. undefined 면 빈 상태 — FileTree 가 prompt. */
   workspaceRoot?: string;
@@ -158,6 +187,8 @@ export function CodePanel({
             setTruncated(fc.truncated);
             setLineCount(fc.line_count);
             setExternalChange(false);
+            // v2.7.0 sub-PR — last-opened 영속. 다음 mount 시 restore.
+            saveLastOpenedFile(workspaceRoot, relPath);
             // v2.7.0 Phase 3 sub-PR — readFile 직후 별도 stat 호출로 정확한
             // 디스크 mtime 캡처. writeFile 의 expected_mtime + 폴링 비교용.
             if (typeof ws.statFile === 'function') {
@@ -179,6 +210,9 @@ export function CodePanel({
             setDraft('');
             setTruncated(false);
             setLineCount(0);
+            // 파일 사라짐/접근 실패 → stale entry 제거. 다음 mount 시
+            // restore 시도가 같은 에러를 반복하지 않도록.
+            clearLastOpenedFile(workspaceRoot);
           }
         } catch (err) {
           setError(err instanceof Error ? err.message : String(err));
@@ -189,6 +223,18 @@ export function CodePanel({
     },
     [workspaceRoot]
   );
+
+  // v2.7.0 sub-PR — workspace mount 시 마지막 열린 파일 자동 restore.
+  // workspace-clear effect 가 selectedPath 를 undefined 로 reset 한 후
+  // 본 effect 가 loadFile(restoredPath) 를 호출. 사용자가 즉시 다른 파일을
+  // 클릭하면 그 호출이 우선 (양쪽 모두 loadFile 동일 경로라 race 무관).
+  // 파일이 사라졌으면 loadFile 의 실패 path 가 localStorage entry 를 정리.
+  useEffect(() => {
+    if (workspaceRoot === undefined || workspaceRoot.length === 0) return;
+    const restored = loadLastOpenedFile(workspaceRoot);
+    if (restored === null) return;
+    loadFile(restored);
+  }, [workspaceRoot, loadFile]);
 
   const handleSave = useCallback(() => {
     if (
