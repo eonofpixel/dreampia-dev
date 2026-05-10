@@ -23,6 +23,8 @@ import { FileText } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 
+import { useT } from '../../i18n';
+
 interface FileEntry {
   path: string;
   size_bytes: number;
@@ -84,6 +86,7 @@ export function FileTree({
   selectedPath,
   onSelect,
 }: FileTreeProps): React.JSX.Element {
+  const t = useT();
   const [entries, setEntries] = useState<ReadonlyArray<FileEntry>>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +103,7 @@ export function FileTree({
     lastRequestedRoot.current = workspaceRoot;
     const ws = typeof window !== 'undefined' ? window.dreampia?.workspace : undefined;
     if (ws === undefined || typeof ws.listFiles !== 'function') {
-      setError('Workspace API 를 사용할 수 없습니다.');
+      setError(t('preview.code.api_unavailable'));
       return;
     }
     setLoading(true);
@@ -175,8 +178,8 @@ export function FileTree({
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="파일 검색"
-          aria-label="파일 검색"
+          placeholder={t('preview.code.tree.search_placeholder')}
+          aria-label={t('preview.code.tree.search_aria')}
           className="w-full rounded border border-border-primary bg-bg-primary px-2 py-1 text-xs text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none"
           data-testid="code-file-tree-search"
         />
@@ -184,11 +187,11 @@ export function FileTree({
       <div className="flex-1 overflow-hidden">
         {workspaceRoot === undefined || workspaceRoot.length === 0 ? (
           <p className="px-3 py-4 text-xs text-text-tertiary" data-testid="code-file-tree-empty">
-            워크스페이스를 먼저 선택하세요.
+            {t('preview.code.tree.empty_workspace')}
           </p>
         ) : loading ? (
           <p className="px-3 py-4 text-xs text-text-tertiary" data-testid="code-file-tree-loading">
-            파일 목록 불러오는 중...
+            {t('preview.code.tree.loading')}
           </p>
         ) : error !== null ? (
           <p
@@ -203,7 +206,9 @@ export function FileTree({
             className="px-3 py-4 text-xs text-text-tertiary"
             data-testid="code-file-tree-no-results"
           >
-            {query.length === 0 ? '파일이 없습니다.' : '일치하는 파일이 없습니다.'}
+            {query.length === 0
+              ? t('preview.code.tree.empty')
+              : t('preview.code.tree.no_results')}
           </p>
         ) : filtered.length < VIRTUALIZATION_THRESHOLD ? (
           <ul className="h-full overflow-y-auto" data-testid="code-file-tree-list">
@@ -232,13 +237,13 @@ export function FileTree({
       </div>
       <footer className="border-t border-border-primary px-3 py-1 text-[10px] text-text-tertiary">
         {filtered.length} / {entries.length}
-        {entries.length === MAX_FILES && ' (한도 도달)'}
+        {entries.length === MAX_FILES && t('preview.code.tree.cap_reached')}
       </footer>
       {/* v2.7.x sub-PR — drag-to-resize handle. button element 로 a11y
           interactive 요건 충족. 4px wide hit area on the right edge. */}
       <button
         type="button"
-        aria-label="파일 트리 너비 조정"
+        aria-label={t('preview.code.tree.resize_aria')}
         className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-accent/40 focus:bg-accent/40 focus:outline-none"
         data-testid="code-file-tree-resize-handle"
         onMouseDown={handleHandleMouseDown}

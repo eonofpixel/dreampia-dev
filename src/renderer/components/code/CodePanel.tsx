@@ -170,7 +170,7 @@ export function CodePanel({
       if (workspaceRoot === undefined || workspaceRoot.length === 0) return;
       const ws = typeof window !== 'undefined' ? window.dreampia?.workspace : undefined;
       if (ws === undefined || typeof ws.readFile !== 'function') {
-        setError('Workspace API 를 사용할 수 없습니다.');
+        setError(t('preview.code.api_unavailable'));
         return;
       }
       setLoading(true);
@@ -245,7 +245,7 @@ export function CodePanel({
       return;
     const ws = typeof window !== 'undefined' ? window.dreampia?.workspace : undefined;
     if (ws === undefined || typeof ws.writeFile !== 'function') {
-      setError('Workspace API 를 사용할 수 없습니다.');
+      setError(t('preview.code.api_unavailable'));
       return;
     }
     setSaving(true);
@@ -337,7 +337,9 @@ export function CodePanel({
             data-testid="code-edit-toggle"
           >
             <Pencil aria-hidden="true" className="h-3 w-3" />
-            <span>{editing ? '편집 중' : '편집'}</span>
+            <span>
+              {editing ? t('preview.code.toolbar.editing') : t('preview.code.toolbar.edit')}
+            </span>
           </button>
         )}
         {editing && isDirty && (
@@ -353,7 +355,9 @@ export function CodePanel({
             data-testid="code-diff-toggle"
           >
             <Diff aria-hidden="true" className="h-3 w-3" />
-            <span>{showDiff ? '편집기' : '비교'}</span>
+            <span>
+              {showDiff ? t('preview.code.toolbar.editor_view') : t('preview.code.toolbar.diff')}
+            </span>
           </button>
         )}
         {editing && isDirty && (
@@ -364,7 +368,7 @@ export function CodePanel({
             data-testid="code-revert"
           >
             <RotateCcw aria-hidden="true" className="h-3 w-3" />
-            <span>되돌리기</span>
+            <span>{t('preview.code.toolbar.revert')}</span>
           </button>
         )}
         {editing && (
@@ -376,7 +380,9 @@ export function CodePanel({
             data-testid="code-save"
           >
             <Save aria-hidden="true" className="h-3 w-3" />
-            <span>{saving ? '저장 중...' : '저장'}</span>
+            <span>
+              {saving ? t('preview.code.toolbar.saving') : t('preview.code.toolbar.save')}
+            </span>
           </button>
         )}
         {onSwitchMode !== undefined && (
@@ -398,7 +404,7 @@ export function CodePanel({
           className="flex items-center gap-2 border-b border-blue-700/50 bg-blue-900/20 px-3 py-1.5 text-[11px] text-blue-200"
           data-testid="code-external-change-banner"
         >
-          <span className="flex-1">디스크의 파일이 외부에서 변경되었습니다.</span>
+          <span className="flex-1">{t('preview.code.external.message')}</span>
           <button
             type="button"
             onClick={() => {
@@ -407,7 +413,7 @@ export function CodePanel({
             className="rounded border border-blue-600/50 bg-blue-900/30 px-2 py-0.5 hover:bg-blue-900/50"
             data-testid="code-external-reload"
           >
-            다시 읽기
+            {t('preview.code.external.reload')}
           </button>
           <button
             type="button"
@@ -415,7 +421,7 @@ export function CodePanel({
             className="rounded border border-border-primary bg-bg-tertiary px-2 py-0.5"
             data-testid="code-external-dismiss"
           >
-            무시
+            {t('preview.code.external.dismiss')}
           </button>
         </div>
       )}
@@ -425,16 +431,14 @@ export function CodePanel({
           className="flex items-center gap-2 border-b border-yellow-700/50 bg-yellow-900/20 px-3 py-1.5 text-[11px] text-yellow-200"
           data-testid="code-conflict-banner"
         >
-          <span className="flex-1">
-            파일이 외부에서 변경된 것 같습니다. 강제로 덮어쓸까요?
-          </span>
+          <span className="flex-1">{t('preview.code.conflict.message')}</span>
           <button
             type="button"
             onClick={handleForceOverwrite}
             className="rounded border border-yellow-600/50 bg-yellow-900/30 px-2 py-0.5 hover:bg-yellow-900/50"
             data-testid="code-force-overwrite"
           >
-            덮어쓰기
+            {t('preview.code.conflict.overwrite')}
           </button>
           <button
             type="button"
@@ -445,7 +449,7 @@ export function CodePanel({
             className="rounded border border-border-primary bg-bg-tertiary px-2 py-0.5"
             data-testid="code-conflict-reload"
           >
-            디스크 다시 읽기
+            {t('preview.code.conflict.reload')}
           </button>
         </div>
       )}
@@ -464,7 +468,7 @@ export function CodePanel({
               className="flex flex-1 items-center justify-center text-xs text-text-tertiary"
               data-testid="code-editor-loading"
             >
-              파일 로드 중...
+              {t('preview.code.editor.loading')}
             </p>
           ) : error !== null ? (
             <p

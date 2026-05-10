@@ -34,6 +34,8 @@ import {
 } from '@codemirror/view';
 import { useEffect, useMemo, useRef } from 'react';
 
+import { useT } from '../../i18n';
+
 import { detectLanguageExtension } from './languageDetect';
 
 export interface CodeEditorProps {
@@ -93,6 +95,8 @@ export function CodeEditor({
   onSaveRef.current = onSave;
   const onToggleEditRef = useRef<typeof onToggleEdit>(onToggleEdit);
   onToggleEditRef.current = onToggleEdit;
+
+  const t = useT();
 
   // Compartment: editable / theme / language 를 runtime 에 reconfigure.
   const editableCompartment = useRef(new Compartment());
@@ -221,7 +225,7 @@ export function CodeEditor({
           className="border-t border-border-primary bg-bg-secondary px-3 py-1.5 text-[11px] text-text-tertiary"
           data-testid="code-editor-truncated"
         >
-          파일이 잘렸습니다. 전체 내용을 보려면 터미널에서 직접 열어주세요.
+          {t('preview.code.editor.truncated')}
         </div>
       )}
     </div>
