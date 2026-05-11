@@ -2,6 +2,42 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [2.8.0] — 2026-05-11
+
+**Builder UX polish — 파일 탐색 + 에디터 정보 + chat ↔ Code 연계 8 항목 sweep.**
+
+`BUILDER_UX_ANALYSIS.md` 의 8 후보 (A/B/C/D/E/F/G/H) 모두 1차 land. v2.7.0 의 Code mode 편집 foundation 위에 빌더툴 가시성 + 워크플로 단축. AI 빌더툴 특화 갭 점수 5 → 7.5+ 견인.
+
+### Added
+- **FileTree 폴더 hierarchy + collapse/expand** (#B) — 평면 list → 트리 + 폴더 클릭 토글 (점수 25, ratio 5.0).
+- **Mod+P Quick Open** (#A) — Cmd/Ctrl+P 으로 fuzzy 파일 검색 모달, ↑↓/Enter/Esc, filename 우선 가중치 (점수 29.5, ratio 4.2).
+- **경로 breadcrumb 헤더** (#G) — CodePanel 헤더가 `dir / sub / file.ext` 로 분해 표시 (회색 segments + 흰색 filename).
+- **타이틀바 dirty marker** (#D) — `document.title` 동적 동기화: `Dreampia-Dev` / `index.ts — Dreampia-Dev` / `● index.ts — Dreampia-Dev`. CodePanel unmount 시 기본 복원.
+- **Recents 섹션** (#F) — workspace 별 최근 5개 (`dreampia.codeMode.recentFiles.<ws>` localStorage). QuickOpenModal 의 query 빈 상태에서 list 상단 "최근 파일" / "전체 파일" 두 섹션. CodePanel.loadFile 의 success/failure 가 push/remove.
+- **편집 변경 gutter** (#E) — CodeMirror StateField + gutter extension. disk content (baseline) 와 line-by-line 비교, modified 파랑 (#3b82f6) / added 녹색 (#22c55e). MVP 제한: LCS 미사용 (Diff 토글이 정확한 비교 제공). trailing-newline 정규화로 false-positive 차단.
+- **Outline 패널** (#H) — lezer syntaxTree walk 로 함수/클래스/메서드/인터페이스/마크다운 헤딩 등 13 노드 추출. 클릭 시 view.dispatch + scrollIntoView + focus. depth 기반 들여쓰기. 헤더 토글 + localStorage 영속.
+- **Chat 코드 블록 → "Code 로 보내기"** (#C minimum subset) — fenced ` ```lang\n...\n``` ` 정규식 분리 + 우상단 버튼. 클릭 시 `navigator.clipboard.writeText` + `setPreviewMode('code')` + Preview 자동 노출 + toast. streaming 중 마지막 text block 은 partial fence 안전을 위해 plain `<p>` 유지.
+- **i18n 17 신규 키** — Code outline 6 + Chat code block 3 + Recents 2 + What's new 6 키. ko/en 양쪽.
+- **새 컴포넌트 5종** — `QuickOpenModal`, `EditorOutline`, `MessageText` + helpers `recentFiles.ts`, `changeGutter.ts`. 모두 pure helper 분리로 jsdom-friendly 단위 테스트.
+
+### Changed
+- `package.json:version`: 2.7.0 → 2.8.0.
+- `CodeEditor` 가 `baseline` + `onViewReady` prop 추가 (forwardRef 회피). 마운트 시 1회 view emit, unmount 시 null.
+- `CodePanel` 이 outline 토글 / view state / breadcrumb 헤더로 확장.
+- `ChatPanel` 이 `onSendToCode` prop 을 4계층 (Props → MessagesArea → TurnDisplay → MessageText) plumb. 모두 optional — 기존 호출자 호환.
+
+### Tests
+- 56+ 신규 테스트: D 3 + F 18 + E 9 + H 11 + C-min 14 + WhatsNew 회귀. **155 files / 1,619 tests pass**.
+
+### Decided
+- `#C` 의 1차 PR scope = "버튼 + 클립보드 + 모드 전환" 만. `Apply-to-file` IPC + inline diff workflow 는 별도 PR (사용자가 Code 모드에서 paste).
+- Outline 갱신은 setInterval 500ms — `EditorView.updateListener` 가 마운트 시점 등록만 가능해 detach 안전성 우선. `extractOutline` < 1ms (typical 파일).
+- Change gutter 는 라인 인덱스 단순 매칭 — LCS 정확 비교는 기존 Diff 토글 (`@codemirror/merge`) 이 제공.
+
+### Deferred
+- `#C` Apply-to-file IPC + diff workflow → 후속 라인.
+- 변경 gutter 의 `deleted` 인디케이터 (현재 라인 위 marker range 가 없음) → LCS 도입 시 함께.
+
 ## [2.7.0] — 2026-05-11
 
 **Code mode 편집 foundation — 편집 + atomic write IPC + diff + 외부 변경 감지 + 키보드 + i18n.**
