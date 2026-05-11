@@ -117,6 +117,17 @@ export interface CodePanelProps {
   onCurrentFileChange?: (
     info: { path: string; mtime?: string; content: string } | null
   ) => void;
+  /**
+   * v2.8.x (Builder UX, C 3차) — 외부 (App.tsx 의 ApplyToFileModal accept)
+   * 가 disk content 를 갱신했음을 알림. 값 변화 시 selectedPath 가 일치하면
+   * setDiskContent + setDiskMtime + 외부 변경 banner reset. 일회성 — 한 번
+   * 소비하면 onAppliedDiskUpdateConsumed 로 부모가 reset.
+   *
+   * fs watcher 없이도 in-process write 후 즉시 baseline 동기화 — change
+   * gutter / diff toggle / dirty 비교가 stale baseline 을 가리키지 않게.
+   */
+  appliedDiskUpdate?: { path: string; content: string; mtime?: string } | null;
+  onAppliedDiskUpdateConsumed?: () => void;
 }
 
 export function CodePanel({
@@ -126,6 +137,8 @@ export function CodePanel({
   requestedFile,
   onRequestedFileConsumed,
   onCurrentFileChange,
+  appliedDiskUpdate,
+  onAppliedDiskUpdateConsumed,
 }: CodePanelProps): React.JSX.Element {
   const t = useT();
   const [selectedPath, setSelectedPath] = useState<string | undefined>(undefined);
@@ -298,6 +311,25 @@ export function CodePanel({
     loadFile(requestedFile);
     onRequestedFileConsumed?.();
   }, [requestedFile, loadFile, onRequestedFileConsumed]);
+
+  // v2.8.x (Builder UX, C 3차) — Apply-to-file 성공 후 disk baseline 즉시
+  // 동기화. App.tsx 가 prop 으로 새 content + mtime 을 dispatch → selectedPath
+  // 가 일치하면 적용 + externalChange banner reset. 즉시 소비 callback 으로
+  // 부모가 prop 을 null 로 reset → 같은 update 가 반복 적용되지 않도록.
+  useEffect(() => {
+    if (appliedDiskUpdate === null || appliedDiskUpdate === undefined) return;
+    if (selectedPath === undefined || selectedPath !== appliedDiskUpdate.path) {
+      // 사용자가 그 사이 파일을 바꿨거나 닫았으면 무시 — disk state 침범 X.
+      onAppliedDiskUpdateConsumed?.();
+      return;
+    }
+    setDiskContent(appliedDiskUpdate.content);
+    if (appliedDiskUpdate.mtime !== undefined) {
+      setDiskMtime(appliedDiskUpdate.mtime);
+    }
+    setExternalChange(false);
+    onAppliedDiskUpdateConsumed?.();
+  }, [appliedDiskUpdate, selectedPath, onAppliedDiskUpdateConsumed]);
 
   // v2.8.x (Builder UX, C 후속) — 현재 열린 파일 메타데이터 emit. App.tsx
   // 가 ChatPanel "Apply to file" 버튼 활성화 + writeFile target 식별에 사용.

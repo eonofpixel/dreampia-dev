@@ -303,6 +303,14 @@ export function App(): React.JSX.Element {
     language?: string;
   } | null>(null);
   const [applySaving, setApplySaving] = useState(false);
+  // v2.8.x (Builder UX, C 3차) — Apply 성공 후 CodePanel 의 disk baseline 을
+  // in-process 에서 즉시 동기화하기 위한 dispatch slot. CodePanel 이 prop 으로
+  // 받고 즉시 onAppliedDiskUpdateConsumed 로 reset.
+  const [appliedDiskUpdate, setAppliedDiskUpdate] = useState<{
+    path: string;
+    content: string;
+    mtime?: string;
+  } | null>(null);
   // v1.6.4 — Fullscreen toggle (Mod+Shift+F). 진입 시 sidebar+preview 모두
   // 숨기고 chat 만 풀폭. 진입 직전 sidebar/preview 상태를 ref 에 저장 →
   // 토글 OFF 시 정확히 복원. ref 만으로 충분 (별도 상태 없이 snapshot 의
@@ -1539,6 +1547,8 @@ export function App(): React.JSX.Element {
             })}
             onRequestedFileConsumed={() => setQuickOpenRequestedFile(undefined)}
             onCurrentFileChange={setCurrentCodeFile}
+            appliedDiskUpdate={appliedDiskUpdate}
+            onAppliedDiskUpdateConsumed={() => setAppliedDiskUpdate(null)}
             onAnnotation={(block) => {
               // v1.6.13 — typed block 으로 정식 prepend.
               setPendingBlocks((prev) => [...prev, block]);
@@ -1664,10 +1674,15 @@ export function App(): React.JSX.Element {
                 );
                 return;
               }
-              // 성공 — CodePanel 의 disk content 도 곧 다시 읽혀야 정확한 baseline.
-              // 단, atomic write 가 fs watcher 로 자동 reload 트리거 안 함 (현
-              // CodePanel 은 폴링만). 사용자가 reload 또는 외부 변경 banner 로
-              // 인지. v0 결정 — 자동 reload 는 후속 PR.
+              // v2.8.x (C 3차) — 성공 시 CodePanel 의 disk baseline 을 즉시
+              // 동기화. fs watcher 없이 in-process write → CodePanel 이
+              // selectedPath 일치 확인 후 setDiskContent + setDiskMtime +
+              // externalChange reset. consume callback 으로 한 번만 적용.
+              setAppliedDiskUpdate({
+                path: currentCodeFile.path,
+                content: applyTarget.code,
+                mtime: wr.mtime,
+              });
               toasts.info(t('toast.code.applied', { path: currentCodeFile.path }));
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);

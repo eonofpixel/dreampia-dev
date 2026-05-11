@@ -638,6 +638,109 @@ describe('CodePanel (Phase 2)', () => {
     expect(screen.getByTestId('code-outline')).toBeInTheDocument();
   });
 
+  // ────────────────────────────────────────────────────────────
+  // v2.8.x (Builder UX, C 3차) — appliedDiskUpdate auto-reload
+  // ────────────────────────────────────────────────────────────
+
+  it('Builder UX C-3rd: appliedDiskUpdate 가 외부 변경 banner 를 즉시 닫음 + 콜백 fire', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const initialMtime = '2026-05-10T00:00:00.000Z';
+      __mockStore.workspaceFiles = [
+        { path: 'a.ts', size_bytes: 12, mtime: initialMtime },
+      ];
+      __mockStore.workspaceFileContents.set('a.ts', {
+        content: 'old\n',
+        truncated: false,
+        line_count: 1,
+      });
+      __mockStore.workspaceFileStats.set('a.ts', { mtime: initialMtime, size_bytes: 12 });
+
+      const onConsumed = vi.fn();
+      const { rerender } = render(
+        <CodePanel
+          workspaceRoot="/proj"
+          appliedDiskUpdate={null}
+          onAppliedDiskUpdateConsumed={onConsumed}
+        />
+      );
+      await waitFor(() => screen.getByTestId('code-file-row-a.ts'));
+      await user.click(screen.getByTestId('code-file-row-a.ts'));
+      await waitFor(() => screen.getByTestId('code-editor'));
+
+      // 외부 변경 시뮬레이션 → 5s 폴링 후 banner 노출.
+      __mockStore.workspaceFileStats.set('a.ts', {
+        mtime: '2099-01-01T00:00:00.000Z',
+        size_bytes: 12,
+      });
+      await vi.advanceTimersByTimeAsync(5_500);
+      await waitFor(() => screen.getByTestId('code-external-change-banner'));
+
+      // appliedDiskUpdate dispatch — selectedPath 와 일치.
+      rerender(
+        <CodePanel
+          workspaceRoot="/proj"
+          appliedDiskUpdate={{
+            path: 'a.ts',
+            content: 'new\n',
+            mtime: '2099-01-01T00:00:00.000Z',
+          }}
+          onAppliedDiskUpdateConsumed={onConsumed}
+        />
+      );
+
+      // banner 가 즉시 사라지고 consume callback 호출됨.
+      await waitFor(() => {
+        expect(screen.queryByTestId('code-external-change-banner')).not.toBeInTheDocument();
+      });
+      expect(onConsumed).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('Builder UX C-3rd: appliedDiskUpdate 의 path 가 selectedPath 와 다르면 무시', async () => {
+    const user = userEvent.setup();
+    __mockStore.workspaceFiles = [
+      { path: 'a.ts', size_bytes: 12, mtime: '2026-05-10T00:00:00.000Z' },
+      { path: 'b.ts', size_bytes: 12, mtime: '2026-05-10T00:00:00.000Z' },
+    ];
+    __mockStore.workspaceFileContents.set('a.ts', {
+      content: 'A\n',
+      truncated: false,
+      line_count: 1,
+    });
+    __mockStore.workspaceFileContents.set('b.ts', {
+      content: 'B\n',
+      truncated: false,
+      line_count: 1,
+    });
+
+    const onConsumed = vi.fn();
+    const { rerender } = render(
+      <CodePanel
+        workspaceRoot="/proj"
+        appliedDiskUpdate={null}
+        onAppliedDiskUpdateConsumed={onConsumed}
+      />
+    );
+    await waitFor(() => screen.getByTestId('code-file-row-a.ts'));
+    await user.click(screen.getByTestId('code-file-row-a.ts'));
+    await waitFor(() => screen.getByTestId('code-editor'));
+
+    // b.ts 에 대한 update 가 dispatch 됐지만 현재 a.ts 가 열려있음.
+    rerender(
+      <CodePanel
+        workspaceRoot="/proj"
+        appliedDiskUpdate={{ path: 'b.ts', content: 'BBBB\n' }}
+        onAppliedDiskUpdateConsumed={onConsumed}
+      />
+    );
+    // disk state 침범 없음 — onConsumed 는 여전히 호출 (한 번만 적용 보장).
+    expect(onConsumed).toHaveBeenCalled();
+  });
+
   it('clearing workspaceRoot resets the selected file', async () => {
     const user = userEvent.setup();
     __mockStore.workspaceFiles = [

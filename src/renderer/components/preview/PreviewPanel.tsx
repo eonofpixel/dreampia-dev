@@ -107,6 +107,13 @@ export interface PreviewPanelProps {
   onCurrentFileChange?: (
     info: { path: string; mtime?: string; content: string } | null
   ) => void;
+  /**
+   * v2.8.x (Builder UX, C 3차) — Apply-to-file 성공 후 부모가 dispatch 하는
+   * disk baseline 갱신 신호. CodePanel 이 selectedPath 일치 시 적용 + 즉시
+   * 소비 callback. fs watcher 없이 in-process write 후 baseline 동기화.
+   */
+  appliedDiskUpdate?: { path: string; content: string; mtime?: string } | null;
+  onAppliedDiskUpdateConsumed?: () => void;
 }
 
 /**
@@ -130,6 +137,12 @@ export function PreviewPanel(props: PreviewPanelProps): React.JSX.Element {
         })}
         {...(props.onCurrentFileChange !== undefined && {
           onCurrentFileChange: props.onCurrentFileChange,
+        })}
+        {...(props.appliedDiskUpdate !== undefined && {
+          appliedDiskUpdate: props.appliedDiskUpdate,
+        })}
+        {...(props.onAppliedDiskUpdateConsumed !== undefined && {
+          onAppliedDiskUpdateConsumed: props.onAppliedDiskUpdateConsumed,
         })}
       />
     );

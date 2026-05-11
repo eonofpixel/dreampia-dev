@@ -112,6 +112,24 @@ describe('ApplyToFileModal', () => {
     expect(onCancel).not.toHaveBeenCalled();
   });
 
+  it('preview 패널이 DiffViewer (CodeMirror merge) 를 마운트', () => {
+    render(
+      <ApplyToFileModal
+        target={{
+          path: 'a.ts',
+          diskContent: 'old\n',
+          newCode: 'new\n',
+          language: 'ts',
+        }}
+        onAccept={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+    // DiffViewer 의 wrapper testid (code-diff-viewer) 가 마운트됨.
+    expect(screen.getByTestId('apply-to-file-preview')).toBeInTheDocument();
+    expect(screen.getByTestId('code-diff-viewer')).toBeInTheDocument();
+  });
+
   it('overlay click 이 onCancel 호출 (모달 본체 click 은 무시)', () => {
     const onCancel = vi.fn();
     render(

@@ -21,7 +21,7 @@ import { useEffect } from 'react';
 
 import { useT } from '../../i18n';
 
-import { CodeEditor } from './CodeEditor';
+import { DiffViewer } from './DiffViewer';
 
 export interface ApplyToFileModalProps {
   /** undefined / null 이면 모달 미노출 (App.tsx 의 state 가 null 일 때). */
@@ -118,10 +118,15 @@ export function ApplyToFileModal({
             aria-label={t('code.apply.modal.preview_aria')}
             data-testid="apply-to-file-preview"
           >
-            <CodeEditor
-              content={target.newCode}
+            {/* v2.8.x (C 3차) — read-only inline unified diff (CodeMirror
+                merge). disk = original, newCode = modified. mergeControls 는
+                DiffViewer 안에서 false (라인 단위 partial accept/reject 는
+                별도 PR). language 는 syntax highlight 용도라 임의 prefix
+                'preview.<lang>' 으로 detect. */}
+            <DiffViewer
+              original={target.diskContent}
+              modified={target.newCode}
               {...(target.language !== undefined && { relPath: 'preview.' + target.language })}
-              editable={false}
             />
           </div>
         </div>
