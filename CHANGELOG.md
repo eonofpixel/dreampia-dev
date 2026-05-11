@@ -2,6 +2,26 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [2.9.1] — 2026-05-11
+
+**v2.9.x release pipeline 회복 — v2.8.0 + v2.9.0 이 CI 막힘으로 published artifact 없이 tag 만 남아 있던 상태를 정리.**
+
+v2.8.0 + v2.9.0 두 태그가 GitHub Actions 의 Lint + TypeScript 실패로 3 OS Build matrix 의 Package 단계에 도달하지 못해 `Dreampia-Dev-*-x64.dmg` / `Dreampia-Dev-*-arm64.dmg` / `Dreampia-Dev-Setup-*-x64.exe` / `Dreampia-Dev-*-x86_64.AppImage` 등 어떤 OS artifact 도 발행되지 못했음. v2.9.1 = 동일한 v2.9.0 의 builder UX 사이클 (Apply-to-file + hunk accept/reject + auto-reload) 을 finalize 한 ship-ready 릴리스.
+
+### Fixed
+- **`QuickOpenModal.test.tsx:145`** — `rows[0]` strict undefined assert 추가 (`toHaveLength(1)` 가 이미 보장). `tsc --noEmit` 의 3 OS Build matrix Type check 단계를 막던 원인.
+- **`ApplyToFileModal.tsx:92`** — overlay dialog 의 click-to-cancel 패턴에 `jsx-a11y/no-noninteractive-element-interactions` + `jsx-a11y/click-events-have-key-events` eslint-disable 적용 + 의도 명시 주석. Esc 키보드 equivalent 는 이미 `window` keydown 으로 전역 wire 되어 있어 정책상 충돌 없이 무시 가능.
+- **`PermissionDangerModal.tsx:29`** — `useEffect` body 와 deps 가 `request.request_id` 로 align. 객체 ref 변동 시 reason reset 회피, request_id 가 실제로 바뀔 때만 reset (의도 그대로).
+- **Prettier 누적 부채 — 15 src 파일** — `npm run format` 으로 v2.8.x 진행 중 누적된 unformatted 파일 일괄 정리. whitespace-only.
+
+### Notes
+- v2.8.0 + v2.9.0 의 기능 변경은 v2.9.1 에 모두 포함 (tag 만 다를 뿐 코드 동일). 사용자는 v2.7.0 → v2.9.1 로 직접 업데이트하면 builder UX 8 항목 + Apply-to-file workflow 전부 한번에 활성화.
+- CI E2E (Playwright) 의 MigrationToast 관련 회귀는 v2.8.x 사이클 어딘가에서 들어왔으나 별도 hotfix 로 분리 — Release workflow 는 E2E 의존 X 라 본 release blocker 아님.
+
+### Tests
+- 로컬 verify: `npm run typecheck` clean / `npm run lint` 0 errors / `npm test` **225 files / 2,504 tests pass**.
+- CI: Lint (Prettier 포함) + TypeScript + Test (3 OS) + Build (3 OS) 모두 green (run 25669654442).
+
 ## [2.9.0] — 2026-05-11
 
 **Chat → Code 적용 워크플로 완성 — Apply-to-file 의 confirm 모달 + inline diff + hunk 단위 accept/reject + 자동 reload.**
