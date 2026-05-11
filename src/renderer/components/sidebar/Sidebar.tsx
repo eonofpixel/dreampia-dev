@@ -276,41 +276,67 @@ export function Sidebar({
         )}
       </nav>
 
-      {/* Bottom: 사용량 (v0.4.0) + MCP 상태 (v0.9.0) + 설정 + 온보딩 재진입 (v0.3.0) */}
-      <div className="border-t border-border-primary p-2">
+      {/*
+       * v2.10.0 (.omc/DESIGN.md, Codex parity γ) — Bottom footer 5-row vertical
+       * stack → MCP indicator (status line) + icon-only horizontal row. 사용량/
+       * 온보딩/단축키/설정 4개를 single row 로 압축. label 은 title + aria-label
+       * 로 이동, shortcut hint 도 title 안에 "(Ctrl+/)" 형태. testid 보존 →
+       * e2e/unit test 그대로 통과.
+       *
+       * Refs: captures/state_09_left_sidebar (Codex sidebar footer 패턴).
+       */}
+      <div className="border-t border-hairline">
         {onOpenMcpSettings !== undefined && <McpStatusIndicator onOpen={onOpenMcpSettings} />}
-        {onOpenUsage !== undefined && (
-          <SidebarNavItem
-            icon={<BarChart3 className="h-4 w-4" />}
-            label={t('sidebar.usage')}
-            onClick={onOpenUsage}
-            testId="sidebar-open-usage"
-          />
-        )}
-        {onReopenOnboarding !== undefined && (
-          <SidebarNavItem
-            icon={<Compass className="h-4 w-4" />}
-            label={t('sidebar.onboarding_reopen')}
-            onClick={onReopenOnboarding}
-            testId="sidebar-reopen-onboarding"
-          />
-        )}
-        {onOpenHelp !== undefined && (
-          <SidebarNavItem
-            icon={<HelpCircle className="h-4 w-4" />}
-            label={t('sidebar.help')}
-            shortcut="Ctrl+/"
-            onClick={onOpenHelp}
-            testId="sidebar-open-help"
-          />
-        )}
-        <SidebarNavItem
-          icon={<Settings className="h-4 w-4" />}
-          label={t('sidebar.settings')}
-          shortcut="Ctrl+,"
-          onClick={onOpenSettings}
-          testId="sidebar-open-settings"
-        />
+        <div className="flex items-center justify-between gap-xxs px-sm py-xs">
+          <div className="flex items-center gap-xxs">
+            {onOpenUsage !== undefined && (
+              <button
+                type="button"
+                onClick={onOpenUsage}
+                title={t('sidebar.usage')}
+                aria-label={t('sidebar.usage')}
+                className="rounded-md p-xxs text-text-tertiary hover:bg-surface-strong hover:text-text-primary"
+                data-testid="sidebar-open-usage"
+              >
+                <BarChart3 aria-hidden="true" className="h-4 w-4" />
+              </button>
+            )}
+            {onReopenOnboarding !== undefined && (
+              <button
+                type="button"
+                onClick={onReopenOnboarding}
+                title={t('sidebar.onboarding_reopen')}
+                aria-label={t('sidebar.onboarding_reopen')}
+                className="rounded-md p-xxs text-text-tertiary hover:bg-surface-strong hover:text-text-primary"
+                data-testid="sidebar-reopen-onboarding"
+              >
+                <Compass aria-hidden="true" className="h-4 w-4" />
+              </button>
+            )}
+            {onOpenHelp !== undefined && (
+              <button
+                type="button"
+                onClick={onOpenHelp}
+                title={`${t('sidebar.help')} (Ctrl+/)`}
+                aria-label={`${t('sidebar.help')} (Ctrl+/)`}
+                className="rounded-md p-xxs text-text-tertiary hover:bg-surface-strong hover:text-text-primary"
+                data-testid="sidebar-open-help"
+              >
+                <HelpCircle aria-hidden="true" className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            title={`${t('sidebar.settings')} (Ctrl+,)`}
+            aria-label={`${t('sidebar.settings')} (Ctrl+,)`}
+            className="rounded-md p-xxs text-text-tertiary hover:bg-surface-strong hover:text-text-primary"
+            data-testid="sidebar-open-settings"
+          >
+            <Settings aria-hidden="true" className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </aside>
   );

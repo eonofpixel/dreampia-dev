@@ -744,16 +744,21 @@ export function ChatInput({
         </div>
       )}
       {pendingBlocks !== undefined && pendingBlocks.length > 0 && (
+        // v2.10.0 (.omc/DESIGN.md δ, Codex state_08 패턴) — raw blue chrome →
+        // accent-soft + hairline + caption typography. count summary 가 prefix
+        // 로 prominent ("첨부 N개").
         <div
-          className="mb-1 flex flex-wrap items-center gap-1 rounded border border-blue-700/40 bg-blue-900/15 px-2 py-1 text-[11px] text-blue-200"
+          className="mb-xs flex flex-wrap items-center gap-xs rounded-md border border-accent/30 bg-accent-soft px-sm py-xs text-caption text-text-secondary"
           role="status"
           data-testid="chat-input-pending-blocks"
         >
-          <span className="text-text-tertiary">{t('chat.input.attached_label')}</span>
+          <span className="text-caption-uppercase uppercase text-accent">
+            {t('chat.input.attached_count_label', { n: pendingBlocks.length })}
+          </span>
           {pendingBlocks.map((b, i) => (
             <span
               key={`${b.type}-${i}`}
-              className="inline-flex items-center gap-1 rounded bg-bg-tertiary px-1.5 py-0.5 font-mono text-[10px] text-text-secondary"
+              className="inline-flex items-center gap-xxs rounded-sm bg-surface-card px-xxs py-[1px] font-mono text-caption text-text-secondary"
               data-testid={`chat-input-pending-block-${i}`}
             >
               <span>{b.type}</span>
@@ -763,7 +768,7 @@ export function ChatInput({
                   onClick={() => {
                     onRemovePendingBlock(i);
                   }}
-                  className="rounded text-text-tertiary hover:bg-bg-primary hover:text-text-primary"
+                  className="rounded text-text-tertiary hover:text-text-primary"
                   aria-label={t('chat.input.attached_remove_aria', { type: b.type })}
                   data-testid={`chat-input-pending-block-remove-${i}`}
                 >

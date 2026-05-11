@@ -44,6 +44,8 @@ describe('Sidebar — Help entry point (v1.6.21)', () => {
       />
     );
     const btn = screen.getByTestId('sidebar-open-help');
-    expect(btn.textContent ?? '').toContain('Ctrl+/');
+    // v2.10.0 (.omc/DESIGN.md γ) — footer icon-only row. shortcut hint 는
+    // title/aria-label 로 이동 (text 미노출 — Codex 패턴).
+    expect(btn.getAttribute('title') ?? '').toContain('Ctrl+/');
   });
 });

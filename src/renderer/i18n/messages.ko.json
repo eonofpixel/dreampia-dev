@@ -108,6 +108,7 @@
   "chat.input.placeholder": "메시지를 입력하세요",
   "chat.input.aria_label": "채팅 입력",
   "chat.input.attached_label": "첨부:",
+  "chat.input.attached_count_label": "첨부 {n}개",
   "chat.input.attached_remove_aria": "{type} 첨부 제거",
   "toast.retry_hint": "잠시 후 다시 시도하세요.",
   "toast.code.sent_to_code": "코드를 클립보드에 복사했어요. Code 모드에서 붙여넣기 (Ctrl+V).",

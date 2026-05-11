@@ -108,6 +108,7 @@
   "chat.input.placeholder": "Type a message",
   "chat.input.aria_label": "Chat input",
   "chat.input.attached_label": "Attached:",
+  "chat.input.attached_count_label": "{n} attached",
   "chat.input.attached_remove_aria": "Remove {type} attachment",
   "toast.retry_hint": "Please try again in a moment.",
   "toast.code.sent_to_code": "Code copied to clipboard. Paste it in Code mode (Ctrl+V).",

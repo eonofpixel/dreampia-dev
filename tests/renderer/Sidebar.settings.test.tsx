@@ -26,7 +26,9 @@ describe('Sidebar — Settings entry points (v0.8.0)', () => {
         onOpenSettings={onOpenSettings}
       />
     );
-    await user.click(screen.getByText('설정'));
+    // v2.10.0 (.omc/DESIGN.md γ) — footer icon-only row, label 미노출 →
+    // testid 로 click.
+    await user.click(screen.getByTestId('sidebar-open-settings'));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 

@@ -132,7 +132,11 @@ describe('Sidebar', () => {
     expect(screen.getByText('자동화')).toBeInTheDocument();
     expect(screen.getByText('프로젝트')).toBeInTheDocument();
     expect(screen.getByText('채팅')).toBeInTheDocument();
-    expect(screen.getByText('설정')).toBeInTheDocument();
+    // v2.10.0 (.omc/DESIGN.md γ) — footer icon-only row. 설정 텍스트 미노출 →
+    // aria-label/testid 로 식별.
+    expect(screen.getByTestId('sidebar-open-settings').getAttribute('aria-label') ?? '').toContain(
+      '설정'
+    );
   });
 
   // ────────────────────────────────────────────────────────────
@@ -196,8 +200,10 @@ describe('Sidebar', () => {
           onReopenOnboarding={() => {}}
         />
       );
-      expect(screen.getByTestId('sidebar-reopen-onboarding')).toBeInTheDocument();
-      expect(screen.getByText('온보딩 다시 보기')).toBeInTheDocument();
+      const btn = screen.getByTestId('sidebar-reopen-onboarding');
+      expect(btn).toBeInTheDocument();
+      // v2.10.0 (.omc/DESIGN.md γ) — icon-only row; label 은 aria-label 로.
+      expect(btn.getAttribute('aria-label') ?? '').toContain('온보딩 다시 보기');
     });
 
     it('clicking 온보딩 다시 보기 calls onReopenOnboarding', async () => {
@@ -238,8 +244,10 @@ describe('Sidebar', () => {
           onOpenUsage={() => {}}
         />
       );
-      expect(screen.getByTestId('sidebar-open-usage')).toBeInTheDocument();
-      expect(screen.getByText('사용량')).toBeInTheDocument();
+      const btn = screen.getByTestId('sidebar-open-usage');
+      expect(btn).toBeInTheDocument();
+      // v2.10.0 (.omc/DESIGN.md γ) — icon-only row; label 은 aria-label 로.
+      expect(btn.getAttribute('aria-label') ?? '').toContain('사용량');
     });
 
     it('clicking 사용량 calls onOpenUsage', async () => {
