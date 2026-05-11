@@ -271,10 +271,31 @@ export function ChatPanel({
   onApplyToFile,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
+    // α-2 (.omc/DESIGN.md, Codex parity) — hero + ChatInput 도 같이 mount.
+    // App.tsx handleSubmitMessage 가 activeSession === null 일 때 자동으로
+    // 새 session 생성 후 user turn push + streaming start (Codex 의 빈 chat
+    // 즉시 입력 가능 패턴과 동일).
     return (
       <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
         {ipcUnavailable && <IpcUnavailableBanner />}
         <ChatLandingHero workspaceName={workspaceName} />
+        <InputArea
+          onSubmit={onSubmit}
+          isStreaming={isStreaming}
+          onCancel={onCancel}
+          disabled={ipcUnavailable}
+          initialValue={initialInputValue}
+          commandHandlers={commandHandlers}
+          mentionWorkspaceRoot={mentionWorkspaceRoot}
+          mentionIgnorePatterns={mentionIgnorePatterns}
+          mentionSessions={mentionSessions}
+          mentionResolverContext={mentionResolverContext}
+          onSubmitBlocks={onSubmitBlocks}
+          pendingBlocks={pendingBlocks}
+          onConsumePendingBlocks={onConsumePendingBlocks}
+          onAttachBlocks={onAttachBlocks}
+          onRemovePendingBlock={onRemovePendingBlock}
+        />
       </main>
     );
   }

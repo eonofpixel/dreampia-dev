@@ -885,7 +885,7 @@ export function App(): React.JSX.Element {
 
   const handleSubmitMessage = useCallback(
     async (text: string, extraBlocks?: ContentBlock[]): Promise<void> => {
-      if (activeSession === null || isStreaming) return;
+      if (isStreaming) return;
       // Phase 3 audit (HIGH) — production 에서 IPC bridge 누락 시 fail-closed.
       // ChatPanel 이 이미 banner 와 input disable 로 표시 중이지만 방어적으로 가드.
       if (provider === null) return;
@@ -904,6 +904,30 @@ export function App(): React.JSX.Element {
       // 둘 다 비어있으면 (이론적으로 불가, ChatInput 가 trim 후 호출) — 안전 가드.
       if (blocks.length === 0) return;
 
+      // α-2 (.omc/DESIGN.md v1.0, Codex parity) — activeSession === null 일
+      // 때 ChatLandingHero 의 ChatInput submit 호출이 와도 그냥 return 하지 않고
+      // 자동으로 새 session 생성. workspace 가 없으면 picker. Codex 의 빈 chat
+      // 진입과 동일 동선. setActiveSessionId 는 다음 render 에 반영되지만 본
+      // 함수 안에선 created 객체를 직접 들고 진행해서 race 없음.
+      let session: Session | null = activeSession;
+      if (session === null) {
+        let workspace = defaultWorkspace;
+        if (workspace === null) {
+          const picked = await pickWorkspace();
+          if (picked === null) return;
+          workspace = { root: picked.path, name: picked.name };
+        }
+        const draft = createDemoSession(
+          `새 채팅 ${sessions.length + 1}`,
+          workspace,
+          defaultPermissionLevel
+        );
+        const created = await createSession(draft);
+        if (created === null) return;
+        setActiveSessionId(created.id);
+        session = created;
+      }
+
       const userTurn: Turn = {
         id: newTurnId(),
         role: 'user',
@@ -912,22 +936,23 @@ export function App(): React.JSX.Element {
         content: blocks,
       };
 
-      // 1) Optimistic local push so the UI is responsive.
-      setActiveSession((prev) =>
-        prev === null
-          ? prev
-          : {
-              ...prev,
-              updated_at: nowIso(),
-              conversation: {
-                ...prev.conversation,
-                turns: [...prev.conversation.turns, userTurn],
-              },
-            }
-      );
+      // 1) Optimistic local push so the UI is responsive. α-2: created session
+      // 도 동일 setState — prev 가 null 이면 session (방금 만든) 로 시드.
+      setActiveSession((prev) => {
+        const base = prev ?? session;
+        if (base === null) return prev;
+        return {
+          ...base,
+          updated_at: nowIso(),
+          conversation: {
+            ...base.conversation,
+            turns: [...base.conversation.turns, userTurn],
+          },
+        };
+      });
 
       // 2) Persist user turn (refresh updates Sidebar's updated_at order).
-      await persistTurn(activeSession.id, userTurn);
+      await persistTurn(session.id, userTurn);
       markTurnPersisted(userTurn.id);
 
       // 3) Kick off streaming; assistant turn shadowed locally,
@@ -940,23 +965,27 @@ export function App(): React.JSX.Element {
       // 폴더) 로 가서 ensureAsciiCwd 가 junction 생성 → AI 가 junction path 를
       // 자기 cwd 로 인식하는 혼란 발생. 사용자 시각적 표시 (sidebar/ChatHeader)
       // 와 실제 AI cwd 를 일치시킴.
-      const effectiveWorkspaceRoot = defaultWorkspace?.root ?? activeSession.workspace.root;
+      const effectiveWorkspaceRoot = defaultWorkspace?.root ?? session.workspace.root;
       void startStream({
-        turns: [...activeSession.conversation.turns, userTurn],
-        model: activeSession.conversation.current_model,
-        sessionId: activeSession.id,
+        turns: [...session.conversation.turns, userTurn],
+        model: session.conversation.current_model,
+        sessionId: session.id,
         workspaceRoot: effectiveWorkspaceRoot,
-        permissionLevel: activeSession.permission.default_level,
+        permissionLevel: session.permission.default_level,
       });
     },
     [
       activeSession,
       defaultWorkspace,
+      defaultPermissionLevel,
       isStreaming,
       persistTurn,
       startStream,
       provider,
       markTurnPersisted,
+      pickWorkspace,
+      createSession,
+      sessions.length,
     ]
   );
 
