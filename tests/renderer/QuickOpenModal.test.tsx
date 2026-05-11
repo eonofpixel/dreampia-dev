@@ -142,6 +142,6 @@ describe('QuickOpenModal', () => {
     // shared.ts 행은 정확히 1개만 (recent kind).
     const rows = screen.getAllByTestId('quick-open-row-shared.ts');
     expect(rows).toHaveLength(1);
-    expect(rows[0].getAttribute('data-row-kind')).toBe('recent');
+    expect(rows[0]!.getAttribute('data-row-kind')).toBe('recent');
   });
 });

@@ -89,6 +89,10 @@ export function ApplyToFileModal({
   const after = countLines(mergedCode);
 
   return (
+    // Overlay click → cancel. Keyboard equivalent (Escape) is wired via the
+    // window keydown listener in the useEffect above, so a dialog-role overlay
+    // intentionally has only an onClick handler on itself.
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events
     <div
       className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 pt-[8vh]"
       role="dialog"

@@ -24,11 +24,12 @@ export function PermissionDangerModal({
 }: PermissionDangerModalProps): React.JSX.Element | null {
   const t = useT();
   const [reason, setReason] = useState('');
+  const requestId = request?.request_id ?? null;
 
-  // request 가 바뀔 때마다 reason 초기화.
+  // request_id 가 바뀔 때만 reason 초기화 — request 객체 ref 변동에는 반응 X.
   useEffect(() => {
-    if (request !== null) setReason('');
-  }, [request?.request_id]);
+    if (requestId !== null) setReason('');
+  }, [requestId]);
 
   if (request === null) return null;
 
