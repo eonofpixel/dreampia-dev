@@ -93,6 +93,13 @@ export interface PreviewPanelProps {
    * mention 과 동일한 set 재사용 (node_modules, .git 등 자동 prune).
    */
   ignorePatterns?: ReadonlyArray<string>;
+  /**
+   * v2.8.0 (Builder UX) — Quick Open 등 외부에서 파일 로드 요청. 값 변화 시
+   * CodePanel 이 loadFile(requestedFile). 한 번 소비되면 부모가
+   * onRequestedFileConsumed 로 reset.
+   */
+  requestedFile?: string;
+  onRequestedFileConsumed?: () => void;
 }
 
 /**
@@ -110,6 +117,10 @@ export function PreviewPanel(props: PreviewPanelProps): React.JSX.Element {
         {...(props.workspaceRoot !== undefined && { workspaceRoot: props.workspaceRoot })}
         {...(props.ignorePatterns !== undefined && { ignorePatterns: props.ignorePatterns })}
         {...(props.onSwitchMode !== undefined && { onSwitchMode: props.onSwitchMode })}
+        {...(props.requestedFile !== undefined && { requestedFile: props.requestedFile })}
+        {...(props.onRequestedFileConsumed !== undefined && {
+          onRequestedFileConsumed: props.onRequestedFileConsumed,
+        })}
       />
     );
   }

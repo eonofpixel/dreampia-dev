@@ -77,12 +77,20 @@ export interface CodePanelProps {
    * 이 콜백으로 'browser' 를 보낸다.
    */
   onSwitchMode?: (next: 'browser' | 'code') => void;
+  /**
+   * v2.8.0 (Builder UX) — Quick Open 등 외부에서 파일 로드 요청. 값 변화 시
+   * loadFile(requestedFile). 한 번 소비되면 onRequestedFileConsumed 로 reset.
+   */
+  requestedFile?: string;
+  onRequestedFileConsumed?: () => void;
 }
 
 export function CodePanel({
   workspaceRoot,
   ignorePatterns,
   onSwitchMode,
+  requestedFile,
+  onRequestedFileConsumed,
 }: CodePanelProps): React.JSX.Element {
   const t = useT();
   const [selectedPath, setSelectedPath] = useState<string | undefined>(undefined);
@@ -221,7 +229,7 @@ export function CodePanel({
         }
       })();
     },
-    [workspaceRoot]
+    [workspaceRoot, t]
   );
 
   // v2.7.0 sub-PR — workspace mount 시 마지막 열린 파일 자동 restore.
@@ -235,6 +243,15 @@ export function CodePanel({
     if (restored === null) return;
     loadFile(restored);
   }, [workspaceRoot, loadFile]);
+
+  // v2.8.0 (Builder UX) — Quick Open 등 외부 요청으로 파일 로드.
+  // requestedFile 값이 변하면 loadFile 호출 + 부모에게 소비 알림. 부모는
+  // 즉시 prop 을 undefined 로 reset 하지만 본 effect 는 그 사이 fire 됨.
+  useEffect(() => {
+    if (requestedFile === undefined || requestedFile.length === 0) return;
+    loadFile(requestedFile);
+    onRequestedFileConsumed?.();
+  }, [requestedFile, loadFile, onRequestedFileConsumed]);
 
   const handleSave = useCallback(() => {
     if (
@@ -277,7 +294,7 @@ export function CodePanel({
         setSaving(false);
       }
     })();
-  }, [workspaceRoot, selectedPath, draft, diskMtime]);
+  }, [workspaceRoot, selectedPath, draft, diskMtime, t]);
 
   const handleRevert = useCallback(() => {
     setDraft(diskContent);
@@ -300,13 +317,28 @@ export function CodePanel({
       <header className="flex items-center gap-2 border-b border-border-primary px-3 py-2 text-xs text-text-secondary">
         <FileCode2 aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
         {selectedPath !== undefined ? (
-          <span
-            className="min-w-0 flex-1 truncate font-mono text-text-primary"
-            title={selectedPath}
-            data-testid="code-active-path"
-          >
-            {selectedPath}
-          </span>
+          (() => {
+            // v2.8.0 (Builder UX) — Breadcrumb: dir segments muted + filename
+            // emphasized. monospace 로 유지하되 색만 분리.
+            const segments = selectedPath.split('/');
+            const fname = segments[segments.length - 1] ?? selectedPath;
+            const dirs = segments.slice(0, -1);
+            return (
+              <span
+                className="flex min-w-0 flex-1 items-center truncate font-mono"
+                title={selectedPath}
+                data-testid="code-active-path"
+              >
+                {dirs.map((seg, idx) => (
+                  <span key={idx} className="text-text-tertiary">
+                    <span>{seg}</span>
+                    <span className="mx-0.5 select-none">/</span>
+                  </span>
+                ))}
+                <span className="truncate text-text-primary">{fname}</span>
+              </span>
+            );
+          })()
         ) : (
           <span className="flex-1 font-medium text-text-primary">{t('preview.code.title')}</span>
         )}

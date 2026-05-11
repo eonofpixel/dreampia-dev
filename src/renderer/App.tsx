@@ -23,6 +23,7 @@ import { SlashHelpModal } from './components/chat/SlashHelpModal';
 import { CompareModal } from './components/chat/CompareModal';
 import { PluginsModal } from './components/plugins/PluginsModal';
 import { AutomationModal } from './components/automation/AutomationModal';
+import { QuickOpenModal } from './components/code/QuickOpenModal';
 import { BackfillPromptModal } from './components/workspace/BackfillPromptModal';
 import { ToastContainer } from './components/toast/ToastContainer';
 import { MigrationToast } from './components/MigrationToast';
@@ -279,6 +280,13 @@ export function App(): React.JSX.Element {
   // 로 복귀. PreviewPanel 이 mode prop 으로 분기.
   // Decision doc: ../CODE_TAB_DECISION.md.
   const [previewMode, setPreviewMode] = useState<'browser' | 'code'>('browser');
+  // v2.8.0 (Builder UX) — Cmd/Ctrl+P quick file open. modal state + queued
+  // file to load when modal closes via selection. CodePanel 의
+  // requestedFile prop 으로 forward.
+  const [quickOpenVisible, setQuickOpenVisible] = useState(false);
+  const [quickOpenRequestedFile, setQuickOpenRequestedFile] = useState<string | undefined>(
+    undefined
+  );
   // v1.6.4 — Fullscreen toggle (Mod+Shift+F). 진입 시 sidebar+preview 모두
   // 숨기고 chat 만 풀폭. 진입 직전 sidebar/preview 상태를 ref 에 저장 →
   // 토글 OFF 시 정확히 복원. ref 만으로 충분 (별도 상태 없이 snapshot 의
@@ -1234,6 +1242,10 @@ export function App(): React.JSX.Element {
       'preview.toggle': (): void => {
         setPreviewVisible((v) => !v);
       },
+      // v2.8.0 (Builder UX) — Mod+P Quick file open. modal toggle.
+      'quick.open': (): void => {
+        setQuickOpenVisible(true);
+      },
       // v1.6.4 — Mod+Shift+F. 진입 시 sidebar/preview 현재 상태 저장 후 둘
       // 다 hidden. 다시 누르면 snapshot 으로 복원. snapshot 의 존재 자체가
       // 진입 상태를 나타냄 (별도 boolean state 불필요).
@@ -1474,6 +1486,10 @@ export function App(): React.JSX.Element {
             onSwitchMode={setPreviewMode}
             {...(mentionWorkspaceRoot !== undefined && { workspaceRoot: mentionWorkspaceRoot })}
             {...(mentionIgnorePatterns !== undefined && { ignorePatterns: mentionIgnorePatterns })}
+            {...(quickOpenRequestedFile !== undefined && {
+              requestedFile: quickOpenRequestedFile,
+            })}
+            onRequestedFileConsumed={() => setQuickOpenRequestedFile(undefined)}
             onAnnotation={(block) => {
               // v1.6.13 — typed block 으로 정식 prepend.
               setPendingBlocks((prev) => [...prev, block]);
@@ -1531,6 +1547,19 @@ export function App(): React.JSX.Element {
       <PluginsModal open={pluginsModalOpen} onClose={() => setPluginsModalOpen(false)} />
       {/* v1.7.4 — Automation modal (Sidebar [자동화] 클릭). */}
       <AutomationModal open={automationModalOpen} onClose={() => setAutomationModalOpen(false)} />
+      <QuickOpenModal
+        open={quickOpenVisible}
+        {...(mentionWorkspaceRoot !== undefined && { workspaceRoot: mentionWorkspaceRoot })}
+        {...(mentionIgnorePatterns !== undefined && { ignorePatterns: mentionIgnorePatterns })}
+        onClose={() => setQuickOpenVisible(false)}
+        onSelect={(relPath) => {
+          // v2.8.0 — Quick open 선택 시 Code 모드 전환 + 파일 로드 + modal close.
+          setPreviewMode('code');
+          setPreviewVisible(true);
+          setQuickOpenRequestedFile(relPath);
+          setQuickOpenVisible(false);
+        }}
+      />
       {/* v1.4.8 — Workspace ID backfill prompt (boot effect 가 trigger). */}
       <BackfillPromptModal
         open={backfillModal !== null}

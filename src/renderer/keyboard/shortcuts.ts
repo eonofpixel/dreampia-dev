@@ -29,7 +29,8 @@ export type ShortcutAction =
   | 'modal.close'
   | 'chat.cancel'
   | 'preview.toggle'
-  | 'layout.fullscreen';
+  | 'layout.fullscreen'
+  | 'quick.open';
 
 /** 사용자에게 노출할 카테고리. SettingsModal 의 그룹핑에 사용. */
 export type ShortcutCategory = 'navigation' | 'settings' | 'chat' | 'modal';
@@ -56,6 +57,15 @@ export const SHORTCUT_DEFS: ReadonlyArray<ShortcutDef> = [
     default: 'Mod+K',
     label: '검색 포커스',
     description: '사이드바 메시지 검색 박스로 포커스 이동',
+    category: 'navigation',
+  },
+  {
+    // v2.8.0 (Builder UX) — Codex / VS Code 식 Quick file open. Code 모드 자동
+    // 전환 + workspace.listFiles fuzzy 검색 + Enter 로 열기.
+    action: 'quick.open',
+    default: 'Mod+P',
+    label: '빠른 파일 열기',
+    description: '워크스페이스 파일 fuzzy 검색 + Enter 로 Code 모드에서 열기',
     category: 'navigation',
   },
   {

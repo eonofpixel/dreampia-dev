@@ -49,6 +49,7 @@ describe('SHORTCUT_DEFS', () => {
         'layout.fullscreen',
         'modal.close',
         'preview.toggle',
+        'quick.open',
         'search.focus',
         'settings.open',
         'sidebar.toggle',
