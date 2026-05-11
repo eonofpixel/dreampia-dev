@@ -131,11 +131,11 @@ export function AnnotationOverlay({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
-      {/* 기존 boxes (부모가 관리). */}
+      {/* 기존 boxes — accent token + 우상단 번호 marker. */}
       {boxes.map((b, i) => (
         <div
           key={`${b.captured_at}-${i}`}
-          className="absolute border-2 border-blue-400/70 bg-blue-400/15"
+          className="absolute border-2 border-accent bg-accent/15"
           style={{
             left: `${b.x}px`,
             top: `${b.y}px`,
@@ -143,13 +143,23 @@ export function AnnotationOverlay({
             height: `${b.h}px`,
           }}
           data-testid={`annotation-box-${i}`}
-        />
+        >
+          {/* v2.10.0 (.omc/DESIGN.md β-1, Codex state_07 패턴) — 번호 라벨로
+              각 region 식별. 사용자가 어느 영역이 몇 번째인지 즉시 인지. */}
+          <span
+            className="absolute -top-2 -left-2 flex h-5 min-w-5 items-center justify-center rounded-pill bg-accent px-xxs text-caption-uppercase uppercase text-white shadow-soft"
+            data-testid={`annotation-box-number-${i}`}
+            aria-hidden="true"
+          >
+            {i + 1}
+          </span>
+        </div>
       ))}
 
-      {/* drag 중인 활성 box. */}
+      {/* drag 중인 활성 box (accent-hover = orange 더 밝은 톤). */}
       {dragRect !== null && dragRect.w >= 1 && dragRect.h >= 1 && (
         <div
-          className="absolute border-2 border-yellow-400 bg-yellow-400/20"
+          className="absolute border-2 border-accent-hover bg-accent-soft"
           style={{
             left: `${dragRect.x}px`,
             top: `${dragRect.y}px`,
@@ -165,18 +175,18 @@ export function AnnotationOverlay({
         <div
           role="toolbar"
           aria-label={t('preview.annotation.toolbar_aria')}
-          className="pointer-events-auto absolute top-2 right-2 z-10 flex items-center gap-2 rounded border border-border-primary bg-bg-primary/90 px-2 py-1 text-xs"
+          className="pointer-events-auto absolute right-sm top-sm z-10 flex items-center gap-xs rounded-md border border-accent/40 bg-surface-card/95 px-sm py-xxs text-caption text-text-primary shadow-card"
           data-testid="annotation-overlay-toolbar"
           // toolbar 영역에서는 drag 시작 안 되도록 stopPropagation.
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <Ruler aria-hidden="true" className="h-3 w-3" />
+          <Ruler aria-hidden="true" className="h-3 w-3 text-accent" />
           <span>{t('preview.annotation.toolbar_label')}</span>
           {onToggle !== undefined && (
             <button
               type="button"
               onClick={onToggle}
-              className="rounded p-0.5 hover:bg-bg-tertiary"
+              className="rounded-sm p-xxs text-text-tertiary hover:bg-surface-strong hover:text-text-primary"
               data-testid="annotation-overlay-toggle-off"
               aria-label={t('preview.annotation.exit_aria')}
             >
