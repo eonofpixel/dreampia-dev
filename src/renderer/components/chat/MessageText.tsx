@@ -89,7 +89,12 @@ export interface MessageTextProps {
    * 현재 열린 파일이 있을 때만 prop 전달 (미지정 시 버튼 자체 미노출).
    */
   onApplyToFile?: (code: string, language?: string) => void;
-  /** user turn (accent bg) 인지 — 코드 블록 색상 보정 용. */
+  /**
+   * v2.10.0 (.omc/DESIGN.md C-2) — Deprecated. user turn 의 새 chrome 이
+   * accent-soft + text-text-primary 라 code block 도 일반 chrome (canvas-soft +
+   * hairline) 으로 충분한 contrast. legacy caller 호환 위해 prop 은 유지하되
+   * 내부에서 사용하지 않음.
+   */
   inverse?: boolean;
 }
 
@@ -97,7 +102,8 @@ export function MessageText({
   text,
   onSendToCode,
   onApplyToFile,
-  inverse = false,
+  // v2.10.0 (C-2) — unused, kept for prop compat. caller 가 inverse 전달해도 ignore.
+  inverse: _inverse = false,
 }: MessageTextProps): React.JSX.Element {
   const t = useT();
   const segments = useMemo(() => parseMessageSegments(text), [text]);
@@ -119,24 +125,18 @@ export function MessageText({
             </p>
           );
         }
+        // v2.10.0 (.omc/DESIGN.md C-2) — code block chrome 토큰화. user turn
+        // 의 새 bg-accent-soft 위에서도 동일한 surface (canvas-soft) 가 자연
+        // contrast — 이전엔 black/20 hardcoded 이었음. inverse 의미는 "user
+        // turn 안" → background 대비 + apply button accent tint.
         return (
           <Fragment key={idx}>
             <div
-              className={
-                inverse
-                  ? 'group/code overflow-hidden rounded-md border border-white/30 bg-black/20'
-                  : 'group/code overflow-hidden rounded-md border border-border-primary bg-bg-tertiary'
-              }
+              className="group/code overflow-hidden rounded-md border border-hairline bg-canvas-soft"
               data-testid={`message-code-block-${idx}`}
               data-code-language={seg.language}
             >
-              <header
-                className={
-                  inverse
-                    ? 'flex items-center gap-2 border-b border-white/20 px-2 py-1 text-[10px] uppercase tracking-wide text-white/70'
-                    : 'flex items-center gap-2 border-b border-border-primary px-2 py-1 text-[10px] uppercase tracking-wide text-text-tertiary'
-                }
-              >
+              <header className="flex items-center gap-xs border-b border-hairline px-xs py-xxs text-caption-uppercase uppercase text-text-tertiary">
                 <span data-testid={`message-code-language-${idx}`}>
                   {seg.language.length > 0 ? seg.language : t('chat.code_block.plain_label')}
                 </span>
@@ -145,11 +145,7 @@ export function MessageText({
                     type="button"
                     onClick={() => onApplyToFile(seg.content, seg.language || undefined)}
                     aria-label={t('chat.code_block.apply_to_file_aria')}
-                    className={
-                      inverse
-                        ? 'ml-auto flex items-center gap-1 rounded border border-emerald-300/50 bg-emerald-500/20 px-1.5 py-0.5 text-[10px] normal-case tracking-normal text-emerald-100 hover:bg-emerald-500/30'
-                        : 'ml-auto flex items-center gap-1 rounded border border-emerald-600/50 bg-emerald-900/20 px-1.5 py-0.5 text-[10px] normal-case tracking-normal text-emerald-300 hover:bg-emerald-900/30'
-                    }
+                    className="ml-auto flex items-center gap-xxs rounded-md border border-accent/40 bg-accent-soft px-xs py-[2px] text-caption normal-case tracking-normal text-accent hover:bg-accent/15"
                     data-testid={`message-code-apply-${idx}`}
                   >
                     <FileEdit aria-hidden="true" className="h-3 w-3" />
@@ -161,19 +157,12 @@ export function MessageText({
                     type="button"
                     onClick={() => onSendToCode(seg.content, seg.language || undefined)}
                     aria-label={t('chat.code_block.send_to_code_aria')}
-                    className={
-                      // onApplyToFile 이 ml-auto 를 가져갔으면 본 버튼은 그 옆에
-                      // 붙도록 ml-auto 생략. 둘 중 하나만 노출이면 본 버튼이 우측.
-                      [
-                        onApplyToFile === undefined ? 'ml-auto' : '',
-                        'flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] normal-case tracking-normal',
-                        inverse
-                          ? 'border-white/30 bg-white/10 text-white hover:bg-white/20'
-                          : 'border-border-primary bg-bg-secondary text-text-secondary hover:bg-bg-primary',
-                      ]
-                        .filter((c) => c.length > 0)
-                        .join(' ')
-                    }
+                    className={[
+                      onApplyToFile === undefined ? 'ml-auto' : '',
+                      'flex items-center gap-xxs rounded-md border border-hairline bg-surface-card px-xs py-[2px] text-caption normal-case tracking-normal text-text-secondary hover:bg-surface-strong',
+                    ]
+                      .filter((c) => c.length > 0)
+                      .join(' ')}
                     data-testid={`message-code-send-${idx}`}
                   >
                     <ArrowRightToLine aria-hidden="true" className="h-3 w-3" />
@@ -181,13 +170,7 @@ export function MessageText({
                   </button>
                 )}
               </header>
-              <pre
-                className={
-                  inverse
-                    ? 'overflow-x-auto px-2 py-1.5 text-[12px] text-white'
-                    : 'overflow-x-auto px-2 py-1.5 text-[12px] text-text-primary'
-                }
-              >
+              <pre className="overflow-x-auto px-xs py-xxs text-code text-text-primary">
                 <code>{seg.content}</code>
               </pre>
             </div>

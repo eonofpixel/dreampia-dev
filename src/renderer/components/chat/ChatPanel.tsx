@@ -792,7 +792,10 @@ const PROVIDER_BADGE_CLASS: Record<string, string> = {
 function CliStatusBadge({ status }: { status: CliStatus }): React.JSX.Element | null {
   const t = useT();
   if (status === null) return null;
-  const baseClass = 'rounded border px-1.5 py-0.5 text-[10px]';
+  // v2.10.0 (.omc/DESIGN.md B5) — typography 토큰화 + radius-pill. provider 별
+  // 색 distinction (claude=파랑 / codex=보라 / mock=노랑 / none=회색) 은
+  // semantic 의미라 raw 유지.
+  const baseClass = 'rounded-pill border px-xs py-[2px] text-caption uppercase tracking-wide';
   if (status.source === 'mock') {
     return (
       <span
@@ -944,6 +947,9 @@ export function WelcomeMessage({
   );
 }
 
+// v2.10.0 (.omc/DESIGN.md B6) — chip 류를 token-driven 으로. 단순 inline
+// styling 유지 (Button primitive 의 size/padding 와는 다른 list-row 형태이므로
+// Button variant 강제 적용 X — 그러나 색 + typography + radius 는 token).
 function CtaChip({
   children,
   onClick,
@@ -958,7 +964,7 @@ function CtaChip({
       type="button"
       onClick={onClick}
       data-testid={testId}
-      className="block w-full rounded-md border border-accent/40 bg-accent/5 px-3 py-2 text-left text-sm text-accent hover:bg-accent/10"
+      className="block w-full rounded-md border border-accent/40 bg-accent-soft px-sm py-xs text-left text-body-sm text-accent hover:bg-accent/15"
     >
       → {children}
     </button>
@@ -979,7 +985,7 @@ function SuggestionChip({
       onClick={onClick}
       disabled={!isInteractive}
       data-testid="welcome-suggestion-chip"
-      className="block w-full rounded-md border border-border-primary bg-bg-secondary px-3 py-2 text-left text-sm hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-60"
+      className="block w-full rounded-md border border-hairline bg-canvas-soft px-sm py-xs text-left text-body-sm text-text-primary hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-60"
     >
       • {children}
     </button>

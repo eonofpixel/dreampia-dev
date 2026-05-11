@@ -119,11 +119,17 @@ describe('MessageText', () => {
       expect(onSendToCode).toHaveBeenNthCalledWith(2, 'b', 'ts');
     });
 
-    it('inverse=true 면 user-turn 색상 클래스 적용 (DOM 존재 검증)', () => {
-      render(<MessageText text={'```\nx\n```'} inverse={true} />);
-      const block = screen.getByTestId('message-code-block-0');
-      // border-white 클래스 또는 bg-black 시그니처 확인 — class 에 'white' 포함.
-      expect(block.className).toMatch(/white|black/);
+    it('inverse=true 도 일반 chrome (hairline + canvas-soft) 동일 — v2.10.0 deprecated', () => {
+      // v2.10.0 (.omc/DESIGN.md C-2) — inverse prop 은 legacy. user turn 의 새
+      // bg-accent-soft 위에서도 일반 code block chrome 으로 충분한 contrast.
+      // prop 받아도 internal ignore. 같은 chrome 인지 검증.
+      const { container, rerender } = render(<MessageText text={'```\nx\n```'} inverse={false} />);
+      const blockFalse = container.querySelector('[data-testid="message-code-block-0"]');
+      const classesFalse = blockFalse?.className ?? '';
+
+      rerender(<MessageText text={'```\nx\n```'} inverse={true} />);
+      const blockTrue = container.querySelector('[data-testid="message-code-block-0"]');
+      expect(blockTrue?.className ?? '').toBe(classesFalse);
     });
 
     // ────────────────────────────────────────────────────────────

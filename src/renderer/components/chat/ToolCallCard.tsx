@@ -45,14 +45,14 @@ function useStatusConfig(status: ToolStatus): StatusConfig {
     case 'success':
       return {
         label: STATUS_LABELS_KO.success,
-        icon: <CheckCircle2 className="h-3 w-3 text-green-500" aria-hidden="true" />,
-        color: 'text-green-600',
+        icon: <CheckCircle2 className="h-3 w-3 text-semantic-success" aria-hidden="true" />,
+        color: 'text-semantic-success',
       };
     case 'failed':
       return {
         label: STATUS_LABELS_KO.failed,
-        icon: <XCircle className="h-3 w-3 text-red-500" aria-hidden="true" />,
-        color: 'text-red-600',
+        icon: <XCircle className="h-3 w-3 text-semantic-danger" aria-hidden="true" />,
+        color: 'text-semantic-danger',
       };
     case 'cancelled':
       return {
@@ -63,8 +63,8 @@ function useStatusConfig(status: ToolStatus): StatusConfig {
     case 'timeout':
       return {
         label: STATUS_LABELS_KO.timeout,
-        icon: <Clock className="h-3 w-3 text-amber-500" aria-hidden="true" />,
-        color: 'text-amber-600',
+        icon: <Clock className="h-3 w-3 text-semantic-warning" aria-hidden="true" />,
+        color: 'text-semantic-warning',
       };
   }
 }
@@ -90,35 +90,38 @@ export function ToolCallCard({ call, result }: ToolCallCardProps): React.JSX.Ele
 
   const ChevronIcon = expanded ? ChevronDown : ChevronRight;
 
+  // v2.10.0 (.omc/DESIGN.md C-1) — raw red/green/amber + bg-bg-tertiary
+  // chrome → semantic.* tokens + surface-card. radius-md → radius-lg (card
+  // hierarchy 와 align).
   return (
     <div
       data-testid="tool-call-card"
-      className="mt-1.5 rounded-md border border-border-primary bg-bg-tertiary text-xs"
+      className="mt-xxs rounded-lg border border-hairline bg-surface-card text-caption"
     >
       {/* Header row */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left hover:bg-bg-secondary/60 rounded-t-md transition-colors"
+        className="flex w-full items-center gap-xs rounded-t-lg px-xs py-xxs text-left transition-colors duration-fast ease-out hover:bg-surface-strong/60"
         aria-expanded={expanded}
       >
         <ChevronIcon className="h-3 w-3 shrink-0 text-text-tertiary" aria-hidden="true" />
 
         {/* Tool name */}
-        <span className="flex items-center gap-1 font-mono font-medium text-text-primary truncate flex-1">
+        <span className="flex flex-1 items-center gap-xxs truncate font-mono font-medium text-text-primary">
           <Wrench aria-hidden="true" className="h-3 w-3 shrink-0 text-text-tertiary" />
           <span className="truncate">{call.tool_id}</span>
         </span>
 
         {/* Status badge */}
-        <span className={`flex items-center gap-1 shrink-0 ${statusConfig.color}`}>
+        <span className={`flex shrink-0 items-center gap-xxs ${statusConfig.color}`}>
           {statusConfig.icon}
           <span>{statusConfig.label}</span>
         </span>
 
         {/* Duration */}
         {result && (
-          <span className="shrink-0 text-text-tertiary ml-1">
+          <span className="ml-xxs shrink-0 text-text-tertiary">
             ({formatDuration(result.duration_ms)})
           </span>
         )}
@@ -126,18 +129,18 @@ export function ToolCallCard({ call, result }: ToolCallCardProps): React.JSX.Ele
 
       {/* Collapsed summary: input preview always visible */}
       {!expanded && (
-        <div className="border-t border-border-primary/50 px-2 py-1 font-mono text-text-secondary truncate">
+        <div className="truncate border-t border-hairline/60 px-xs py-xxs font-mono text-text-secondary">
           {inputPreview}
         </div>
       )}
 
       {/* Expanded detail: full input + result */}
       {expanded && (
-        <div className="border-t border-border-primary/50 space-y-1.5 p-2">
+        <div className="space-y-xs border-t border-hairline/60 p-xs">
           {/* Full input */}
           <div>
-            <div className="mb-0.5 text-text-tertiary">입력</div>
-            <pre className="whitespace-pre-wrap break-all font-mono text-text-secondary leading-relaxed">
+            <div className="mb-[2px] text-text-tertiary">입력</div>
+            <pre className="whitespace-pre-wrap break-all font-mono leading-relaxed text-text-secondary">
               {inputJson}
             </pre>
           </div>
@@ -145,8 +148,8 @@ export function ToolCallCard({ call, result }: ToolCallCardProps): React.JSX.Ele
           {/* Success output */}
           {status === 'success' && outputPreview !== null && (
             <div>
-              <div className="mb-0.5 text-text-tertiary">출력</div>
-              <pre className="whitespace-pre-wrap break-all font-mono text-text-secondary leading-relaxed">
+              <div className="mb-[2px] text-text-tertiary">출력</div>
+              <pre className="whitespace-pre-wrap break-all font-mono leading-relaxed text-text-secondary">
                 {outputPreview}
               </pre>
             </div>
@@ -154,9 +157,11 @@ export function ToolCallCard({ call, result }: ToolCallCardProps): React.JSX.Ele
 
           {/* Failed error */}
           {status === 'failed' && result?.error && (
-            <div className="rounded bg-red-500/10 px-2 py-1.5 border border-red-500/20">
-              <div className="font-mono font-semibold text-red-600">{result.error.code}</div>
-              <div className="mt-0.5 text-red-600/80">{result.error.message}</div>
+            <div className="rounded-md border border-semantic-danger/30 bg-semantic-danger/10 px-xs py-xxs">
+              <div className="font-mono font-semibold text-semantic-danger">
+                {result.error.code}
+              </div>
+              <div className="mt-[2px] text-semantic-danger/80">{result.error.message}</div>
             </div>
           )}
         </div>
