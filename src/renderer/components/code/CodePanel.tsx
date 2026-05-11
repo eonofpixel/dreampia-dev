@@ -16,13 +16,15 @@
  *   - autosave 없음 (사용자 명시 저장)
  */
 
-import { Diff, FileCode2, Globe, Pencil, RotateCcw, Save } from 'lucide-react';
+import type { EditorView } from '@codemirror/view';
+import { Diff, FileCode2, Globe, ListTree, Pencil, RotateCcw, Save } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { useT } from '../../i18n';
 
 import { CodeEditor } from './CodeEditor';
 import { DiffViewer } from './DiffViewer';
+import { EditorOutline } from './EditorOutline';
 import { FileTree } from './FileTree';
 import { detectLanguageLabel } from './languageDetect';
 import { pushRecentFile, removeRecentFile } from './recentFiles';
@@ -65,6 +67,26 @@ function clearLastOpenedFile(workspaceRoot: string): void {
     localStorage.removeItem(LAST_FILE_STORAGE_PREFIX + workspaceRoot);
   } catch {
     // ignore
+  }
+}
+
+// v2.8.0 (Builder UX) — outline 패널 표시 여부 (전역, per-workspace 아님).
+// 한 번 켜면 모든 워크스페이스에서 기억 — 빌더툴 사용자 선호.
+const OUTLINE_VISIBLE_STORAGE_KEY = 'dreampia.codeMode.outlineVisible';
+
+function loadOutlineVisible(): boolean {
+  try {
+    return localStorage.getItem(OUTLINE_VISIBLE_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function saveOutlineVisible(value: boolean): void {
+  try {
+    localStorage.setItem(OUTLINE_VISIBLE_STORAGE_KEY, value ? 'true' : 'false');
+  } catch {
+    // quota / SSR — UX-non-critical
   }
 }
 
@@ -111,6 +133,10 @@ export function CodePanel({
   // v2.7.0 Phase 3 sub-PR — 외부 변경 감지 (폴링). 디스크 mtime 이 마지막
   // load 시점과 달라지면 true. 사용자에게 reload prompt.
   const [externalChange, setExternalChange] = useState(false);
+  // v2.8.0 (Builder UX) — outline 패널 표시 + 현재 EditorView 인스턴스.
+  // outline 토글은 localStorage 영속, view 는 mount 시 CodeEditor 가 emit.
+  const [outlineVisible, setOutlineVisible] = useState<boolean>(() => loadOutlineVisible());
+  const [editorView, setEditorView] = useState<EditorView | null>(null);
 
   const isDirty = editing && draft !== diskContent;
 
@@ -449,6 +475,27 @@ export function CodePanel({
             </span>
           </button>
         )}
+        {selectedPath !== undefined && (
+          <button
+            type="button"
+            onClick={() => {
+              const next = !outlineVisible;
+              setOutlineVisible(next);
+              saveOutlineVisible(next);
+            }}
+            aria-pressed={outlineVisible}
+            aria-label={t('preview.code.outline.toggle_aria')}
+            className={
+              outlineVisible
+                ? 'flex items-center gap-1 rounded border border-accent bg-accent/10 px-2 py-0.5 text-[11px] text-accent'
+                : 'flex items-center gap-1 rounded border border-border-primary bg-bg-tertiary px-2 py-0.5 text-[11px] hover:bg-border-primary'
+            }
+            data-testid="code-outline-toggle"
+          >
+            <ListTree aria-hidden="true" className="h-3 w-3" />
+            <span>{t('preview.code.outline.toggle')}</span>
+          </button>
+        )}
         {onSwitchMode !== undefined && (
           <button
             type="button"
@@ -558,9 +605,11 @@ export function CodePanel({
               onSave={editing && isDirty && !saving ? handleSave : undefined}
               onToggleEdit={!truncated ? () => setEditing((v) => !v) : undefined}
               baseline={diskContent}
+              onViewReady={setEditorView}
             />
           )}
         </div>
+        {outlineVisible && selectedPath !== undefined && <EditorOutline view={editorView} />}
       </div>
     </aside>
   );

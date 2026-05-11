@@ -77,6 +77,12 @@ export interface CodeEditorProps {
    * 제공.
    */
   baseline?: string;
+  /**
+   * v2.8.0 (Builder UX) — EditorView 인스턴스를 외부 (예: EditorOutline)
+   * 가 잡을 수 있도록 emit. mount 시 view 한 번, unmount 시 null 한 번.
+   * forwardRef 대신 callback 으로 단순화 — 호출자는 useState 로 보관.
+   */
+  onViewReady?: (view: EditorView | null) => void;
 }
 
 function resolveDarkMode(prop: 'light' | 'dark' | undefined): boolean {
@@ -95,6 +101,7 @@ export function CodeEditor({
   onSave,
   onToggleEdit,
   baseline,
+  onViewReady,
 }: CodeEditorProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -108,6 +115,8 @@ export function CodeEditor({
   onSaveRef.current = onSave;
   const onToggleEditRef = useRef<typeof onToggleEdit>(onToggleEdit);
   onToggleEditRef.current = onToggleEdit;
+  const onViewReadyRef = useRef<typeof onViewReady>(onViewReady);
+  onViewReadyRef.current = onViewReady;
 
   const t = useT();
 
@@ -206,7 +215,12 @@ export function CodeEditor({
         effects: changeGutterRef.current.setBaseline.of(baseline),
       });
     }
+    // v2.8.0 (Builder UX) — view 인스턴스 emit. 외부 (EditorOutline) 가
+    // syntaxTree 접근 / scrollIntoView dispatch 에 사용. unmount 시 null 로
+    // 해제하지 않으면 외부가 destroy 된 view 를 들고 있게 됨.
+    onViewReadyRef.current?.(view);
     return (): void => {
+      onViewReadyRef.current?.(null);
       view.destroy();
       viewRef.current = null;
       changeGutterRef.current = null;

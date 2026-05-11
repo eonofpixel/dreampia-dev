@@ -573,6 +573,71 @@ describe('CodePanel (Phase 2)', () => {
     expect(document.title).toBe('Dreampia-Dev');
   });
 
+  // ────────────────────────────────────────────────────────────
+  // v2.8.0 (Builder UX) — Outline panel toggle
+  // ────────────────────────────────────────────────────────────
+
+  it('Builder UX outline: toggle button renders only when a file is selected', async () => {
+    const user = userEvent.setup();
+    __mockStore.workspaceFiles = [
+      { path: 'a.ts', size_bytes: 12, mtime: '2026-05-10T00:00:00.000Z' },
+    ];
+    __mockStore.workspaceFileContents.set('a.ts', {
+      content: 'const x = 1;\n',
+      truncated: false,
+      line_count: 1,
+    });
+    render(<CodePanel workspaceRoot="/proj" />);
+    // 파일 선택 전엔 outline 토글 X.
+    expect(screen.queryByTestId('code-outline-toggle')).not.toBeInTheDocument();
+    await waitFor(() => screen.getByTestId('code-file-row-a.ts'));
+    await user.click(screen.getByTestId('code-file-row-a.ts'));
+    await waitFor(() => screen.getByTestId('code-editor'));
+    // 파일 선택 후 toggle 노출, default off (aria-pressed=false), 패널 숨김.
+    const toggle = screen.getByTestId('code-outline-toggle');
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByTestId('code-outline')).not.toBeInTheDocument();
+  });
+
+  it('Builder UX outline: toggle on shows panel + persists to localStorage', async () => {
+    const user = userEvent.setup();
+    __mockStore.workspaceFiles = [
+      { path: 'a.ts', size_bytes: 12, mtime: '2026-05-10T00:00:00.000Z' },
+    ];
+    __mockStore.workspaceFileContents.set('a.ts', {
+      content: 'const x = 1;\n',
+      truncated: false,
+      line_count: 1,
+    });
+    render(<CodePanel workspaceRoot="/proj" />);
+    await waitFor(() => screen.getByTestId('code-file-row-a.ts'));
+    await user.click(screen.getByTestId('code-file-row-a.ts'));
+    await waitFor(() => screen.getByTestId('code-editor'));
+    await user.click(screen.getByTestId('code-outline-toggle'));
+    expect(screen.getByTestId('code-outline-toggle')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('code-outline')).toBeInTheDocument();
+    expect(localStorage.getItem('dreampia.codeMode.outlineVisible')).toBe('true');
+  });
+
+  it('Builder UX outline: localStorage seeded → toggle starts on, panel mounted', async () => {
+    localStorage.setItem('dreampia.codeMode.outlineVisible', 'true');
+    const user = userEvent.setup();
+    __mockStore.workspaceFiles = [
+      { path: 'a.ts', size_bytes: 12, mtime: '2026-05-10T00:00:00.000Z' },
+    ];
+    __mockStore.workspaceFileContents.set('a.ts', {
+      content: 'const x = 1;\n',
+      truncated: false,
+      line_count: 1,
+    });
+    render(<CodePanel workspaceRoot="/proj" />);
+    await waitFor(() => screen.getByTestId('code-file-row-a.ts'));
+    await user.click(screen.getByTestId('code-file-row-a.ts'));
+    await waitFor(() => screen.getByTestId('code-editor'));
+    expect(screen.getByTestId('code-outline-toggle')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('code-outline')).toBeInTheDocument();
+  });
+
   it('clearing workspaceRoot resets the selected file', async () => {
     const user = userEvent.setup();
     __mockStore.workspaceFiles = [
