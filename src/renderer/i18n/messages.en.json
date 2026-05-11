@@ -74,6 +74,8 @@
   "quick_open.hint.navigate": "navigate",
   "quick_open.hint.open": "open",
   "quick_open.hint.close": "close",
+  "quick_open.section.recents": "Recents",
+  "quick_open.section.all": "All files",
   "sidebar.coming_soon": "Coming soon — feature planned for v1.x",
   "sidebar.coming_soon_badge": "Coming soon",
   "sidebar.section.projects": "Projects",

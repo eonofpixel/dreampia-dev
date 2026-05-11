@@ -74,6 +74,8 @@
   "quick_open.hint.navigate": "이동",
   "quick_open.hint.open": "열기",
   "quick_open.hint.close": "닫기",
+  "quick_open.section.recents": "최근 파일",
+  "quick_open.section.all": "전체 파일",
   "sidebar.coming_soon": "준비 중 — v1.x 에서 추가될 예정인 기능입니다",
   "sidebar.coming_soon_badge": "준비 중",
   "sidebar.section.projects": "프로젝트",

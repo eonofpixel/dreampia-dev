@@ -25,6 +25,7 @@ import { CodeEditor } from './CodeEditor';
 import { DiffViewer } from './DiffViewer';
 import { FileTree } from './FileTree';
 import { detectLanguageLabel } from './languageDetect';
+import { pushRecentFile, removeRecentFile } from './recentFiles';
 
 interface FileContent {
   content: string;
@@ -197,6 +198,9 @@ export function CodePanel({
             setExternalChange(false);
             // v2.7.0 sub-PR — last-opened 영속. 다음 mount 시 restore.
             saveLastOpenedFile(workspaceRoot, relPath);
+            // v2.8.0 (Builder UX) — recents list 갱신. QuickOpenModal 이
+            // query 비어 있을 때 상단 "Recents" 섹션으로 노출.
+            pushRecentFile(workspaceRoot, relPath);
             // v2.7.0 Phase 3 sub-PR — readFile 직후 별도 stat 호출로 정확한
             // 디스크 mtime 캡처. writeFile 의 expected_mtime + 폴링 비교용.
             if (typeof ws.statFile === 'function') {
@@ -221,6 +225,10 @@ export function CodePanel({
             // 파일 사라짐/접근 실패 → stale entry 제거. 다음 mount 시
             // restore 시도가 같은 에러를 반복하지 않도록.
             clearLastOpenedFile(workspaceRoot);
+            // v2.8.0 (Builder UX) — recents 에서도 같은 entry 제거. 사용자가
+            // QuickOpenModal 의 Recents 섹션에서 다시 클릭해도 같은 에러를
+            // 반복하지 않도록.
+            removeRecentFile(workspaceRoot, relPath);
           }
         } catch (err) {
           setError(err instanceof Error ? err.message : String(err));
