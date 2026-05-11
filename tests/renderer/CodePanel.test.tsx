@@ -523,6 +523,56 @@ describe('CodePanel (Phase 2)', () => {
     expect(screen.queryByTestId('code-diff-viewer')).not.toBeInTheDocument();
   });
 
+  // ────────────────────────────────────────────────────────────
+  // v2.8.0 (Builder UX) — document.title sync (file name + dirty marker)
+  // ────────────────────────────────────────────────────────────
+
+  it('Builder UX title: defaults to plain product name when no file selected', () => {
+    document.title = 'Dreampia-Dev';
+    render(<CodePanel workspaceRoot="/proj" />);
+    expect(document.title).toBe('Dreampia-Dev');
+  });
+
+  it('Builder UX title: includes file basename after loading a file', async () => {
+    const user = userEvent.setup();
+    document.title = 'Dreampia-Dev';
+    __mockStore.workspaceFiles = [
+      { path: 'src/deep/index.ts', size_bytes: 12, mtime: '2026-05-10T00:00:00.000Z' },
+    ];
+    __mockStore.workspaceFileContents.set('src/deep/index.ts', {
+      content: 'const x = 1;\n',
+      truncated: false,
+      line_count: 1,
+    });
+    render(<CodePanel workspaceRoot="/proj" />);
+    await waitFor(() => screen.getByTestId('code-file-row-src/deep/index.ts'));
+    await user.click(screen.getByTestId('code-file-row-src/deep/index.ts'));
+    await waitFor(() => screen.getByTestId('code-editor'));
+    expect(document.title).toBe('index.ts — Dreampia-Dev');
+    // dirty marker 는 편집 토글만으로는 안 붙음 (draft===disk 상태 유지).
+    expect(document.title.startsWith('● ')).toBe(false);
+  });
+
+  it('Builder UX title: restores plain product name on unmount', async () => {
+    const user = userEvent.setup();
+    document.title = 'Dreampia-Dev';
+    __mockStore.workspaceFiles = [
+      { path: 'a.ts', size_bytes: 12, mtime: '2026-05-10T00:00:00.000Z' },
+    ];
+    __mockStore.workspaceFileContents.set('a.ts', {
+      content: 'const x = 1;\n',
+      truncated: false,
+      line_count: 1,
+    });
+    const { unmount } = render(<CodePanel workspaceRoot="/proj" />);
+    await waitFor(() => screen.getByTestId('code-file-row-a.ts'));
+    await user.click(screen.getByTestId('code-file-row-a.ts'));
+    await waitFor(() => screen.getByTestId('code-editor'));
+    expect(document.title).toBe('a.ts — Dreampia-Dev');
+    unmount();
+    expect(document.title).toBe('Dreampia-Dev');
+  });
+
   it('clearing workspaceRoot resets the selected file', async () => {
     const user = userEvent.setup();
     __mockStore.workspaceFiles = [

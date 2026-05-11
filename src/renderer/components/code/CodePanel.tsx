@@ -253,6 +253,30 @@ export function CodePanel({
     onRequestedFileConsumed?.();
   }, [requestedFile, loadFile, onRequestedFileConsumed]);
 
+  // v2.8.0 (Builder UX) — document.title 을 현재 파일 + dirty 상태로 동기화.
+  // 형태: `● filename.ext — Dreampia-Dev` (편집 중 + 변경 있음) 또는
+  //       `filename.ext — Dreampia-Dev` (편집 X 또는 변경 없음) 또는
+  //       `Dreampia-Dev` (파일 미선택).
+  // 사용자가 다른 작업창과 빠르게 전환할 때 unsaved 작업 식별이 가능해야.
+  useEffect(() => {
+    if (selectedPath === undefined) {
+      document.title = 'Dreampia-Dev';
+      return;
+    }
+    const segments = selectedPath.split('/');
+    const fname = segments[segments.length - 1] ?? selectedPath;
+    document.title = `${isDirty ? '● ' : ''}${fname} — Dreampia-Dev`;
+  }, [selectedPath, isDirty]);
+
+  // CodePanel 언마운트 (Browser 모드 전환 등) 시 기본 title 복원. 위 effect
+  // 의 cleanup 으로 묶지 않은 이유: 의존성 바뀔 때마다 reset 으로 깜빡이지
+  // 않도록. 본 effect 는 mount 시 1회만 등록되어 언마운트 시점에 fire.
+  useEffect(() => {
+    return (): void => {
+      document.title = 'Dreampia-Dev';
+    };
+  }, []);
+
   const handleSave = useCallback(() => {
     if (
       workspaceRoot === undefined ||
