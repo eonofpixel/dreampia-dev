@@ -10,17 +10,7 @@
  *       docs/ia/onboarding.md (CLI 감지)
  */
 
-import {
-  AlertTriangle,
-  Eye,
-  EyeOff,
-  Folder,
-  GitBranch,
-  Hand,
-  Lock,
-  LockOpen,
-  MessageSquare,
-} from 'lucide-react';
+import { AlertTriangle, Eye, EyeOff, Folder, GitBranch, Hand, Lock, LockOpen } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 
@@ -35,7 +25,6 @@ import { Virtuoso } from 'react-virtuoso';
  */
 export const TURN_VIRTUALIZATION_THRESHOLD = 100;
 import { ChatInput } from './ChatInput';
-import { EmptyState as SharedEmptyState } from '../empty/EmptyState';
 import type { ContentBlock, PermissionLevel, Session, Turn, ToolResultRef } from '@/types';
 import { EFFORT_LABELS_KO } from '@/types';
 import { FileReferenceChip } from './FileReferenceChip';
@@ -283,9 +272,9 @@ export function ChatPanel({
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
-      <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-bg-primary">
+      <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
         {ipcUnavailable && <IpcUnavailableBanner />}
-        <EmptyState />
+        <ChatLandingHero workspaceName={workspaceName} />
       </main>
     );
   }
@@ -1148,17 +1137,60 @@ function TurnDisplay({
   );
 }
 
-// v1.1.7 — 통일된 EmptyState 컴포넌트 사용. 이전엔 ChatPanel 내부에 별도
-// emoji-only EmptyState 가 있어 Sidebar/Settings 등 다른 빈 상태와 paradigm
-// 불일치. 공유 EmptyState 로 통일 (icon + title + description).
-function EmptyState(): React.JSX.Element {
+/**
+ * ChatLandingHero — session=null 진입 시 거대 hero (Codex 의 "무엇을 구축할까요?"
+ * 패턴, .omc/DESIGN.md §EmptyHero).
+ *
+ * v2.10.0 (Codex parity α): 기존 단순 "사이드바에서 채팅을 선택" 안내문은
+ * 사용자가 즉시 시작할 path 가 0 이었음. 대신 거대 hero + workspace-aware
+ * sub + quickstart chip 4종 + 사이드바 안내. ChatInput 직접 mount 는 α-2 에서
+ * (App.tsx 의 createSession + submit 통합 필요).
+ *
+ * Refs: captures/explore_48_annotation_open + state_09_left_sidebar.
+ */
+const QUICKSTART_KEYS: ReadonlyArray<string> = [
+  'chat.empty.quickstart.review_pr',
+  'chat.empty.quickstart.find_bug',
+  'chat.empty.quickstart.explain_arch',
+  'chat.empty.quickstart.write_test',
+];
+
+function ChatLandingHero({ workspaceName }: { workspaceName?: string }): React.JSX.Element {
   const t = useT();
   return (
-    <div className="flex h-full flex-col items-center justify-center">
-      <SharedEmptyState
-        icon={<MessageSquare aria-hidden="true" className="h-8 w-8" />}
-        title={t('chat.empty.message')}
-      />
+    <div
+      className="flex h-full flex-col items-center justify-center px-section py-xxl"
+      data-testid="chat-landing-hero"
+    >
+      <div className="text-center">
+        <h1 className="text-display-lg text-text-primary">{t('chat.empty.hero_title')}</h1>
+        <p className="mt-base text-body-md text-text-secondary">
+          {workspaceName === undefined
+            ? t('chat.empty.hero_subtitle')
+            : t('chat.empty.hero_subtitle_workspace', { name: workspaceName })}
+        </p>
+      </div>
+
+      <div className="mt-xxl w-full max-w-2xl">
+        <p className="mb-xs px-sm text-caption-uppercase uppercase text-text-tertiary">
+          {t('chat.empty.quickstart_label')}
+        </p>
+        <ul className="space-y-xs">
+          {QUICKSTART_KEYS.map((key) => (
+            <li
+              key={key}
+              className="rounded-lg border border-hairline bg-surface-card px-md py-sm text-body-md text-text-secondary"
+              data-testid="chat-landing-quickstart-item"
+            >
+              {t(key)}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <p className="mt-xxl text-body-sm text-text-tertiary" data-testid="chat-landing-sidebar-hint">
+        {t('chat.empty.sidebar_hint')}
+      </p>
     </div>
   );
 }

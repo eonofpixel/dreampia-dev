@@ -182,7 +182,9 @@ describe('tool call cards', () => {
 describe('null session + static', () => {
   it('empty state when null', () => {
     render(<ChatPanel session={null} onSubmit={() => {}} />);
-    expect(screen.getByText(/사이드바에서 채팅을 선택/)).toBeInTheDocument();
+    // v2.10.0 (Codex parity α) — EmptyState → ChatLandingHero (.omc/DESIGN.md).
+    expect(screen.getByTestId('chat-landing-hero')).toBeInTheDocument();
+    expect(screen.getByText(/무엇을 만들어볼까요/)).toBeInTheDocument();
   });
   it('renders session title', () => {
     const s = makeSession([]);
