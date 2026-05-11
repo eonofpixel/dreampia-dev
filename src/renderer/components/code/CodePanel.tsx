@@ -557,6 +557,7 @@ export function CodePanel({
               onChange={(next) => setDraft(next)}
               onSave={editing && isDirty && !saving ? handleSave : undefined}
               onToggleEdit={!truncated ? () => setEditing((v) => !v) : undefined}
+              baseline={diskContent}
             />
           )}
         </div>

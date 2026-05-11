@@ -36,6 +36,7 @@ import { useEffect, useMemo, useRef } from 'react';
 
 import { useT } from '../../i18n';
 
+import { changeGutter } from './changeGutter';
 import { detectLanguageExtension } from './languageDetect';
 
 export interface CodeEditorProps {
@@ -65,6 +66,17 @@ export interface CodeEditorProps {
    * (예: Edge 의 Find Toolbar) 차단.
    */
   onToggleEdit?: () => void;
+  /**
+   * v2.8.0 (Builder UX) — disk content baseline. 라인 단위 변경 gutter 가
+   * `content` 와 비교해 변경 라인을 좌측 마크로 노출. 미지정 시 gutter
+   * 자체가 mount 되지 않음 (read-only / 변경 추적 불필요한 호출자 호환).
+   *
+   * baseline === content 인 경우 (편집 중이지만 변경 없음 또는 read-only
+   * 모드) 마크는 자연스럽게 비어 있음. 정확한 비교는 라인 인덱스 단순
+   * 매칭 — Diff 토글 (CodePanel 의 ` Diff` 버튼) 이 정확한 LCS 기반 비교
+   * 제공.
+   */
+  baseline?: string;
 }
 
 function resolveDarkMode(prop: 'light' | 'dark' | undefined): boolean {
@@ -82,6 +94,7 @@ export function CodeEditor({
   onChange,
   onSave,
   onToggleEdit,
+  baseline,
 }: CodeEditorProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -103,6 +116,12 @@ export function CodeEditor({
   const themeCompartment = useRef(new Compartment());
   const langCompartment = useRef(new Compartment());
 
+  // v2.8.0 (Builder UX) — change gutter ref. mount 시점에 baseline prop 이
+  // defined 면 1회 마운트. 이후 toggle 미지원 — 호출자 (CodePanel) 가 항상
+  // diskContent 를 baseline 으로 전달하므로 마운트 후 undefined 로 가는
+  // 케이스 없음. baseline 변경은 setBaseline effect 로 dispatch.
+  const changeGutterRef = useRef<ReturnType<typeof changeGutter> | null>(null);
+
   const langExt = useMemo(
     () => (relPath !== undefined ? detectLanguageExtension(relPath) : undefined),
     [relPath]
@@ -113,6 +132,12 @@ export function CodeEditor({
   // ── Mount once ─────────────────────────────────────────────────
   useEffect(() => {
     if (hostRef.current === null) return;
+    // v2.8.0 (Builder UX) — baseline prop 이 정의돼 있으면 changeGutter 한 번
+    // 만 마운트. baseline 후속 변경은 별도 effect 의 setBaseline.dispatch 로.
+    const enableChangeGutter = baseline !== undefined;
+    if (enableChangeGutter) {
+      changeGutterRef.current = changeGutter();
+    }
     const baseExtensions = [
       lineNumbers(),
       highlightActiveLineGutter(),
@@ -168,14 +193,23 @@ export function CodeEditor({
       editableCompartment.current.of(buildEditableExtensions(editable)),
       themeCompartment.current.of(isDark ? [oneDark] : []),
       langCompartment.current.of(langExt ?? []),
+      ...(changeGutterRef.current !== null ? [changeGutterRef.current.extension] : []),
     ];
 
     const state = EditorState.create({ doc: content, extensions: baseExtensions });
     const view = new EditorView({ state, parent: hostRef.current });
     viewRef.current = view;
+    // v2.8.0 (Builder UX) — initial baseline dispatch. StateField 의 default
+    // 가 '' 라 mount 직후 dispatch 해야 정확한 비교가 시작됨.
+    if (changeGutterRef.current !== null && baseline !== undefined) {
+      view.dispatch({
+        effects: changeGutterRef.current.setBaseline.of(baseline),
+      });
+    }
     return (): void => {
       view.destroy();
       viewRef.current = null;
+      changeGutterRef.current = null;
     };
     // 마운트 시 한 번만 — content/editable/theme/lang 후속 변경은 별도 effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -216,6 +250,17 @@ export function CodeEditor({
       effects: langCompartment.current.reconfigure(langExt ?? []),
     });
   }, [langExt]);
+
+  // ── baseline 외부 변경 시 setBaseline effect dispatch ──────────────
+  // 호출자가 reload / 저장 후 새 disk content 를 baseline 으로 갱신할 때.
+  // changeGutterRef 가 null (마운트 시 baseline undefined 였음) 이면 no-op.
+  useEffect(() => {
+    const view = viewRef.current;
+    const cg = changeGutterRef.current;
+    if (view === null || cg === null) return;
+    if (baseline === undefined) return;
+    view.dispatch({ effects: cg.setBaseline.of(baseline) });
+  }, [baseline]);
 
   return (
     <div className="flex h-full flex-col" data-testid="code-editor">
