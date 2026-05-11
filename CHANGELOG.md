@@ -2,6 +2,42 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [2.9.0] — 2026-05-11
+
+**Chat → Code 적용 워크플로 완성 — Apply-to-file 의 confirm 모달 + inline diff + hunk 단위 accept/reject + 자동 reload.**
+
+v2.8.0 의 "Code 로 보내기" (클립보드 + 모드 전환) 가 빌더툴 차별점의 시작이었다면, v2.9.0 은 그 흐름을 IPC 까지 잇는다. AI 가 chat 에서 제안한 코드를 한 클릭으로 현재 열린 파일에 안전하게 적용 — line 단위 partial accept 까지 가능.
+
+### Added
+- **"파일에 적용" 버튼** (chat 코드 블록) — Code 모드에 파일이 열려 있을 때만 노출. 클릭 시 ApplyToFileModal 마운트 (commit 6d80fd8).
+- **ApplyToFileModal** — path + lines delta + read-only confirm 모달. Esc / overlay click / Cancel 3가지 안전 종료. saving 중 두 버튼 disable.
+- **Inline diff preview** — modal 안에 `@codemirror/merge` 의 unifiedMergeView. disk = original, newCode = modified (commit e86bc93).
+- **Hunk 단위 accept/reject** — `mergeControls=true` 로 각 hunk 옆 인라인 버튼. 사용자가 일부만 골라 적용 가능. 최종 merged 코드가 workspace.writeFile 의 content.
+- **Apply 후 자동 reload** — writeFile 성공 시 CodePanel 의 disk baseline (`diskContent` + `diskMtime`) 을 in-process 즉시 동기화. fs watcher 없이도 change gutter / diff toggle / dirty 비교가 정확한 baseline 기반 (commit e86bc93).
+- **i18n 16 신규 키** — chat.code_block.apply_to_file 2 + code.apply.modal.* 8 + toast.code.* 3 + What's new 3. ko/en 양쪽.
+
+### Changed
+- `package.json:version`: 2.8.0 → 2.9.0.
+- **DiffViewer API 확장** — `mergeControls?: boolean` + `onChange?: (current) => void` props. CodePanel 의 read-only Diff 토글은 기본값 (false) 으로 호환 유지.
+- **CodePanel 새 props** — `onCurrentFileChange` (현재 파일 메타데이터 emit) + `appliedDiskUpdate` / `onAppliedDiskUpdateConsumed` (auto-reload dispatch).
+- **ChatPanel `onApplyToFile`** 4계층 plumb (Props → MessagesArea → TurnDisplay → MessageText). 모두 optional.
+- **App.tsx 3개 신규 state** — `currentCodeFile` / `applyTarget` / `appliedDiskUpdate`. Modal mount 와 writeFile 핸들러 wire.
+
+### Tests
+- ApplyToFileModal.test.tsx (8 tests): null/렌더+lines/cancel/accept-with-final/Esc/saving/preview=DiffViewer/overlay-click.
+- CodePanel.test.tsx (+5 tests): onCurrentFileChange emit (간접) + appliedDiskUpdate auto-reload + path 불일치 시 침범 X.
+- MessageText.test.tsx (+3 tests): Apply 버튼 미노출/콜백+lang/DOM 순서 (Apply 좌측, Send 우측).
+- **156 files / 1,632 tests pass** (v2.8.0 baseline 155/1,619 → +1 file / +13 tests across 3 commits).
+
+### Decided
+- inline diff 는 modal 안에 embedded — 별도 popup / split 없음.
+- Apply 후 disk baseline 동기화는 fs watcher 가 아니라 in-process state dispatch. atomic write 가 끝난 직후 즉시 정확 — fs watcher 의 지연 없이.
+- finalCode 전달 흐름: DiffViewer.onChange → ApplyToFileModal.mergedCode → onAccept(final) → App.tsx writeFile content. 사용자가 hunk 토글 안 하면 finalCode === target.newCode 으로 무변화.
+
+### Deferred
+- AI 응답의 fenced 가 partial / 외부 patch 형식 (unified diff `@@ -`) 인 경우 직접 적용 — 현재는 사용자가 plain 코드 블록을 통째 적용. patch 파서는 다음 사이클.
+- 다중 파일 동시 적용 — 현재는 단일 파일.
+
 ## [2.8.0] — 2026-05-11
 
 **Builder UX polish — 파일 탐색 + 에디터 정보 + chat ↔ Code 연계 8 항목 sweep.**
