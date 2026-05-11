@@ -1636,7 +1636,9 @@ export function App(): React.JSX.Element {
         }
         saving={applySaving}
         onCancel={() => setApplyTarget(null)}
-        onAccept={() => {
+        onAccept={(finalCode) => {
+          // v2.9.0 (C 4차) — finalCode 는 사용자가 modal 안에서 hunk reject
+          // 한 결과. 사용자가 토글 안 했으면 applyTarget.code 와 동일.
           if (
             applyTarget === null ||
             currentCodeFile === null ||
@@ -1658,7 +1660,7 @@ export function App(): React.JSX.Element {
               const result = await ws.writeFile({
                 workspace_root: mentionWorkspaceRoot,
                 rel_path: currentCodeFile.path,
-                content: applyTarget.code,
+                content: finalCode,
                 ...(currentCodeFile.mtime !== undefined && {
                   expected_mtime: currentCodeFile.mtime,
                 }),
@@ -1678,9 +1680,10 @@ export function App(): React.JSX.Element {
               // 동기화. fs watcher 없이 in-process write → CodePanel 이
               // selectedPath 일치 확인 후 setDiskContent + setDiskMtime +
               // externalChange reset. consume callback 으로 한 번만 적용.
+              // v2.9.0 (C 4차) — finalCode (hunk reject 반영) 를 baseline 로.
               setAppliedDiskUpdate({
                 path: currentCodeFile.path,
-                content: applyTarget.code,
+                content: finalCode,
                 mtime: wr.mtime,
               });
               toasts.info(t('toast.code.applied', { path: currentCodeFile.path }));

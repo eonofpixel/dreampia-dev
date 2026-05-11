@@ -17,7 +17,7 @@
  */
 
 import { Check, X } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useT } from '../../i18n';
 
@@ -32,7 +32,11 @@ export interface ApplyToFileModalProps {
     newCode: string;
     language?: string;
   } | null;
-  onAccept: () => void;
+  /**
+   * v2.9.0 (C 4차) — final 인자는 사용자가 hunk reject 한 결과 반영된 최종
+   * merged 코드. 사용자가 토글 안 했으면 target.newCode 와 동일.
+   */
+  onAccept: (final: string) => void;
   onCancel: () => void;
   /** Accept 진행 중 (writeFile in-flight) — 버튼 disable + 라벨 갱신. */
   saving?: boolean;
@@ -54,6 +58,16 @@ export function ApplyToFileModal({
 }: ApplyToFileModalProps): React.JSX.Element | null {
   const t = useT();
 
+  // v2.9.0 (C 4차) — 사용자가 hunk reject 한 결과 추적. 초기값 = target.newCode.
+  // DiffViewer 의 onChange 가 view 의 doc 갱신마다 호출 → 항상 최신 merged
+  // code 를 보유. Accept 시 이 값을 그대로 workspace.writeFile.
+  const [mergedCode, setMergedCode] = useState<string>(target?.newCode ?? '');
+
+  // target 변경 (사용자가 다른 코드 블록을 또 적용하려고 함) 시 reset.
+  useEffect(() => {
+    if (target !== null) setMergedCode(target.newCode);
+  }, [target]);
+
   // Esc → cancel. target 변경 / 언마운트 시 cleanup.
   useEffect(() => {
     if (target === null) return;
@@ -72,7 +86,7 @@ export function ApplyToFileModal({
   if (target === null) return null;
 
   const before = countLines(target.diskContent);
-  const after = countLines(target.newCode);
+  const after = countLines(mergedCode);
 
   return (
     <div
@@ -118,14 +132,16 @@ export function ApplyToFileModal({
             aria-label={t('code.apply.modal.preview_aria')}
             data-testid="apply-to-file-preview"
           >
-            {/* v2.8.x (C 3차) — read-only inline unified diff (CodeMirror
-                merge). disk = original, newCode = modified. mergeControls 는
-                DiffViewer 안에서 false (라인 단위 partial accept/reject 는
-                별도 PR). language 는 syntax highlight 용도라 임의 prefix
-                'preview.<lang>' 으로 detect. */}
+            {/* v2.9.0 (C 4차) — inline unified diff with hunk-level controls.
+                disk = original, mergedCode = modified (사용자 reject 반영).
+                mergeControls=true → 각 hunk 옆 accept/reject 버튼. onChange
+                마다 setMergedCode 로 최신 merged 추적. language 는 syntax
+                highlight 용도라 임의 prefix 'preview.<lang>' 으로 detect. */}
             <DiffViewer
               original={target.diskContent}
-              modified={target.newCode}
+              modified={mergedCode}
+              mergeControls={true}
+              onChange={setMergedCode}
               {...(target.language !== undefined && { relPath: 'preview.' + target.language })}
             />
           </div>
@@ -143,7 +159,7 @@ export function ApplyToFileModal({
           </button>
           <button
             type="button"
-            onClick={onAccept}
+            onClick={() => onAccept(mergedCode)}
             disabled={saving}
             className="flex items-center gap-1 rounded border border-emerald-600/50 bg-emerald-900/20 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
             data-testid="apply-to-file-accept"

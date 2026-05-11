@@ -38,6 +38,18 @@ export interface DiffViewerProps {
   relPath?: string;
   /** 다크/라이트 강제. 미지정 시 document data-theme 추정. */
   theme?: 'light' | 'dark';
+  /**
+   * v2.9.0 (Builder UX, C 4차) — true 면 unifiedMergeView 의 인라인
+   * accept/reject 버튼 활성화. 사용자가 hunk 별 토글 가능. ApplyToFileModal
+   * 에서 사용 — 기본 false (CodePanel 의 read-only Diff 토글은 그대로).
+   */
+  mergeControls?: boolean;
+  /**
+   * v2.9.0 (Builder UX, C 4차) — view 의 doc 이 사용자 상호작용으로 바뀔 때
+   * 마다 호출. mergeControls=true 와 짝. ApplyToFileModal 이 최종 merged
+   * 결과를 추적해 Accept 시 그 값을 workspace.writeFile.
+   */
+  onChange?: (current: string) => void;
 }
 
 function resolveDarkMode(prop: 'light' | 'dark' | undefined): boolean {
@@ -51,11 +63,17 @@ export function DiffViewer({
   modified,
   relPath,
   theme,
+  mergeControls = false,
+  onChange,
 }: DiffViewerProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const themeCompartment = useRef(new Compartment());
   const langCompartment = useRef(new Compartment());
+  // v2.9.0 (C 4차) — onChange ref. callback identity 변화로 view 재생성을
+  // 트리거하지 않도록.
+  const onChangeRef = useRef<typeof onChange>(onChange);
+  onChangeRef.current = onChange;
 
   const langExt = useMemo(
     () => (relPath !== undefined ? detectLanguageExtension(relPath) : undefined),
@@ -77,13 +95,22 @@ export function DiffViewer({
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap, ...foldKeymap, ...searchKeymap]),
       EditorView.editable.of(false),
-      EditorState.readOnly.of(true),
+      // v2.9.0 (C 4차) — mergeControls=true 면 doc 수정 dispatch 를 허용해야
+      // hunk accept/reject 버튼이 동작. editable=false 라 키보드 입력은 여전
+      // 차단 (사용자 직접 타이핑 X, merge 버튼만 영향).
+      EditorState.readOnly.of(!mergeControls),
       EditorView.theme({
         '&': { height: '100%', fontSize: '12px' },
         '.cm-scroller': { fontFamily: 'var(--font-mono, ui-monospace, monospace)' },
       }),
-      // mergeControls=false — accept/reject 인라인 버튼 미노출 (read-only diff).
-      unifiedMergeView({ original, mergeControls: false }),
+      // mergeControls=false 면 인라인 accept/reject 버튼 미노출 (read-only diff).
+      // true 면 사용자가 hunk 별 토글 가능 — ApplyToFileModal 의 partial apply.
+      unifiedMergeView({ original, mergeControls }),
+      EditorView.updateListener.of((update) => {
+        if (update.docChanged && onChangeRef.current !== undefined) {
+          onChangeRef.current(update.state.doc.toString());
+        }
+      }),
       themeCompartment.current.of(isDark ? [oneDark] : []),
       langCompartment.current.of(langExt ?? []),
     ];
@@ -130,7 +157,7 @@ export function DiffViewer({
     const state = EditorState.create({ doc: modified, extensions: baseExtensions });
     const newView = new EditorView({ state, parent: host });
     viewRef.current = newView;
-  }, [original, modified, isDark, langExt]);
+  }, [original, modified, isDark, langExt, mergeControls]);
 
   return (
     <div className="flex h-full flex-col" data-testid="code-diff-viewer">

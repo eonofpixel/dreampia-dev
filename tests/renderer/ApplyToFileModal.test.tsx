@@ -69,18 +69,21 @@ describe('ApplyToFileModal', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it('Accept 버튼이 onAccept 호출', async () => {
+  it('Accept 버튼이 onAccept 를 최신 mergedCode 인자로 호출', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const onAccept = vi.fn();
     render(
       <ApplyToFileModal
-        target={{ path: 'a.ts', diskContent: '', newCode: 'x' }}
+        target={{ path: 'a.ts', diskContent: 'old\n', newCode: 'new\n' }}
         onAccept={onAccept}
         onCancel={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('apply-to-file-accept'));
     expect(onAccept).toHaveBeenCalledTimes(1);
+    // v2.9.0 (C 4차) — onAccept 시그니처: (final) => void. 사용자가 hunk
+    // reject 안 하면 final === target.newCode.
+    expect(onAccept).toHaveBeenCalledWith('new\n');
   });
 
   it('Esc 키가 onCancel 호출', () => {
