@@ -21,6 +21,8 @@
   "preview.annotation.overlay_aria": "주석 영역 선택",
   "preview.annotation.toolbar_aria": "주석 도구",
   "preview.annotation.toolbar_label": "Annotation 모드 — 드래그로 영역 선택",
+  "preview.inspector.label": "Inspector",
+  "preview.inspector.tab_required": "URL 을 열어 캡처 도구 활성화",
   "preview.screenshot_capture_aria": "현재 페이지 스크린샷 캡처",
   "preview.dom_dump_capture_aria": "현재 페이지 DOM 구조 캡처",
 

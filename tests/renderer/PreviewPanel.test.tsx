@@ -71,7 +71,8 @@ describe('PreviewPanel', () => {
     // No active tab → camera + dom buttons disabled, hint shown.
     expect(screen.getByTestId('preview-screenshot-capture')).toBeDisabled();
     expect(screen.getByTestId('preview-dom-dump')).toBeDisabled();
-    expect(screen.getByText(/Open a URL to enable capture tools/i)).toBeInTheDocument();
+    // v2.10.0 (.omc/DESIGN.md) — hardcoded 영문 → i18n. default locale 'ko' 매치.
+    expect(screen.getByText(/URL 을 열어 캡처 도구 활성화/)).toBeInTheDocument();
   });
 
   it('v2.4.0: inspector toolbar hidden when no handlers provided', async () => {

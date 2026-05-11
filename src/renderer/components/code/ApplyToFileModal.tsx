@@ -13,13 +13,20 @@
  *   - cancel = 새 코드 폐기. accept = workspace.writeFile (atomic + expected_mtime)
  *   - Esc / overlay click 으로 cancel — 사용자가 실수로 적용하는 path 차단
  *
+ * v2.10.0 (DESIGN.md v1.0) — Chrome 을 `ModalShell` + `Button` primitive 로
+ * 마이그레이션. data-testid + 동작 (Esc / overlay click + saving disable)
+ * 모두 보존.
+ *
  * Refs: BUILDER_UX_ANALYSIS.md #C — Apply-to-file follow-up.
+ *       .omc/DESIGN.md §Components.ModalShell.
  */
 
 import { Check, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { useT } from '../../i18n';
+import { Button } from '../ui/Button';
+import { ModalShell } from '../ui/ModalShell';
 
 import { DiffViewer } from './DiffViewer';
 
@@ -68,108 +75,82 @@ export function ApplyToFileModal({
     if (target !== null) setMergedCode(target.newCode);
   }, [target]);
 
-  // Esc → cancel. target 변경 / 언마운트 시 cleanup.
-  useEffect(() => {
-    if (target === null) return;
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && !saving) {
-        e.preventDefault();
-        onCancel();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return (): void => {
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [target, saving, onCancel]);
-
   if (target === null) return null;
 
   const before = countLines(target.diskContent);
   const after = countLines(mergedCode);
 
   return (
-    // Overlay click → cancel. Keyboard equivalent (Escape) is wired via the
-    // window keydown listener in the useEffect above, so a dialog-role overlay
-    // intentionally has only an onClick handler on itself.
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events
-    <div
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 pt-[8vh]"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="apply-to-file-title"
+    <ModalShell
+      open={true}
+      size="lg"
+      title={t('code.apply.modal.title')}
+      titleId="apply-to-file-title"
+      onClose={onCancel}
+      disableEscape={saving}
+      disableOverlayClose={saving}
+      hideCloseButton={true}
       data-testid="apply-to-file-modal"
-      onClick={(e) => {
-        // overlay click (이벤트 target 이 본 div 자체) → cancel.
-        if (e.target === e.currentTarget && !saving) onCancel();
-      }}
-    >
-      <div className="flex w-[720px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-2xl">
-        <header className="flex items-center gap-2 border-b border-border-primary px-4 py-2">
-          <h2 id="apply-to-file-title" className="flex-1 text-sm font-semibold text-text-primary">
-            {t('code.apply.modal.title')}
-          </h2>
-        </header>
-        <div className="space-y-3 px-4 py-3 text-xs">
-          <p className="text-text-secondary">{t('code.apply.modal.body')}</p>
-          <div className="flex items-center gap-2">
-            <span className="text-text-tertiary">{t('code.apply.modal.target')}:</span>
-            <span
-              className="truncate font-mono text-text-primary"
-              data-testid="apply-to-file-path"
-              title={target.path}
-            >
-              {target.path}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-text-tertiary">{t('code.apply.modal.diff_label')}:</span>
-            <span data-testid="apply-to-file-lines-delta">
-              {t('code.apply.modal.lines_delta', { before: String(before), after: String(after) })}
-            </span>
-          </div>
-          <div
-            className="h-[40vh] overflow-hidden rounded border border-border-primary"
-            aria-label={t('code.apply.modal.preview_aria')}
-            data-testid="apply-to-file-preview"
-          >
-            {/* v2.9.0 (C 4차) — inline unified diff with hunk-level controls.
-                disk = original, mergedCode = modified (사용자 reject 반영).
-                mergeControls=true → 각 hunk 옆 accept/reject 버튼. onChange
-                마다 setMergedCode 로 최신 merged 추적. language 는 syntax
-                highlight 용도라 임의 prefix 'preview.<lang>' 으로 detect. */}
-            <DiffViewer
-              original={target.diskContent}
-              modified={mergedCode}
-              mergeControls={true}
-              onChange={setMergedCode}
-              {...(target.language !== undefined && { relPath: 'preview.' + target.language })}
-            />
-          </div>
-        </div>
-        <footer className="flex items-center justify-end gap-2 border-t border-border-primary px-4 py-2">
-          <button
-            type="button"
+      footer={
+        <>
+          <Button
+            variant="secondary"
             onClick={onCancel}
             disabled={saving}
-            className="flex items-center gap-1 rounded border border-border-primary bg-bg-tertiary px-3 py-1 text-xs hover:bg-border-primary disabled:opacity-50"
+            leadingIcon={<X aria-hidden="true" className="h-3 w-3" />}
             data-testid="apply-to-file-cancel"
           >
-            <X aria-hidden="true" className="h-3 w-3" />
-            <span>{t('code.apply.modal.cancel')}</span>
-          </button>
-          <button
-            type="button"
+            {t('code.apply.modal.cancel')}
+          </Button>
+          <Button
+            variant="primary"
             onClick={() => onAccept(mergedCode)}
             disabled={saving}
-            className="flex items-center gap-1 rounded border border-emerald-600/50 bg-emerald-900/20 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            leadingIcon={<Check aria-hidden="true" className="h-3 w-3" />}
             data-testid="apply-to-file-accept"
           >
-            <Check aria-hidden="true" className="h-3 w-3" />
-            <span>{t('code.apply.modal.accept')}</span>
-          </button>
-        </footer>
+            {t('code.apply.modal.accept')}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-sm text-body-sm">
+        <p className="text-text-secondary">{t('code.apply.modal.body')}</p>
+        <div className="flex items-center gap-xs">
+          <span className="text-text-tertiary">{t('code.apply.modal.target')}:</span>
+          <span
+            className="truncate font-mono text-text-primary"
+            data-testid="apply-to-file-path"
+            title={target.path}
+          >
+            {target.path}
+          </span>
+        </div>
+        <div className="flex items-center gap-xs">
+          <span className="text-text-tertiary">{t('code.apply.modal.diff_label')}:</span>
+          <span data-testid="apply-to-file-lines-delta">
+            {t('code.apply.modal.lines_delta', { before: String(before), after: String(after) })}
+          </span>
+        </div>
+        <div
+          className="h-[40vh] overflow-hidden rounded-md border border-hairline"
+          aria-label={t('code.apply.modal.preview_aria')}
+          data-testid="apply-to-file-preview"
+        >
+          {/* v2.9.0 (C 4차) — inline unified diff with hunk-level controls.
+              disk = original, mergedCode = modified (사용자 reject 반영).
+              mergeControls=true → 각 hunk 옆 accept/reject 버튼. onChange
+              마다 setMergedCode 로 최신 merged 추적. language 는 syntax
+              highlight 용도라 임의 prefix 'preview.<lang>' 으로 detect. */}
+          <DiffViewer
+            original={target.diskContent}
+            modified={mergedCode}
+            mergeControls={true}
+            onChange={setMergedCode}
+            {...(target.language !== undefined && { relPath: 'preview.' + target.language })}
+          />
+        </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

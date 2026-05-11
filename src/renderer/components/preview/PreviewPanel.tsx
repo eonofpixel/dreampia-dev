@@ -310,19 +310,24 @@ function BrowserPreview({
        */}
       {(onAnnotation !== undefined || onScreenshot !== undefined || onDomDump !== undefined) && (
         <div
-          className="flex items-center gap-1 border-b border-border-primary bg-bg-secondary px-2 py-1"
+          className="flex items-center gap-xs border-b border-hairline bg-canvas-soft px-sm py-xxs"
           role="toolbar"
           aria-label={t('preview.aside_aria')}
           data-testid="preview-inspector-toolbar"
         >
+          {/* v2.10.0 (.omc/DESIGN.md) — Inspector 식별자 label. 사용자가 toolbar
+              가 무엇인지 즉시 인지하도록. */}
+          <span className="select-none text-caption-uppercase uppercase text-text-tertiary">
+            {t('preview.inspector.label')}
+          </span>
           {onAnnotation !== undefined && (
             <button
               type="button"
               onClick={handleAnnotationToggle}
               className={
                 annotationActive
-                  ? 'rounded border border-blue-500/60 bg-blue-900/30 px-2 py-1 text-[11px] text-blue-300'
-                  : 'rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-[11px] text-text-secondary hover:bg-border-primary'
+                  ? 'rounded-md border border-accent/40 bg-accent-soft px-xs py-xxs text-caption text-accent'
+                  : 'rounded-md border border-hairline bg-surface-card px-xs py-xxs text-caption text-text-secondary hover:bg-surface-strong'
               }
               aria-label={t('preview.annotation.start_aria')}
               aria-pressed={annotationActive}
@@ -339,7 +344,7 @@ function BrowserPreview({
                 void handleCapture();
               }}
               disabled={capturing || activeTab === null}
-              className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-[11px] text-text-secondary hover:bg-border-primary disabled:opacity-40 disabled:cursor-not-allowed"
+              className="rounded-md border border-hairline bg-surface-card px-xs py-xxs text-caption text-text-secondary hover:bg-surface-strong disabled:opacity-40 disabled:cursor-not-allowed"
               aria-label={t('preview.screenshot_capture_aria')}
               data-testid="preview-screenshot-capture"
               title={t('preview.screenshot_capture_aria')}
@@ -354,7 +359,7 @@ function BrowserPreview({
                 void handleDumpDom();
               }}
               disabled={activeTab === null}
-              className="rounded border border-border-primary bg-bg-tertiary px-2 py-1 text-[11px] text-text-secondary hover:bg-border-primary disabled:opacity-40 disabled:cursor-not-allowed"
+              className="rounded-md border border-hairline bg-surface-card px-xs py-xxs text-caption text-text-secondary hover:bg-surface-strong disabled:opacity-40 disabled:cursor-not-allowed"
               aria-label={t('preview.dom_dump_capture_aria')}
               data-testid="preview-dom-dump"
               title={t('preview.dom_dump_capture_aria')}
@@ -363,8 +368,8 @@ function BrowserPreview({
             </button>
           )}
           {activeTab === null && (
-            <span className="ml-1 text-[10px] text-text-tertiary">
-              Open a URL to enable capture tools
+            <span className="ml-xxs text-caption text-text-tertiary">
+              {t('preview.inspector.tab_required')}
             </span>
           )}
         </div>

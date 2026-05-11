@@ -513,10 +513,10 @@ function InputArea({
   return (
     <div>
       {isStreaming && (
-        <div className="flex items-center justify-end border-t border-border-primary bg-bg-secondary px-3 py-1">
+        <div className="flex items-center justify-end border-t border-hairline bg-canvas-soft px-sm py-xxs">
           <button
             onClick={onCancel}
-            className="rounded bg-bg-tertiary px-3 py-1 text-xs text-text-secondary hover:bg-border-primary"
+            className="rounded-md bg-surface-strong px-sm py-xxs text-button text-text-secondary hover:bg-hairline-strong"
             aria-label={t('chat.streaming.stop_aria')}
             data-testid="stop-button"
           >
@@ -597,9 +597,10 @@ function ChatHeader({
     // v1.0.7 — Codex 검토 반영: flex-shrink-0 + whitespace-nowrap + min-w-0 로
     // narrow 한 header 에서 모든 자식이 단일 row 유지. 이전 v1.0.6 는 drift
     // badge 추가로 모든 요소 wrap 됐었음.
-    <div className="flex h-12 items-center justify-between gap-3 border-b border-border-primary px-4">
-      <h1 className="min-w-0 truncate text-sm font-semibold">{session.title}</h1>
-      <div className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs text-text-tertiary">
+    // v2.10.0 (.omc/DESIGN.md) — h-12 → h-10 (modern productivity 표준).
+    <div className="flex h-10 items-center justify-between gap-xs border-b border-hairline px-base">
+      <h1 className="min-w-0 truncate text-title-sm text-text-primary">{session.title}</h1>
+      <div className="flex shrink-0 items-center gap-xs whitespace-nowrap text-body-sm text-text-tertiary">
         {driftDetected && (
           // v1.1.21 (Workspace UX): drift menu — 짧은 ⚠ icon 을 click 시
           // popover (group focus-within) 로 detail + 액션 노출. v1.0.7 의
@@ -607,7 +608,7 @@ function ChatHeader({
           <div className="relative shrink-0 group">
             <button
               type="button"
-              className="rounded bg-yellow-900/30 px-1 py-0.5 leading-none text-yellow-400 hover:bg-yellow-900/50"
+              className="rounded-sm bg-semantic-warning/15 px-xxs py-[2px] leading-none text-semantic-warning hover:bg-semantic-warning/25"
               title={t('chat.header.drift_tooltip', { name: sessionWorkspaceName })}
               aria-label={t('chat.header.drift_aria', { name: sessionWorkspaceName })}
               data-testid="workspace-drift-badge"
@@ -615,14 +616,14 @@ function ChatHeader({
               <AlertTriangle aria-hidden="true" className="h-3.5 w-3.5" />
             </button>
             <div
-              className="invisible absolute right-0 top-full z-20 mt-1 w-72 rounded-md border border-yellow-600/50 bg-bg-primary p-3 text-xs shadow-lg group-focus-within:visible group-hover:visible"
+              className="invisible absolute right-0 top-full z-20 mt-xxs w-72 rounded-md border border-semantic-warning/40 bg-surface-card p-sm text-body-sm shadow-card group-focus-within:visible group-hover:visible"
               role="menu"
               data-testid="workspace-drift-menu"
             >
-              <p className="mb-2 font-semibold text-yellow-300">
+              <p className="mb-xs text-title-sm text-semantic-warning">
                 {t('chat.header.drift_menu_title')}
               </p>
-              <p className="mb-2 text-text-secondary leading-snug">
+              <p className="mb-xs text-text-secondary leading-snug">
                 {t('chat.header.drift_menu_body', {
                   session: sessionWorkspaceName ?? '',
                   current: workspaceName ?? '',
@@ -632,7 +633,7 @@ function ChatHeader({
                 <button
                   type="button"
                   onClick={onToggleWorkspaceLock}
-                  className="flex w-full items-center gap-1.5 rounded border border-border-primary bg-bg-secondary px-2 py-1 text-left hover:bg-bg-tertiary"
+                  className="flex w-full items-center gap-xxs rounded-md border border-hairline bg-canvas-soft px-xs py-xxs text-left hover:bg-surface-strong"
                   data-testid="workspace-drift-menu-lock"
                 >
                   <Lock aria-hidden="true" className="h-3.5 w-3.5" />
@@ -1041,8 +1042,10 @@ function TurnDisplay({
       <div
         className={
           isUser
-            ? 'max-w-[80%] rounded-2xl bg-accent px-4 py-2 text-white'
-            : 'max-w-[80%] rounded-2xl bg-bg-secondary px-4 py-2'
+            ? // v2.10.0 (.omc/DESIGN.md) — orange accent 가 raw bg 면 매우 강렬.
+              // accent-soft tint + accent text + 미세 border 로 부드럽게 (Linear 류).
+              'max-w-[80%] rounded-lg border border-accent/30 bg-accent-soft px-md py-xs text-text-primary'
+            : 'max-w-[80%] rounded-lg border border-hairline bg-surface-card px-md py-xs text-text-primary'
         }
       >
         {turn.content.map((block, i) => {

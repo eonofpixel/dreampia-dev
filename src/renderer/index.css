@@ -3,61 +3,118 @@
 @tailwind utilities;
 
 /* ============================================
-   Design Tokens (Tier 2 - Semantic)
-   See: docs/design/tokens/colors.md
+   Design Tokens — see .omc/DESIGN.md (v1.0)
+   Based on Cursor warm-cream + orange tone,
+   adapted for dreampia (Korean + light/dark dual).
    ============================================ */
 
 :root {
-  /* Light theme */
-  --color-bg-primary: hsl(0 0% 100%);
-  --color-bg-secondary: hsl(220 14% 96%);
-  --color-bg-tertiary: hsl(220 13% 91%);
-  --color-bg-elevated: hsl(0 0% 100%);
+  /* ── canvas + surface ─────────────────────── */
+  --color-canvas: #f7f7f4;
+  --color-canvas-soft: #fafaf7;
+  --color-surface-card: #ffffff;
+  --color-surface-strong: #efeee8;
 
-  --color-text-primary: hsl(220 9% 9%);
-  /* v1.1.7 (a11y) — sidebar nav (text-secondary on bg-secondary) 가 axe 측정
-     contrast 4.39 (target 4.5). 46% L → 43% L 로 조정 → contrast ~4.8:1. */
-  --color-text-secondary: hsl(220 9% 43%);
-  /* v1.1.7 (a11y) — bg-tertiary 위에서 4.5:1 보장. 이전 65% L 은 light bg-tertiary
-     와 contrast ~2.1:1 (axe color-contrast serious). 42% L → contrast ~4.7:1. */
-  --color-text-tertiary: hsl(220 9% 42%);
+  /* ── hairlines ────────────────────────────── */
+  --color-hairline: #e6e5e0;
+  --color-hairline-soft: #efeee8;
+  --color-hairline-strong: #cfcdc4;
 
-  --color-accent: hsl(195 80% 48%);
-  --color-accent-hover: hsl(195 75% 40%);
+  /* ── text (a11y: tertiary >=4.5:1 on #fff) ── */
+  --color-text-primary: #26251e;
+  --color-text-secondary: #5a5852;
+  --color-text-tertiary: #6a6860;
 
-  --color-border-primary: hsl(220 13% 91%);
-  --color-border-focus: hsl(195 80% 48%);
+  /* ── accent — Cursor Orange ───────────────── */
+  --color-accent: #f54e00;
+  --color-accent-hover: #d04200;
+  --color-accent-soft: #fef0e8;
 
-  /* Typography (한국어 우선) */
+  --color-border-focus: #f54e00;
+
+  /* ── semantic ─────────────────────────────── */
+  --color-success: #1f8a65;
+  --color-warning: #d4a017;
+  --color-danger: #cf2d56;
+
+  /* ── back-compat aliases (Stage 5 에서 제거) ── */
+  --color-bg-primary: var(--color-canvas);
+  --color-bg-secondary: var(--color-canvas-soft);
+  --color-bg-tertiary: var(--color-surface-strong);
+  --color-bg-elevated: var(--color-surface-card);
+  --color-border-primary: var(--color-hairline);
+
+  /* ── shadow / elevation ───────────────────── */
+  --elev-flat: none;
+  --elev-soft: 0 1px 3px rgba(20, 20, 19, 0.08);
+  --elev-card: 0 2px 8px rgba(20, 20, 19, 0.06), 0 0 0 1px var(--color-hairline);
+  --elev-strong: 0 8px 24px rgba(20, 20, 19, 0.16);
+
+  /* ── motion ───────────────────────────────── */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* ── radius ───────────────────────────────── */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 9999px;
+
+  /* ── typography ───────────────────────────── */
   --font-sans:
-    'Pretendard Variable', 'Pretendard', 'Apple SD Gothic Neo', -apple-system, BlinkMacSystemFont,
-    'Segoe UI', Roboto, sans-serif;
+    'Pretendard Variable', 'Pretendard', 'Inter', 'Apple SD Gothic Neo', -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
   --font-mono:
-    'D2Coding Ligature', 'D2Coding', 'JetBrains Mono', 'Fira Code', Menlo, Monaco, Consolas,
+    'JetBrains Mono', 'D2Coding Ligature', 'D2Coding', 'Fira Code', Menlo, Monaco, Consolas,
     monospace;
 }
 
 [data-theme='dark'] {
-  --color-bg-primary: hsl(220 13% 9%);
-  --color-bg-secondary: hsl(220 13% 14%);
-  --color-bg-tertiary: hsl(220 13% 18%);
-  --color-bg-elevated: hsl(220 13% 14%);
+  /* ── canvas + surface (warm dark) ─────────── */
+  --color-canvas: #181715;
+  --color-canvas-soft: #1f1e1b;
+  --color-surface-card: #252320;
+  --color-surface-strong: #2d2b27;
 
-  --color-text-primary: hsl(220 14% 96%);
-  --color-text-secondary: hsl(220 9% 70%);
-  /* v1.1.7 (a11y) — dark bg-tertiary (L=18%) 위에서 4.5:1 보장. 이전 50% L 은
-     contrast ~3.4:1 (axe serious). 60% L → contrast ~5.6:1. */
-  --color-text-tertiary: hsl(220 9% 60%);
+  /* ── hairlines ────────────────────────────── */
+  --color-hairline: #2d2b27;
+  --color-hairline-soft: #252320;
+  --color-hairline-strong: #3a3833;
 
-  --color-accent: hsl(195 84% 68%);
-  --color-accent-hover: hsl(195 88% 78%);
+  /* ── text (a11y: tertiary >=4.6:1 on #181715) ─ */
+  --color-text-primary: #faf9f5;
+  --color-text-secondary: #b8b5ac;
+  --color-text-tertiary: #8e8b82;
 
-  --color-border-primary: hsl(220 13% 22%);
-  --color-border-focus: hsl(195 84% 68%);
+  /* ── accent — orange lifted for dark legibility ─ */
+  --color-accent: #ff6920;
+  --color-accent-hover: #f54e00;
+  --color-accent-soft: #3a221a;
+
+  --color-border-focus: #ff6920;
+
+  /* ── semantic (dark variants) ─────────────── */
+  --color-success: #27a644;
+  --color-warning: #e8a55a;
+  --color-danger: #ff5577;
+
+  /* ── shadow (alpha 키움) ──────────────────── */
+  --elev-soft: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --elev-card: 0 2px 8px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--color-hairline);
+  --elev-strong: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
-/* Base styles */
+/* ============================================
+   Base styles
+   ============================================ */
+
 html,
 body,
 #app {
@@ -66,6 +123,9 @@ body,
 
 body {
   font-family: var(--font-sans);
+  font-feature-settings: 'ss01' 1; /* Pretendard 한글 ss feature */
+  background-color: var(--color-canvas);
+  color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
   word-break: keep-all; /* 한국어 어절 유지 */
   overflow-wrap: break-word;
@@ -76,8 +136,13 @@ pre {
   font-family: var(--font-mono);
 }
 
-/* Reduced motion */
+/* Reduced motion — duration token 들도 같이 무력화 */
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0.01ms;
+    --duration-base: 0.01ms;
+    --duration-slow: 0.01ms;
+  }
   *,
   *::before,
   *::after {
@@ -86,7 +151,7 @@ pre {
   }
 }
 
-/* Focus ring (keyboard only) */
+/* Focus ring (keyboard only) — accent 색으로 통일 */
 *:focus {
   outline: none;
 }
