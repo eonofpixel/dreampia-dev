@@ -1467,6 +1467,28 @@ export function App(): React.JSX.Element {
             onRemovePendingBlock={(index) => {
               setPendingBlocks((prev) => prev.filter((_, i) => i !== index));
             }}
+            onSendToCode={(code) => {
+              // v2.8.0 (Builder UX) — chat fenced code block 의 "Code 로
+              // 보내기" 버튼. 코드를 클립보드에 복사하고 Code 모드로 전환,
+              // preview 패널이 숨겨져 있었다면 자동 노출. 사용자는 Code
+              // 모드의 에디터에서 paste 로 붙여넣기. (Apply-to-file IPC 는
+              // 후속 PR.) clipboard write 실패 (permission denied 등) 는
+              // toast.error 로 안내 + 모드 전환은 진행 — 사용자가 다른 경로
+              // (수동 select+copy) 로 코드를 옮길 수 있도록.
+              const writePromise =
+                typeof navigator !== 'undefined' && navigator.clipboard !== undefined
+                  ? navigator.clipboard.writeText(code)
+                  : Promise.reject(new Error('clipboard unavailable'));
+              void writePromise.then(
+                () => toasts.info(t('toast.code.sent_to_code')),
+                (err: unknown) => {
+                  const msg = err instanceof Error ? err.message : String(err);
+                  toasts.error(t('toast.code.sent_to_code'), { detail: msg });
+                }
+              );
+              setPreviewMode('code');
+              setPreviewVisible(true);
+            }}
             onForkSession={async () => {
               await handleForkSession(undefined);
             }}

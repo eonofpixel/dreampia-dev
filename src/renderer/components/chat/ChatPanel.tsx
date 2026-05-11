@@ -39,6 +39,7 @@ import { EmptyState as SharedEmptyState } from '../empty/EmptyState';
 import type { ContentBlock, PermissionLevel, Session, Turn, ToolResultRef } from '@/types';
 import { EFFORT_LABELS_KO } from '@/types';
 import { FileReferenceChip } from './FileReferenceChip';
+import { MessageText } from './MessageText';
 import { SessionReferenceChip } from './SessionReferenceChip';
 import { ToolCallCard } from './ToolCallCard';
 import { findToolResult } from './toolDisplayHelpers';
@@ -185,6 +186,14 @@ export interface ChatPanelProps {
    * 모든 turn 은 not persisted (외부 콜사이트 호환).
    */
   persistedTurnIds?: ReadonlySet<string>;
+  /**
+   * v2.8.0 (Builder UX) — chat 의 fenced code block 옆 "Code 로 보내기"
+   * 버튼 클릭 시 호출. App.tsx 가 클립보드 복사 + Code 모드 전환 + toast.
+   * 미지정 시 버튼 자체 미노출 — chat 만 보는 호출자 호환.
+   *
+   * Refs: BUILDER_UX_ANALYSIS.md #C minimum subset.
+   */
+  onSendToCode?: (code: string, language?: string) => void;
 }
 
 interface MessagesAreaProps {
@@ -219,6 +228,8 @@ interface MessagesAreaProps {
    * 호환을 위해 optional — 미지정 시 모든 turn 은 not persisted.
    */
   persistedTurnIds?: ReadonlySet<string>;
+  /** v2.8.0 (Builder UX) — fenced code block 액션 forward (ChatPanel → MessagesArea → TurnDisplay). */
+  onSendToCode?: (code: string, language?: string) => void;
 }
 
 export function ChatPanel({
@@ -256,6 +267,7 @@ export function ChatPanel({
   onOpenPlugins,
   onOpenHelp,
   persistedTurnIds,
+  onSendToCode,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -295,6 +307,7 @@ export function ChatPanel({
         {...(onOpenPlugins !== undefined && { onOpenPlugins })}
         {...(onOpenHelp !== undefined && { onOpenHelp })}
         {...(persistedTurnIds !== undefined && { persistedTurnIds })}
+        {...(onSendToCode !== undefined && { onSendToCode })}
       />
       <InputArea
         onSubmit={onSubmit}
@@ -348,6 +361,7 @@ function MessagesArea({
   onOpenPlugins,
   onOpenHelp,
   persistedTurnIds,
+  onSendToCode,
 }: MessagesAreaProps): React.JSX.Element {
   const t = useT();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -412,6 +426,7 @@ function MessagesArea({
                 }
                 onPickSession={onPickSession}
                 {...(onForkAtTurn !== undefined && { onForkAtTurn })}
+                {...(onSendToCode !== undefined && { onSendToCode })}
                 isPersisted={persistedTurnIds?.has(turn.id) === true}
               />
             </div>
@@ -429,6 +444,7 @@ function MessagesArea({
               }
               onPickSession={onPickSession}
               {...(onForkAtTurn !== undefined && { onForkAtTurn })}
+              {...(onSendToCode !== undefined && { onSendToCode })}
               isPersisted={persistedTurnIds?.has(turn.id) === true}
             />
           ))}
@@ -962,6 +978,11 @@ interface TurnDisplayProps {
    * SQLite 조회 시점을 기다리는 용도.
    */
   isPersisted?: boolean;
+  /**
+   * v2.8.0 (Builder UX) — fenced code block 옆 "Code 로 보내기" 버튼.
+   * MessageText 가 segment 별로 호출. 미지정 시 버튼 자체 미노출.
+   */
+  onSendToCode?: (code: string, language?: string) => void;
 }
 
 function TurnDisplay({
@@ -970,6 +991,7 @@ function TurnDisplay({
   onPickSession,
   onForkAtTurn,
   isPersisted = false,
+  onSendToCode,
 }: TurnDisplayProps): React.JSX.Element | null {
   const t = useT();
   // tool 역할 턴은 렌더링하지 않음 — 결과는 어시스턴트 턴 내 인라인으로 표시
@@ -1007,10 +1029,15 @@ function TurnDisplay({
       >
         {turn.content.map((block, i) => {
           if (block.type === 'text') {
-            return (
-              <p key={i}>
-                {block.text}
-                {isStreamingTurn && i === lastTextBlockIndex && (
+            // v2.8.0 (Builder UX) — streaming 중인 마지막 text block 은 fence
+            // 가 아직 partial (열린 ``` 만 있고 닫힘 X) 상태일 수 있어 안전한
+            // plain <p> + cursor 유지. 완료된 text block 만 MessageText 로
+            // 위임해 fenced code block 분리 + "Code 로 보내기" 버튼 부착.
+            const isStreamingTextTail = isStreamingTurn && i === lastTextBlockIndex;
+            if (isStreamingTextTail) {
+              return (
+                <p key={i}>
+                  {block.text}
                   <span
                     className="ml-0.5 inline-block animate-pulse"
                     aria-label={t('chat.streaming.cursor_aria')}
@@ -1018,8 +1045,16 @@ function TurnDisplay({
                   >
                     ▋
                   </span>
-                )}
-              </p>
+                </p>
+              );
+            }
+            return (
+              <MessageText
+                key={i}
+                text={block.text}
+                inverse={isUser}
+                {...(onSendToCode !== undefined && { onSendToCode })}
+              />
             );
           }
           if (block.type === 'embedded_card') {
