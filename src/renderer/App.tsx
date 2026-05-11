@@ -23,6 +23,7 @@ import { SlashHelpModal } from './components/chat/SlashHelpModal';
 import { CompareModal } from './components/chat/CompareModal';
 import { PluginsModal } from './components/plugins/PluginsModal';
 import { AutomationModal } from './components/automation/AutomationModal';
+import { ApplyToFileModal } from './components/code/ApplyToFileModal';
 import { QuickOpenModal } from './components/code/QuickOpenModal';
 import { BackfillPromptModal } from './components/workspace/BackfillPromptModal';
 import { ToastContainer } from './components/toast/ToastContainer';
@@ -287,6 +288,21 @@ export function App(): React.JSX.Element {
   const [quickOpenRequestedFile, setQuickOpenRequestedFile] = useState<string | undefined>(
     undefined
   );
+  // v2.8.x (Builder UX, C 후속) — Code 모드의 현재 열린 파일 메타데이터.
+  // CodePanel 의 onCurrentFileChange 가 emit. ChatPanel 의 "파일에 적용"
+  // 버튼 활성화 + ApplyToFileModal 의 target / writeFile target 식별에 사용.
+  const [currentCodeFile, setCurrentCodeFile] = useState<{
+    path: string;
+    mtime?: string;
+    content: string;
+  } | null>(null);
+  // v2.8.x (Builder UX, C 후속) — chat 의 "파일에 적용" 클릭 시 set →
+  // ApplyToFileModal 마운트. accept/cancel 시 null. 적용 진행 중 saving=true.
+  const [applyTarget, setApplyTarget] = useState<{
+    code: string;
+    language?: string;
+  } | null>(null);
+  const [applySaving, setApplySaving] = useState(false);
   // v1.6.4 — Fullscreen toggle (Mod+Shift+F). 진입 시 sidebar+preview 모두
   // 숨기고 chat 만 풀폭. 진입 직전 sidebar/preview 상태를 ref 에 저장 →
   // 토글 OFF 시 정확히 복원. ref 만으로 충분 (별도 상태 없이 snapshot 의
@@ -1471,10 +1487,10 @@ export function App(): React.JSX.Element {
               // v2.8.0 (Builder UX) — chat fenced code block 의 "Code 로
               // 보내기" 버튼. 코드를 클립보드에 복사하고 Code 모드로 전환,
               // preview 패널이 숨겨져 있었다면 자동 노출. 사용자는 Code
-              // 모드의 에디터에서 paste 로 붙여넣기. (Apply-to-file IPC 는
-              // 후속 PR.) clipboard write 실패 (permission denied 등) 는
-              // toast.error 로 안내 + 모드 전환은 진행 — 사용자가 다른 경로
-              // (수동 select+copy) 로 코드를 옮길 수 있도록.
+              // 모드의 에디터에서 paste 로 붙여넣기. clipboard write 실패
+              // (permission denied 등) 는 toast.error 로 안내 + 모드 전환은
+              // 진행 — 사용자가 다른 경로 (수동 select+copy) 로 코드를 옮길
+              // 수 있도록.
               const writePromise =
                 typeof navigator !== 'undefined' && navigator.clipboard !== undefined
                   ? navigator.clipboard.writeText(code)
@@ -1489,6 +1505,16 @@ export function App(): React.JSX.Element {
               setPreviewMode('code');
               setPreviewVisible(true);
             }}
+            {...(currentCodeFile !== null && {
+              // v2.8.x (Builder UX, C 후속) — 현재 Code 모드 에 파일이 열려
+              // 있을 때만 chat 코드 블록 옆 "파일에 적용" 버튼 노출. 클릭 시
+              // ApplyToFileModal 띄움 (사용자 confirm). 파일 미선택 / 워크스
+              // 페이스 변경 등으로 currentCodeFile 이 null 인 동안엔 prop 자체
+              // 미전달 → ChatPanel 이 버튼 숨김.
+              onApplyToFile: (code: string, language?: string) => {
+                setApplyTarget(language !== undefined ? { code, language } : { code });
+              },
+            })}
             onForkSession={async () => {
               await handleForkSession(undefined);
             }}
@@ -1512,6 +1538,7 @@ export function App(): React.JSX.Element {
               requestedFile: quickOpenRequestedFile,
             })}
             onRequestedFileConsumed={() => setQuickOpenRequestedFile(undefined)}
+            onCurrentFileChange={setCurrentCodeFile}
             onAnnotation={(block) => {
               // v1.6.13 — typed block 으로 정식 prepend.
               setPendingBlocks((prev) => [...prev, block]);
@@ -1580,6 +1607,76 @@ export function App(): React.JSX.Element {
           setPreviewVisible(true);
           setQuickOpenRequestedFile(relPath);
           setQuickOpenVisible(false);
+        }}
+      />
+      {/* v2.8.x (Builder UX, C 후속) — chat 의 "파일에 적용" 버튼 → 본 모달.
+          target prop = applyTarget + currentCodeFile 합성. accept 시 workspace.
+          writeFile (atomic + expected_mtime). 충돌 / 실패 시 toast. */}
+      <ApplyToFileModal
+        target={
+          applyTarget !== null && currentCodeFile !== null
+            ? {
+                path: currentCodeFile.path,
+                ...(currentCodeFile.mtime !== undefined && { mtime: currentCodeFile.mtime }),
+                diskContent: currentCodeFile.content,
+                newCode: applyTarget.code,
+                ...(applyTarget.language !== undefined && { language: applyTarget.language }),
+              }
+            : null
+        }
+        saving={applySaving}
+        onCancel={() => setApplyTarget(null)}
+        onAccept={() => {
+          if (
+            applyTarget === null ||
+            currentCodeFile === null ||
+            mentionWorkspaceRoot === undefined
+          ) {
+            setApplyTarget(null);
+            return;
+          }
+          const ws =
+            typeof window !== 'undefined' ? window.dreampia?.workspace : undefined;
+          if (ws === undefined || typeof ws.writeFile !== 'function') {
+            toasts.error(t('toast.code.apply_failed'), { detail: 'workspace API unavailable' });
+            setApplyTarget(null);
+            return;
+          }
+          setApplySaving(true);
+          void (async () => {
+            try {
+              const result = await ws.writeFile({
+                workspace_root: mentionWorkspaceRoot,
+                rel_path: currentCodeFile.path,
+                content: applyTarget.code,
+                ...(currentCodeFile.mtime !== undefined && {
+                  expected_mtime: currentCodeFile.mtime,
+                }),
+              });
+              if (!result.ok) {
+                toasts.error(t('toast.code.apply_failed'), { detail: result.error });
+                return;
+              }
+              const wr = result.value as { mtime: string; conflict?: 'mtime_mismatch' };
+              if (wr.conflict === 'mtime_mismatch') {
+                toasts.error(
+                  t('toast.code.apply_conflict', { path: currentCodeFile.path })
+                );
+                return;
+              }
+              // 성공 — CodePanel 의 disk content 도 곧 다시 읽혀야 정확한 baseline.
+              // 단, atomic write 가 fs watcher 로 자동 reload 트리거 안 함 (현
+              // CodePanel 은 폴링만). 사용자가 reload 또는 외부 변경 banner 로
+              // 인지. v0 결정 — 자동 reload 는 후속 PR.
+              toasts.info(t('toast.code.applied', { path: currentCodeFile.path }));
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              toasts.error(t('toast.code.apply_failed'), { detail: msg });
+            } finally {
+              setApplySaving(false);
+              setApplyTarget(null);
+            }
+          })();
         }}
       />
       {/* v1.4.8 — Workspace ID backfill prompt (boot effect 가 trigger). */}

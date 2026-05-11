@@ -18,7 +18,7 @@
 
 import type { EditorView } from '@codemirror/view';
 import { Diff, FileCode2, Globe, ListTree, Pencil, RotateCcw, Save } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useT } from '../../i18n';
 
@@ -106,6 +106,17 @@ export interface CodePanelProps {
    */
   requestedFile?: string;
   onRequestedFileConsumed?: () => void;
+  /**
+   * v2.8.x (Builder UX, C 후속) — 현재 열린 파일의 메타데이터 emit. App.tsx
+   * 가 ChatPanel 의 "Apply to file" 버튼을 활성화할 때 target 파일 식별에
+   * 사용. 파일 미선택 / 워크스페이스 변경 / 로드 실패 시 null. mtime / content
+   * 도 함께 — writeFile 의 expected_mtime 검증과 diff preview 에 사용.
+   *
+   * Refs: BUILDER_UX_ANALYSIS.md #C — Apply-to-file follow-up.
+   */
+  onCurrentFileChange?: (
+    info: { path: string; mtime?: string; content: string } | null
+  ) => void;
 }
 
 export function CodePanel({
@@ -114,6 +125,7 @@ export function CodePanel({
   onSwitchMode,
   requestedFile,
   onRequestedFileConsumed,
+  onCurrentFileChange,
 }: CodePanelProps): React.JSX.Element {
   const t = useT();
   const [selectedPath, setSelectedPath] = useState<string | undefined>(undefined);
@@ -286,6 +298,23 @@ export function CodePanel({
     loadFile(requestedFile);
     onRequestedFileConsumed?.();
   }, [requestedFile, loadFile, onRequestedFileConsumed]);
+
+  // v2.8.x (Builder UX, C 후속) — 현재 열린 파일 메타데이터 emit. App.tsx
+  // 가 ChatPanel "Apply to file" 버튼 활성화 + writeFile target 식별에 사용.
+  // callback 의 identity 변화로 effect 가 흔들리지 않도록 ref 로 보관 후 호출.
+  const onCurrentFileChangeRef = useRef<typeof onCurrentFileChange>(onCurrentFileChange);
+  onCurrentFileChangeRef.current = onCurrentFileChange;
+  useEffect(() => {
+    if (selectedPath === undefined) {
+      onCurrentFileChangeRef.current?.(null);
+      return;
+    }
+    onCurrentFileChangeRef.current?.({
+      path: selectedPath,
+      content: diskContent,
+      ...(diskMtime !== undefined && { mtime: diskMtime }),
+    });
+  }, [selectedPath, diskContent, diskMtime]);
 
   // v2.8.0 (Builder UX) — document.title 을 현재 파일 + dirty 상태로 동기화.
   // 형태: `● filename.ext — Dreampia-Dev` (편집 중 + 변경 있음) 또는

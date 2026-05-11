@@ -20,7 +20,7 @@
  * Decision doc: ../../../../BUILDER_UX_ANALYSIS.md (#C minimum subset).
  */
 
-import { ArrowRightToLine } from 'lucide-react';
+import { ArrowRightToLine, FileEdit } from 'lucide-react';
 import { Fragment, useMemo } from 'react';
 
 import { useT } from '../../i18n';
@@ -84,6 +84,11 @@ export interface MessageTextProps {
   text: string;
   /** 코드 블록의 "Code 로 보내기" 버튼 클릭 시 호출. 미지정 시 버튼 숨김. */
   onSendToCode?: (code: string, language?: string) => void;
+  /**
+   * v2.8.x (Builder UX, C 후속) — 코드 블록의 "파일에 적용" 버튼. App.tsx 가
+   * 현재 열린 파일이 있을 때만 prop 전달 (미지정 시 버튼 자체 미노출).
+   */
+  onApplyToFile?: (code: string, language?: string) => void;
   /** user turn (accent bg) 인지 — 코드 블록 색상 보정 용. */
   inverse?: boolean;
 }
@@ -91,6 +96,7 @@ export interface MessageTextProps {
 export function MessageText({
   text,
   onSendToCode,
+  onApplyToFile,
   inverse = false,
 }: MessageTextProps): React.JSX.Element {
   const t = useT();
@@ -134,15 +140,39 @@ export function MessageText({
                 <span data-testid={`message-code-language-${idx}`}>
                   {seg.language.length > 0 ? seg.language : t('chat.code_block.plain_label')}
                 </span>
+                {onApplyToFile !== undefined && (
+                  <button
+                    type="button"
+                    onClick={() => onApplyToFile(seg.content, seg.language || undefined)}
+                    aria-label={t('chat.code_block.apply_to_file_aria')}
+                    className={
+                      inverse
+                        ? 'ml-auto flex items-center gap-1 rounded border border-emerald-300/50 bg-emerald-500/20 px-1.5 py-0.5 text-[10px] normal-case tracking-normal text-emerald-100 hover:bg-emerald-500/30'
+                        : 'ml-auto flex items-center gap-1 rounded border border-emerald-600/50 bg-emerald-900/20 px-1.5 py-0.5 text-[10px] normal-case tracking-normal text-emerald-300 hover:bg-emerald-900/30'
+                    }
+                    data-testid={`message-code-apply-${idx}`}
+                  >
+                    <FileEdit aria-hidden="true" className="h-3 w-3" />
+                    <span>{t('chat.code_block.apply_to_file')}</span>
+                  </button>
+                )}
                 {onSendToCode !== undefined && (
                   <button
                     type="button"
                     onClick={() => onSendToCode(seg.content, seg.language || undefined)}
                     aria-label={t('chat.code_block.send_to_code_aria')}
                     className={
-                      inverse
-                        ? 'ml-auto flex items-center gap-1 rounded border border-white/30 bg-white/10 px-1.5 py-0.5 text-[10px] normal-case tracking-normal text-white hover:bg-white/20'
-                        : 'ml-auto flex items-center gap-1 rounded border border-border-primary bg-bg-secondary px-1.5 py-0.5 text-[10px] normal-case tracking-normal text-text-secondary hover:bg-bg-primary'
+                      // onApplyToFile 이 ml-auto 를 가져갔으면 본 버튼은 그 옆에
+                      // 붙도록 ml-auto 생략. 둘 중 하나만 노출이면 본 버튼이 우측.
+                      [
+                        onApplyToFile === undefined ? 'ml-auto' : '',
+                        'flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] normal-case tracking-normal',
+                        inverse
+                          ? 'border-white/30 bg-white/10 text-white hover:bg-white/20'
+                          : 'border-border-primary bg-bg-secondary text-text-secondary hover:bg-bg-primary',
+                      ]
+                        .filter((c) => c.length > 0)
+                        .join(' ')
                     }
                     data-testid={`message-code-send-${idx}`}
                   >

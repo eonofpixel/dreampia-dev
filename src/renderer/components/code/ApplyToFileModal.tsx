@@ -1,0 +1,153 @@
+/**
+ * ApplyToFileModal — chat 의 코드 블록을 현재 열린 파일에 적용하기 전 확인.
+ *
+ * v2.8.x (Builder UX, C 후속) — 사용자가 chat 의 "파일에 적용" 버튼 클릭
+ * 시 App.tsx 가 본 모달을 mount. 사용자에게 대상 path + 줄 수 차이 + 새
+ * 코드 read-only preview 를 보여주고 Accept 선택 시 부모가 workspace.writeFile.
+ *
+ * 디자인 결정:
+ *   - 전체 inline diff (`@codemirror/merge`) 는 v0 에선 미포함 — modal 안에
+ *     embedded 하면 jsdom test 가 매우 무거워지고 layout 도 200% 폭 필요.
+ *     줄 수 delta + read-only preview 만 표시 — 사용자 panic-undo 시그널만
+ *     명확하게. inline accept/reject 는 별도 PR (#C 의 3차)
+ *   - cancel = 새 코드 폐기. accept = workspace.writeFile (atomic + expected_mtime)
+ *   - Esc / overlay click 으로 cancel — 사용자가 실수로 적용하는 path 차단
+ *
+ * Refs: BUILDER_UX_ANALYSIS.md #C — Apply-to-file follow-up.
+ */
+
+import { Check, X } from 'lucide-react';
+import { useEffect } from 'react';
+
+import { useT } from '../../i18n';
+
+import { CodeEditor } from './CodeEditor';
+
+export interface ApplyToFileModalProps {
+  /** undefined / null 이면 모달 미노출 (App.tsx 의 state 가 null 일 때). */
+  target: {
+    path: string;
+    mtime?: string;
+    diskContent: string;
+    newCode: string;
+    language?: string;
+  } | null;
+  onAccept: () => void;
+  onCancel: () => void;
+  /** Accept 진행 중 (writeFile in-flight) — 버튼 disable + 라벨 갱신. */
+  saving?: boolean;
+}
+
+function countLines(text: string): number {
+  if (text.length === 0) return 0;
+  // CodeMirror 의 line model 과 동일 — 마지막 \n 다음 빈 라인을 count 하지
+  // 않도록 trailing \n 1개만 strip.
+  const stripped = text.endsWith('\n') ? text.slice(0, -1) : text;
+  return stripped.split('\n').length;
+}
+
+export function ApplyToFileModal({
+  target,
+  onAccept,
+  onCancel,
+  saving = false,
+}: ApplyToFileModalProps): React.JSX.Element | null {
+  const t = useT();
+
+  // Esc → cancel. target 변경 / 언마운트 시 cleanup.
+  useEffect(() => {
+    if (target === null) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && !saving) {
+        e.preventDefault();
+        onCancel();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return (): void => {
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [target, saving, onCancel]);
+
+  if (target === null) return null;
+
+  const before = countLines(target.diskContent);
+  const after = countLines(target.newCode);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 pt-[8vh]"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="apply-to-file-title"
+      data-testid="apply-to-file-modal"
+      onClick={(e) => {
+        // overlay click (이벤트 target 이 본 div 자체) → cancel.
+        if (e.target === e.currentTarget && !saving) onCancel();
+      }}
+    >
+      <div className="flex w-[720px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-2xl">
+        <header className="flex items-center gap-2 border-b border-border-primary px-4 py-2">
+          <h2
+            id="apply-to-file-title"
+            className="flex-1 text-sm font-semibold text-text-primary"
+          >
+            {t('code.apply.modal.title')}
+          </h2>
+        </header>
+        <div className="space-y-3 px-4 py-3 text-xs">
+          <p className="text-text-secondary">{t('code.apply.modal.body')}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-text-tertiary">{t('code.apply.modal.target')}:</span>
+            <span
+              className="truncate font-mono text-text-primary"
+              data-testid="apply-to-file-path"
+              title={target.path}
+            >
+              {target.path}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-text-tertiary">{t('code.apply.modal.diff_label')}:</span>
+            <span data-testid="apply-to-file-lines-delta">
+              {t('code.apply.modal.lines_delta', { before: String(before), after: String(after) })}
+            </span>
+          </div>
+          <div
+            className="h-[40vh] overflow-hidden rounded border border-border-primary"
+            aria-label={t('code.apply.modal.preview_aria')}
+            data-testid="apply-to-file-preview"
+          >
+            <CodeEditor
+              content={target.newCode}
+              {...(target.language !== undefined && { relPath: 'preview.' + target.language })}
+              editable={false}
+            />
+          </div>
+        </div>
+        <footer className="flex items-center justify-end gap-2 border-t border-border-primary px-4 py-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="flex items-center gap-1 rounded border border-border-primary bg-bg-tertiary px-3 py-1 text-xs hover:bg-border-primary disabled:opacity-50"
+            data-testid="apply-to-file-cancel"
+          >
+            <X aria-hidden="true" className="h-3 w-3" />
+            <span>{t('code.apply.modal.cancel')}</span>
+          </button>
+          <button
+            type="button"
+            onClick={onAccept}
+            disabled={saving}
+            className="flex items-center gap-1 rounded border border-emerald-600/50 bg-emerald-900/20 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            data-testid="apply-to-file-accept"
+          >
+            <Check aria-hidden="true" className="h-3 w-3" />
+            <span>{t('code.apply.modal.accept')}</span>
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}

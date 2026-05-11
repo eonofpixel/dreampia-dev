@@ -100,6 +100,13 @@ export interface PreviewPanelProps {
    */
   requestedFile?: string;
   onRequestedFileConsumed?: () => void;
+  /**
+   * v2.8.x (Builder UX, C 후속) — CodePanel 의 현재 파일 메타데이터를 부모
+   * (App.tsx) 에 emit. ChatPanel "Apply to file" 활성화 + writeFile target.
+   */
+  onCurrentFileChange?: (
+    info: { path: string; mtime?: string; content: string } | null
+  ) => void;
 }
 
 /**
@@ -120,6 +127,9 @@ export function PreviewPanel(props: PreviewPanelProps): React.JSX.Element {
         {...(props.requestedFile !== undefined && { requestedFile: props.requestedFile })}
         {...(props.onRequestedFileConsumed !== undefined && {
           onRequestedFileConsumed: props.onRequestedFileConsumed,
+        })}
+        {...(props.onCurrentFileChange !== undefined && {
+          onCurrentFileChange: props.onCurrentFileChange,
         })}
       />
     );

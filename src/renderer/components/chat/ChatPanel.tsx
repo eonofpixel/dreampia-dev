@@ -194,6 +194,15 @@ export interface ChatPanelProps {
    * Refs: BUILDER_UX_ANALYSIS.md #C minimum subset.
    */
   onSendToCode?: (code: string, language?: string) => void;
+  /**
+   * v2.8.x (Builder UX, C 후속) — fenced code block 의 "파일에 적용" 버튼.
+   * App.tsx 가 Code 모드에서 현재 열린 파일이 있을 때만 prop 전달 (없으면
+   * 버튼 자체 미노출). 핸들러는 ApplyToFileModal 을 띄워 사용자 confirm 후
+   * workspace.writeFile.
+   *
+   * Refs: BUILDER_UX_ANALYSIS.md #C — Apply-to-file follow-up.
+   */
+  onApplyToFile?: (code: string, language?: string) => void;
 }
 
 interface MessagesAreaProps {
@@ -230,6 +239,8 @@ interface MessagesAreaProps {
   persistedTurnIds?: ReadonlySet<string>;
   /** v2.8.0 (Builder UX) — fenced code block 액션 forward (ChatPanel → MessagesArea → TurnDisplay). */
   onSendToCode?: (code: string, language?: string) => void;
+  /** v2.8.x (Builder UX, C 후속) — fenced code block 의 "파일에 적용" forward. */
+  onApplyToFile?: (code: string, language?: string) => void;
 }
 
 export function ChatPanel({
@@ -268,6 +279,7 @@ export function ChatPanel({
   onOpenHelp,
   persistedTurnIds,
   onSendToCode,
+  onApplyToFile,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     return (
@@ -308,6 +320,7 @@ export function ChatPanel({
         {...(onOpenHelp !== undefined && { onOpenHelp })}
         {...(persistedTurnIds !== undefined && { persistedTurnIds })}
         {...(onSendToCode !== undefined && { onSendToCode })}
+        {...(onApplyToFile !== undefined && { onApplyToFile })}
       />
       <InputArea
         onSubmit={onSubmit}
@@ -362,6 +375,7 @@ function MessagesArea({
   onOpenHelp,
   persistedTurnIds,
   onSendToCode,
+  onApplyToFile,
 }: MessagesAreaProps): React.JSX.Element {
   const t = useT();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -427,6 +441,7 @@ function MessagesArea({
                 onPickSession={onPickSession}
                 {...(onForkAtTurn !== undefined && { onForkAtTurn })}
                 {...(onSendToCode !== undefined && { onSendToCode })}
+                {...(onApplyToFile !== undefined && { onApplyToFile })}
                 isPersisted={persistedTurnIds?.has(turn.id) === true}
               />
             </div>
@@ -983,6 +998,8 @@ interface TurnDisplayProps {
    * MessageText 가 segment 별로 호출. 미지정 시 버튼 자체 미노출.
    */
   onSendToCode?: (code: string, language?: string) => void;
+  /** v2.8.x (Builder UX, C 후속) — "파일에 적용" forward to MessageText. */
+  onApplyToFile?: (code: string, language?: string) => void;
 }
 
 function TurnDisplay({
@@ -992,6 +1009,7 @@ function TurnDisplay({
   onForkAtTurn,
   isPersisted = false,
   onSendToCode,
+  onApplyToFile,
 }: TurnDisplayProps): React.JSX.Element | null {
   const t = useT();
   // tool 역할 턴은 렌더링하지 않음 — 결과는 어시스턴트 턴 내 인라인으로 표시
@@ -1054,6 +1072,7 @@ function TurnDisplay({
                 text={block.text}
                 inverse={isUser}
                 {...(onSendToCode !== undefined && { onSendToCode })}
+                {...(onApplyToFile !== undefined && { onApplyToFile })}
               />
             );
           }

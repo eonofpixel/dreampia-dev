@@ -125,5 +125,45 @@ describe('MessageText', () => {
       // border-white 클래스 또는 bg-black 시그니처 확인 — class 에 'white' 포함.
       expect(block.className).toMatch(/white|black/);
     });
+
+    // ────────────────────────────────────────────────────────────
+    // v2.8.x — onApplyToFile (C 후속)
+    // ────────────────────────────────────────────────────────────
+
+    it('onApplyToFile 미지정 시 Apply 버튼 미노출', () => {
+      render(<MessageText text={'```\nx\n```'} onSendToCode={vi.fn()} />);
+      expect(screen.queryByTestId('message-code-apply-0')).not.toBeInTheDocument();
+      expect(screen.getByTestId('message-code-send-0')).toBeInTheDocument();
+    });
+
+    it('onApplyToFile 지정 시 Apply 버튼 클릭이 콜백 호출', async () => {
+      const user = userEvent.setup();
+      const onApplyToFile = vi.fn();
+      render(
+        <MessageText
+          text={'```ts\nconst x = 1;\n```'}
+          onSendToCode={vi.fn()}
+          onApplyToFile={onApplyToFile}
+        />
+      );
+      await user.click(screen.getByTestId('message-code-apply-0'));
+      expect(onApplyToFile).toHaveBeenCalledWith('const x = 1;', 'ts');
+    });
+
+    it('두 버튼 모두 노출 시 Apply 가 먼저 (좌측), Send 가 우측', () => {
+      render(
+        <MessageText
+          text={'```\nx\n```'}
+          onSendToCode={vi.fn()}
+          onApplyToFile={vi.fn()}
+        />
+      );
+      const apply = screen.getByTestId('message-code-apply-0');
+      const send = screen.getByTestId('message-code-send-0');
+      // DocumentPosition: apply 가 send 보다 먼저 → DOCUMENT_POSITION_FOLLOWING
+      const pos = apply.compareDocumentPosition(send);
+      // eslint-disable-next-line no-bitwise
+      expect(pos & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
   });
 });
