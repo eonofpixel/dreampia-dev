@@ -98,12 +98,7 @@ import {
   type ProviderFactory,
 } from './compare/orchestrator';
 import type { BrowserManager, BrowserTabState } from './BrowserManager';
-import type {
-  FileContent,
-  FileEntry,
-  FileStatResult,
-  FileWriteResult,
-} from '@/types/workspace';
+import type { FileContent, FileEntry, FileStatResult, FileWriteResult } from '@/types/workspace';
 import type {
   ConversationPatch,
   PermissionPatch,
@@ -777,7 +772,9 @@ export function registerIpcHandlers(
   ipcMain.handle('app:set-plugin-isolation-mode', (_evt, raw: unknown): Result<void> => {
     try {
       if (raw !== 'utility_process' && raw !== 'in_process' && raw !== 'auto') {
-        throw new Error("pluginIsolationMode must be one of: 'utility_process', 'in_process', 'auto'");
+        throw new Error(
+          "pluginIsolationMode must be one of: 'utility_process', 'in_process', 'auto'"
+        );
       }
       writeSettings({ pluginIsolationMode: raw });
       return ok(undefined);
@@ -786,39 +783,36 @@ export function registerIpcHandlers(
     }
   });
 
-  ipcMain.handle(
-    'app:set-mcp-revocation-feed-publisher',
-    (_evt, raw: unknown): Result<void> => {
-      try {
-        // null/undefined → clear the setting (revert to permissive default).
-        if (raw === null || raw === undefined) {
-          writeSettings({ mcpRevocationFeedPublisher: undefined });
-          return ok(undefined);
-        }
-        if (typeof raw !== 'object') {
-          throw new Error('mcpRevocationFeedPublisher must be { issuer, subject_pattern } or null');
-        }
-        const obj = raw as Record<string, unknown>;
-        if (typeof obj['issuer'] !== 'string' || obj['issuer'].length === 0) {
-          throw new Error("'issuer' must be non-empty URL string");
-        }
-        if (typeof obj['subject_pattern'] !== 'string' || obj['subject_pattern'].length === 0) {
-          throw new Error("'subject_pattern' must be non-empty string");
-        }
-        // Sanity-check issuer URL.
-        new URL(obj['issuer']);
-        writeSettings({
-          mcpRevocationFeedPublisher: {
-            issuer: obj['issuer'],
-            subject_pattern: obj['subject_pattern'],
-          },
-        });
+  ipcMain.handle('app:set-mcp-revocation-feed-publisher', (_evt, raw: unknown): Result<void> => {
+    try {
+      // null/undefined → clear the setting (revert to permissive default).
+      if (raw === null || raw === undefined) {
+        writeSettings({ mcpRevocationFeedPublisher: undefined });
         return ok(undefined);
-      } catch (err) {
-        return fail(err);
       }
+      if (typeof raw !== 'object') {
+        throw new Error('mcpRevocationFeedPublisher must be { issuer, subject_pattern } or null');
+      }
+      const obj = raw as Record<string, unknown>;
+      if (typeof obj['issuer'] !== 'string' || obj['issuer'].length === 0) {
+        throw new Error("'issuer' must be non-empty URL string");
+      }
+      if (typeof obj['subject_pattern'] !== 'string' || obj['subject_pattern'].length === 0) {
+        throw new Error("'subject_pattern' must be non-empty string");
+      }
+      // Sanity-check issuer URL.
+      new URL(obj['issuer']);
+      writeSettings({
+        mcpRevocationFeedPublisher: {
+          issuer: obj['issuer'],
+          subject_pattern: obj['subject_pattern'],
+        },
+      });
+      return ok(undefined);
+    } catch (err) {
+      return fail(err);
     }
-  );
+  });
 
   // v0.11.0 (B2) — Settings 모달 [언어] 탭. 'ko' default. 알 수 없는 값은
   // throw — renderer 가 ok=false 로 받아 silent fallback.
@@ -2985,10 +2979,7 @@ function registerMcpHandlers(mcp: McpManager, audit: AuditLogStore | null): void
               audit?.recordEvent({
                 timestamp: event.timestamp,
                 session_id: 'mcp-install',
-                event:
-                  event.outcome === 'installed'
-                    ? 'mcp.install_ok'
-                    : 'mcp.install_rejected',
+                event: event.outcome === 'installed' ? 'mcp.install_ok' : 'mcp.install_rejected',
                 capability: 'NETWORK_MCP',
                 target_json: JSON.stringify({
                   package_id: event.package_id,

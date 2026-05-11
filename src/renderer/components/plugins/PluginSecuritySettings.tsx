@@ -110,10 +110,7 @@ export function PluginSecuritySettings(): React.JSX.Element {
 
   if (state === null) {
     return (
-      <p
-        className="text-xs text-text-tertiary"
-        data-testid="plugin-security-loading"
-      >
+      <p className="text-xs text-text-tertiary" data-testid="plugin-security-loading">
         Loading security settings…
       </p>
     );
@@ -234,7 +231,9 @@ export function PluginSecuritySettings(): React.JSX.Element {
                   subject_pattern: subjectInput.trim(),
                 })
               }
-              disabled={saving || issuerInput.trim().length === 0 || subjectInput.trim().length === 0}
+              disabled={
+                saving || issuerInput.trim().length === 0 || subjectInput.trim().length === 0
+              }
               className="rounded border border-border-primary bg-bg-tertiary px-2 py-0.5 text-[11px] hover:bg-border-primary disabled:opacity-50"
               data-testid="feed-publisher-save"
             >

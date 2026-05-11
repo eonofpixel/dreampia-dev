@@ -104,9 +104,7 @@ export interface PreviewPanelProps {
    * v2.8.x (Builder UX, C 후속) — CodePanel 의 현재 파일 메타데이터를 부모
    * (App.tsx) 에 emit. ChatPanel "Apply to file" 활성화 + writeFile target.
    */
-  onCurrentFileChange?: (
-    info: { path: string; mtime?: string; content: string } | null
-  ) => void;
+  onCurrentFileChange?: (info: { path: string; mtime?: string; content: string } | null) => void;
   /**
    * v2.8.x (Builder UX, C 3차) — Apply-to-file 성공 후 부모가 dispatch 하는
    * disk baseline 갱신 신호. CodePanel 이 selectedPath 일치 시 적용 + 즉시

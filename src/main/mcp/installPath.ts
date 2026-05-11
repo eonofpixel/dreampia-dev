@@ -28,10 +28,7 @@ import {
   type ManifestVerifier,
   type McpVerificationMode,
 } from '../../types/mcpManifest';
-import type {
-  InstalledPluginRecord,
-  IsolationMode,
-} from '../../types/installedPluginRecord';
+import type { InstalledPluginRecord, IsolationMode } from '../../types/installedPluginRecord';
 import type { InstalledPluginRecordStore } from './installedPluginRecordStore';
 
 export interface InstallPathDeps {

@@ -1647,8 +1647,7 @@ export function App(): React.JSX.Element {
             setApplyTarget(null);
             return;
           }
-          const ws =
-            typeof window !== 'undefined' ? window.dreampia?.workspace : undefined;
+          const ws = typeof window !== 'undefined' ? window.dreampia?.workspace : undefined;
           if (ws === undefined || typeof ws.writeFile !== 'function') {
             toasts.error(t('toast.code.apply_failed'), { detail: 'workspace API unavailable' });
             setApplyTarget(null);
@@ -1671,9 +1670,7 @@ export function App(): React.JSX.Element {
               }
               const wr = result.value as { mtime: string; conflict?: 'mtime_mismatch' };
               if (wr.conflict === 'mtime_mismatch') {
-                toasts.error(
-                  t('toast.code.apply_conflict', { path: currentCodeFile.path })
-                );
+                toasts.error(t('toast.code.apply_conflict', { path: currentCodeFile.path }));
                 return;
               }
               // v2.8.x (C 3차) — 성공 시 CodePanel 의 disk baseline 을 즉시

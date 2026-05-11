@@ -51,10 +51,7 @@ export function MigrationToast(props: MigrationToastProps): React.JSX.Element | 
       data-testid="migration-toast"
     >
       <div className="flex items-start gap-3 px-4 py-3">
-        <AlertTriangle
-          aria-hidden="true"
-          className="h-5 w-5 shrink-0 text-yellow-400"
-        />
+        <AlertTriangle aria-hidden="true" className="h-5 w-5 shrink-0 text-yellow-400" />
         <div className="flex-1 min-w-0 space-y-1">
           <p className="text-sm font-medium text-text-primary">{TOAST_TEXT}</p>
           <p className="text-xs text-text-tertiary">

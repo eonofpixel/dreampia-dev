@@ -120,9 +120,7 @@ function buildVisibleNodes(
   const folders = [...folderSet].sort();
   const fileEntries = [...entries].sort((a, b) => a.path.localeCompare(b.path));
 
-  type Item =
-    | { kind: 'folder'; path: string }
-    | { kind: 'file'; path: string; entry: FileEntry };
+  type Item = { kind: 'folder'; path: string } | { kind: 'file'; path: string; entry: FileEntry };
   const items: Item[] = [];
   for (const p of folders) items.push({ kind: 'folder', path: p });
   for (const e of fileEntries) items.push({ kind: 'file', path: e.path, entry: e });
@@ -340,9 +338,7 @@ export function FileTree({
             className="px-3 py-4 text-xs text-text-tertiary"
             data-testid="code-file-tree-no-results"
           >
-            {query.length === 0
-              ? t('preview.code.tree.empty')
-              : t('preview.code.tree.no_results')}
+            {query.length === 0 ? t('preview.code.tree.empty') : t('preview.code.tree.no_results')}
           </p>
         ) : visibleNodes.length < VIRTUALIZATION_THRESHOLD ? (
           <ul className="h-full overflow-y-auto" data-testid="code-file-tree-list">

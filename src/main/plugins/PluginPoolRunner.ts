@@ -40,11 +40,7 @@ import type {
 } from './poolInterfaces';
 import type { LoadedPlugin } from './PluginManager';
 import type { PluginCapabilityGate } from './PluginCapabilityGate';
-import type {
-  PluginRunner,
-  PluginHookContext,
-  PluginHookAuditEvent,
-} from './PluginHookRunner';
+import type { PluginRunner, PluginHookContext, PluginHookAuditEvent } from './PluginHookRunner';
 import {
   attachIsolationTelemetry,
   type IsolationTelemetryEvent,
@@ -178,10 +174,7 @@ export class PluginPoolRunner implements PluginRunner {
           payload: ctx.payload,
           timeout_ms: this.timeoutMs,
         };
-        const result = await worker.call<{ payload: Record<string, unknown> }>(
-          'run-hook',
-          params
-        );
+        const result = await worker.call<{ payload: Record<string, unknown> }>('run-hook', params);
         // Reflect plugin-mutated payload back into caller's ctx.payload.
         if (result?.payload !== undefined && result.payload !== null) {
           for (const k of Object.keys(ctx.payload)) {
@@ -264,7 +257,11 @@ export function makeDefaultPoolSpawnFn(opts: {
     }
     const handle: PoolWorkerHandle = {
       pid: child.pid ?? -1,
-      postMessage: (msg: HostPriorityMessage | { type: 'host-rpc'; call_id: string; method: string; params: unknown }) => {
+      postMessage: (
+        msg:
+          | HostPriorityMessage
+          | { type: 'host-rpc'; call_id: string; method: string; params: unknown }
+      ) => {
         child.postMessage(msg);
       },
       on: (event: 'message', listener: (msg: PluginToHostMessage) => void) => {

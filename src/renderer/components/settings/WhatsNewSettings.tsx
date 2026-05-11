@@ -82,10 +82,7 @@ const RELEASES: ReadonlyArray<ReleaseHighlightSpec> = [
 export function WhatsNewSettings(): React.JSX.Element {
   const t = useT();
   return (
-    <div
-      className="flex-1 overflow-y-auto p-6"
-      data-testid="settings-panel-whats_new-content"
-    >
+    <div className="flex-1 overflow-y-auto p-6" data-testid="settings-panel-whats_new-content">
       <header className="mb-6 flex items-center gap-2">
         <Sparkles aria-hidden="true" className="h-5 w-5 text-accent" />
         <h3 className="text-base font-semibold text-text-primary">

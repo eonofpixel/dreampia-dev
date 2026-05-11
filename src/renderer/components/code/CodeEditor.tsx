@@ -291,7 +291,9 @@ export function CodeEditor({
   );
 }
 
-function buildEditableExtensions(editable: boolean): readonly [
+function buildEditableExtensions(
+  editable: boolean
+): readonly [
   ReturnType<typeof EditorView.editable.of>,
   ReturnType<typeof EditorState.readOnly.of>,
 ] {

@@ -106,10 +106,7 @@ export function ApplyToFileModal({
     >
       <div className="flex w-[720px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-2xl">
         <header className="flex items-center gap-2 border-b border-border-primary px-4 py-2">
-          <h2
-            id="apply-to-file-title"
-            className="flex-1 text-sm font-semibold text-text-primary"
-          >
+          <h2 id="apply-to-file-title" className="flex-1 text-sm font-semibold text-text-primary">
             {t('code.apply.modal.title')}
           </h2>
         </header>

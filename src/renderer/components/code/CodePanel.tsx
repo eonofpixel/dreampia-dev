@@ -114,9 +114,7 @@ export interface CodePanelProps {
    *
    * Refs: BUILDER_UX_ANALYSIS.md #C — Apply-to-file follow-up.
    */
-  onCurrentFileChange?: (
-    info: { path: string; mtime?: string; content: string } | null
-  ) => void;
+  onCurrentFileChange?: (info: { path: string; mtime?: string; content: string } | null) => void;
   /**
    * v2.8.x (Builder UX, C 3차) — 외부 (App.tsx 의 ApplyToFileModal accept)
    * 가 disk content 를 갱신했음을 알림. 값 변화 시 selectedPath 가 일치하면
@@ -373,11 +371,7 @@ export function CodePanel({
   }, []);
 
   const handleSave = useCallback(() => {
-    if (
-      workspaceRoot === undefined ||
-      workspaceRoot.length === 0 ||
-      selectedPath === undefined
-    )
+    if (workspaceRoot === undefined || workspaceRoot.length === 0 || selectedPath === undefined)
       return;
     const ws = typeof window !== 'undefined' ? window.dreampia?.workspace : undefined;
     if (ws === undefined || typeof ws.writeFile !== 'function') {
@@ -651,11 +645,7 @@ export function CodePanel({
               {error}
             </p>
           ) : showDiff ? (
-            <DiffViewer
-              original={diskContent}
-              modified={draft}
-              relPath={selectedPath}
-            />
+            <DiffViewer original={diskContent} modified={draft} relPath={selectedPath} />
           ) : (
             <CodeEditor
               content={editing ? draft : diskContent}

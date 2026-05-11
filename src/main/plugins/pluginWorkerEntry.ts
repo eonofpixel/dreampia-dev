@@ -321,4 +321,3 @@ if (electronProcess.parentPort !== undefined) {
     void handleHostMessage(e.data, parentPort.postMessage.bind(parentPort), () => process.exit(0));
   });
 }
-

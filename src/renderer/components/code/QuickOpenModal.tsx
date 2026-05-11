@@ -42,9 +42,7 @@ const VISIBLE_LIMIT = 50;
  * (loadRecentFiles 가 path 만 반환). list view 가 양쪽을 동일하게 렌더링
  * 하지만 추가 메타데이터 표시는 모두 entry 기준이라 차이 없음.
  */
-type Row =
-  | { kind: 'recent'; path: string }
-  | { kind: 'file'; entry: FileEntry };
+type Row = { kind: 'recent'; path: string } | { kind: 'file'; entry: FileEntry };
 
 export function QuickOpenModal({
   open,
@@ -142,9 +140,7 @@ export function QuickOpenModal({
       }
     }
     scored.sort((a, b) => b.score - a.score);
-    return scored
-      .slice(0, VISIBLE_LIMIT)
-      .map<Row>((s) => ({ kind: 'file', entry: s.entry }));
+    return scored.slice(0, VISIBLE_LIMIT).map<Row>((s) => ({ kind: 'file', entry: s.entry }));
   }, [entries, recents, query]);
 
   function rowPath(row: Row): string {
@@ -256,9 +252,7 @@ export function QuickOpenModal({
                 const prev = idx > 0 ? rows[idx - 1] : undefined;
                 const showRecentHeader = row.kind === 'recent' && prev?.kind !== 'recent';
                 const showAllHeader =
-                  query.length === 0 &&
-                  row.kind === 'file' &&
-                  prev?.kind === 'recent';
+                  query.length === 0 && row.kind === 'file' && prev?.kind === 'recent';
                 return (
                   <Fragment key={`${row.kind}:${path}`}>
                     {showRecentHeader && (
@@ -294,9 +288,15 @@ export function QuickOpenModal({
                         }
                       >
                         {row.kind === 'recent' ? (
-                          <Clock aria-hidden="true" className="h-3 w-3 shrink-0 text-text-tertiary" />
+                          <Clock
+                            aria-hidden="true"
+                            className="h-3 w-3 shrink-0 text-text-tertiary"
+                          />
                         ) : (
-                          <FileText aria-hidden="true" className="h-3 w-3 shrink-0 text-text-tertiary" />
+                          <FileText
+                            aria-hidden="true"
+                            className="h-3 w-3 shrink-0 text-text-tertiary"
+                          />
                         )}
                         <span className="truncate font-mono text-text-primary">{path}</span>
                       </button>

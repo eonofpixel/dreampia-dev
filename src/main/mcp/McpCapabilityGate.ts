@@ -21,14 +21,7 @@
  *   - InstalledPluginRecord materialization (caller composes manifest+verify result).
  */
 
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const GRANTED_FILENAME = 'granted.json';
