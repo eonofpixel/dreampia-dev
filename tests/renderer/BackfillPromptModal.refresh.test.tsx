@@ -40,7 +40,7 @@ describe('BackfillPromptModal — onDone callback', () => {
       />
     );
 
-    fireEvent.click(screen.getByTestId('workspace-backfill-close'));
+    fireEvent.click(screen.getByTestId('modal-shell-close'));
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 

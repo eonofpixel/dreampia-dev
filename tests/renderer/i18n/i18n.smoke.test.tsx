@@ -25,7 +25,7 @@ describe('i18n smoke (v0.11.0 B2)', () => {
         />
       );
       expect(screen.getByText('새 채팅')).toBeInTheDocument();
-      expect(screen.getByText('설정')).toBeInTheDocument();
+      expect(screen.getByLabelText('설정 (Ctrl+,)')).toBeInTheDocument();
       expect(screen.getByText('채팅')).toBeInTheDocument();
     });
 
@@ -39,7 +39,7 @@ describe('i18n smoke (v0.11.0 B2)', () => {
         />
       );
       expect(screen.getByText('New chat')).toBeInTheDocument();
-      expect(screen.getByText('Settings')).toBeInTheDocument();
+      expect(screen.getByLabelText('Settings (Ctrl+,)')).toBeInTheDocument();
       expect(screen.getByText('Chats')).toBeInTheDocument();
     });
 

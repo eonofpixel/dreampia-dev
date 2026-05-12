@@ -3,10 +3,10 @@
  *
  * indicator 는 onOpenMcpSettings prop 이 있을 때만 표시.
  * 색상 dot:
- *   - 0 서버: gray
- *   - all ready: green
- *   - any connecting: yellow
- *   - any error: red
+ *   - 0 서버: muted
+ *   - all ready: semantic success
+ *   - any connecting: semantic warning
+ *   - any error: semantic danger
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -66,7 +66,7 @@ describe('Sidebar — MCP status indicator (v0.9.0)', () => {
     });
     const dot = screen
       .getByTestId('sidebar-mcp-status')
-      .querySelector('span.bg-green-500');
+      .querySelector('span.bg-semantic-success');
     expect(dot).not.toBeNull();
   });
 
@@ -99,7 +99,7 @@ describe('Sidebar — MCP status indicator (v0.9.0)', () => {
     });
     const dot = screen
       .getByTestId('sidebar-mcp-status')
-      .querySelector('span.bg-red-500');
+      .querySelector('span.bg-semantic-danger');
     expect(dot).not.toBeNull();
   });
 
