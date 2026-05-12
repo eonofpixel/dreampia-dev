@@ -12,12 +12,20 @@ import { test, expect } from './fixtures';
 const SKIP_NETWORK = process.env['PLAYWRIGHT_SKIP_NETWORK'] === '1';
 
 test.describe('preview panel — BrowserView (V4)', () => {
-  test('shows empty state with [예시 URL 열기] button initially', async ({ window }) => {
-    // No tabs → EmptyPreview renders (PreviewPanel.tsx:404).
+  test('opens from the preview rail and shows empty state', async ({ window }) => {
+    await expect(window.locator('[data-preview-visible]')).toHaveAttribute(
+      'data-preview-visible',
+      'false'
+    );
+    await window.getByTestId('preview-rail-toggle').click();
+
+    // No tabs → EmptyPreview renders after the on-demand panel opens.
+    await expect(window.locator('[data-preview-visible]')).toHaveAttribute(
+      'data-preview-visible',
+      'true'
+    );
     await expect(window.getByText('미리보기할 페이지가 없어요')).toBeVisible();
-    await expect(
-      window.getByRole('button', { name: '예시 URL 열기' })
-    ).toBeVisible();
+    await expect(window.getByRole('button', { name: '예시 URL 열기' })).toBeVisible();
   });
 
   test('opens example.com tab when clicking demo button', async ({ window }) => {
@@ -25,6 +33,7 @@ test.describe('preview panel — BrowserView (V4)', () => {
 
     // BrowserView 는 session-scoped partition 사용 — 세션 먼저 생성 필요.
     await window.getByRole('button', { name: '새 채팅', exact: true }).click();
+    await window.getByTestId('preview-toggle-button').click();
 
     await window.getByRole('button', { name: '예시 URL 열기' }).click();
 
@@ -48,6 +57,7 @@ test.describe('preview panel — BrowserView (V4)', () => {
     test.skip(SKIP_NETWORK, 'PLAYWRIGHT_SKIP_NETWORK set — no network in CI runner');
 
     await window.getByRole('button', { name: '새 채팅', exact: true }).click();
+    await window.getByTestId('preview-toggle-button').click();
     await window.getByRole('button', { name: '예시 URL 열기' }).click();
     await expect(window.getByRole('tab')).toHaveCount(1, { timeout: 10_000 });
 

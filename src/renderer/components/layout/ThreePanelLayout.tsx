@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react';
+
 /**
  * ThreePanelLayout — Sidebar + Chat + Preview.
  *
@@ -10,6 +12,7 @@ export interface ThreePanelLayoutProps {
   sidebar: React.ReactNode;
   chat: React.ReactNode;
   preview: React.ReactNode;
+  previewToggle?: React.ReactNode;
   /**
    * v0.10.0 (F-025) — Mod+B 단축키로 사이드바 토글. false 면 sidebar 자리를
    * 0px 로 collapse, chat 이 그 자리를 차지. 기본값 true.
@@ -29,26 +32,45 @@ export function ThreePanelLayout({
   sidebar,
   chat,
   preview,
+  previewToggle,
   sidebarVisible = true,
   previewVisible = true,
 }: ThreePanelLayoutProps): React.JSX.Element {
-  // 4 가지 조합 (sidebar × preview) 에 따른 grid template.
-  // Tailwind 의 동적 class 빌드 한계 우회 — inline style.
-  // chat 의 max-width 750px 는 항상 유지 (가독성).
-  const gridTemplateColumns = `${sidebarVisible ? '286px' : '0px'} minmax(400px,750px) ${previewVisible ? '1fr' : '0px'}`;
+  const layoutStyle = {
+    '--sidebar-panel-width': sidebarVisible ? '286px' : '0px',
+    '--chat-panel-width': previewVisible ? 'minmax(360px, min(740px, 45vw))' : 'minmax(0, 1fr)',
+    '--preview-panel-width': previewVisible ? 'minmax(360px, 1fr)' : '0px',
+    '--preview-rail-width': '44px',
+  } as CSSProperties;
+
   return (
     <div
-      className="grid h-screen overflow-hidden bg-bg-primary text-text-primary"
-      style={{ gridTemplateColumns }}
+      className="three-panel-layout relative grid h-screen overflow-hidden bg-bg-primary text-text-primary"
+      style={layoutStyle}
       data-sidebar-visible={sidebarVisible}
       data-preview-visible={previewVisible}
     >
-      <div className={sidebarVisible ? '' : 'hidden'} aria-hidden={!sidebarVisible}>
+      <div
+        className="three-panel-sidebar min-w-0 overflow-hidden"
+        data-open={sidebarVisible}
+        aria-hidden={!sidebarVisible}
+      >
         {sidebar}
       </div>
-      {chat}
-      <div className={previewVisible ? '' : 'hidden'} aria-hidden={!previewVisible}>
+      <div className="three-panel-chat min-w-0 overflow-hidden">{chat}</div>
+      <div
+        className="three-panel-preview min-w-0 overflow-hidden"
+        data-open={previewVisible}
+        aria-hidden={!previewVisible}
+      >
         {preview}
+      </div>
+      <div
+        className="three-panel-preview-rail flex min-w-0 items-start justify-center border-l border-hairline bg-canvas-soft px-1 py-sm"
+        data-preview-open={previewVisible}
+        aria-hidden={previewToggle === undefined}
+      >
+        {previewToggle}
       </div>
     </div>
   );

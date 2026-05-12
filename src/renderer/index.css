@@ -161,3 +161,108 @@ pre {
   outline-offset: 2px;
   border-radius: 0.25rem;
 }
+
+/* ============================================
+   App layout + scroll surfaces
+   ============================================ */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-hairline-strong) 76%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 40px;
+  border: 3px solid transparent;
+  border-radius: var(--radius-pill);
+  background-clip: content-box;
+  background-color: color-mix(in srgb, var(--color-hairline-strong) 72%, transparent);
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--color-text-tertiary) 58%, transparent);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.three-panel-layout {
+  grid-template-columns:
+    var(--sidebar-panel-width) var(--chat-panel-width)
+    var(--preview-panel-width) var(--preview-rail-width);
+  transition: grid-template-columns var(--duration-base) var(--ease-out);
+}
+
+.three-panel-sidebar,
+.three-panel-preview,
+.three-panel-preview-rail {
+  min-height: 0;
+}
+
+.three-panel-sidebar[data-open='false'],
+.three-panel-preview[data-open='false'] {
+  display: none;
+}
+
+.three-panel-preview {
+  background-color: var(--color-canvas);
+}
+
+.three-panel-preview > aside,
+.three-panel-preview > section {
+  box-shadow:
+    -1px 0 0 var(--color-hairline),
+    -14px 0 30px rgba(20, 20, 19, 0.06);
+}
+
+.three-panel-preview-rail {
+  box-shadow: inset 1px 0 0 var(--color-hairline-soft);
+}
+
+@media (max-width: 1100px) {
+  .three-panel-layout {
+    grid-template-columns: var(--sidebar-panel-width) minmax(0, 1fr) 0px 44px;
+  }
+
+  .three-panel-preview[data-open='true'] {
+    position: absolute;
+    top: 0;
+    right: 44px;
+    bottom: 0;
+    z-index: 20;
+    width: min(540px, calc(100vw - var(--sidebar-panel-width) - 44px));
+    border-left: 1px solid var(--color-hairline);
+  }
+}
+
+@media (max-width: 760px) {
+  .three-panel-layout {
+    grid-template-columns: minmax(0, 1fr) 0px 44px;
+  }
+
+  .three-panel-sidebar[data-open='true'] {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    width: min(286px, calc(100vw - 44px));
+    border-right: 1px solid var(--color-hairline);
+    box-shadow: var(--elev-strong);
+  }
+
+  .three-panel-preview[data-open='true'] {
+    right: 44px;
+    width: calc(100vw - 44px);
+  }
+}

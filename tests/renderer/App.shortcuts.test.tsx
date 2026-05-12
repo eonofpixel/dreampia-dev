@@ -122,18 +122,14 @@ describe('App keyboard shortcuts (v0.10.0)', () => {
     fireEvent.keyDown(window, { key: 'b', ctrlKey: true });
     await waitFor(() => {
       expect(
-        document
-          .querySelector('[data-sidebar-visible]')
-          ?.getAttribute('data-sidebar-visible')
+        document.querySelector('[data-sidebar-visible]')?.getAttribute('data-sidebar-visible')
       ).toBe('false');
     });
     // Toggle back.
     fireEvent.keyDown(window, { key: 'b', ctrlKey: true });
     await waitFor(() => {
       expect(
-        document
-          .querySelector('[data-sidebar-visible]')
-          ?.getAttribute('data-sidebar-visible')
+        document.querySelector('[data-sidebar-visible]')?.getAttribute('data-sidebar-visible')
       ).toBe('true');
     });
   });
@@ -154,7 +150,7 @@ describe('App keyboard shortcuts (v0.10.0)', () => {
     expect(screen.queryByTestId('settings-modal')).not.toBeInTheDocument();
   });
 
-  it('Mod+Shift+F toggles fullscreen layout — hides sidebar + preview together (v1.6.4)', async () => {
+  it('Mod+Shift+F toggles fullscreen layout — restores an open preview snapshot (v1.6.4)', async () => {
     stubPlatform('Win32');
     render(<App />);
     await waitFor(() => {
@@ -162,6 +158,14 @@ describe('App keyboard shortcuts (v0.10.0)', () => {
     });
     const layout = document.querySelector('[data-sidebar-visible]');
     expect(layout?.getAttribute('data-sidebar-visible')).toBe('true');
+    expect(layout?.getAttribute('data-preview-visible')).toBe('false');
+
+    // 사용자가 preview 를 먼저 켠 상태를 snapshot 으로 잡는다.
+    fireEvent.keyDown(window, { key: '\\', ctrlKey: true });
+    await waitFor(() => {
+      const el = document.querySelector('[data-preview-visible]');
+      expect(el?.getAttribute('data-preview-visible')).toBe('true');
+    });
     expect(layout?.getAttribute('data-preview-visible')).toBe('true');
 
     // 진입 — 둘 다 hidden.
@@ -181,18 +185,16 @@ describe('App keyboard shortcuts (v0.10.0)', () => {
     });
   });
 
-  it('Mod+Shift+F restores prior sidebar-only state (v1.6.4)', async () => {
+  it('Mod+Shift+F restores prior sidebar-only state with preview closed by default (v1.6.4)', async () => {
     stubPlatform('Win32');
     render(<App />);
     await waitFor(() => {
       expect(screen.getByTestId('sidebar-search-input')).toBeInTheDocument();
     });
-    // 사용자가 먼저 preview 를 끔 (Mod+\)
-    fireEvent.keyDown(window, { key: '\\', ctrlKey: true });
-    await waitFor(() => {
-      const el = document.querySelector('[data-preview-visible]');
-      expect(el?.getAttribute('data-preview-visible')).toBe('false');
-    });
+    const layout = document.querySelector('[data-sidebar-visible]');
+    expect(layout?.getAttribute('data-sidebar-visible')).toBe('true');
+    expect(layout?.getAttribute('data-preview-visible')).toBe('false');
+
     // 진입 fullscreen — 사이드바도 hidden.
     fireEvent.keyDown(window, { key: 'F', ctrlKey: true, shiftKey: true });
     await waitFor(() => {

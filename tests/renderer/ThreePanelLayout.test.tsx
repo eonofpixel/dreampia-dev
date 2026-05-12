@@ -31,4 +31,19 @@ describe('ThreePanelLayout', () => {
     const root = container.firstChild as HTMLElement;
     expect(root.className).toContain('grid');
   });
+
+  it('shows the preview rail when preview is collapsed', () => {
+    render(
+      <ThreePanelLayout
+        sidebar={<div data-testid="sidebar">사이드바</div>}
+        chat={<div data-testid="chat">채팅</div>}
+        preview={<div data-testid="preview">미리보기</div>}
+        previewVisible={false}
+        previewToggle={<button data-testid="preview-rail-toggle">열기</button>}
+      />
+    );
+
+    expect(screen.getByTestId('preview-rail-toggle')).toBeInTheDocument();
+    expect(screen.getByTestId('preview')).toBeInTheDocument();
+  });
 });

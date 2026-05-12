@@ -472,7 +472,7 @@ function BrowserPreview({
 
   return (
     <aside
-      className="relative flex h-full flex-1 flex-col border-l border-border-primary bg-bg-primary"
+      className="relative flex h-full flex-1 flex-col border-l border-hairline bg-canvas"
       aria-label={t('preview.aside_aria')}
     >
       <PreviewTabs
@@ -521,7 +521,7 @@ function BrowserPreview({
        */}
       {(onAnnotation !== undefined || onScreenshot !== undefined || onDomDump !== undefined) && (
         <div
-          className="flex items-center gap-xs border-b border-hairline bg-canvas-soft px-sm py-xxs"
+          className="flex items-center gap-xs border-b border-hairline bg-canvas-soft px-sm py-xs"
           role="toolbar"
           aria-label={t('preview.aside_aria')}
           data-testid="preview-inspector-toolbar"
@@ -646,8 +646,8 @@ function PreviewTabs({
     // 만 carry — WAI-ARIA 명세: tablist 의 required children 은 role=tab only.
     // 이전엔 같은 element 가 role=tablist + new-tab button 자식 → axe critical
     // (aria-required-children). 새 탭 button 을 tablist 형제로 분리.
-    <div className="flex h-9 items-center border-b border-border-primary bg-bg-secondary">
-      <div role="tablist" className="flex items-center">
+    <div className="flex h-10 items-center border-b border-hairline bg-canvas-soft px-xs">
+      <div role="tablist" className="flex min-w-0 flex-1 items-center overflow-hidden">
         {tabs.map((tab) => {
           const isActive = tab.tab_id === activeTabId;
           return (
@@ -656,7 +656,7 @@ function PreviewTabs({
               role="tab"
               aria-selected={isActive}
               data-active={isActive}
-              className="flex items-center gap-1 border-r border-border-primary pl-3 pr-1 py-1.5 text-xs hover:bg-bg-tertiary data-[active=true]:bg-bg-primary"
+              className="flex min-w-0 items-center gap-1 rounded-md px-xs py-1.5 text-xs text-text-secondary hover:bg-surface-strong data-[active=true]:bg-surface-card data-[active=true]:text-text-primary data-[active=true]:shadow-soft"
             >
               <button
                 type="button"
@@ -678,7 +678,7 @@ function PreviewTabs({
                 aria-label={t('preview.tabs.close_aria', {
                   title: tab.title || t('preview.tabs.untitled'),
                 })}
-                className="rounded p-0.5 text-text-tertiary hover:bg-bg-primary hover:text-text-primary"
+                className="rounded p-0.5 text-text-tertiary hover:bg-canvas-soft hover:text-text-primary"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -689,7 +689,7 @@ function PreviewTabs({
       <button
         type="button"
         onClick={onNewTab}
-        className="px-3 py-1.5 text-text-tertiary hover:bg-bg-tertiary"
+        className="ml-xs rounded-md p-1.5 text-text-tertiary hover:bg-surface-strong hover:text-text-primary"
         aria-label={t('preview.tabs.new_aria')}
         data-testid="preview-new-tab"
       >
@@ -746,12 +746,12 @@ function BrowserControls({
   const disabled = activeTab === null;
 
   return (
-    <div className="flex h-10 items-center gap-1 border-b border-border-primary px-2">
+    <div className="flex h-11 items-center gap-xs border-b border-hairline bg-canvas px-sm">
       <button
         type="button"
         onClick={onBack}
         disabled={disabled || !activeTab?.can_go_back}
-        className="rounded p-1.5 text-text-tertiary hover:bg-bg-tertiary disabled:opacity-30"
+        className="rounded-md p-1.5 text-text-tertiary hover:bg-surface-strong hover:text-text-primary disabled:opacity-30"
         aria-label={t('preview.controls.back_aria')}
         data-testid="preview-back"
       >
@@ -761,7 +761,7 @@ function BrowserControls({
         type="button"
         onClick={onForward}
         disabled={disabled || !activeTab?.can_go_forward}
-        className="rounded p-1.5 text-text-tertiary hover:bg-bg-tertiary disabled:opacity-30"
+        className="rounded-md p-1.5 text-text-tertiary hover:bg-surface-strong hover:text-text-primary disabled:opacity-30"
         aria-label={t('preview.controls.forward_aria')}
         data-testid="preview-forward"
       >
@@ -771,7 +771,7 @@ function BrowserControls({
         type="button"
         onClick={onReload}
         disabled={disabled}
-        className="rounded p-1.5 text-text-tertiary hover:bg-bg-tertiary disabled:opacity-30"
+        className="rounded-md p-1.5 text-text-tertiary hover:bg-surface-strong hover:text-text-primary disabled:opacity-30"
         aria-label={t('preview.controls.reload_aria')}
         data-testid="preview-reload"
       >
@@ -780,7 +780,7 @@ function BrowserControls({
 
       <form
         onSubmit={submit}
-        className="ml-2 flex flex-1 items-center rounded-md bg-bg-secondary px-3 py-1"
+        className="ml-xs flex flex-1 items-center rounded-md border border-hairline bg-surface-card px-sm py-1 shadow-soft"
       >
         <input
           type="text"
@@ -796,7 +796,7 @@ function BrowserControls({
       <button
         type="button"
         disabled
-        className="rounded p-1.5 text-text-tertiary hover:bg-bg-tertiary disabled:opacity-30"
+        className="rounded-md p-1.5 text-text-tertiary hover:bg-surface-strong hover:text-text-primary disabled:opacity-30"
         aria-label={t('preview.controls.fullscreen_aria')}
         title={t('preview.controls.fullscreen_tooltip')}
       >
@@ -872,7 +872,7 @@ function BrowserPaneAnchor({
 
   if (!hasTabs) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-text-tertiary">
+      <div className="flex flex-1 items-center justify-center bg-canvas-soft text-sm text-text-tertiary">
         <EmptyPreview onOpenDemo={onOpenDemo} />
       </div>
     );
@@ -900,16 +900,16 @@ function BrowserPaneAnchor({
 function EmptyPreview({ onOpenDemo }: { onOpenDemo: () => void }): React.JSX.Element {
   const t = useT();
   return (
-    <div className="text-center">
-      <div className="flex justify-center text-text-tertiary">
-        <Globe aria-hidden="true" className="h-12 w-12" />
+    <div className="max-w-[280px] rounded-lg border border-hairline bg-surface-card px-lg py-xl text-center shadow-soft">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-md bg-accent-soft text-accent">
+        <Globe aria-hidden="true" className="h-6 w-6" />
       </div>
-      <p className="mt-4">{t('preview.empty.title')}</p>
-      <p className="mt-2 text-xs">{t('preview.empty.hint')}</p>
+      <p className="mt-base text-title-sm text-text-primary">{t('preview.empty.title')}</p>
+      <p className="mt-xs text-caption text-text-tertiary">{t('preview.empty.hint')}</p>
       <button
         type="button"
         onClick={onOpenDemo}
-        className="mt-4 rounded-md border border-border-primary bg-bg-secondary px-3 py-1 text-xs text-text-primary hover:bg-bg-tertiary"
+        className="mt-base rounded-md border border-hairline bg-canvas px-sm py-xs text-caption text-text-primary hover:bg-surface-strong"
         data-testid="preview-open-demo"
       >
         {t('preview.empty.open_demo')}

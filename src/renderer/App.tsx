@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { ThreePanelLayout } from './components/layout/ThreePanelLayout';
 import { Sidebar } from './components/sidebar/Sidebar';
 import type { SearchResultEntry } from './components/sidebar/SearchSection';
@@ -272,10 +273,10 @@ export function App(): React.JSX.Element {
   });
   // v0.10.0 (F-025) — 사이드바 토글. Mod+B 로 표시/숨김.
   const [sidebarVisible, setSidebarVisible] = useState(true);
-  // v1.0.8 (FAKE-1 청산) — 미리보기 패널 토글. Mod+\\ 로 표시/숨김.
-  // 이전엔 schema (browser.panel_visible) 만 있고 UI/IPC 0 — 사용자가 닫을
-  // 방법 없었음. 사이드바 토글 패턴 그대로 차용.
-  const [previewVisible, setPreviewVisible] = useState(true);
+  // v2.10.x — 미리보기 패널은 사용자가 필요할 때 여는 drawer 기본값.
+  // 빈 작업 화면은 chat 중심으로 시작하고, rail / ChatHeader / Code 진입이
+  // 같은 상태를 공유한다.
+  const [previewVisible, setPreviewVisible] = useState(false);
   // v2.5.0 (Phase 1 — Code mode) — Codex 의 file-open preview 패턴 (옵션 D).
   // Sidebar 의 [Code] 클릭이 'code' 로 토글, [Browser]/Open Demo 가 'browser'
   // 로 복귀. PreviewPanel 이 mode prop 으로 분기.
@@ -1390,6 +1391,31 @@ export function App(): React.JSX.Element {
       <ThreePanelLayout
         sidebarVisible={sidebarVisible}
         previewVisible={previewVisible}
+        previewToggle={
+          <button
+            type="button"
+            onClick={() => setPreviewVisible((v) => !v)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-hairline bg-surface-card text-text-secondary shadow-soft transition-colors hover:border-hairline-strong hover:bg-surface-strong hover:text-text-primary"
+            title={
+              previewVisible
+                ? t('chat.header.preview_hide_tooltip')
+                : t('chat.header.preview_show_tooltip')
+            }
+            aria-label={
+              previewVisible
+                ? t('chat.header.preview_hide_aria')
+                : t('chat.header.preview_show_aria')
+            }
+            aria-pressed={previewVisible}
+            data-testid="preview-rail-toggle"
+          >
+            {previewVisible ? (
+              <PanelRightClose aria-hidden="true" className="h-4 w-4" />
+            ) : (
+              <PanelRightOpen aria-hidden="true" className="h-4 w-4" />
+            )}
+          </button>
+        }
         sidebar={
           <Sidebar
             sessions={sidebarSessions}

@@ -86,11 +86,7 @@ test.describe('drive r2', () => {
         listText: list?.textContent?.trim().slice(0, 200) ?? null,
       };
     });
-    writeFileSync(
-      resolve(SHOT_DIR, 'r2-07-state.json'),
-      JSON.stringify(result, null, 2),
-      'utf-8'
-    );
+    writeFileSync(resolve(SHOT_DIR, 'r2-07-state.json'), JSON.stringify(result, null, 2), 'utf-8');
 
     await search.clear();
     await window.waitForTimeout(200);
@@ -98,6 +94,7 @@ test.describe('drive r2', () => {
   });
 
   test('08 — preview panel example URL button', async ({ window }) => {
+    await window.getByTestId('preview-rail-toggle').click();
     const exampleBtn = window.getByRole('button', { name: '예시 URL 열기' });
     await expect(exampleBtn).toBeVisible();
 
@@ -130,9 +127,8 @@ test.describe('drive r2', () => {
     window,
   }) => {
     // 가짜 폴더 경로로 dialog 응답 설정.
-    const FAKE_PATH = process.platform === 'win32'
-      ? 'C:\\fake\\my-new-project'
-      : '/fake/my-new-project';
+    const FAKE_PATH =
+      process.platform === 'win32' ? 'C:\\fake\\my-new-project' : '/fake/my-new-project';
 
     await app.evaluate(({ dialog }, fakePath) => {
       dialog.showOpenDialog = (async () => {
@@ -199,7 +195,9 @@ test.describe('drive r2', () => {
     // 사이드바뿐 아니라 전체 화면에서 클릭 가능한 모든 것을 카탈로그한다.
     const inventory = await window.evaluate(() => {
       const all = Array.from(
-        document.querySelectorAll('button, a[href], [role="button"], input, textarea, [data-testid]')
+        document.querySelectorAll(
+          'button, a[href], [role="button"], input, textarea, [data-testid]'
+        )
       );
       const w = globalThis as unknown as Window;
       return all.slice(0, 80).map((el) => {
