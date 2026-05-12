@@ -859,12 +859,7 @@ export class BrowserManager {
     if (!tab) return null;
     const wc = tab.view.webContents as {
       isDestroyed(): boolean;
-      capturePage?: (rect?: {
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-      }) => Promise<{
+      capturePage?: (rect?: { x: number; y: number; width: number; height: number }) => Promise<{
         toPNG(): Buffer | Uint8Array;
         getSize(): { width: number; height: number };
       }>;

@@ -1294,9 +1294,7 @@ const api = {
     captureRegion: (
       tabId: string,
       bbox: { x: number; y: number; w: number; h: number }
-    ): Promise<
-      Result<{ uri: string; png_base64: string; width: number; height: number } | null>
-    > =>
+    ): Promise<Result<{ uri: string; png_base64: string; width: number; height: number } | null>> =>
       ipcRenderer.invoke('browser/capture-region', tabId, bbox) as Promise<
         Result<{ uri: string; png_base64: string; width: number; height: number } | null>
       >,
@@ -1342,9 +1340,7 @@ const api = {
     disableInspector: (tabId: string): Promise<Result<void>> =>
       ipcRenderer.invoke('browser/disable-inspector', tabId) as Promise<Result<void>>,
 
-    onInspectorEvent: (
-      listener: (payload: BrowserInspectorPayloadShape) => void
-    ): (() => void) => {
+    onInspectorEvent: (listener: (payload: BrowserInspectorPayloadShape) => void): (() => void) => {
       const handler = (
         _event: Electron.IpcRendererEvent,
         payload: BrowserInspectorPayloadShape

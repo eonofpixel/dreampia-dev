@@ -590,7 +590,10 @@ function DiagnoseDataBlock({ t, data }: SubProps & { data: DiagnoseShape }): Rea
         </p>
       )}
       {data.db_error !== undefined && (
-        <p className="font-mono text-xs text-semantic-danger" data-testid="settings-diagnose-db-error">
+        <p
+          className="font-mono text-xs text-semantic-danger"
+          data-testid="settings-diagnose-db-error"
+        >
           {data.db_error}
         </p>
       )}

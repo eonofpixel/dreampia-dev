@@ -2615,10 +2615,7 @@ function registerBrowserHandlers(browser: BrowserManager): void {
   // because a buggy/compromised renderer must not blow up disk.
   ipcMain.handle(
     'annotation/save-audio',
-    async (
-      _evt,
-      args: unknown
-    ): Promise<Result<{ uri: string; size_bytes: number } | null>> => {
+    async (_evt, args: unknown): Promise<Result<{ uri: string; size_bytes: number } | null>> => {
       try {
         if (args === null || typeof args !== 'object') {
           throw new Error('args must be an object');

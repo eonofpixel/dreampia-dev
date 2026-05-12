@@ -563,10 +563,7 @@ function DailySection({ rows }: DailySectionProps): React.JSX.Element {
           </thead>
           <tbody>
             {rows.map((row, idx) => (
-              <tr
-                key={`${row.date}/${row.provider}/${idx}`}
-                className="border-t border-hairline"
-              >
+              <tr key={`${row.date}/${row.provider}/${idx}`} className="border-t border-hairline">
                 <td className="p-2 font-mono text-xs">{row.date}</td>
                 <td className="p-2">
                   <span

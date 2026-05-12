@@ -269,15 +269,12 @@ function BrowserPreview({
     setAnnotationActive((v) => !v);
   }, []);
 
-  const handleAnnotationMark = useCallback(
-    (box: AnnotationBox): void => {
-      // v2.10.0 β-4 (F-021 inline panel) — draft 로 보유. InlinePanel 의
-      // [저장] 시점에 captureRegion + audio save + onAnnotation forward.
-      // pendingBox 가 이미 있으면 새 mark 는 무시 (사용자가 panel 정리 먼저).
-      setPendingBox((prev) => (prev === null ? box : prev));
-    },
-    []
-  );
+  const handleAnnotationMark = useCallback((box: AnnotationBox): void => {
+    // v2.10.0 β-4 (F-021 inline panel) — draft 로 보유. InlinePanel 의
+    // [저장] 시점에 captureRegion + audio save + onAnnotation forward.
+    // pendingBox 가 이미 있으면 새 mark 는 무시 (사용자가 panel 정리 먼저).
+    setPendingBox((prev) => (prev === null ? box : prev));
+  }, []);
 
   // v2.10.0 β-4 — InlinePanel 의 [저장] 콜백. 여기서 screenshot capture +
   // (이미 finalized 된 audio) + AnnotationBlock 조립 후 onAnnotation forward.

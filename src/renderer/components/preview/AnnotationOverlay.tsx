@@ -189,10 +189,7 @@ export function AnnotationOverlay({
           const rightAnchor = hoverRect.x + hoverRect.w + 8;
           const leftAnchor = hoverRect.x - META_CARD_W - 8;
           // Right side fits when there's room to the right of the element.
-          const placeLeft =
-            rightAnchor + META_CARD_W > overlayW && leftAnchor >= 0
-              ? true
-              : false;
+          const placeLeft = rightAnchor + META_CARD_W > overlayW && leftAnchor >= 0 ? true : false;
           let top = hoverRect.y;
           if (top + META_CARD_H_EST > overlayH) {
             top = Math.max(0, overlayH - META_CARD_H_EST);
@@ -357,7 +354,10 @@ export function AnnotationOverlay({
           }}
         >
           <div className="flex flex-col gap-xxs">
-            <div className="font-medium text-text-primary" data-testid="annotation-hover-meta-title">
+            <div
+              className="font-medium text-text-primary"
+              data-testid="annotation-hover-meta-title"
+            >
               {`<${hoverMeta.tag}${
                 hoverMeta.classes !== undefined && hoverMeta.classes.length > 0
                   ? `.${hoverMeta.classes.join('.')}`
@@ -370,10 +370,7 @@ export function AnnotationOverlay({
               </div>
             )}
             {hoverMeta.color !== undefined && (
-              <div
-                className="flex items-center gap-xs"
-                data-testid="annotation-hover-meta-color"
-              >
+              <div className="flex items-center gap-xs" data-testid="annotation-hover-meta-color">
                 <span
                   className="inline-block h-3 w-3 rounded-sm border border-hairline"
                   style={{ background: hoverMeta.color }}
@@ -417,7 +414,10 @@ export function AnnotationOverlay({
                 <span className="font-mono text-text-secondary">{hoverMeta.font}</span>
               </div>
             )}
-            <div className="flex items-baseline gap-xs" data-testid="annotation-hover-meta-dimensions">
+            <div
+              className="flex items-baseline gap-xs"
+              data-testid="annotation-hover-meta-dimensions"
+            >
               <span className="text-text-tertiary">
                 {t('preview.annotation.meta.dimensions_label')}
               </span>
