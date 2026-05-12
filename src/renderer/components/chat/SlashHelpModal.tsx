@@ -14,10 +14,10 @@
  */
 
 import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
 import { SLASH_COMMANDS } from '../../commands/registry';
 import { SHORTCUT_DEFS, formatShortcut, type ShortcutAction } from '../../keyboard/shortcuts';
 import { useT } from '../../i18n';
+import { ModalShell } from '../ui/ModalShell';
 
 export interface SlashHelpModalProps {
   open: boolean;
@@ -49,141 +49,111 @@ export function SlashHelpModal({ open, onClose }: SlashHelpModalProps): React.JS
     };
   }, [open]);
 
-  // Esc 로 닫기 — 다른 모달과 일관된 keyboard UX. App level 의 useKeyboardShortcuts
-  // 가 modal.close 를 dispatch 해 onClose 까지 도달 가능하지만, 본 모달은 단독
-  // 으로도 사용될 수 있어 자체 listener 도 유지.
-  useEffect(() => {
-    if (!open) return;
-    const handleKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => {
-      window.removeEventListener('keydown', handleKey);
-    };
-  }, [open, onClose]);
-
-  if (!open) return null;
-
+  // v2.10.0 (.omc/DESIGN.md, modal migration A) — chrome 을 ModalShell + token
+  // 으로. ModalShell 의 onClose 가 Escape + overlay click 자동 처리해 기존
+  // 자체 keydown listener 제거. subtitle 은 children 의 상단으로 옮김 (header
+  // 는 title 단일 row 유지).
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('slash_help.modal_aria')}
+    <ModalShell
+      open={open}
+      size="lg"
+      title={t('slash_help.title')}
+      titleId="slash-help-modal-title"
+      onClose={onClose}
       data-testid="slash-help-modal"
-    >
-      <div className="flex max-h-[90vh] w-[640px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border-primary p-4">
-          <div>
-            <h2 className="text-lg font-semibold">{t('slash_help.title')}</h2>
-            <p className="text-xs text-text-secondary">
-              {t('slash_help.subtitle.before')}
-              <kbd className="rounded bg-bg-tertiary px-1">/</kbd>
-              {t('slash_help.subtitle.after')}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded-md p-2 hover:bg-bg-tertiary"
-            aria-label={t('slash_help.close')}
-            data-testid="slash-help-close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Body — 명령 목록 + 단축키 */}
-        <div className="flex-1 overflow-y-auto p-4">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
-            {t('slash_help.section.commands')}
-          </h3>
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-text-tertiary">
-              <tr>
-                <th className="pb-2 font-medium">{t('slash_help.col.command')}</th>
-                <th className="pb-2 font-medium">{t('slash_help.col.description')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {SLASH_COMMANDS.map((cmd) => (
-                <tr
-                  key={cmd.id}
-                  data-testid={`slash-help-row-${cmd.id}`}
-                  className="border-t border-border-primary"
-                >
-                  <td className="py-2 align-top">
-                    <code className="font-mono text-xs text-accent">{cmd.trigger}</code>
-                    {cmd.hasArgs === true && cmd.argHint !== undefined && (
-                      <code className="ml-1 font-mono text-xs text-text-tertiary">
-                        {cmd.argHint}
-                      </code>
-                    )}
-                  </td>
-                  <td className="py-2 align-top">
-                    <div className="font-medium">{cmd.label}</div>
-                    <div className="text-xs text-text-tertiary">{cmd.description}</div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <h3
-            className="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide text-text-tertiary"
-            data-testid="slash-help-shortcuts-heading"
-          >
-            {t('slash_help.section.shortcuts')}
-          </h3>
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-text-tertiary">
-              <tr>
-                <th className="pb-2 font-medium">{t('slash_help.col.key')}</th>
-                <th className="pb-2 font-medium">{t('slash_help.col.description')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {SHORTCUT_DEFS.map((def) => {
-                const combo = overrides[def.action] ?? def.default;
-                return (
-                  <tr
-                    key={def.action}
-                    data-testid={`slash-help-shortcut-${def.action as ShortcutAction}`}
-                    className="border-t border-border-primary"
-                  >
-                    <td className="py-2 align-top">
-                      <kbd className="rounded bg-bg-tertiary px-2 py-0.5 font-mono text-xs text-text-secondary">
-                        {formatShortcut(combo)}
-                      </kbd>
-                    </td>
-                    <td className="py-2 align-top">
-                      <div className="font-medium">{def.label}</div>
-                      <div className="text-xs text-text-tertiary">{def.description}</div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Footer hint */}
-        <div className="border-t border-border-primary px-4 py-2 text-xs text-text-tertiary">
-          <kbd className="rounded bg-bg-tertiary px-1">↑</kbd>
-          <kbd className="ml-0.5 rounded bg-bg-tertiary px-1">↓</kbd>{' '}
+      footer={
+        <span className="text-caption text-text-tertiary">
+          <kbd className="rounded-sm bg-surface-strong px-xxs">↑</kbd>
+          <kbd className="ml-[2px] rounded-sm bg-surface-strong px-xxs">↓</kbd>{' '}
           {t('slash_help.footer.navigate')}
-          <span className="mx-2">·</span>
-          <kbd className="rounded bg-bg-tertiary px-1">Enter</kbd> {t('slash_help.footer.select')}
-          <span className="mx-2">·</span>
-          <kbd className="rounded bg-bg-tertiary px-1">Tab</kbd>{' '}
+          <span className="mx-xs">·</span>
+          <kbd className="rounded-sm bg-surface-strong px-xxs">Enter</kbd>{' '}
+          {t('slash_help.footer.select')}
+          <span className="mx-xs">·</span>
+          <kbd className="rounded-sm bg-surface-strong px-xxs">Tab</kbd>{' '}
           {t('slash_help.footer.autocomplete')}
-          <span className="mx-2">·</span>
-          <kbd className="rounded bg-bg-tertiary px-1">Esc</kbd> {t('slash_help.footer.close')}
-        </div>
-      </div>
-    </div>
+          <span className="mx-xs">·</span>
+          <kbd className="rounded-sm bg-surface-strong px-xxs">Esc</kbd>{' '}
+          {t('slash_help.footer.close')}
+        </span>
+      }
+    >
+      <p className="mb-base text-caption text-text-secondary">
+        {t('slash_help.subtitle.before')}
+        <kbd className="rounded-sm bg-surface-strong px-xxs">/</kbd>
+        {t('slash_help.subtitle.after')}
+      </p>
+
+      <h3 className="mb-xs text-caption-uppercase uppercase text-text-tertiary">
+        {t('slash_help.section.commands')}
+      </h3>
+      <table className="mb-lg w-full text-body-sm">
+        <thead className="text-left text-caption text-text-tertiary">
+          <tr>
+            <th className="pb-xs font-medium">{t('slash_help.col.command')}</th>
+            <th className="pb-xs font-medium">{t('slash_help.col.description')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {SLASH_COMMANDS.map((cmd) => (
+            <tr
+              key={cmd.id}
+              data-testid={`slash-help-row-${cmd.id}`}
+              className="border-t border-hairline"
+            >
+              <td className="py-xs align-top">
+                <code className="font-mono text-caption text-accent">{cmd.trigger}</code>
+                {cmd.hasArgs === true && cmd.argHint !== undefined && (
+                  <code className="ml-xxs font-mono text-caption text-text-tertiary">
+                    {cmd.argHint}
+                  </code>
+                )}
+              </td>
+              <td className="py-xs align-top">
+                <div className="font-medium text-text-primary">{cmd.label}</div>
+                <div className="text-caption text-text-tertiary">{cmd.description}</div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <h3
+        className="mb-xs text-caption-uppercase uppercase text-text-tertiary"
+        data-testid="slash-help-shortcuts-heading"
+      >
+        {t('slash_help.section.shortcuts')}
+      </h3>
+      <table className="w-full text-body-sm">
+        <thead className="text-left text-caption text-text-tertiary">
+          <tr>
+            <th className="pb-xs font-medium">{t('slash_help.col.key')}</th>
+            <th className="pb-xs font-medium">{t('slash_help.col.description')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {SHORTCUT_DEFS.map((def) => {
+            const combo = overrides[def.action] ?? def.default;
+            return (
+              <tr
+                key={def.action}
+                data-testid={`slash-help-shortcut-${def.action as ShortcutAction}`}
+                className="border-t border-hairline"
+              >
+                <td className="py-xs align-top">
+                  <kbd className="rounded-sm bg-surface-strong px-xs py-[2px] font-mono text-caption text-text-secondary">
+                    {formatShortcut(combo)}
+                  </kbd>
+                </td>
+                <td className="py-xs align-top">
+                  <div className="font-medium text-text-primary">{def.label}</div>
+                  <div className="text-caption text-text-tertiary">{def.description}</div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </ModalShell>
   );
 }

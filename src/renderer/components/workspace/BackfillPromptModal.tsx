@@ -15,8 +15,10 @@
  */
 
 import { useCallback, useState } from 'react';
-import { Trash2, X } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { useT } from '../../i18n';
+import { Button } from '../ui/Button';
+import { ModalShell } from '../ui/ModalShell';
 
 export interface BackfillPromptModalProps {
   open: boolean;
@@ -124,172 +126,145 @@ export function BackfillPromptModal({
     }
   }, [onDone]);
 
-  if (!open) return null;
-
+  // v2.10.0 (.omc/DESIGN.md, modal migration A) — chrome 을 ModalShell + Button
+  // 으로. raw yellow-600/40 + red-600/40 → semantic.{warning,danger} 토큰.
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('workspace_backfill.title')}
+    <ModalShell
+      open={open}
+      size="md"
+      title={result === null ? t('workspace_backfill.title') : t('workspace_backfill.done_title')}
+      titleId="workspace-backfill-modal-title"
+      onClose={onDone}
       data-testid="workspace-backfill-modal"
-    >
-      <div className="flex w-[520px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl">
-        <div className="flex items-center justify-between border-b border-border-primary p-4">
-          <h2 className="text-lg font-semibold">
-            {result === null ? t('workspace_backfill.title') : t('workspace_backfill.done_title')}
-          </h2>
-          <button
-            type="button"
-            onClick={onDone}
-            className="rounded-md p-2 hover:bg-bg-tertiary"
-            aria-label={t('workspace_backfill.close')}
-            data-testid="workspace-backfill-close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="space-y-3 p-4 text-sm">
-          {result === null ? (
-            <>
-              <p data-testid="workspace-backfill-body">
-                {t('workspace_backfill.body', { count: legacyCount })}
-              </p>
-              {targetConflicts > 0 && (
-                <p
-                  className="rounded border border-yellow-600/40 bg-yellow-900/20 p-2 text-[12px] text-yellow-300"
-                  data-testid="workspace-backfill-conflict-warning"
-                >
-                  {t('workspace_backfill.warning_conflicts', { n: targetConflicts })}
-                </p>
-              )}
-              {error !== null && (
-                <p
-                  className="rounded border border-red-600/40 bg-red-900/20 p-2 text-[12px] text-red-300"
-                  data-testid="workspace-backfill-error"
-                >
-                  {t('workspace_backfill.error', { reason: error })}
-                </p>
-              )}
-            </>
-          ) : (
-            <>
-              <p data-testid="workspace-backfill-summary">
-                {t('workspace_backfill.done_summary', {
-                  updated: result.updated,
-                  skipped: result.skipped,
-                  conflicts: result.conflicts,
-                })}
-              </p>
-              {/* v1.4.11 — 남아있는 충돌 row 들 + [legacy 삭제] action */}
-              {result.conflicts > 0 && (
-                <div
-                  className="rounded border border-yellow-600/40 bg-yellow-900/10 p-2 text-[12px]"
-                  data-testid="workspace-backfill-conflicts-section"
-                >
-                  <p className="mb-2 text-yellow-300">
-                    {t('workspace_backfill.conflicts_resolution_intro')}
-                  </p>
-                  {conflictsLoading ? (
-                    <p className="text-text-secondary">
-                      {t('workspace_backfill.conflicts_loading')}
-                    </p>
-                  ) : conflicts === null || conflicts.length === 0 ? (
-                    <p
-                      className="text-text-tertiary"
-                      data-testid="workspace-backfill-conflicts-empty"
-                    >
-                      {t('workspace_backfill.conflicts_resolved')}
-                    </p>
-                  ) : (
-                    <ul
-                      className="divide-y divide-border-primary"
-                      data-testid="workspace-backfill-conflicts-list"
-                    >
-                      {conflicts.map((row) => (
-                        <li
-                          key={row.legacy_id}
-                          className="flex items-start justify-between gap-2 py-1"
-                          data-testid={`workspace-backfill-conflict-${row.legacy_id}`}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate font-mono text-[11px]">{row.root}</div>
-                            <div className="text-[10px] text-text-tertiary">
-                              {t('workspace_backfill.conflict_session_count', {
-                                n: row.session_count,
-                              })}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void handleDeleteLegacy(row);
-                            }}
-                            className="inline-flex shrink-0 items-center gap-1 rounded border border-red-600/40 bg-red-900/20 px-2 py-0.5 text-[10px] text-red-300 hover:bg-red-900/30"
-                            title={t('workspace_backfill.delete_tooltip')}
-                            data-testid={`workspace-backfill-delete-${row.legacy_id}`}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                            {t('workspace_backfill.delete_legacy')}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        <div className="flex justify-end gap-2 border-t border-border-primary p-3">
-          {result === null ? (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  void handleDismiss();
-                }}
-                disabled={busy}
-                className="rounded-md border border-border-primary bg-bg-secondary px-3 py-1 text-xs hover:bg-bg-tertiary disabled:opacity-50"
-                data-testid="workspace-backfill-dismiss"
-              >
-                {t('workspace_backfill.dismiss')}
-              </button>
-              <button
-                type="button"
-                onClick={onDone}
-                disabled={busy}
-                className="rounded-md border border-border-primary bg-bg-secondary px-3 py-1 text-xs hover:bg-bg-tertiary disabled:opacity-50"
-                data-testid="workspace-backfill-later"
-              >
-                {t('workspace_backfill.later')}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void handleRun();
-                }}
-                disabled={busy}
-                className="rounded-md bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-                data-testid="workspace-backfill-run"
-              >
-                {busy ? t('workspace_backfill.running') : t('workspace_backfill.run')}
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={onDone}
-              className="rounded-md bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover"
-              data-testid="workspace-backfill-done"
+      footer={
+        result === null ? (
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                void handleDismiss();
+              }}
+              disabled={busy}
+              data-testid="workspace-backfill-dismiss"
             >
-              {t('workspace_backfill.close')}
-            </button>
-          )}
-        </div>
+              {t('workspace_backfill.dismiss')}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={onDone}
+              disabled={busy}
+              data-testid="workspace-backfill-later"
+            >
+              {t('workspace_backfill.later')}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                void handleRun();
+              }}
+              disabled={busy}
+              data-testid="workspace-backfill-run"
+            >
+              {busy ? t('workspace_backfill.running') : t('workspace_backfill.run')}
+            </Button>
+          </>
+        ) : (
+          <Button variant="primary" onClick={onDone} data-testid="workspace-backfill-done">
+            {t('workspace_backfill.close')}
+          </Button>
+        )
+      }
+    >
+      <div className="space-y-sm">
+        {result === null ? (
+          <>
+            <p data-testid="workspace-backfill-body" className="text-body-sm">
+              {t('workspace_backfill.body', { count: legacyCount })}
+            </p>
+            {targetConflicts > 0 && (
+              <p
+                className="rounded-md border border-semantic-warning/40 bg-semantic-warning/15 p-xs text-caption text-semantic-warning"
+                data-testid="workspace-backfill-conflict-warning"
+              >
+                {t('workspace_backfill.warning_conflicts', { n: targetConflicts })}
+              </p>
+            )}
+            {error !== null && (
+              <p
+                className="rounded-md border border-semantic-danger/40 bg-semantic-danger/15 p-xs text-caption text-semantic-danger"
+                data-testid="workspace-backfill-error"
+              >
+                {t('workspace_backfill.error', { reason: error })}
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <p data-testid="workspace-backfill-summary" className="text-body-sm">
+              {t('workspace_backfill.done_summary', {
+                updated: result.updated,
+                skipped: result.skipped,
+                conflicts: result.conflicts,
+              })}
+            </p>
+            {/* v1.4.11 — 남아있는 충돌 row 들 + [legacy 삭제] action */}
+            {result.conflicts > 0 && (
+              <div
+                className="rounded-md border border-semantic-warning/40 bg-semantic-warning/10 p-xs text-caption"
+                data-testid="workspace-backfill-conflicts-section"
+              >
+                <p className="mb-xs text-semantic-warning">
+                  {t('workspace_backfill.conflicts_resolution_intro')}
+                </p>
+                {conflictsLoading ? (
+                  <p className="text-text-secondary">{t('workspace_backfill.conflicts_loading')}</p>
+                ) : conflicts === null || conflicts.length === 0 ? (
+                  <p
+                    className="text-text-tertiary"
+                    data-testid="workspace-backfill-conflicts-empty"
+                  >
+                    {t('workspace_backfill.conflicts_resolved')}
+                  </p>
+                ) : (
+                  <ul
+                    className="divide-y divide-hairline"
+                    data-testid="workspace-backfill-conflicts-list"
+                  >
+                    {conflicts.map((row) => (
+                      <li
+                        key={row.legacy_id}
+                        className="flex items-start justify-between gap-xs py-xxs"
+                        data-testid={`workspace-backfill-conflict-${row.legacy_id}`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-mono text-caption">{row.root}</div>
+                          <div className="text-caption text-text-tertiary">
+                            {t('workspace_backfill.conflict_session_count', {
+                              n: row.session_count,
+                            })}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleDeleteLegacy(row);
+                          }}
+                          className="inline-flex shrink-0 items-center gap-xxs rounded-md border border-semantic-danger/40 bg-semantic-danger/15 px-xs py-[2px] text-caption text-semantic-danger hover:bg-semantic-danger/25"
+                          title={t('workspace_backfill.delete_tooltip')}
+                          data-testid={`workspace-backfill-delete-${row.legacy_id}`}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          {t('workspace_backfill.delete_legacy')}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
-    </div>
+    </ModalShell>
   );
 }
