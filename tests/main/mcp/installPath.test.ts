@@ -298,18 +298,15 @@ describe('v2.4.0 Task 2 — installMcpPlugin', () => {
     expect(stored?.verification_status).toBe('signature_invalid');
   });
 
-  it('off → skips verify, installed with verification_status=unverified', async () => {
+  it('off → skips verifier bootstrap, installed with verification_status=unverified', async () => {
     let verifyCalls = 0;
-    const verifier: ManifestVerifier = {
-      verify: () => {
-        verifyCalls += 1;
-        return Promise.resolve({ kind: 'unsigned', evidence: { reason: 'mode_off' } });
-      },
-    };
     const result = await installMcpPlugin(
       { manifest: validManifest, bundle: null, mode: 'off' },
       {
-        verifierFactory: () => Promise.resolve(verifier),
+        verifierFactory: () => {
+          verifyCalls += 1;
+          throw new Error('verifier should not load for mode=off');
+        },
         recordStore: h.recordStore,
         audit: h.audit,
       }
@@ -318,9 +315,28 @@ describe('v2.4.0 Task 2 — installMcpPlugin', () => {
     if (result.kind === 'installed') {
       expect(result.verification_status).toBe('unverified');
     }
-    // Verifier was called (with mode='off' it returns unsigned/mode_off shortcut),
-    // but applyVerificationPolicy short-circuits to allow regardless.
-    expect(verifyCalls).toBe(1);
+    expect(verifyCalls).toBe(0);
+  });
+
+  it('strict + unsigned (null bundle) → rejected without verifier bootstrap', async () => {
+    let verifyCalls = 0;
+    const result = await installMcpPlugin(
+      { manifest: validManifest, bundle: null, mode: 'strict' },
+      {
+        verifierFactory: () => {
+          verifyCalls += 1;
+          throw new Error('verifier should not load without a bundle');
+        },
+        recordStore: h.recordStore,
+        audit: h.audit,
+      }
+    );
+    expect(result.kind).toBe('rejected');
+    if (result.kind === 'rejected') {
+      expect(result.reason).toBe('unsigned_strict');
+    }
+    expect(h.recordStore.count()).toBe(0);
+    expect(verifyCalls).toBe(0);
   });
 
   it('manifest.runtime.preferred_isolation=in_process → record.isolation_mode=in_process', async () => {
@@ -350,10 +366,10 @@ describe('v2.4.0 Task 2 — installMcpPlugin', () => {
     }
   });
 
-  it('strict + unsigned (null bundle) → rejected as unsigned_strict', async () => {
+  it('strict + unsigned verifier outcome → rejected as unsigned_strict', async () => {
     const verifier = makeVerifier({ kind: 'unsigned', evidence: { reason: 'no_bundle' } });
     const result = await installMcpPlugin(
-      { manifest: validManifest, bundle: null, mode: 'strict' },
+      { manifest: validManifest, bundle: { fake: 'bundle' }, mode: 'strict' },
       {
         verifierFactory: () => Promise.resolve(verifier),
         recordStore: h.recordStore,

@@ -54,8 +54,8 @@ test.describe('drive r5 — drift detection', () => {
     await expect(badge).toBeVisible({ timeout: 5_000 });
     await window.screenshot({ path: shot('23b-drift-detected'), fullPage: true });
 
-    // 5) v1.0.7 — badge 가 짧은 ⚠ icon only. 텍스트 라벨은 tooltip 으로 이동.
-    await expect(badge).toContainText('⚠');
+    // 5) v2.10 — badge is icon-only via CSS/lucide; accessible name carries the signal.
+    await expect(badge).toHaveAttribute('aria-label', /워크스페이스 드리프트/);
 
     // 6) tooltip (title) 이 원래 폴더 이름을 포함하는지.
     const titleAttr = await badge.getAttribute('title');

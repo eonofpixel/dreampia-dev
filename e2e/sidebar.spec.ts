@@ -46,13 +46,15 @@ test.describe('sidebar', () => {
       .toHaveAttribute('aria-current', 'true');
   });
 
-  test('chat input becomes available once a session is selected', async ({ window }) => {
-    // Empty state → no chat input visible.
-    await expect(window.getByTestId('chat-input')).toHaveCount(0);
+  test('chat input remains available and a new session leaves the landing hero', async ({ window }) => {
+    // v2.10 landing hero keeps the composer available before the first session.
+    await expect(window.getByTestId('chat-landing-hero')).toBeVisible();
+    await expect(window.getByTestId('chat-input')).toBeVisible();
 
     await window.getByRole('button', { name: '새 채팅', exact: false }).first().click();
 
-    // After selection, ChatPanel mounts ChatInput.
+    // After selection, ChatPanel keeps ChatInput and leaves the landing hero state.
     await expect(window.getByTestId('chat-input')).toBeVisible({ timeout: 5_000 });
+    await expect(window.getByTestId('chat-landing-hero')).toHaveCount(0);
   });
 });

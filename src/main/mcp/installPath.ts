@@ -99,13 +99,14 @@ export async function installMcpPlugin(
   }
   const manifest: McpManifest = parsed.data;
 
-  // 2. Verify (mode='off' returns kind='unsigned' / evidence='mode_off')
-  const verifier = await deps.verifierFactory();
-  const result: ManifestVerificationResult = await verifier.verify(
-    manifest,
-    args.bundle,
-    args.mode
-  );
+  // 2. Verify. No-bundle and mode=off outcomes are deterministic, so avoid
+  // loading Sigstore trust material on paths that cannot use it.
+  const result: ManifestVerificationResult =
+    args.mode === 'off'
+      ? { kind: 'unsigned', evidence: { reason: 'mode_off' } }
+      : args.bundle === null
+        ? { kind: 'unsigned', evidence: { reason: 'no_bundle' } }
+        : await (await deps.verifierFactory()).verify(manifest, args.bundle, args.mode);
 
   // 3. Mode policy (G2 codex: signature without identity policy is theater).
   const policy = applyVerificationPolicy(result, args.mode);
