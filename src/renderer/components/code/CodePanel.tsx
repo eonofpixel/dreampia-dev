@@ -422,12 +422,12 @@ export function CodePanel({
 
   return (
     <aside
-      className="relative flex h-full flex-1 flex-col border-l border-border-primary bg-bg-primary"
+      className="relative flex h-full flex-1 flex-col border-l border-hairline bg-canvas"
       aria-label={t('preview.aside_aria')}
       data-testid="preview-panel-code"
       data-mode="code"
     >
-      <header className="flex items-center gap-2 border-b border-border-primary px-3 py-2 text-xs text-text-secondary">
+      <header className="flex items-center gap-2 border-b border-hairline px-3 py-2 text-xs text-text-secondary">
         <FileCode2 aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
         {selectedPath !== undefined ? (
           (() => {
@@ -477,7 +477,7 @@ export function CodePanel({
             className={
               editing
                 ? 'flex items-center gap-1 rounded border border-accent bg-accent/10 px-2 py-0.5 text-[11px] text-accent'
-                : 'flex items-center gap-1 rounded border border-border-primary bg-bg-tertiary px-2 py-0.5 text-[11px] hover:bg-border-primary'
+                : 'flex items-center gap-1 rounded border border-hairline bg-surface-strong px-2 py-0.5 text-[11px] hover:bg-hairline-strong'
             }
             data-testid="code-edit-toggle"
           >
@@ -495,7 +495,7 @@ export function CodePanel({
             className={
               showDiff
                 ? 'flex items-center gap-1 rounded border border-accent bg-accent/10 px-2 py-0.5 text-[11px] text-accent'
-                : 'flex items-center gap-1 rounded border border-border-primary bg-bg-tertiary px-2 py-0.5 text-[11px] hover:bg-border-primary'
+                : 'flex items-center gap-1 rounded border border-hairline bg-surface-strong px-2 py-0.5 text-[11px] hover:bg-hairline-strong'
             }
             data-testid="code-diff-toggle"
           >
@@ -509,7 +509,7 @@ export function CodePanel({
           <button
             type="button"
             onClick={handleRevert}
-            className="flex items-center gap-1 rounded border border-border-primary bg-bg-tertiary px-2 py-0.5 text-[11px] hover:bg-border-primary"
+            className="flex items-center gap-1 rounded border border-hairline bg-surface-strong px-2 py-0.5 text-[11px] hover:bg-hairline-strong"
             data-testid="code-revert"
           >
             <RotateCcw aria-hidden="true" className="h-3 w-3" />
@@ -543,7 +543,7 @@ export function CodePanel({
             className={
               outlineVisible
                 ? 'flex items-center gap-1 rounded border border-accent bg-accent/10 px-2 py-0.5 text-[11px] text-accent'
-                : 'flex items-center gap-1 rounded border border-border-primary bg-bg-tertiary px-2 py-0.5 text-[11px] hover:bg-border-primary'
+                : 'flex items-center gap-1 rounded border border-hairline bg-surface-strong px-2 py-0.5 text-[11px] hover:bg-hairline-strong'
             }
             data-testid="code-outline-toggle"
           >
@@ -555,7 +555,7 @@ export function CodePanel({
           <button
             type="button"
             onClick={() => onSwitchMode('browser')}
-            className="flex items-center gap-1 rounded border border-border-primary bg-bg-tertiary px-2 py-0.5 text-[11px] hover:bg-border-primary"
+            className="flex items-center gap-1 rounded border border-hairline bg-surface-strong px-2 py-0.5 text-[11px] hover:bg-hairline-strong"
             aria-label={t('preview.mode.browser_aria')}
             data-testid="preview-mode-browser"
           >
@@ -584,7 +584,7 @@ export function CodePanel({
           <button
             type="button"
             onClick={() => setExternalChange(false)}
-            className="rounded border border-border-primary bg-bg-tertiary px-2 py-0.5"
+            className="rounded border border-hairline bg-surface-strong px-2 py-0.5"
             data-testid="code-external-dismiss"
           >
             {t('preview.code.external.dismiss')}
@@ -612,7 +612,7 @@ export function CodePanel({
               setConflict(false);
               if (selectedPath !== undefined) loadFile(selectedPath);
             }}
-            className="rounded border border-border-primary bg-bg-tertiary px-2 py-0.5"
+            className="rounded border border-hairline bg-surface-strong px-2 py-0.5"
             data-testid="code-conflict-reload"
           >
             {t('preview.code.conflict.reload')}
@@ -638,7 +638,7 @@ export function CodePanel({
             </p>
           ) : error !== null ? (
             <p
-              className="flex flex-1 items-center justify-center px-6 text-center text-xs text-red-300"
+              className="flex flex-1 items-center justify-center px-6 text-center text-xs text-danger"
               role="alert"
               data-testid="code-editor-error"
             >

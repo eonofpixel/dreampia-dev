@@ -281,7 +281,7 @@ export function CodeEditor({
       <div ref={hostRef} className="flex-1 overflow-hidden" data-testid="code-editor-host" />
       {truncated && (
         <div
-          className="border-t border-border-primary bg-bg-secondary px-3 py-1.5 text-[11px] text-text-tertiary"
+          className="border-t border-hairline bg-canvas-soft px-3 py-1.5 text-[11px] text-text-tertiary"
           data-testid="code-editor-truncated"
         >
           {t('preview.code.editor.truncated')}

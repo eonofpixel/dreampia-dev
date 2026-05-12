@@ -300,19 +300,19 @@ export function FileTree({
 
   return (
     <div
-      className="relative flex h-full shrink-0 flex-col border-r border-border-primary bg-bg-secondary"
+      className="relative flex h-full shrink-0 flex-col border-r border-hairline bg-canvas-soft"
       style={{ width }}
       data-testid="code-file-tree"
       data-tree-width={width}
     >
-      <div className="border-b border-border-primary p-2">
+      <div className="border-b border-hairline p-2">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t('preview.code.tree.search_placeholder')}
           aria-label={t('preview.code.tree.search_aria')}
-          className="w-full rounded border border-border-primary bg-bg-primary px-2 py-1 text-xs text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none"
+          className="w-full rounded border border-hairline bg-surface-card px-2 py-1 text-xs text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none"
           data-testid="code-file-tree-search"
         />
       </div>
@@ -327,7 +327,7 @@ export function FileTree({
           </p>
         ) : error !== null ? (
           <p
-            className="px-3 py-4 text-xs text-red-300"
+            className="px-3 py-4 text-xs text-danger"
             role="alert"
             data-testid="code-file-tree-error"
           >
@@ -369,7 +369,7 @@ export function FileTree({
           />
         )}
       </div>
-      <footer className="border-t border-border-primary px-3 py-1 text-[10px] text-text-tertiary">
+      <footer className="border-t border-hairline px-3 py-1 text-[10px] text-text-tertiary">
         {visibleFileCount} / {fileCount}
         {entries.length === MAX_FILES && t('preview.code.tree.cap_reached')}
       </footer>
@@ -411,7 +411,7 @@ function TreeRow({
         onClick={() => onToggleFolder(node.path)}
         aria-expanded={expanded}
         data-testid={`code-folder-row-${node.path}`}
-        className="flex w-full items-center gap-1 border-l-2 border-transparent px-2 py-1 text-left text-xs text-text-secondary hover:bg-bg-tertiary"
+        className="flex w-full items-center gap-1 border-l-2 border-transparent px-2 py-1 text-left text-xs text-text-secondary hover:bg-surface-strong"
       >
         <span style={{ paddingLeft: indentPx }} aria-hidden className="shrink-0" />
         {expanded ? (
@@ -437,8 +437,8 @@ function TreeRow({
       data-selected={selected ? 'true' : 'false'}
       className={
         selected
-          ? 'flex w-full items-center gap-1 border-l-2 border-accent bg-bg-tertiary px-2 py-1 text-left text-xs text-text-primary'
-          : 'flex w-full items-center gap-1 border-l-2 border-transparent px-2 py-1 text-left text-xs text-text-secondary hover:bg-bg-tertiary'
+          ? 'flex w-full items-center gap-1 border-l-2 border-accent bg-surface-strong px-2 py-1 text-left text-xs text-text-primary'
+          : 'flex w-full items-center gap-1 border-l-2 border-transparent px-2 py-1 text-left text-xs text-text-secondary hover:bg-surface-strong'
       }
     >
       <span style={{ paddingLeft: indentPx }} aria-hidden className="shrink-0" />

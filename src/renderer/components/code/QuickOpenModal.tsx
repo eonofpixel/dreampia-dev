@@ -195,8 +195,8 @@ export function QuickOpenModal({
       aria-label={t('quick_open.aria')}
       data-testid="quick-open-modal"
     >
-      <div className="flex w-[640px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-2xl">
-        <div className="flex items-center gap-2 border-b border-border-primary px-3 py-2">
+      <div className="flex w-[640px] max-w-[95vw] flex-col rounded-lg border border-hairline bg-surface-card shadow-2xl">
+        <div className="flex items-center gap-2 border-b border-hairline px-3 py-2">
           <Search aria-hidden="true" className="h-4 w-4 shrink-0 text-text-tertiary" />
           <input
             ref={inputRef}
@@ -227,7 +227,7 @@ export function QuickOpenModal({
             </p>
           ) : error !== null ? (
             <p
-              className="px-3 py-6 text-center text-xs text-red-300"
+              className="px-3 py-6 text-center text-xs text-danger"
               role="alert"
               data-testid="quick-open-error"
             >
@@ -284,7 +284,7 @@ export function QuickOpenModal({
                         className={
                           idx === highlightIdx
                             ? 'flex w-full items-center gap-2 bg-accent/15 px-3 py-1.5 text-left text-xs'
-                            : 'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-bg-tertiary'
+                            : 'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-surface-strong'
                         }
                       >
                         {row.kind === 'recent' ? (
@@ -307,7 +307,7 @@ export function QuickOpenModal({
             </ul>
           )}
         </div>
-        <footer className="border-t border-border-primary px-3 py-1 text-[10px] text-text-tertiary">
+        <footer className="border-t border-hairline px-3 py-1 text-[10px] text-text-tertiary">
           <span className="mr-3">↑↓ {t('quick_open.hint.navigate')}</span>
           <span className="mr-3">Enter {t('quick_open.hint.open')}</span>
           <span>Esc {t('quick_open.hint.close')}</span>

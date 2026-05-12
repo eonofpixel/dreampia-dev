@@ -141,11 +141,11 @@ export function EditorOutline({ view }: EditorOutlineProps): React.JSX.Element {
 
   return (
     <aside
-      className="flex w-[220px] flex-col border-l border-border-primary bg-bg-secondary"
+      className="flex w-[220px] flex-col border-l border-hairline bg-canvas-soft"
       aria-label={t('preview.code.outline.aria')}
       data-testid="code-outline"
     >
-      <header className="flex items-center gap-1.5 border-b border-border-primary px-3 py-1.5 text-[11px] uppercase tracking-wide text-text-tertiary">
+      <header className="flex items-center gap-1.5 border-b border-hairline px-3 py-1.5 text-[11px] uppercase tracking-wide text-text-tertiary">
         <ListTree aria-hidden="true" className="h-3 w-3" />
         <span>{t('preview.code.outline.title')}</span>
         <span
@@ -177,7 +177,7 @@ export function EditorOutline({ view }: EditorOutlineProps): React.JSX.Element {
                 <button
                   type="button"
                   onClick={() => handleJump(entry)}
-                  className="flex w-full items-baseline gap-1.5 px-3 py-1 text-left text-[11px] hover:bg-bg-tertiary"
+                  className="flex w-full items-baseline gap-1.5 px-3 py-1 text-left text-[11px] hover:bg-surface-strong"
                   data-testid={`code-outline-row-${idx}`}
                   data-outline-kind={entry.kind}
                   style={{ paddingLeft: `${12 + entry.depth * 10}px` }}
