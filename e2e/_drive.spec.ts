@@ -100,10 +100,9 @@ test.describe('drive', () => {
   });
 
   test('04 — chat header empty state vs. session state', async ({ window }) => {
-    // 세션이 없을 때 empty state 메시지 표시.
-    await expect(
-      window.getByText('사이드바에서 채팅을 선택하거나 새로 만드세요')
-    ).toBeVisible();
+    // 세션이 없을 때 v2.10 ChatLandingHero 가 표시된다.
+    await expect(window.getByTestId('chat-landing-hero')).toBeVisible();
+    await expect(window.getByRole('heading', { name: '무엇을 만들어볼까요?' })).toBeVisible();
 
     await window.screenshot({ path: shotPath('04-empty-chat'), fullPage: true });
   });

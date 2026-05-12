@@ -80,4 +80,10 @@ describe('v2.4.0 — MigrationToast', () => {
     expect(toast).toHaveAttribute('role', 'status');
     expect(toast).toHaveAttribute('aria-live', 'polite');
   });
+
+  it('toast body does not intercept app clicks while dismiss button remains clickable', () => {
+    render(<MigrationToast dismissed={false} onDismiss={vi.fn()} />);
+    expect(screen.getByTestId('migration-toast')).toHaveClass('pointer-events-none');
+    expect(screen.getByTestId('migration-toast-dismiss')).toHaveClass('pointer-events-auto');
+  });
 });

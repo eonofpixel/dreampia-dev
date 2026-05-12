@@ -31,9 +31,9 @@ test.describe('drive r2', () => {
     await window.waitForTimeout(800);
     await window.screenshot({ path: shot('06b-after-newchat'), fullPage: true });
 
-    // empty state 가 사라졌는지 — 사라졌으면 세션이 생긴 것.
+    // landing hero 가 사라졌는지 — 사라졌으면 세션이 생긴 것.
     const stillEmpty = await window
-      .getByText('사이드바에서 채팅을 선택하거나 새로 만드세요')
+      .getByTestId('chat-landing-hero')
       .isVisible()
       .catch(() => false);
 

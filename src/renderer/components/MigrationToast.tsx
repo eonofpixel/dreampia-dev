@@ -47,7 +47,7 @@ export function MigrationToast(props: MigrationToastProps): React.JSX.Element | 
     <div
       role="status"
       aria-live="polite"
-      className="fixed bottom-4 left-1/2 z-40 w-[520px] max-w-[95vw] -translate-x-1/2 rounded-lg border border-yellow-700/50 bg-bg-secondary shadow-lg"
+      className="pointer-events-none fixed bottom-4 left-1/2 z-40 w-[520px] max-w-[95vw] -translate-x-1/2 rounded-lg border border-yellow-700/50 bg-bg-secondary shadow-lg"
       data-testid="migration-toast"
     >
       <div className="flex items-start gap-3 px-4 py-3">
@@ -63,7 +63,7 @@ export function MigrationToast(props: MigrationToastProps): React.JSX.Element | 
           type="button"
           onClick={handleDismiss}
           disabled={pending}
-          className="shrink-0 rounded border border-border-primary bg-bg-tertiary px-3 py-1 text-xs hover:bg-border-primary disabled:opacity-50"
+          className="pointer-events-auto shrink-0 rounded border border-border-primary bg-bg-tertiary px-3 py-1 text-xs hover:bg-border-primary disabled:opacity-50"
           data-testid="migration-toast-dismiss"
         >
           {pending ? 'Saving…' : 'Got it'}

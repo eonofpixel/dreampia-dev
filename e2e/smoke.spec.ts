@@ -23,13 +23,13 @@ test.describe('smoke', () => {
     // Sidebar: aria-label="사이드바" (src/renderer/components/sidebar/Sidebar.tsx:33)
     await expect(window.getByLabel('사이드바')).toBeVisible();
 
-    // Preview panel: aria-label="미리보기" (PreviewPanel.tsx:86)
-    await expect(window.getByLabel('미리보기')).toBeVisible();
+    // Preview panel: aria-label="미리보기" (PreviewPanel.tsx:86). Inspector toolbar
+    // also has a "미리보기" label, so use the complementary landmark.
+    await expect(window.getByRole('complementary', { name: '미리보기' })).toBeVisible();
 
-    // Center chat panel — empty state copy when no session yet.
-    await expect(
-      window.getByText('사이드바에서 채팅을 선택하거나 새로 만드세요')
-    ).toBeVisible();
+    // Center chat panel — v2.10 ChatLandingHero when no session yet.
+    await expect(window.getByTestId('chat-landing-hero')).toBeVisible();
+    await expect(window.getByRole('heading', { name: '무엇을 만들어볼까요?' })).toBeVisible();
   });
 
   test('shows Korean nav labels in sidebar', async ({ window }) => {
