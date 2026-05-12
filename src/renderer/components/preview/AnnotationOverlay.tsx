@@ -36,6 +36,21 @@ export interface AnnotationBox {
 /** v2.10.0 β-2 — Annotation 의 두 모드. */
 export type AnnotationMode = 'pick' | 'region';
 
+/**
+ * v2.10.0 β-3 (F-033 meta card) — hover 메타 카드 표시용 element 정보.
+ * BrowserManager 의 InspectorEvent 와 동일 shape 의 subset. classes 는
+ * 5개 cap, font 는 "family size" 형식.
+ */
+export interface AnnotationHoverMeta {
+  tag: string;
+  dimensions: string;
+  id?: string;
+  classes?: string[];
+  color?: string;
+  bg_color?: string;
+  font?: string;
+}
+
 export interface AnnotationOverlayProps {
   active: boolean;
   onToggle?: () => void;
@@ -57,6 +72,12 @@ export interface AnnotationOverlayProps {
    * 시각 cue 로 사용자가 어디를 가리키는지 명확하게.
    */
   hoverRect?: { x: number; y: number; w: number; h: number } | null;
+  /**
+   * v2.10.0 β-3 (F-033 meta card) — pick 모드 + hover 시점의 computed-style
+   * meta. 부모가 inspector-event 'hover' payload 에서 추출해 전달. 값이 있으면
+   * 카드가 hoverRect 옆에 absolute 로 렌더. region 모드 / 비활성 시 미렌더.
+   */
+  hoverMeta?: AnnotationHoverMeta | null;
 }
 
 interface DragState {
@@ -64,6 +85,23 @@ interface DragState {
   startY: number;
   curX: number;
   curY: number;
+}
+
+/**
+ * v2.10.0 β-3 — Detect `rgba(...,0)` or `transparent` literal so the meta
+ * card replaces the raw string with the i18n "투명 / transparent" label.
+ * Plain `rgb(...)` and named colors are pass-through.
+ */
+function isTransparent(value: string): boolean {
+  const v = value.trim().toLowerCase();
+  if (v === 'transparent') return true;
+  // Accepts both rgba(0, 0, 0, 0) and rgba(0,0,0,0).
+  const m = v.match(/^rgba\s*\(([^)]+)\)$/);
+  if (m === null || m[1] === undefined) return false;
+  const parts = m[1].split(',').map((s) => s.trim());
+  if (parts.length < 4) return false;
+  const alpha = Number(parts[3]);
+  return Number.isFinite(alpha) && alpha === 0;
 }
 
 export function AnnotationOverlay({
@@ -74,10 +112,39 @@ export function AnnotationOverlay({
   mode = 'pick',
   onModeChange,
   hoverRect = null,
+  hoverMeta = null,
 }: AnnotationOverlayProps): React.JSX.Element {
   const t = useT();
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+
+  // v2.10.0 β-3 (F-033 meta card) — Place the card next to hoverRect. Default
+  // anchor: top-right of the hovered element (rect.right + 8, rect.top).
+  // If that overflows the overlay viewport, flip to the left or shift up.
+  // The card width is intentionally bounded; we estimate a fixed budget so
+  // layout stays stable across hover targets without a measurement pass.
+  const META_CARD_W = 220;
+  const META_CARD_H_EST = 110;
+  const overlaySize = overlayRef.current?.getBoundingClientRect();
+  const overlayW = overlaySize?.width ?? Number.POSITIVE_INFINITY;
+  const overlayH = overlaySize?.height ?? Number.POSITIVE_INFINITY;
+  const metaCardPos =
+    hoverRect !== null && hoverMeta !== null && active && mode === 'pick'
+      ? (() => {
+          const rightAnchor = hoverRect.x + hoverRect.w + 8;
+          const leftAnchor = hoverRect.x - META_CARD_W - 8;
+          // Right side fits when there's room to the right of the element.
+          const placeLeft =
+            rightAnchor + META_CARD_W > overlayW && leftAnchor >= 0
+              ? true
+              : false;
+          let top = hoverRect.y;
+          if (top + META_CARD_H_EST > overlayH) {
+            top = Math.max(0, overlayH - META_CARD_H_EST);
+          }
+          return { left: placeLeft ? leftAnchor : rightAnchor, top };
+        })()
+      : null;
 
   const overlayCoords = useCallback(
     (e: { clientX: number; clientY: number }): { x: number; y: number } => {
@@ -213,6 +280,94 @@ export function AnnotationOverlay({
           }}
           data-testid="annotation-hover-outline"
         />
+      )}
+
+      {/* v2.10.0 β-3 (F-033 meta card) — Hover meta side card. pick 모드 + hover
+          meta + outline 활성 시에만 렌더. screen-reader 에는 노출 X (live hover
+          정보, aria-hidden) — pick 액션 자체는 별도 annotation block 으로 chat 에
+          기록되므로 보조기기 사용자도 결과를 잃지 않음. */}
+      {hoverMeta !== null && metaCardPos !== null && (
+        <div
+          aria-hidden="true"
+          data-testid="annotation-hover-meta-card"
+          className="absolute rounded-md border border-hairline bg-surface-card px-sm py-xs text-caption text-text-primary shadow-soft"
+          style={{
+            left: `${metaCardPos.left}px`,
+            top: `${metaCardPos.top}px`,
+            width: `${META_CARD_W}px`,
+            pointerEvents: 'none',
+            zIndex: 5,
+          }}
+        >
+          <div className="flex flex-col gap-xxs">
+            <div className="font-medium text-text-primary" data-testid="annotation-hover-meta-title">
+              {`<${hoverMeta.tag}${
+                hoverMeta.classes !== undefined && hoverMeta.classes.length > 0
+                  ? `.${hoverMeta.classes.join('.')}`
+                  : ''
+              }>`}
+            </div>
+            {hoverMeta.id !== undefined && (
+              <div className="text-text-tertiary" data-testid="annotation-hover-meta-id">
+                {`#${hoverMeta.id}`}
+              </div>
+            )}
+            {hoverMeta.color !== undefined && (
+              <div
+                className="flex items-center gap-xs"
+                data-testid="annotation-hover-meta-color"
+              >
+                <span
+                  className="inline-block h-3 w-3 rounded-sm border border-hairline"
+                  style={{ background: hoverMeta.color }}
+                  aria-hidden="true"
+                />
+                <span className="text-text-tertiary">
+                  {t('preview.annotation.meta.color_label')}
+                </span>
+                <span className="font-mono text-text-secondary">
+                  {isTransparent(hoverMeta.color)
+                    ? t('preview.annotation.meta.transparent')
+                    : hoverMeta.color}
+                </span>
+              </div>
+            )}
+            {hoverMeta.bg_color !== undefined && (
+              <div
+                className="flex items-center gap-xs"
+                data-testid="annotation-hover-meta-bg-color"
+              >
+                <span
+                  className="inline-block h-3 w-3 rounded-sm border border-hairline"
+                  style={{ background: hoverMeta.bg_color }}
+                  aria-hidden="true"
+                />
+                <span className="text-text-tertiary">
+                  {t('preview.annotation.meta.bg_color_label')}
+                </span>
+                <span className="font-mono text-text-secondary">
+                  {isTransparent(hoverMeta.bg_color)
+                    ? t('preview.annotation.meta.transparent')
+                    : hoverMeta.bg_color}
+                </span>
+              </div>
+            )}
+            {hoverMeta.font !== undefined && (
+              <div className="flex items-baseline gap-xs" data-testid="annotation-hover-meta-font">
+                <span className="text-text-tertiary">
+                  {t('preview.annotation.meta.font_label')}
+                </span>
+                <span className="font-mono text-text-secondary">{hoverMeta.font}</span>
+              </div>
+            )}
+            <div className="flex items-baseline gap-xs" data-testid="annotation-hover-meta-dimensions">
+              <span className="text-text-tertiary">
+                {t('preview.annotation.meta.dimensions_label')}
+              </span>
+              <span className="font-mono text-text-secondary">{hoverMeta.dimensions}</span>
+            </div>
+          </div>
+        </div>
       )}
 
       {active && (

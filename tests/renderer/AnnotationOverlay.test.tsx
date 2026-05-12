@@ -235,3 +235,123 @@ describe('v2.10.0 β-2 — Annotation pick mode + segmented control', () => {
     expect(queryByTestId('annotation-mode-segment')).toBeNull();
   });
 });
+
+// ────────────────────────────────────────────────────────────
+// v2.10.0 β-3 (F-033 meta card) — Hover meta side card
+// ────────────────────────────────────────────────────────────
+describe('v2.10.0 β-3 — Annotation hover meta card', () => {
+  const baseHoverRect = { x: 30, y: 40, w: 120, h: 60 };
+
+  it('hoverMeta 주어지면 카드 렌더 + tag/classes/dimensions 텍스트 확인', () => {
+    const { getByTestId } = render(
+      <AnnotationOverlay
+        active={true}
+        mode="pick"
+        hoverRect={baseHoverRect}
+        hoverMeta={{
+          tag: 'h3',
+          dimensions: '120x60',
+          classes: ['section-title', 'primary'],
+          color: 'rgb(26, 28, 31)',
+          bg_color: 'rgb(255, 255, 255)',
+          font: 'Pretendard 16px',
+        }}
+      />
+    );
+    const card = getByTestId('annotation-hover-meta-card');
+    expect(card).toBeDefined();
+    // aria-hidden 으로 SR spam 회피.
+    expect(card.getAttribute('aria-hidden')).toBe('true');
+    // pointer-events: none — overlay 가 hover 를 받도록.
+    expect(card.style.pointerEvents).toBe('none');
+
+    // tag.classes 제목 표시.
+    expect(getByTestId('annotation-hover-meta-title').textContent).toBe(
+      '<h3.section-title.primary>'
+    );
+    // 색상 / 글꼴 / 크기 라인.
+    expect(getByTestId('annotation-hover-meta-color').textContent).toContain('rgb(26, 28, 31)');
+    expect(getByTestId('annotation-hover-meta-bg-color').textContent).toContain(
+      'rgb(255, 255, 255)'
+    );
+    expect(getByTestId('annotation-hover-meta-font').textContent).toContain('Pretendard 16px');
+    expect(getByTestId('annotation-hover-meta-dimensions').textContent).toContain('120x60');
+  });
+
+  it("hoverMeta.id 있으면 #id 라인 표시, 없으면 omit", () => {
+    const { getByTestId, queryByTestId, rerender } = render(
+      <AnnotationOverlay
+        active={true}
+        mode="pick"
+        hoverRect={baseHoverRect}
+        hoverMeta={{ tag: 'div', dimensions: '10x10', id: 'main-header' }}
+      />
+    );
+    expect(getByTestId('annotation-hover-meta-id').textContent).toBe('#main-header');
+
+    rerender(
+      <AnnotationOverlay
+        active={true}
+        mode="pick"
+        hoverRect={baseHoverRect}
+        hoverMeta={{ tag: 'div', dimensions: '10x10' }}
+      />
+    );
+    expect(queryByTestId('annotation-hover-meta-id')).toBeNull();
+  });
+
+  it('rgba(0,0,0,0) bg_color 는 "투명" 라벨로 변환', () => {
+    const { getByTestId } = render(
+      <AnnotationOverlay
+        active={true}
+        mode="pick"
+        hoverRect={baseHoverRect}
+        hoverMeta={{
+          tag: 'span',
+          dimensions: '40x20',
+          bg_color: 'rgba(0, 0, 0, 0)',
+        }}
+      />
+    );
+    // default locale ko → "투명"
+    expect(getByTestId('annotation-hover-meta-bg-color').textContent).toContain('투명');
+  });
+
+  it("mode='region' 일 때 hoverMeta 가 있어도 카드 미렌더", () => {
+    const { queryByTestId } = render(
+      <AnnotationOverlay
+        active={true}
+        mode="region"
+        hoverRect={baseHoverRect}
+        hoverMeta={{ tag: 'div', dimensions: '10x10' }}
+      />
+    );
+    expect(queryByTestId('annotation-hover-meta-card')).toBeNull();
+  });
+
+  it('active=false 일 때 hoverMeta 가 있어도 카드 미렌더', () => {
+    const { queryByTestId } = render(
+      <AnnotationOverlay
+        active={false}
+        mode="pick"
+        hoverRect={baseHoverRect}
+        hoverMeta={{ tag: 'div', dimensions: '10x10' }}
+      />
+    );
+    expect(queryByTestId('annotation-hover-meta-card')).toBeNull();
+  });
+
+  it('hoverRect 만 있고 hoverMeta 가 null 이면 카드 미렌더 (outline 만)', () => {
+    const { queryByTestId, getByTestId } = render(
+      <AnnotationOverlay
+        active={true}
+        mode="pick"
+        hoverRect={baseHoverRect}
+        hoverMeta={null}
+      />
+    );
+    expect(queryByTestId('annotation-hover-meta-card')).toBeNull();
+    // outline 은 그대로 렌더.
+    expect(getByTestId('annotation-hover-outline')).toBeDefined();
+  });
+});

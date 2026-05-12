@@ -97,19 +97,31 @@ export function normalizeBrowserUrl(input: string): string {
 
 // v2.10.0 β-2 (F-021 + F-033) — Inspector event shapes mirrored from
 // preload.ts. Renderer keeps a local copy to avoid cross-boundary imports.
+//
+// v2.10.0 β-3 — Added computed-style meta (id / classes / color / bg_color
+// / font / dimensions). dimensions required; remaining optional.
+export interface InspectorElementMeta {
+  tag: string;
+  dimensions: string;
+  id?: string;
+  classes?: string[];
+  color?: string;
+  bg_color?: string;
+  font?: string;
+}
+
 export type InspectorEvent =
-  | { type: 'hover'; x: number; y: number; w: number; h: number; tag: string }
-  | {
+  | ({ type: 'hover'; x: number; y: number; w: number; h: number } & InspectorElementMeta)
+  | ({
       type: 'pick';
       selector: string;
       x: number;
       y: number;
       w: number;
       h: number;
-      tag: string;
       page_url: string;
       ts: number;
-    };
+    } & InspectorElementMeta);
 
 export interface BrowserInspectorPayload {
   tab_id: string;

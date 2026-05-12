@@ -27,12 +27,17 @@
  */
 
 import {
+  app,
   WebContentsView,
   session as electronSession,
   type BrowserWindow,
   type Session as ElectronSession,
   type WebContents,
 } from 'electron';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { SessionId } from '@/types';
 import { partitionIdFor } from '@/types';
 
@@ -73,18 +78,38 @@ export interface BrowserManagerOptions {
 
 // v2.10.0 β-2 — Inspector event discriminated union. webview 안 inspector
 // script 가 push 한 큐를 main 이 drain → 본 형식으로 emit. F-033 spec.
+//
+// v2.10.0 β-3 (F-033 meta card) — hover / pick 모두 computed-style 메타
+// (id / classes / color / bg_color / font / dimensions) 를 동봉. dimensions
+// 만 required (항상 채워짐), 나머지는 cross-origin / shadow DOM 같은 환경에서
+// 조용히 omit. selector / page_url / ts 는 pick 전용.
+export interface InspectorElementMeta {
+  /** Element tag name (lowercased). 항상 채워짐. */
+  tag: string;
+  /** "WxH" — 소수점 round 후 join. 항상 채워짐. */
+  dimensions: string;
+  /** element.id (없거나 빈 문자열이면 omit). */
+  id?: string;
+  /** classList → array. 최대 5개 cap. 빈 list 면 omit. */
+  classes?: string[];
+  /** getComputedStyle.color (rgb/rgba string). 접근 실패 시 omit. */
+  color?: string;
+  /** getComputedStyle.backgroundColor. */
+  bg_color?: string;
+  /** "<family> <size>px" — family 의 first comma split 만 사용. */
+  font?: string;
+}
+
 export type InspectorEvent =
-  | {
+  | ({
       type: 'hover';
       /** viewport-relative bounding rect (CSS px). */
       x: number;
       y: number;
       w: number;
       h: number;
-      /** Element tag name (lowercased). */
-      tag: string;
-    }
-  | {
+    } & InspectorElementMeta)
+  | ({
       type: 'pick';
       /** Auto-generated CSS selector (id > tag.class > nth-of-type chain, max 6). */
       selector: string;
@@ -92,12 +117,11 @@ export type InspectorEvent =
       y: number;
       w: number;
       h: number;
-      tag: string;
       /** Picked element's owner document URL. */
       page_url: string;
       /** Picked epoch ms (webview clock). */
       ts: number;
-    };
+    } & InspectorElementMeta);
 
 // ────────────────────────────────────────────────────────────
 // Internal types
@@ -196,17 +220,38 @@ function parseInspectorEvent(raw: unknown): InspectorEvent | null {
   const w = o['w'];
   const h = o['h'];
   const tag = o['tag'];
+  const dimensions = o['dimensions'];
   if (
     typeof x !== 'number' ||
     typeof y !== 'number' ||
     typeof w !== 'number' ||
     typeof h !== 'number' ||
-    typeof tag !== 'string'
+    typeof tag !== 'string' ||
+    typeof dimensions !== 'string'
   ) {
     return null;
   }
+  // v2.10.0 β-3 — Optional computed-style meta fields. Each field validated
+  // independently — a single bad field doesn't reject the whole event; we
+  // just omit it. cross-origin iframe / shadow DOM 환경에서 일부 필드가
+  // 빠지는 정상 경로를 받아주기 위함.
+  const meta: Omit<InspectorElementMeta, 'tag' | 'dimensions'> = {};
+  const rawId = o['id'];
+  if (typeof rawId === 'string' && rawId.length > 0) meta.id = rawId;
+  const rawClasses = o['classes'];
+  if (Array.isArray(rawClasses)) {
+    const cls = rawClasses.filter((c): c is string => typeof c === 'string').slice(0, 5);
+    if (cls.length > 0) meta.classes = cls;
+  }
+  const rawColor = o['color'];
+  if (typeof rawColor === 'string' && rawColor.length > 0) meta.color = rawColor;
+  const rawBg = o['bg_color'];
+  if (typeof rawBg === 'string' && rawBg.length > 0) meta.bg_color = rawBg;
+  const rawFont = o['font'];
+  if (typeof rawFont === 'string' && rawFont.length > 0) meta.font = rawFont;
+
   if (t === 'hover') {
-    return { type: 'hover', x, y, w, h, tag };
+    return { type: 'hover', x, y, w, h, tag, dimensions, ...meta };
   }
   if (t === 'pick') {
     const selector = o['selector'];
@@ -215,7 +260,19 @@ function parseInspectorEvent(raw: unknown): InspectorEvent | null {
     if (typeof selector !== 'string' || typeof page_url !== 'string' || typeof ts !== 'number') {
       return null;
     }
-    return { type: 'pick', selector, x, y, w, h, tag, page_url, ts };
+    return {
+      type: 'pick',
+      selector,
+      x,
+      y,
+      w,
+      h,
+      tag,
+      dimensions,
+      page_url,
+      ts,
+      ...meta,
+    };
   }
   return null;
 }
@@ -321,6 +378,42 @@ const INSPECTOR_SCRIPT = `(function(){
     picks.push(e);
   }
 
+  // v2.10.0 β-3 (F-033 meta card) — Extract computed-style meta. dimensions
+  // always set; remaining fields omitted when getComputedStyle fails (cross-
+  // origin iframe / closed shadow root). classList capped at 5 entries so the
+  // host-side card has stable width.
+  function extractMeta(el, rect){
+    var meta = {
+      tag: el.tagName.toLowerCase(),
+      dimensions: Math.round(rect.width) + 'x' + Math.round(rect.height)
+    };
+    try {
+      if (typeof el.id === 'string' && el.id.length > 0) meta.id = el.id;
+    } catch (e) {}
+    try {
+      if (el.classList && el.classList.length > 0){
+        var cls = [];
+        for (var i = 0; i < el.classList.length && cls.length < 5; i++){
+          var c = el.classList[i];
+          if (typeof c === 'string' && c.length > 0) cls.push(c);
+        }
+        if (cls.length > 0) meta.classes = cls;
+      }
+    } catch (e) {}
+    try {
+      var cs = window.getComputedStyle(el);
+      if (cs){
+        if (cs.color) meta.color = cs.color;
+        if (cs.backgroundColor) meta.bg_color = cs.backgroundColor;
+        var fam = (cs.fontFamily || '').split(',')[0];
+        if (fam) fam = fam.replace(/^["'\\s]+|["'\\s]+$/g, '');
+        var size = cs.fontSize || '';
+        if (fam || size) meta.font = (fam + ' ' + size).trim();
+      }
+    } catch (e) {}
+    return meta;
+  }
+
   function onMove(e){
     if (!window.__dreampia_inspector_active) return;
     var t = e.target;
@@ -331,11 +424,12 @@ const INSPECTOR_SCRIPT = `(function(){
     overlay.style.top = r.top + 'px';
     overlay.style.width = r.width + 'px';
     overlay.style.height = r.height + 'px';
+    var meta = extractMeta(t, r);
     // Latest-only ring buffer of size 1 — overwrite on every push so a hover
     // storm 이 pick 큐를 누르지 못한다 (architect P0-1).
-    window.__dreampia_inspector_hover_latest = {
-      type:'hover', x:r.left, y:r.top, w:r.width, h:r.height, tag:t.tagName.toLowerCase()
-    };
+    var ev = { type:'hover', x:r.left, y:r.top, w:r.width, h:r.height };
+    for (var k in meta){ if (Object.prototype.hasOwnProperty.call(meta, k)) ev[k] = meta[k]; }
+    window.__dreampia_inspector_hover_latest = ev;
   }
 
   function onClick(e){
@@ -345,14 +439,16 @@ const INSPECTOR_SCRIPT = `(function(){
     var t = e.target;
     if (!t) return;
     var r = t.getBoundingClientRect();
-    pushPick({
+    var meta = extractMeta(t, r);
+    var ev = {
       type:'pick',
       selector: generateSelector(t),
       x:r.left, y:r.top, w:r.width, h:r.height,
-      tag:t.tagName.toLowerCase(),
       page_url: location.href,
       ts: Date.now()
-    });
+    };
+    for (var k in meta){ if (Object.prototype.hasOwnProperty.call(meta, k)) ev[k] = meta[k]; }
+    pushPick(ev);
   }
 
   document.addEventListener('mousemove', onMove, true);
@@ -736,6 +832,91 @@ export class BrowserManager {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[BrowserManager] captureTab(${tab_id}) failed: ${msg}`);
+      return null;
+    }
+  }
+
+  /**
+   * v2.10.0 β-3 (F-021 partial screenshot) — Capture a rectangular region of
+   * the webview. bbox coords are viewport-relative CSS px (same as inspector
+   * `getBoundingClientRect` output). On success the PNG is written to
+   * `app.getPath('userData')/annotations/<sessionId>/<uuid>.png` and the
+   * file:// URI returned alongside base64 for renderer-side preview without
+   * a second disk read.
+   *
+   * Iron rule: never throws across IPC. capturePage / fs failures → null +
+   * console.warn; renderer falls back to annotation block without screenshot.
+   *
+   * bbox is clamped to the live webview viewport bounds before the capture
+   * call so partial overflow (overlay drawing past the right edge) does not
+   * cause an Electron rejection.
+   */
+  async captureRegion(
+    tab_id: string,
+    bbox: { x: number; y: number; w: number; h: number }
+  ): Promise<{ uri: string; png_base64: string; width: number; height: number } | null> {
+    const tab = this.tabs.get(tab_id);
+    if (!tab) return null;
+    const wc = tab.view.webContents as {
+      isDestroyed(): boolean;
+      capturePage?: (rect?: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }) => Promise<{
+        toPNG(): Buffer | Uint8Array;
+        getSize(): { width: number; height: number };
+      }>;
+    };
+    if (wc.isDestroyed()) return null;
+    if (typeof wc.capturePage !== 'function') return null;
+
+    // Clamp the rect to the tab's known bounds (renderer-reported placeholder
+    // geometry). Without this, Electron rejects out-of-bounds capture rects.
+    const tabBounds = tab.bounds;
+    const viewportW = tabBounds?.width ?? Number.POSITIVE_INFINITY;
+    const viewportH = tabBounds?.height ?? Number.POSITIVE_INFINITY;
+    const x = Math.max(0, Math.round(bbox.x));
+    const y = Math.max(0, Math.round(bbox.y));
+    let width = Math.max(0, Math.round(bbox.w));
+    let height = Math.max(0, Math.round(bbox.h));
+    if (Number.isFinite(viewportW)) width = Math.max(0, Math.min(width, viewportW - x));
+    if (Number.isFinite(viewportH)) height = Math.max(0, Math.min(height, viewportH - y));
+    if (width <= 0 || height <= 0) return null;
+
+    let pngBuf: Buffer;
+    let size: { width: number; height: number };
+    try {
+      const image = await wc.capturePage({ x, y, width, height });
+      const png = image.toPNG();
+      pngBuf = png instanceof Buffer ? png : Buffer.from(png);
+      size = image.getSize();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[BrowserManager] captureRegion(${tab_id}) capturePage failed: ${msg}`);
+      return null;
+    }
+
+    // Persist to userData/annotations/<session>/<uuid>.png. Filename uses
+    // crypto.randomUUID so concurrent picks never collide.
+    try {
+      const userData = app.getPath('userData');
+      const dir = join(userData, 'annotations', String(tab.session_id));
+      await mkdir(dir, { recursive: true });
+      const filePath = join(dir, `${randomUUID()}.png`);
+      await writeFile(filePath, pngBuf);
+      // pathToFileURL handles Windows drive-letter + spaces correctly.
+      const uri = pathToFileURL(filePath).toString();
+      return {
+        uri,
+        png_base64: pngBuf.toString('base64'),
+        width: size.width,
+        height: size.height,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[BrowserManager] captureRegion(${tab_id}) fs write failed: ${msg}`);
       return null;
     }
   }

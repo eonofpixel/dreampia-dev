@@ -10,6 +10,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // ────────────────────────────────────────────────────────────
 // Mock electron — must come before importing BrowserManager
@@ -89,9 +92,14 @@ function makeFakeWebContents(initialUrl: string): FakeWebContents {
     isDestroyed: vi.fn(() => false),
     close: vi.fn(),
     reload: vi.fn(),
-    capturePage: vi.fn(async () => ({
+    // v2.10.0 β-3 — capturePage now accepts an optional rect (region capture).
+    // Without an arg → full page (800x600). With an arg → echo the rect size.
+    capturePage: vi.fn(async (rect?: { width: number; height: number }) => ({
       toPNG: () => Buffer.from('fake-png-bytes', 'utf-8'),
-      getSize: () => ({ width: 800, height: 600 }),
+      getSize: () =>
+        rect !== undefined
+          ? { width: rect.width, height: rect.height }
+          : { width: 800, height: 600 },
     })),
     executeJavaScript: vi.fn(async (code: string) => {
       // 가짜 webview executeJavaScript — 모든 호출이 dumpTabDom 의 inline
@@ -122,8 +130,18 @@ function makeFakeWebContents(initialUrl: string): FakeWebContents {
   return wc;
 }
 
+// v2.10.0 β-3 — captureRegion needs app.getPath('userData') 을 read.
+// Tests inject a temp dir via this hoisted ref. vi.mock 안에서 lazy 하게 읽는다.
+const electronRef = vi.hoisted(() => ({ userDataPath: '/tmp/dreampia-test-userdata' }));
+
 vi.mock('electron', () => {
   return {
+    app: {
+      getPath: vi.fn((name: string) => {
+        if (name === 'userData') return electronRef.userDataPath;
+        return '/tmp';
+      }),
+    },
     session: {
       fromPartition: vi.fn((p: string) => {
         fakeSessionPartitions.push(p);
@@ -521,6 +539,104 @@ describe('BrowserManager', () => {
     warnSpy.mockRestore();
   });
 
+  // ── v2.10.0 β-3 — captureRegion (F-021 partial screenshot) ─
+  describe('captureRegion', () => {
+    let tmpRoot: string;
+
+    beforeEach(() => {
+      tmpRoot = mkdtempSync(join(tmpdir(), 'dreampia-test-captureRegion-'));
+      electronRef.userDataPath = tmpRoot;
+    });
+
+    afterEach(() => {
+      try {
+        rmSync(tmpRoot, { recursive: true, force: true });
+      } catch {
+        // best effort
+      }
+    });
+
+    it('captureRegion writes PNG to userData/annotations/<sid>/<uuid>.png + returns file URI', async () => {
+      mgr.openTab({ session_id: SID_A, tab_id: 'cr1', url: 'https://e' });
+      mgr.setBounds('cr1', { x: 0, y: 0, width: 800, height: 600 });
+      const r = await mgr.captureRegion('cr1', { x: 10, y: 20, w: 100, h: 40 });
+      expect(r).not.toBeNull();
+      if (r === null) return;
+      expect(r.uri.startsWith('file://')).toBe(true);
+      expect(r.width).toBe(100);
+      expect(r.height).toBe(40);
+      // base64 contains the mock PNG bytes.
+      expect(r.png_base64).toBe(Buffer.from('fake-png-bytes', 'utf-8').toString('base64'));
+
+      // capturePage called with the clamped rect.
+      expect(fakeViewsCreated[0]!.webContents.capturePage).toHaveBeenCalledWith({
+        x: 10,
+        y: 20,
+        width: 100,
+        height: 40,
+      });
+
+      // PNG actually written under userData/annotations/<SID_A>/<uuid>.png.
+      const dir = join(tmpRoot, 'annotations', SID_A);
+      expect(existsSync(dir)).toBe(true);
+      const files = readdirSync(dir);
+      expect(files).toHaveLength(1);
+      expect(files[0]!.endsWith('.png')).toBe(true);
+      const written = readFileSync(join(dir, files[0]!));
+      expect(written.toString('utf-8')).toBe('fake-png-bytes');
+    });
+
+    it('captureRegion clamps out-of-bounds bbox to viewport', async () => {
+      mgr.openTab({ session_id: SID_A, tab_id: 'cr2', url: 'https://e' });
+      mgr.setBounds('cr2', { x: 0, y: 0, width: 200, height: 100 });
+      // bbox extends past the viewport edge.
+      const r = await mgr.captureRegion('cr2', { x: 150, y: 50, w: 500, h: 500 });
+      expect(r).not.toBeNull();
+      if (r === null) return;
+      // Clamped to (50, 50) inside the 200x100 viewport.
+      expect(fakeViewsCreated[0]!.webContents.capturePage).toHaveBeenCalledWith({
+        x: 150,
+        y: 50,
+        width: 50,
+        height: 50,
+      });
+    });
+
+    it('captureRegion returns null when bbox clamps to zero', async () => {
+      mgr.openTab({ session_id: SID_A, tab_id: 'cr3', url: 'https://e' });
+      mgr.setBounds('cr3', { x: 0, y: 0, width: 100, height: 100 });
+      const r = await mgr.captureRegion('cr3', { x: 200, y: 200, w: 50, h: 50 });
+      expect(r).toBeNull();
+      // capturePage 호출 자체가 일어나면 안 된다.
+      expect(fakeViewsCreated[0]!.webContents.capturePage).not.toHaveBeenCalled();
+    });
+
+    it('captureRegion returns null for unknown tab', async () => {
+      const r = await mgr.captureRegion('does-not-exist', { x: 0, y: 0, w: 10, h: 10 });
+      expect(r).toBeNull();
+    });
+
+    it('captureRegion returns null when webContents is destroyed', async () => {
+      mgr.openTab({ session_id: SID_A, tab_id: 'cr4', url: 'https://e' });
+      mgr.setBounds('cr4', { x: 0, y: 0, width: 200, height: 200 });
+      fakeViewsCreated[0]!.webContents.isDestroyed.mockReturnValue(true);
+      const r = await mgr.captureRegion('cr4', { x: 0, y: 0, w: 10, h: 10 });
+      expect(r).toBeNull();
+    });
+
+    it('captureRegion returns null when capturePage rejects', async () => {
+      mgr.openTab({ session_id: SID_A, tab_id: 'cr5', url: 'https://e' });
+      mgr.setBounds('cr5', { x: 0, y: 0, width: 200, height: 200 });
+      fakeViewsCreated[0]!.webContents.capturePage.mockRejectedValueOnce(
+        new Error('region capture failed')
+      );
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const r = await mgr.captureRegion('cr5', { x: 0, y: 0, w: 10, h: 10 });
+      expect(r).toBeNull();
+      warnSpy.mockRestore();
+    });
+  });
+
   // ── v1.6.14 — dumpTabDom ──────────────────────────────────
 
   it('dumpTabDom — executeJavaScript 결과 wrap', async () => {
@@ -619,7 +735,15 @@ describe('BrowserManager', () => {
         .mockResolvedValueOnce(undefined) // enable
         .mockResolvedValueOnce(
           JSON.stringify({
-            hover: { type: 'hover', x: 10, y: 20, w: 100, h: 40, tag: 'div' },
+            hover: {
+              type: 'hover',
+              x: 10,
+              y: 20,
+              w: 100,
+              h: 40,
+              tag: 'div',
+              dimensions: '100x40',
+            },
             picks: [
               {
                 type: 'pick',
@@ -629,6 +753,7 @@ describe('BrowserManager', () => {
                 w: 7,
                 h: 8,
                 tag: 'div',
+                dimensions: '7x8',
                 page_url: 'https://e/page',
                 ts: 1234567890,
               },
@@ -683,7 +808,15 @@ describe('BrowserManager', () => {
           JSON.stringify({
             // hover queue is latest-only — the storm survives only as the
             // single most-recent hover.
-            hover: { type: 'hover', x: 999, y: 999, w: 1, h: 1, tag: 'p' },
+            hover: {
+              type: 'hover',
+              x: 999,
+              y: 999,
+              w: 1,
+              h: 1,
+              tag: 'p',
+              dimensions: '1x1',
+            },
             // pick must NOT be evicted by the hover storm.
             picks: [
               {
@@ -694,6 +827,7 @@ describe('BrowserManager', () => {
                 w: 3,
                 h: 4,
                 tag: 'button',
+                dimensions: '3x4',
                 page_url: 'https://e/p',
                 ts: 99,
               },

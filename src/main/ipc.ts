@@ -2490,6 +2490,51 @@ function registerBrowserHandlers(browser: BrowserManager): void {
     }
   );
 
+  // v2.10.0 β-3 (F-021 partial screenshot) — Capture a region of the webview
+  // viewport as a PNG, persisted under userData/annotations/<sid>/<uuid>.png.
+  // Returns the file URI + base64 + size. bbox is viewport-relative.
+  ipcMain.handle(
+    'browser/capture-region',
+    async (
+      _evt,
+      tabId: unknown,
+      bboxRaw: unknown
+    ): Promise<
+      Result<{
+        uri: string;
+        png_base64: string;
+        width: number;
+        height: number;
+      } | null>
+    > => {
+      try {
+        if (typeof tabId !== 'string' || tabId.length === 0) {
+          throw new Error('tab id required');
+        }
+        if (bboxRaw === null || typeof bboxRaw !== 'object') {
+          throw new Error('bbox must be an object');
+        }
+        const b = bboxRaw as Record<string, unknown>;
+        const x = b['x'];
+        const y = b['y'];
+        const w = b['w'];
+        const h = b['h'];
+        if (
+          typeof x !== 'number' ||
+          typeof y !== 'number' ||
+          typeof w !== 'number' ||
+          typeof h !== 'number'
+        ) {
+          throw new Error('bbox.x/y/w/h must be numbers');
+        }
+        const result = await browser.captureRegion(tabId, { x, y, w, h });
+        return ok(result);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
   ipcMain.handle('browser/reload', (_evt, tabId: unknown): Result<void> => {
     try {
       if (typeof tabId !== 'string') {

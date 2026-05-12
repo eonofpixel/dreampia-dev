@@ -424,6 +424,7 @@ describe('PreviewPanel', () => {
           w: 100,
           h: 30,
           tag: 'button',
+          dimensions: '100x30',
           page_url: 'https://example.com/page',
           ts: 1715600000000,
         },
@@ -561,6 +562,162 @@ describe('PreviewPanel', () => {
     expect(screen.getByTestId('annotation-mode-region').getAttribute('aria-checked')).toBe('false');
   });
 
+  // ────────────────────────────────────────────────────────────
+  // v2.10.0 β-3 — captureRegion + screenshot_uri wiring
+  // ────────────────────────────────────────────────────────────
+  it('v2.10.0 β-3: pick event triggers captureRegion + screenshot_uri in AnnotationBlock', async () => {
+    __mockStore.browserTabs.set('seed-1', {
+      tab_id: 'seed-1',
+      session_id: SID,
+      url: 'https://example.com',
+      title: 'Example',
+      favicon_url: null,
+      status: 'ready',
+      can_go_back: false,
+      can_go_forward: false,
+    });
+    const onAnnotation = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <PreviewPanel sessionId={SID} browser={null} onAnnotation={onAnnotation} />
+    );
+    await waitFor(() => screen.getByText('Example'));
+    await user.click(screen.getByText('Example'));
+    await user.click(screen.getByTestId('preview-annotation-start'));
+    await waitFor(() => {
+      expect(__mockStore.browserInspectorEnabled.has('seed-1')).toBe(true);
+    });
+
+    act(() => {
+      __emitInspectorEvent({
+        tab_id: 'seed-1',
+        session_id: SID,
+        event: {
+          type: 'pick',
+          selector: 'button#submit',
+          x: 12,
+          y: 34,
+          w: 100,
+          h: 30,
+          tag: 'button',
+          dimensions: '100x30',
+          page_url: 'https://example.com/page',
+          ts: 1715600000000,
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(onAnnotation).toHaveBeenCalledTimes(1);
+    });
+    // captureRegion 호출 검증.
+    expect(__mockStore.browserCaptureRegions).toHaveLength(1);
+    expect(__mockStore.browserCaptureRegions[0]).toEqual({
+      tabId: 'seed-1',
+      bbox: { x: 12, y: 34, w: 100, h: 30 },
+    });
+    const block = onAnnotation.mock.calls[0]![0] as {
+      screenshot_uri?: string;
+      bounding_box: { w: number; h: number };
+    };
+    expect(block.screenshot_uri).toBe('file:///mock-userdata/annotations/seed-1/mock.png');
+    expect(block.bounding_box).toEqual({ x: 12, y: 34, w: 100, h: 30 });
+  });
+
+  it('v2.10.0 β-3: captureRegion failure → AnnotationBlock without screenshot_uri (graceful)', async () => {
+    __mockStore.browserTabs.set('seed-1', {
+      tab_id: 'seed-1',
+      session_id: SID,
+      url: 'https://example.com',
+      title: 'Example',
+      favicon_url: null,
+      status: 'ready',
+      can_go_back: false,
+      can_go_forward: false,
+    });
+    __mockStore.browserCaptureRegionBehavior = 'null';
+    const onAnnotation = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <PreviewPanel sessionId={SID} browser={null} onAnnotation={onAnnotation} />
+    );
+    await waitFor(() => screen.getByText('Example'));
+    await user.click(screen.getByText('Example'));
+    await user.click(screen.getByTestId('preview-annotation-start'));
+    await waitFor(() => {
+      expect(__mockStore.browserInspectorEnabled.has('seed-1')).toBe(true);
+    });
+
+    act(() => {
+      __emitInspectorEvent({
+        tab_id: 'seed-1',
+        session_id: SID,
+        event: {
+          type: 'pick',
+          selector: 'a',
+          x: 0,
+          y: 0,
+          w: 10,
+          h: 10,
+          tag: 'a',
+          dimensions: '10x10',
+          page_url: 'https://example.com',
+          ts: 1,
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(onAnnotation).toHaveBeenCalledTimes(1);
+    });
+    const block = onAnnotation.mock.calls[0]![0] as { screenshot_uri?: string };
+    expect(block.screenshot_uri).toBeUndefined();
+  });
+
+  it('v2.10.0 β-3: hover event with meta → meta card rendered (tag + dimensions visible)', async () => {
+    __mockStore.browserTabs.set('seed-1', {
+      tab_id: 'seed-1',
+      session_id: SID,
+      url: 'https://example.com',
+      title: 'Example',
+      favicon_url: null,
+      status: 'ready',
+      can_go_back: false,
+      can_go_forward: false,
+    });
+    const user = userEvent.setup();
+    render(<PreviewPanel sessionId={SID} browser={null} onAnnotation={() => {}} />);
+    await waitFor(() => screen.getByText('Example'));
+    await user.click(screen.getByText('Example'));
+    await user.click(screen.getByTestId('preview-annotation-start'));
+    await waitFor(() => {
+      expect(__mockStore.browserInspectorEnabled.has('seed-1')).toBe(true);
+    });
+
+    act(() => {
+      __emitInspectorEvent({
+        tab_id: 'seed-1',
+        session_id: SID,
+        event: {
+          type: 'hover',
+          x: 10,
+          y: 20,
+          w: 100,
+          h: 40,
+          tag: 'h3',
+          dimensions: '100x40',
+          classes: ['title'],
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('annotation-hover-meta-card')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('annotation-hover-meta-title').textContent).toBe('<h3.title>');
+    expect(screen.getByTestId('annotation-hover-meta-dimensions').textContent).toContain('100x40');
+  });
+
   it('v2.10.0 β-2: pick event for OTHER tab id is ignored', async () => {
     __mockStore.browserTabs.set('seed-1', {
       tab_id: 'seed-1',
@@ -596,6 +753,7 @@ describe('PreviewPanel', () => {
           w: 10,
           h: 10,
           tag: 'a',
+          dimensions: '10x10',
           page_url: 'https://other',
           ts: 0,
         },

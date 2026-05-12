@@ -90,19 +90,30 @@ interface MockTurnSearchResult {
 type BrowserUpdateListener = (state: MockBrowserTabState) => void;
 
 // v2.10.0 β-2 — Inspector event shapes mirrored from preload.
+// v2.10.0 β-3 — Added computed-style meta (id/classes/color/bg_color/font +
+// required dimensions). Tests that inject events still work without setting
+// these — the renderer treats every optional field as missing.
+interface MockInspectorMeta {
+  tag: string;
+  dimensions: string;
+  id?: string;
+  classes?: string[];
+  color?: string;
+  bg_color?: string;
+  font?: string;
+}
 type MockInspectorEvent =
-  | { type: 'hover'; x: number; y: number; w: number; h: number; tag: string }
-  | {
+  | ({ type: 'hover'; x: number; y: number; w: number; h: number } & MockInspectorMeta)
+  | ({
       type: 'pick';
       selector: string;
       x: number;
       y: number;
       w: number;
       h: number;
-      tag: string;
       page_url: string;
       ts: number;
-    };
+    } & MockInspectorMeta);
 interface MockInspectorPayload {
   tab_id: string;
   session_id: string;
@@ -245,6 +256,15 @@ const mockStore = {
   // v2.10.0 β-2 — Inspector / element pick mock state.
   browserInspectorEnabled: new Set<string>(),
   browserInspectorListeners: new Set<InspectorListener>(),
+  // v2.10.0 β-3 — captureRegion mock. Tests can override
+  // captureRegionBehavior to 'success' (default) | 'null' (capturePage fail)
+  // | 'fail' (IPC Result.ok = false). Calls go through browserCaptureRegions
+  // for assertion. Use a fixed uri so assertions are deterministic.
+  browserCaptureRegionBehavior: 'success' as 'success' | 'null' | 'fail',
+  browserCaptureRegions: [] as Array<{
+    tabId: string;
+    bbox: { x: number; y: number; w: number; h: number };
+  }>,
 
   // ── ai/* (P1-4) ───────────────────────────────────────
   // Tests can inject events via __emitAiStreamEvent / __emitAiStreamEnd.
@@ -512,6 +532,8 @@ beforeEach(() => {
   mockStore.browserListeners.clear();
   mockStore.browserInspectorEnabled.clear();
   mockStore.browserInspectorListeners.clear();
+  mockStore.browserCaptureRegionBehavior = 'success';
+  mockStore.browserCaptureRegions = [];
   mockStore.aiDetection = {
     claude: { path: '/usr/local/bin/claude', version: '1.2.3' },
     codex: null,
@@ -1340,6 +1362,39 @@ if (typeof window !== 'undefined') {
             mockStore.browserInspectorListeners.delete(listener);
           };
         }),
+
+        // v2.10.0 β-3 (F-021 partial screenshot) — captureRegion mock. Returns
+        // a stable file URI so renderer assertions are deterministic.
+        captureRegion: vi.fn(
+          async (
+            tabId: string,
+            bbox: { x: number; y: number; w: number; h: number }
+          ): Promise<
+            Result<{
+              uri: string;
+              png_base64: string;
+              width: number;
+              height: number;
+            } | null>
+          > => {
+            mockStore.browserCaptureRegions.push({ tabId, bbox });
+            if (mockStore.browserCaptureRegionBehavior === 'fail') {
+              return { ok: false, error: 'mock captureRegion failure' };
+            }
+            if (mockStore.browserCaptureRegionBehavior === 'null') {
+              return { ok: true, value: null };
+            }
+            return {
+              ok: true,
+              value: {
+                uri: `file:///mock-userdata/annotations/${tabId}/mock.png`,
+                png_base64: Buffer.from('mock-png', 'utf-8').toString('base64'),
+                width: bbox.w,
+                height: bbox.h,
+              },
+            };
+          }
+        ),
       },
 
       // P1-4: AI streaming via real CLI subprocess. Renderer-side IPC is

@@ -74,26 +74,37 @@ interface BrowserBoundsShape {
 // v2.10.0 β-2 (F-021 + F-033) — Inspector event shape mirrored from
 // `@/main/BrowserManager.ts`. Inlined so preload stays free of Electron-only
 // imports. Keep in sync with `InspectorEvent` in BrowserManager.ts.
+//
+// v2.10.0 β-3 — Extended with computed-style meta (id / classes / color /
+// bg_color / font / dimensions). dimensions required; remaining optional.
+interface InspectorElementMetaShape {
+  tag: string;
+  dimensions: string;
+  id?: string;
+  classes?: string[];
+  color?: string;
+  bg_color?: string;
+  font?: string;
+}
+
 type InspectorEventShape =
-  | {
+  | ({
       type: 'hover';
       x: number;
       y: number;
       w: number;
       h: number;
-      tag: string;
-    }
-  | {
+    } & InspectorElementMetaShape)
+  | ({
       type: 'pick';
       selector: string;
       x: number;
       y: number;
       w: number;
       h: number;
-      tag: string;
       page_url: string;
       ts: number;
-    };
+    } & InspectorElementMetaShape);
 
 interface BrowserInspectorPayloadShape {
   tab_id: string;
@@ -1271,6 +1282,23 @@ const api = {
     ): Promise<Result<{ png_base64: string; width: number; height: number } | null>> =>
       ipcRenderer.invoke('browser/capture-tab', tabId) as Promise<
         Result<{ png_base64: string; width: number; height: number } | null>
+      >,
+
+    /**
+     * v2.10.0 β-3 (F-021 partial screenshot) — Capture a webview region as
+     * a PNG. bbox coords are viewport-relative CSS px (matching inspector
+     * `getBoundingClientRect`). Main writes the file under userData and
+     * returns the file URI + base64 for immediate preview. value=null when
+     * tab is gone, capturePage rejects, or fs write fails.
+     */
+    captureRegion: (
+      tabId: string,
+      bbox: { x: number; y: number; w: number; h: number }
+    ): Promise<
+      Result<{ uri: string; png_base64: string; width: number; height: number } | null>
+    > =>
+      ipcRenderer.invoke('browser/capture-region', tabId, bbox) as Promise<
+        Result<{ uri: string; png_base64: string; width: number; height: number } | null>
       >,
 
     /**

@@ -52,6 +52,7 @@ import {
   AnnotationOverlay,
   type AnnotationBox,
   type AnnotationMode,
+  type AnnotationHoverMeta,
 } from './AnnotationOverlay';
 import type { AnnotationBlock, DomDumpBlock } from '@/types/conversation';
 
@@ -198,6 +199,12 @@ function BrowserPreview({
   const [hoverRect, setHoverRect] = useState<{ x: number; y: number; w: number; h: number } | null>(
     null
   );
+  // v2.10.0 β-3 (F-033 meta card) — Hover meta sidecar. Inspector script
+  // attaches computed-style fields to every hover event; we forward them
+  // verbatim to AnnotationOverlay so the card renders next to hoverRect.
+  // pick event 의 메타도 동일하게 도착하지만 본 PR 에서는 카드 UI 에만 사용
+  // (annotation block dom_meta 확장은 별도 PR).
+  const [hoverMeta, setHoverMeta] = useState<AnnotationHoverMeta | null>(null);
 
   const handleCapture = useCallback(async (): Promise<void> => {
     if (onScreenshot === undefined || activeTab === null || capturing) return;
@@ -263,7 +270,11 @@ function BrowserPreview({
       if (onAnnotation === undefined || activeTab === null) return;
       // 즉시 부모에 forward — App.tsx 가 ChatInput 에 prepend.
       // v2.10.0 β-2 — pick 모드에서 잡힌 box 는 selector + page_url 까지 포함.
-      const block: AnnotationBlock = {
+      // v2.10.0 β-3 — 동일 시점에 main 의 captureRegion 을 호출해 부분
+      // 스크린샷을 userData 에 저장 후 file URI 를 screenshot_uri 에 채운다.
+      // captureRegion 비동기 동안 사용자가 다른 pick 을 해도 promise 가
+      // 독립이라 race 가 발생하지 않는다 — captured_at 으로 식별 가능.
+      const baseBlock: AnnotationBlock = {
         type: 'annotation_block',
         url: box.page_url ?? activeTab.url,
         bounding_box: { x: box.x, y: box.y, w: box.w, h: box.h },
@@ -271,7 +282,25 @@ function BrowserPreview({
         captured_at: box.captured_at,
         ...(box.selector !== undefined && { selector: box.selector }),
       };
-      onAnnotation(block);
+      const tabId = activeTab.tab_id;
+      const api = typeof window !== 'undefined' ? window.dreampia?.browser : undefined;
+      if (api?.captureRegion === undefined) {
+        // captureRegion IPC 미존재 (older preload) — screenshot 없이 그대로.
+        onAnnotation(baseBlock);
+        return;
+      }
+      void api
+        .captureRegion(tabId, { x: box.x, y: box.y, w: box.w, h: box.h })
+        .then((r) => {
+          if (r.ok && r.value !== null && r.value.uri.length > 0) {
+            onAnnotation({ ...baseBlock, screenshot_uri: r.value.uri });
+            return;
+          }
+          onAnnotation(baseBlock);
+        })
+        .catch(() => {
+          onAnnotation(baseBlock);
+        });
     },
     [onAnnotation, activeTab]
   );
@@ -327,6 +356,18 @@ function BrowserPreview({
       const ev = payload.event;
       if (ev.type === 'hover') {
         setHoverRect({ x: ev.x, y: ev.y, w: ev.w, h: ev.h });
+        // v2.10.0 β-3 — Hover meta sidecar. Inspector script 가 보내는
+        // computed-style 필드를 그대로 카드 prop 으로 forward.
+        const meta: AnnotationHoverMeta = {
+          tag: ev.tag,
+          dimensions: ev.dimensions,
+          ...(ev.id !== undefined && { id: ev.id }),
+          ...(ev.classes !== undefined && { classes: ev.classes }),
+          ...(ev.color !== undefined && { color: ev.color }),
+          ...(ev.bg_color !== undefined && { bg_color: ev.bg_color }),
+          ...(ev.font !== undefined && { font: ev.font }),
+        };
+        setHoverMeta(meta);
       } else if (ev.type === 'pick') {
         // Inspector coords are webview-viewport. anchor placeholder 가 webview
         // 와 동일 origin 으로 정렬돼 있어 그대로 overlay 좌표로 사용 가능.
@@ -346,6 +387,7 @@ function BrowserPreview({
       unsub();
       void api.disableInspector?.(tabId);
       setHoverRect(null);
+      setHoverMeta(null);
     };
   }, [annotationActive, annotationMode, activeTab, handleAnnotationMark]);
 
@@ -488,6 +530,7 @@ function BrowserPreview({
             mode={annotationMode}
             onModeChange={setAnnotationMode}
             hoverRect={hoverRect}
+            hoverMeta={hoverMeta}
           />
         )}
       </div>
