@@ -2,6 +2,34 @@
 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 형식. [SemVer](https://semver.org/lang/ko/).
 
+## [2.10.0] — 2026-05-12
+
+**Cursor warm tone UI refresh + Preview annotation/inspector upgrade.**
+
+v2.10.0 은 v2.9.1 의 Chat → Code 적용 워크플로 위에 빌더형 데스크톱 UX 를 정리한 릴리스. 화면 chrome 을 토큰/primitive 기반으로 맞추고, Preview annotation 을 DOM pick + partial screenshot + inline comment/voice memo 흐름까지 확장.
+
+### Added
+- **UI token system + primitives** — Cursor warm tone 기반 semantic token, `Button` / `Badge` / `Card` / `Input` / `ModalShell` 공통 primitive 추가.
+- **Chat landing refresh** — Codex-style `ChatLandingHero`, hero input, quickstart CTA, 첫 메시지 자동 세션 시작 흐름.
+- **Preview Annotation inspector** — DOM pick / region mode segmented control, inspector lifecycle, hover/pick event bridge, selector + page URL metadata.
+- **Hover meta card + partial screenshot** — pick 대상의 tag/id/classes/color/background/font/dimensions 표시와 webview region capture.
+- **Inline annotation panel + voice memo** — mark 직후 comment 입력, WebM/Opus 녹음 저장, annotation block 의 audio URI/duration metadata.
+- **Inspector docs** — ADR-0010 + Preview inspector 한계/운영 문서 추가.
+
+### Changed
+- `package.json:version`: 2.9.1 → 2.10.0.
+- **Modal chrome migration** — Settings / Automation / Compare / Plugins / SlashHelp / Permission / CostLimit / BackfillPrompt 등 주요 모달을 `ModalShell` + `Button` 기반으로 정리.
+- **Warm tone migration** — Sidebar / Chat / Code / Settings 표면의 raw color class 를 semantic token namespace 로 이동.
+- **What's new** — v2.10.0 highlight 를 Settings 의 What's new 탭과 ko/en i18n 에 추가.
+
+### Fixed
+- **Inspector hardening** — hover/pick queue split, drain in-flight guard, navigation re-arm, explicit uninstall cleanup.
+- **Token namespace** — danger 계열 class 를 semantic namespace 로 정리해 Tailwind token 충돌 위험 축소.
+
+### Tests
+- 신규/확장: BrowserManager inspector, IPC browser channels, AnnotationOverlay, PreviewPanel annotation flow, `useRecorder`, annotation audio store/provider coverage.
+- 로컬 verify: `npm run typecheck` clean / `npm run lint` 0 errors (3 warnings) / `npm test` **754 files / 2,577 tests pass**.
+
 ## [2.9.1] — 2026-05-11
 
 **v2.9.x release pipeline 회복 — v2.8.0 + v2.9.0 이 CI 막힘으로 published artifact 없이 tag 만 남아 있던 상태를 정리.**

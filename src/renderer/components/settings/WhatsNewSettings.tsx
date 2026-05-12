@@ -31,6 +31,18 @@ interface ReleaseHighlightSpec {
 // nested path 로 보일 뿐 — 실제 lookup 은 단일 key 그대로.
 const RELEASES: ReadonlyArray<ReleaseHighlightSpec> = [
   {
+    version: 'v2.10.0',
+    date: '2026-05-12',
+    taglineKey: 'settings.whats_new.v210.tagline',
+    bulletKeys: [
+      'settings.whats_new.v210.bullet_0',
+      'settings.whats_new.v210.bullet_1',
+      'settings.whats_new.v210.bullet_2',
+      'settings.whats_new.v210.bullet_3',
+      'settings.whats_new.v210.bullet_4',
+    ],
+  },
+  {
     version: 'v2.9.0',
     date: '2026-05-11',
     taglineKey: 'settings.whats_new.v290.tagline',
