@@ -122,7 +122,7 @@ export function ProviderDropdown({
 
   return (
     <label
-      className="flex items-center gap-1 rounded bg-bg-tertiary px-1.5 py-0.5 text-[11px] text-text-secondary hover:bg-border-primary"
+      className="flex items-center gap-1 rounded bg-surface-strong px-1.5 py-0.5 text-[11px] text-text-secondary hover:bg-hairline-strong"
       title={t('provider.dropdown.tooltip', { label: currentLabel })}
       data-testid="provider-dropdown"
     >

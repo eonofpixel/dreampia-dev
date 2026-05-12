@@ -713,7 +713,7 @@ export function ChatInput({
     : `${SLASH_POPOVER_PREFIX}-listbox`;
 
   return (
-    <div className="relative border-t border-border-primary bg-bg-secondary p-3">
+    <div className="relative border-t border-hairline bg-canvas-soft p-3">
       {slashOpen && (
         <SlashCommandPopover
           commands={filteredCommands}
@@ -795,7 +795,7 @@ export function ChatInput({
         placeholder={effectivePlaceholder}
         disabled={disabled}
         rows={3}
-        className="w-full resize-none rounded-md border border-border-primary bg-bg-primary px-3 py-2 text-sm leading-relaxed focus:border-border-focus focus:outline-none disabled:opacity-50"
+        className="w-full resize-none rounded-md border border-hairline bg-canvas px-3 py-2 text-sm leading-relaxed focus:border-border-focus focus:outline-none disabled:opacity-50"
         aria-label={t('chat.input.aria_label')}
         data-testid="chat-input"
         // listbox a11y: textarea 가 controller 역할. combobox role 은
@@ -811,16 +811,16 @@ export function ChatInput({
 
       <div className="mt-2 flex items-center justify-between text-xs text-text-tertiary">
         <span>
-          <kbd className="rounded bg-bg-tertiary px-1 py-0.5">Enter</kbd>{' '}
+          <kbd className="rounded bg-surface-strong px-1 py-0.5">Enter</kbd>{' '}
           {t('chat.input.hint.enter_send')}
           <span className="mx-2">·</span>
-          <kbd className="rounded bg-bg-tertiary px-1 py-0.5">Shift+Enter</kbd>{' '}
+          <kbd className="rounded bg-surface-strong px-1 py-0.5">Shift+Enter</kbd>{' '}
           {t('chat.input.hint.shift_enter_newline')}
           <span className="mx-2">·</span>
-          <kbd className="rounded bg-bg-tertiary px-1 py-0.5">/</kbd>{' '}
+          <kbd className="rounded bg-surface-strong px-1 py-0.5">/</kbd>{' '}
           {t('chat.input.hint.slash_commands')}
           <span className="mx-2">·</span>
-          <kbd className="rounded bg-bg-tertiary px-1 py-0.5">@</kbd>{' '}
+          <kbd className="rounded bg-surface-strong px-1 py-0.5">@</kbd>{' '}
           {t('chat.input.hint.at_mention')}
         </span>
 

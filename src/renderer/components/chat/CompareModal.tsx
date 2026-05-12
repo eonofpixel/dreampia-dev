@@ -77,8 +77,8 @@ function buildSimpleDiff(left: string, right: string): UnifiedDiffLine[] {
 }
 
 // v2.10.0 (.omc/DESIGN.md modal migration B) — provider-style raw color 는
-// streaming/done 등 status semantic distinction 이라 유지. bg-bg-tertiary
-// alias 그대로 (token 시스템 자동 매핑).
+// streaming/done 등 status semantic distinction 이라 유지. bg-surface-strong
+// 으로 chrome 정렬 (Stage 4b sweep).
 function statusBadgeClass(status: CompareSideStatus): string {
   switch (status) {
     case 'pending':

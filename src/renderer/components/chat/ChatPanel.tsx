@@ -301,7 +301,7 @@ export function ChatPanel({
   }
 
   return (
-    <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-bg-primary">
+    <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
       <ChatHeader
         session={session}
         cliStatus={cliStatus}
@@ -364,7 +364,7 @@ function IpcUnavailableBanner(): React.JSX.Element {
     <div
       role="alert"
       data-testid="ipc-unavailable-banner"
-      className="border-b border-red-500/30 bg-red-500/10 px-4 py-2 text-xs text-red-300"
+      className="border-b border-danger/30 bg-danger/10 px-4 py-2 text-xs text-danger"
     >
       <strong>{t('chat.ipc.banner_strong')}</strong> {t('chat.ipc.banner_detail')}{' '}
       <code>window.dreampia</code> {t('chat.ipc.banner_check')}
@@ -657,7 +657,7 @@ function ChatHeader({
           <button
             type="button"
             onClick={onPickWorkspace}
-            className="flex max-w-[160px] shrink-0 items-center gap-1.5 truncate rounded bg-bg-tertiary px-2 py-0.5 hover:bg-border-primary"
+            className="flex max-w-[160px] shrink-0 items-center gap-1.5 truncate rounded bg-surface-strong px-2 py-0.5 hover:bg-hairline-strong"
             title={t('chat.header.workspace_tooltip', { name: workspaceName })}
             aria-label={t('chat.header.workspace_pick_aria')}
             data-testid="workspace-pick-button"
@@ -675,7 +675,7 @@ function ChatHeader({
           <button
             type="button"
             onClick={onToggleWorkspaceLock}
-            className="shrink-0 rounded px-1.5 py-0.5 text-[14px] leading-none hover:bg-bg-tertiary"
+            className="shrink-0 rounded px-1.5 py-0.5 text-[14px] leading-none hover:bg-surface-strong"
             title={
               workspaceLocked
                 ? t('chat.header.workspace_unlock_tooltip')
@@ -725,7 +725,7 @@ function ChatHeader({
           <button
             type="button"
             onClick={onTogglePreview}
-            className="shrink-0 rounded px-1.5 py-0.5 text-[14px] leading-none hover:bg-bg-tertiary"
+            className="shrink-0 rounded px-1.5 py-0.5 text-[14px] leading-none hover:bg-surface-strong"
             title={
               previewVisible === true
                 ? t('chat.header.preview_hide_tooltip')
@@ -754,7 +754,7 @@ function ChatHeader({
           <button
             type="button"
             onClick={onForkSession}
-            className="shrink-0 rounded px-1.5 py-0.5 text-[14px] leading-none hover:bg-bg-tertiary"
+            className="shrink-0 rounded px-1.5 py-0.5 text-[14px] leading-none hover:bg-surface-strong"
             title={t('chat.header.fork_tooltip')}
             aria-label={t('chat.header.fork_aria')}
             data-testid="chat-fork-button"
@@ -786,7 +786,7 @@ const PROVIDER_BADGE_CLASS: Record<string, string> = {
   'claude-cli': 'border-blue-600/40 bg-blue-900/20 text-blue-300',
   'codex-cli': 'border-purple-600/40 bg-purple-900/20 text-purple-300',
   mock: 'border-yellow-600/40 bg-yellow-900/20 text-yellow-300',
-  none: 'border-border-primary bg-bg-tertiary text-text-tertiary',
+  none: 'border-hairline bg-surface-strong text-text-tertiary',
 };
 
 function CliStatusBadge({ status }: { status: CliStatus }): React.JSX.Element | null {
@@ -1153,7 +1153,7 @@ function TurnDisplay({
               title={t('chat.turn.fork_tooltip')}
               aria-label={t('chat.turn.fork_aria')}
               data-testid={`turn-fork-button-${turn.id}`}
-              className="rounded-md p-1 hover:bg-bg-tertiary"
+              className="rounded-md p-1 hover:bg-surface-strong"
             >
               <GitBranch aria-hidden="true" className="h-3.5 w-3.5" />
             </button>

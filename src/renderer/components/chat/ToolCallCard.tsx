@@ -90,7 +90,7 @@ export function ToolCallCard({ call, result }: ToolCallCardProps): React.JSX.Ele
 
   const ChevronIcon = expanded ? ChevronDown : ChevronRight;
 
-  // v2.10.0 (.omc/DESIGN.md C-1) — raw red/green/amber + bg-bg-tertiary
+  // v2.10.0 (.omc/DESIGN.md C-1) — raw red/green/amber + bg-surface-strong
   // chrome → semantic.* tokens + surface-card. radius-md → radius-lg (card
   // hierarchy 와 align).
   return (

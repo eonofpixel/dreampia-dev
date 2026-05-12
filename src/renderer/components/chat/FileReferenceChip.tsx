@@ -48,8 +48,8 @@ export function FileReferenceChip({
   // 차별화하기 위해 accent border 로 시각 강조.
   const containerCls = inverse
     ? 'bg-white/15 border border-white/25 text-white'
-    : 'bg-bg-primary border border-accent/40 text-text-primary';
-  const headerHoverCls = inverse ? 'hover:bg-white/10' : 'hover:bg-bg-tertiary';
+    : 'bg-surface-card border border-accent/40 text-text-primary';
+  const headerHoverCls = inverse ? 'hover:bg-white/10' : 'hover:bg-surface-strong';
   const trailingCls = inverse ? 'text-white/80' : 'text-text-tertiary';
 
   return (
@@ -85,7 +85,7 @@ export function FileReferenceChip({
       {expanded && (
         <div
           className={`max-h-64 overflow-auto rounded-b-md border-t px-2 py-1 font-mono text-[11px] leading-snug ${
-            inverse ? 'border-white/25 bg-black/20' : 'border-border-primary bg-bg-secondary'
+            inverse ? 'border-white/25 bg-black/20' : 'border-hairline bg-canvas-soft'
           }`}
           data-testid="file-reference-snippet"
           {...(language !== undefined && { 'data-language': language })}

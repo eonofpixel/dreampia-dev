@@ -96,7 +96,7 @@ export function ChatInputSuggestionPopover<T extends SuggestionItem>({
         role="listbox"
         aria-label={ariaLabel}
         {...(testid !== undefined && { 'data-testid': testid })}
-        className="absolute bottom-full left-0 right-0 z-30 mb-1 rounded-md border border-border-primary bg-bg-secondary px-3 py-2 text-xs text-text-tertiary shadow-lg"
+        className="absolute bottom-full left-0 right-0 z-30 mb-1 rounded-md border border-hairline bg-surface-card px-3 py-2 text-xs text-text-tertiary shadow-lg"
       >
         {emptyMessage}
       </div>
@@ -108,7 +108,7 @@ export function ChatInputSuggestionPopover<T extends SuggestionItem>({
       role="listbox"
       aria-label={ariaLabel}
       {...(testid !== undefined && { 'data-testid': testid })}
-      className="absolute bottom-full left-0 right-0 z-30 mb-1 max-h-64 overflow-y-auto rounded-md border border-border-primary bg-bg-secondary shadow-lg"
+      className="absolute bottom-full left-0 right-0 z-30 mb-1 max-h-64 overflow-y-auto rounded-md border border-hairline bg-surface-card shadow-lg"
     >
       <ul className="py-1">
         {items.map((item, index) => {
@@ -125,7 +125,7 @@ export function ChatInputSuggestionPopover<T extends SuggestionItem>({
               data-active={isActive ? 'true' : 'false'}
               className={
                 'flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm ' +
-                (isActive ? 'bg-accent/20' : 'hover:bg-bg-tertiary')
+                (isActive ? 'bg-accent/20' : 'hover:bg-surface-strong')
               }
               onMouseDown={(e) => {
                 // mousedown 으로 처리 — click 보다 먼저 발생해 textarea blur
@@ -148,7 +148,7 @@ export function ChatInputSuggestionPopover<T extends SuggestionItem>({
         })}
       </ul>
       {footerHint !== undefined && footerHint.length > 0 && (
-        <div className="border-t border-border-primary px-3 py-1 text-[10px] text-text-tertiary">
+        <div className="border-t border-hairline px-3 py-1 text-[10px] text-text-tertiary">
           {footerHint}
         </div>
       )}
