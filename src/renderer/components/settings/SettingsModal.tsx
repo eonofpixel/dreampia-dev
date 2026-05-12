@@ -26,7 +26,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  X,
   Server,
   BarChart3,
   Cpu,
@@ -40,6 +39,7 @@ import {
   KeyRound,
   Sparkles,
 } from 'lucide-react';
+import { ModalShell } from '../ui/ModalShell';
 import { McpSettingsPanel } from './McpSettings';
 import { UsageSettingsPanel } from './UsageSettings';
 import { KeyboardSettings } from './KeyboardSettings';
@@ -144,82 +144,69 @@ export function SettingsModal({
     }
   }, [open, initialTab]);
 
-  if (!open) return null;
-
+  // v2.10.0 (.omc/DESIGN.md, modal migration B) — chrome 을 ModalShell 로.
+  // size=xl (~920px, 기존 960px 와 근사). close 는 ModalShell 기본. body 의
+  // sidebar(left) + content(right) 은 children 안에 그대로.
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('settings.title')}
+    <ModalShell
+      open={open}
+      size="xl"
+      title={t('settings.title')}
+      titleId="settings-modal-title"
+      onClose={onClose}
       data-testid="settings-modal"
     >
-      <div className="flex max-h-[90vh] w-[960px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border-primary p-4">
-          <h2 className="text-lg font-semibold">{t('settings.title')}</h2>
-          <button
-            onClick={onClose}
-            className="rounded-md p-2 hover:bg-bg-tertiary"
-            aria-label={t('settings.close')}
-            data-testid="settings-close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+      {/* Body — sidebar(left) + content(right) */}
+      <div className="-mx-lg -my-base flex min-h-[520px] overflow-hidden">
+        <nav
+          aria-label={t('settings.aria.categories')}
+          className="w-[180px] flex-shrink-0 border-r border-border-primary bg-bg-secondary p-2"
+        >
+          <ul className="space-y-1">
+            {TAB_ORDER.map((tab) => {
+              const active = activeTab === tab.id;
+              return (
+                <li key={tab.id}>
+                  <button
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                    }}
+                    data-active={active}
+                    data-testid={`settings-tab-${tab.id}`}
+                    className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm hover:bg-bg-tertiary data-[active=true]:bg-bg-tertiary data-[active=true]:font-medium"
+                    aria-current={active ? 'true' : undefined}
+                  >
+                    <span className="flex-shrink-0">{tab.icon}</span>
+                    <span>{t(tab.labelKey)}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
 
-        {/* Body — sidebar(left) + content(right) */}
-        <div className="flex min-h-[520px] flex-1 overflow-hidden">
-          <nav
-            aria-label={t('settings.aria.categories')}
-            className="w-[180px] flex-shrink-0 border-r border-border-primary bg-bg-secondary p-2"
-          >
-            <ul className="space-y-1">
-              {TAB_ORDER.map((tab) => {
-                const active = activeTab === tab.id;
-                return (
-                  <li key={tab.id}>
-                    <button
-                      onClick={() => {
-                        setActiveTab(tab.id);
-                      }}
-                      data-active={active}
-                      data-testid={`settings-tab-${tab.id}`}
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm hover:bg-bg-tertiary data-[active=true]:bg-bg-tertiary data-[active=true]:font-medium"
-                      aria-current={active ? 'true' : undefined}
-                    >
-                      <span className="flex-shrink-0">{tab.icon}</span>
-                      <span>{t(tab.labelKey)}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
-
-          {/* Content panel — flex-col 로 panel 자체가 자체 footer 가질 수 있게. */}
-          <div
-            className="flex flex-1 flex-col overflow-hidden"
-            data-testid={`settings-panel-${activeTab}`}
-          >
-            {activeTab === 'mcp' && <McpSettingsPanel />}
-            {activeTab === 'usage' && <UsageSettingsPanel />}
-            {activeTab === 'provider' && <ProviderPanel />}
-            {activeTab === 'direct_api' && <DirectApiPanel />}
-            {activeTab === 'permission' && <PermissionPanel />}
-            {activeTab === 'theme' && <ThemePanel />}
-            {activeTab === 'keyboard' && <KeyboardSettings />}
-            {activeTab === 'language' && <LanguageSettings />}
-            {activeTab === 'diagnose' && <DiagnoseSettings />}
-            {activeTab === 'about' && <AboutPanel />}
-            {activeTab === 'whats_new' && <WhatsNewSettings />}
-            {activeTab === 'onboarding' && (
-              <OnboardingPanel onReopenOnboarding={onReopenOnboarding} />
-            )}
-          </div>
+        {/* Content panel — flex-col 로 panel 자체가 자체 footer 가질 수 있게. */}
+        <div
+          className="flex flex-1 flex-col overflow-hidden"
+          data-testid={`settings-panel-${activeTab}`}
+        >
+          {activeTab === 'mcp' && <McpSettingsPanel />}
+          {activeTab === 'usage' && <UsageSettingsPanel />}
+          {activeTab === 'provider' && <ProviderPanel />}
+          {activeTab === 'direct_api' && <DirectApiPanel />}
+          {activeTab === 'permission' && <PermissionPanel />}
+          {activeTab === 'theme' && <ThemePanel />}
+          {activeTab === 'keyboard' && <KeyboardSettings />}
+          {activeTab === 'language' && <LanguageSettings />}
+          {activeTab === 'diagnose' && <DiagnoseSettings />}
+          {activeTab === 'about' && <AboutPanel />}
+          {activeTab === 'whats_new' && <WhatsNewSettings />}
+          {activeTab === 'onboarding' && (
+            <OnboardingPanel onReopenOnboarding={onReopenOnboarding} />
+          )}
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
 

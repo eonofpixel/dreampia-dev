@@ -161,7 +161,8 @@ describe('SettingsModal (v0.8.0)', () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     render(<SettingsModal open={true} onClose={onClose} />);
-    await user.click(screen.getByTestId('settings-close'));
+    // v2.10.0 (.omc/DESIGN.md modal B) — ModalShell 기본 close button.
+    await user.click(screen.getByTestId('modal-shell-close'));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

@@ -17,13 +17,15 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { X, Plus, Play, Trash2 } from 'lucide-react';
+import { Plus, Play, Trash2 } from 'lucide-react';
 import type {
   AuditEventShape,
   AutomationKindShape,
   AutomationRuleSummaryShape,
 } from '@/main/preload';
 import { useT } from '../../i18n';
+import { Button } from '../ui/Button';
+import { ModalShell } from '../ui/ModalShell';
 
 export interface AutomationModalProps {
   open: boolean;
@@ -286,437 +288,428 @@ export function AutomationModal({ open, onClose }: AutomationModalProps): React.
     input.click();
   }, [t, reload]);
 
-  if (!open) return null;
-
+  // v2.10.0 (.omc/DESIGN.md, modal migration B) — chrome 을 ModalShell + Button
+  // 으로. title 옆 export/import 는 ModalShell title prop 의 ReactNode 안에
+  // toolbar 로 포함. close 는 ModalShell 기본 close button.
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('automation.modal_aria')}
-      data-testid="automation-modal"
-    >
-      <div className="flex max-h-[90vh] w-[860px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl">
-        <div className="flex items-center justify-between border-b border-border-primary p-4">
-          <h2 className="text-lg font-semibold">{t('automation.title')}</h2>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
+    <ModalShell
+      open={open}
+      size="xl"
+      title={
+        <span className="flex w-full items-center justify-between gap-xs">
+          <span>{t('automation.title')}</span>
+          <span className="flex shrink-0 items-center gap-xs">
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => void handleExport()}
-              className="rounded-md border border-border-primary px-2 py-1 text-xs hover:bg-bg-tertiary"
               title={t('automation.export_tooltip')}
               data-testid="automation-export"
             >
               {t('automation.export')}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => handleImport()}
-              className="rounded-md border border-border-primary px-2 py-1 text-xs hover:bg-bg-tertiary"
               title={t('automation.import_tooltip')}
               data-testid="automation-import"
             >
               {t('automation.import')}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md p-2 hover:bg-bg-tertiary"
-              aria-label={t('automation.close')}
-              data-testid="automation-close"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 space-y-4 overflow-y-auto p-4">
-          {error !== null && (
-            <p
-              className="break-words rounded border border-red-600/40 bg-red-900/20 p-2 font-mono text-[11px] text-red-300"
-              data-testid="automation-error"
-            >
-              {error}
-            </p>
-          )}
-
-          {/* 새 rule 등록 form */}
-          <section
-            className="rounded-md border border-border-primary p-3"
-            data-testid="automation-new-rule"
+            </Button>
+          </span>
+        </span>
+      }
+      titleId="automation-modal-title"
+      onClose={onClose}
+      data-testid="automation-modal"
+    >
+      <div className="space-y-base">
+        {error !== null && (
+          <p
+            className="break-words rounded border border-red-600/40 bg-red-900/20 p-2 font-mono text-[11px] text-red-300"
+            data-testid="automation-error"
           >
-            <h3 className="mb-2 text-sm font-semibold">{t('automation.new_rule_title')}</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <label className="flex flex-col gap-1 text-xs">
-                <span>{t('automation.field_name')}</span>
-                <input
-                  type="text"
-                  value={draftName}
-                  onChange={(e) => setDraftName(e.target.value)}
-                  placeholder={t('automation.field_name_placeholder')}
-                  className="rounded border border-border-primary bg-bg-secondary px-2 py-1 text-xs"
-                  data-testid="automation-draft-name"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs">
-                <span>{t('automation.field_kind')}</span>
-                <select
-                  value={draftKind}
-                  onChange={(e) => setDraftKind(e.target.value as AutomationKindShape)}
-                  className="rounded border border-border-primary bg-bg-secondary px-2 py-1 text-xs"
-                  data-testid="automation-draft-kind"
-                >
-                  <option value="cron">{t('automation.kind_cron')}</option>
-                  <option value="interval">{t('automation.kind_interval')}</option>
-                  <option value="webhook">{t('automation.kind_webhook')}</option>
-                </select>
-              </label>
+            {error}
+          </p>
+        )}
 
-              {draftKind === 'cron' && (
-                <>
-                  <label className="flex flex-col gap-1 text-xs">
-                    <span>{t('automation.field_cron_expr')}</span>
-                    <input
-                      type="text"
-                      value={draftCronExpr}
-                      onChange={(e) => setDraftCronExpr(e.target.value)}
-                      placeholder={t('automation.field_cron_expr_placeholder')}
-                      className="rounded border border-border-primary bg-bg-secondary px-2 py-1 font-mono text-xs"
-                      data-testid="automation-draft-cron"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 text-xs">
-                    <span>{t('automation.field_tz')}</span>
-                    <input
-                      type="text"
-                      value={draftCronTz}
-                      onChange={(e) => setDraftCronTz(e.target.value)}
-                      placeholder="Asia/Seoul"
-                      className="rounded border border-border-primary bg-bg-secondary px-2 py-1 text-xs"
-                      data-testid="automation-draft-tz"
-                    />
-                  </label>
-                  <p
-                    className="col-span-2 text-[11px] text-text-tertiary"
-                    data-testid="automation-draft-next-run"
-                  >
-                    {t('automation.next_run_label')}:{' '}
-                    {draftNextRun ?? t('automation.next_run_invalid')}
-                  </p>
-                </>
-              )}
+        {/* 새 rule 등록 form */}
+        <section
+          className="rounded-md border border-border-primary p-3"
+          data-testid="automation-new-rule"
+        >
+          <h3 className="mb-2 text-sm font-semibold">{t('automation.new_rule_title')}</h3>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex flex-col gap-1 text-xs">
+              <span>{t('automation.field_name')}</span>
+              <input
+                type="text"
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                placeholder={t('automation.field_name_placeholder')}
+                className="rounded border border-border-primary bg-bg-secondary px-2 py-1 text-xs"
+                data-testid="automation-draft-name"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs">
+              <span>{t('automation.field_kind')}</span>
+              <select
+                value={draftKind}
+                onChange={(e) => setDraftKind(e.target.value as AutomationKindShape)}
+                className="rounded border border-border-primary bg-bg-secondary px-2 py-1 text-xs"
+                data-testid="automation-draft-kind"
+              >
+                <option value="cron">{t('automation.kind_cron')}</option>
+                <option value="interval">{t('automation.kind_interval')}</option>
+                <option value="webhook">{t('automation.kind_webhook')}</option>
+              </select>
+            </label>
 
-              {draftKind === 'interval' && (
-                <label className="col-span-2 flex flex-col gap-1 text-xs">
-                  <span>{t('automation.field_interval_ms')}</span>
-                  <input
-                    type="number"
-                    value={draftIntervalMs}
-                    onChange={(e) => setDraftIntervalMs(e.target.value)}
-                    min="1000"
-                    className="rounded border border-border-primary bg-bg-secondary px-2 py-1 text-xs"
-                    data-testid="automation-draft-interval"
-                  />
-                </label>
-              )}
-
-              {draftKind === 'webhook' && (
-                <label className="col-span-2 flex flex-col gap-1 text-xs">
-                  <span>{t('automation.field_webhook_path')}</span>
+            {draftKind === 'cron' && (
+              <>
+                <label className="flex flex-col gap-1 text-xs">
+                  <span>{t('automation.field_cron_expr')}</span>
                   <input
                     type="text"
-                    value={draftWebhookPath}
-                    onChange={(e) => setDraftWebhookPath(e.target.value)}
-                    placeholder="/hooks/abc"
+                    value={draftCronExpr}
+                    onChange={(e) => setDraftCronExpr(e.target.value)}
+                    placeholder={t('automation.field_cron_expr_placeholder')}
                     className="rounded border border-border-primary bg-bg-secondary px-2 py-1 font-mono text-xs"
-                    data-testid="automation-draft-webhook"
+                    data-testid="automation-draft-cron"
                   />
                 </label>
-              )}
-
-              {/* v1.7.25 — Handler picker + JSON config */}
-              <label className="col-span-2 flex flex-col gap-1 text-xs">
-                <span>{t('automation.field_handler')}</span>
-                <select
-                  value={draftHandlerName}
-                  onChange={(e) => setDraftHandlerName(e.target.value)}
-                  className="rounded border border-border-primary bg-bg-secondary px-2 py-1 text-xs"
-                  data-testid="automation-draft-handler"
+                <label className="flex flex-col gap-1 text-xs">
+                  <span>{t('automation.field_tz')}</span>
+                  <input
+                    type="text"
+                    value={draftCronTz}
+                    onChange={(e) => setDraftCronTz(e.target.value)}
+                    placeholder="Asia/Seoul"
+                    className="rounded border border-border-primary bg-bg-secondary px-2 py-1 text-xs"
+                    data-testid="automation-draft-tz"
+                  />
+                </label>
+                <p
+                  className="col-span-2 text-[11px] text-text-tertiary"
+                  data-testid="automation-draft-next-run"
                 >
-                  <option value="">{t('automation.handler_default_label')}</option>
-                  {availableHandlers.map((h) => (
-                    <option key={h} value={h}>
-                      {h}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  {t('automation.next_run_label')}:{' '}
+                  {draftNextRun ?? t('automation.next_run_invalid')}
+                </p>
+              </>
+            )}
+
+            {draftKind === 'interval' && (
               <label className="col-span-2 flex flex-col gap-1 text-xs">
-                <span>{t('automation.field_handler_config')}</span>
-                <textarea
-                  value={draftHandlerConfig}
-                  onChange={(e) => setDraftHandlerConfig(e.target.value)}
-                  placeholder={t('automation.field_handler_config_placeholder')}
-                  rows={3}
-                  className="rounded border border-border-primary bg-bg-secondary px-2 py-1 font-mono text-[11px]"
-                  data-testid="automation-draft-handler-config"
+                <span>{t('automation.field_interval_ms')}</span>
+                <input
+                  type="number"
+                  value={draftIntervalMs}
+                  onChange={(e) => setDraftIntervalMs(e.target.value)}
+                  min="1000"
+                  className="rounded border border-border-primary bg-bg-secondary px-2 py-1 text-xs"
+                  data-testid="automation-draft-interval"
                 />
               </label>
-            </div>
+            )}
 
-            <button
-              type="button"
-              onClick={() => {
-                void handleAdd();
-              }}
-              className="mt-3 inline-flex items-center gap-1 rounded-md bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover"
-              data-testid="automation-add"
-            >
-              <Plus className="h-3 w-3" />
-              {t('automation.add')}
-            </button>
-          </section>
+            {draftKind === 'webhook' && (
+              <label className="col-span-2 flex flex-col gap-1 text-xs">
+                <span>{t('automation.field_webhook_path')}</span>
+                <input
+                  type="text"
+                  value={draftWebhookPath}
+                  onChange={(e) => setDraftWebhookPath(e.target.value)}
+                  placeholder="/hooks/abc"
+                  className="rounded border border-border-primary bg-bg-secondary px-2 py-1 font-mono text-xs"
+                  data-testid="automation-draft-webhook"
+                />
+              </label>
+            )}
 
-          {/* 등록된 rules 목록 */}
-          <section
-            className="rounded-md border border-border-primary"
-            data-testid="automation-rules-list"
+            {/* v1.7.25 — Handler picker + JSON config */}
+            <label className="col-span-2 flex flex-col gap-1 text-xs">
+              <span>{t('automation.field_handler')}</span>
+              <select
+                value={draftHandlerName}
+                onChange={(e) => setDraftHandlerName(e.target.value)}
+                className="rounded border border-border-primary bg-bg-secondary px-2 py-1 text-xs"
+                data-testid="automation-draft-handler"
+              >
+                <option value="">{t('automation.handler_default_label')}</option>
+                {availableHandlers.map((h) => (
+                  <option key={h} value={h}>
+                    {h}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="col-span-2 flex flex-col gap-1 text-xs">
+              <span>{t('automation.field_handler_config')}</span>
+              <textarea
+                value={draftHandlerConfig}
+                onChange={(e) => setDraftHandlerConfig(e.target.value)}
+                placeholder={t('automation.field_handler_config_placeholder')}
+                rows={3}
+                className="rounded border border-border-primary bg-bg-secondary px-2 py-1 font-mono text-[11px]"
+                data-testid="automation-draft-handler-config"
+              />
+            </label>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              void handleAdd();
+            }}
+            className="mt-3 inline-flex items-center gap-1 rounded-md bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover"
+            data-testid="automation-add"
           >
-            <h3 className="border-b border-border-primary px-3 py-2 text-sm font-semibold">
-              {t('automation.list_title', { n: rules.length })}
-            </h3>
-            {loading ? (
-              <p className="p-3 text-xs text-text-secondary">{t('automation.loading')}</p>
-            ) : rules.length === 0 ? (
-              <p className="p-3 text-xs text-text-tertiary" data-testid="automation-empty">
-                {t('automation.empty')}
-              </p>
-            ) : (
-              <ul className="divide-y divide-border-primary">
-                {rules.map((r) => (
-                  <li
-                    key={r.name}
-                    className="flex items-start justify-between gap-3 px-3 py-2 text-xs"
-                    data-testid={`automation-rule-${r.name}`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-medium">{r.name}</span>
-                        <span className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px] text-text-secondary">
-                          {r.kind}
+            <Plus className="h-3 w-3" />
+            {t('automation.add')}
+          </button>
+        </section>
+
+        {/* 등록된 rules 목록 */}
+        <section
+          className="rounded-md border border-border-primary"
+          data-testid="automation-rules-list"
+        >
+          <h3 className="border-b border-border-primary px-3 py-2 text-sm font-semibold">
+            {t('automation.list_title', { n: rules.length })}
+          </h3>
+          {loading ? (
+            <p className="p-3 text-xs text-text-secondary">{t('automation.loading')}</p>
+          ) : rules.length === 0 ? (
+            <p className="p-3 text-xs text-text-tertiary" data-testid="automation-empty">
+              {t('automation.empty')}
+            </p>
+          ) : (
+            <ul className="divide-y divide-border-primary">
+              {rules.map((r) => (
+                <li
+                  key={r.name}
+                  className="flex items-start justify-between gap-3 px-3 py-2 text-xs"
+                  data-testid={`automation-rule-${r.name}`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-medium">{r.name}</span>
+                      <span className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px] text-text-secondary">
+                        {r.kind}
+                      </span>
+                      {r.handler_name !== undefined && (
+                        <span
+                          className="rounded bg-blue-900/20 px-1.5 py-0.5 font-mono text-[10px] text-blue-300"
+                          data-testid={`automation-rule-${r.name}-handler`}
+                        >
+                          {t('automation.handler_label')}: {r.handler_name}
                         </span>
-                        {r.handler_name !== undefined && (
-                          <span
-                            className="rounded bg-blue-900/20 px-1.5 py-0.5 font-mono text-[10px] text-blue-300"
-                            data-testid={`automation-rule-${r.name}-handler`}
-                          >
-                            {t('automation.handler_label')}: {r.handler_name}
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-1 text-[11px] text-text-tertiary">
-                        {r.kind === 'cron' && (
-                          <>
-                            <span className="font-mono">{r.cron_expr}</span>
-                            {r.cron_tz !== undefined && <span className="ml-2">@ {r.cron_tz}</span>}
-                            {r.next_run !== null && (
-                              <span className="ml-2">
-                                {t('automation.next_label')}: {r.next_run}
+                      )}
+                    </div>
+                    <div className="mt-1 text-[11px] text-text-tertiary">
+                      {r.kind === 'cron' && (
+                        <>
+                          <span className="font-mono">{r.cron_expr}</span>
+                          {r.cron_tz !== undefined && <span className="ml-2">@ {r.cron_tz}</span>}
+                          {r.next_run !== null && (
+                            <span className="ml-2">
+                              {t('automation.next_label')}: {r.next_run}
+                            </span>
+                          )}
+                        </>
+                      )}
+                      {r.kind === 'interval' && (
+                        <span>{t('automation.every', { ms: r.interval_ms ?? 0 })}</span>
+                      )}
+                      {r.kind === 'webhook' && (
+                        <span className="font-mono">POST {r.webhook_path}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <label
+                      className="flex cursor-pointer items-center gap-1 text-[10px] text-text-secondary"
+                      title={t('automation.toggle_tooltip')}
+                      data-testid={`automation-toggle-${r.name}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={r.enabled !== false}
+                        onChange={() => {
+                          void handleToggleEnabled(r.name, r.enabled !== false);
+                        }}
+                        className="h-3 w-3 cursor-pointer"
+                        aria-label={t('automation.toggle_tooltip')}
+                      />
+                      {r.enabled !== false
+                        ? t('automation.enabled_label')
+                        : t('automation.disabled_label')}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void handleFire(r.name);
+                      }}
+                      className="rounded border border-border-primary bg-bg-tertiary px-2 py-0.5 text-[10px] hover:bg-bg-primary"
+                      title={t('automation.fire_tooltip')}
+                      aria-label={t('automation.fire_aria', { name: r.name })}
+                      data-testid={`automation-fire-${r.name}`}
+                    >
+                      <Play className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void handleUnregister(r.name);
+                      }}
+                      className="rounded border border-red-600/40 bg-red-900/20 px-2 py-0.5 text-[10px] text-red-300 hover:bg-red-900/30"
+                      title={t('automation.remove_tooltip')}
+                      aria-label={t('automation.remove_aria', { name: r.name })}
+                      data-testid={`automation-remove-${r.name}`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* v1.7.29 — audit viewer */}
+        <section
+          className="rounded-md border border-border-primary"
+          data-testid="automation-audit-viewer"
+        >
+          <div className="flex items-center justify-between border-b border-border-primary px-3 py-2">
+            <h3 className="text-sm font-semibold">{t('automation.audit_title')}</h3>
+            <div className="flex items-center gap-2 text-[10px]">
+              <select
+                value={auditFilterRule}
+                onChange={(e) => setAuditFilterRule(e.target.value)}
+                className="rounded border border-border-primary bg-bg-secondary px-1 py-0.5 text-[10px]"
+                data-testid="automation-audit-filter-rule"
+                aria-label={t('automation.audit_filter_rule_aria')}
+              >
+                <option value="">{t('automation.audit_filter_rule_all')}</option>
+                {rules.map((r) => (
+                  <option key={r.name} value={r.name}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={auditFilterEvent}
+                onChange={(e) => setAuditFilterEvent(e.target.value as 'all' | 'fired' | 'error')}
+                className="rounded border border-border-primary bg-bg-secondary px-1 py-0.5 text-[10px]"
+                data-testid="automation-audit-filter-event"
+                aria-label={t('automation.audit_filter_event_aria')}
+              >
+                <option value="all">{t('automation.audit_filter_event_all')}</option>
+                <option value="fired">{t('automation.audit_filter_event_fired')}</option>
+                <option value="error">{t('automation.audit_filter_event_error')}</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => void reloadAudit()}
+                className="rounded border border-border-primary bg-bg-tertiary px-1.5 py-0.5 text-[10px] hover:bg-bg-primary"
+                data-testid="automation-audit-refresh"
+                title={t('automation.audit_refresh_tooltip')}
+              >
+                {t('automation.audit_refresh')}
+              </button>
+            </div>
+          </div>
+          {auditLoading ? (
+            <p className="p-3 text-xs text-text-secondary">{t('automation.audit_loading')}</p>
+          ) : (
+            (() => {
+              const visible = auditEvents.filter((e) =>
+                auditFilterEvent === 'all'
+                  ? true
+                  : auditFilterEvent === 'fired'
+                    ? e.event === 'automation.fired'
+                    : e.event === 'automation.error'
+              );
+              if (visible.length === 0) {
+                return (
+                  <p
+                    className="p-3 text-xs text-text-tertiary"
+                    data-testid="automation-audit-empty"
+                  >
+                    {t('automation.audit_empty')}
+                  </p>
+                );
+              }
+              return (
+                <ul
+                  className="max-h-64 divide-y divide-border-primary overflow-y-auto"
+                  data-testid="automation-audit-list"
+                >
+                  {visible.map((e) => {
+                    let parsed: {
+                      rule_name?: string;
+                      handler_name?: string;
+                      duration_ms?: number;
+                      output?: string;
+                    } = {};
+                    try {
+                      parsed = JSON.parse(e.target_json) as typeof parsed;
+                    } catch {
+                      // target_json 손상 — fields 빈 채로 표시.
+                    }
+                    const isError = e.event === 'automation.error';
+                    return (
+                      <li
+                        key={e.id}
+                        className="flex items-start justify-between gap-2 px-3 py-1.5 text-[11px]"
+                        data-testid={`automation-audit-row-${e.id}`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={
+                                isError
+                                  ? 'rounded bg-red-900/30 px-1 py-0.5 text-[9px] text-red-300'
+                                  : 'rounded bg-green-900/30 px-1 py-0.5 text-[9px] text-green-300'
+                              }
+                            >
+                              {isError ? 'error' : 'fired'}
+                            </span>
+                            <span className="font-mono text-text-secondary">
+                              {parsed.rule_name ?? '?'}
+                            </span>
+                            {parsed.handler_name !== undefined && (
+                              <span className="font-mono text-[10px] text-text-tertiary">
+                                ({parsed.handler_name})
                               </span>
                             )}
-                          </>
-                        )}
-                        {r.kind === 'interval' && (
-                          <span>{t('automation.every', { ms: r.interval_ms ?? 0 })}</span>
-                        )}
-                        {r.kind === 'webhook' && (
-                          <span className="font-mono">POST {r.webhook_path}</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <label
-                        className="flex cursor-pointer items-center gap-1 text-[10px] text-text-secondary"
-                        title={t('automation.toggle_tooltip')}
-                        data-testid={`automation-toggle-${r.name}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={r.enabled !== false}
-                          onChange={() => {
-                            void handleToggleEnabled(r.name, r.enabled !== false);
-                          }}
-                          className="h-3 w-3 cursor-pointer"
-                          aria-label={t('automation.toggle_tooltip')}
-                        />
-                        {r.enabled !== false
-                          ? t('automation.enabled_label')
-                          : t('automation.disabled_label')}
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void handleFire(r.name);
-                        }}
-                        className="rounded border border-border-primary bg-bg-tertiary px-2 py-0.5 text-[10px] hover:bg-bg-primary"
-                        title={t('automation.fire_tooltip')}
-                        aria-label={t('automation.fire_aria', { name: r.name })}
-                        data-testid={`automation-fire-${r.name}`}
-                      >
-                        <Play className="h-3 w-3" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void handleUnregister(r.name);
-                        }}
-                        className="rounded border border-red-600/40 bg-red-900/20 px-2 py-0.5 text-[10px] text-red-300 hover:bg-red-900/30"
-                        title={t('automation.remove_tooltip')}
-                        aria-label={t('automation.remove_aria', { name: r.name })}
-                        data-testid={`automation-remove-${r.name}`}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {/* v1.7.29 — audit viewer */}
-          <section
-            className="rounded-md border border-border-primary"
-            data-testid="automation-audit-viewer"
-          >
-            <div className="flex items-center justify-between border-b border-border-primary px-3 py-2">
-              <h3 className="text-sm font-semibold">{t('automation.audit_title')}</h3>
-              <div className="flex items-center gap-2 text-[10px]">
-                <select
-                  value={auditFilterRule}
-                  onChange={(e) => setAuditFilterRule(e.target.value)}
-                  className="rounded border border-border-primary bg-bg-secondary px-1 py-0.5 text-[10px]"
-                  data-testid="automation-audit-filter-rule"
-                  aria-label={t('automation.audit_filter_rule_aria')}
-                >
-                  <option value="">{t('automation.audit_filter_rule_all')}</option>
-                  {rules.map((r) => (
-                    <option key={r.name} value={r.name}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={auditFilterEvent}
-                  onChange={(e) => setAuditFilterEvent(e.target.value as 'all' | 'fired' | 'error')}
-                  className="rounded border border-border-primary bg-bg-secondary px-1 py-0.5 text-[10px]"
-                  data-testid="automation-audit-filter-event"
-                  aria-label={t('automation.audit_filter_event_aria')}
-                >
-                  <option value="all">{t('automation.audit_filter_event_all')}</option>
-                  <option value="fired">{t('automation.audit_filter_event_fired')}</option>
-                  <option value="error">{t('automation.audit_filter_event_error')}</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={() => void reloadAudit()}
-                  className="rounded border border-border-primary bg-bg-tertiary px-1.5 py-0.5 text-[10px] hover:bg-bg-primary"
-                  data-testid="automation-audit-refresh"
-                  title={t('automation.audit_refresh_tooltip')}
-                >
-                  {t('automation.audit_refresh')}
-                </button>
-              </div>
-            </div>
-            {auditLoading ? (
-              <p className="p-3 text-xs text-text-secondary">{t('automation.audit_loading')}</p>
-            ) : (
-              (() => {
-                const visible = auditEvents.filter((e) =>
-                  auditFilterEvent === 'all'
-                    ? true
-                    : auditFilterEvent === 'fired'
-                      ? e.event === 'automation.fired'
-                      : e.event === 'automation.error'
-                );
-                if (visible.length === 0) {
-                  return (
-                    <p
-                      className="p-3 text-xs text-text-tertiary"
-                      data-testid="automation-audit-empty"
-                    >
-                      {t('automation.audit_empty')}
-                    </p>
-                  );
-                }
-                return (
-                  <ul
-                    className="max-h-64 divide-y divide-border-primary overflow-y-auto"
-                    data-testid="automation-audit-list"
-                  >
-                    {visible.map((e) => {
-                      let parsed: {
-                        rule_name?: string;
-                        handler_name?: string;
-                        duration_ms?: number;
-                        output?: string;
-                      } = {};
-                      try {
-                        parsed = JSON.parse(e.target_json) as typeof parsed;
-                      } catch {
-                        // target_json 손상 — fields 빈 채로 표시.
-                      }
-                      const isError = e.event === 'automation.error';
-                      return (
-                        <li
-                          key={e.id}
-                          className="flex items-start justify-between gap-2 px-3 py-1.5 text-[11px]"
-                          data-testid={`automation-audit-row-${e.id}`}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={
-                                  isError
-                                    ? 'rounded bg-red-900/30 px-1 py-0.5 text-[9px] text-red-300'
-                                    : 'rounded bg-green-900/30 px-1 py-0.5 text-[9px] text-green-300'
-                                }
-                              >
-                                {isError ? 'error' : 'fired'}
+                            {parsed.duration_ms !== undefined && (
+                              <span className="text-[10px] text-text-tertiary">
+                                {parsed.duration_ms}ms
                               </span>
-                              <span className="font-mono text-text-secondary">
-                                {parsed.rule_name ?? '?'}
-                              </span>
-                              {parsed.handler_name !== undefined && (
-                                <span className="font-mono text-[10px] text-text-tertiary">
-                                  ({parsed.handler_name})
-                                </span>
-                              )}
-                              {parsed.duration_ms !== undefined && (
-                                <span className="text-[10px] text-text-tertiary">
-                                  {parsed.duration_ms}ms
-                                </span>
-                              )}
-                            </div>
-                            {(parsed.output !== undefined || e.error !== undefined) && (
-                              <div className="mt-0.5 truncate font-mono text-[10px] text-text-tertiary">
-                                {e.error ?? parsed.output}
-                              </div>
                             )}
                           </div>
-                          <span className="shrink-0 text-[10px] text-text-tertiary">
-                            {e.timestamp.slice(11, 19)}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                );
-              })()
-            )}
-          </section>
-        </div>
+                          {(parsed.output !== undefined || e.error !== undefined) && (
+                            <div className="mt-0.5 truncate font-mono text-[10px] text-text-tertiary">
+                              {e.error ?? parsed.output}
+                            </div>
+                          )}
+                        </div>
+                        <span className="shrink-0 text-[10px] text-text-tertiary">
+                          {e.timestamp.slice(11, 19)}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              );
+            })()
+          )}
+        </section>
       </div>
-    </div>
+    </ModalShell>
   );
 }
