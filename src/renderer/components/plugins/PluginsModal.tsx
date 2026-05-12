@@ -14,9 +14,10 @@
  *   - Per-plugin enable/disable toggle.
  */
 
-import { X } from 'lucide-react';
 import { useEffect, useState, useCallback } from 'react';
 import { useT } from '../../i18n';
+import { Button } from '../ui/Button';
+import { ModalShell } from '../ui/ModalShell';
 import { InstalledPluginList } from '../marketplace/InstalledPluginList';
 import { RevokeModal } from '../marketplace/RevokeModal';
 import { IsolationDowngradeModal } from '../marketplace/IsolationDowngradeModal';
@@ -111,34 +112,43 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
     [t, fetchList]
   );
 
-  if (!open) return null;
-
+  // v2.10.0 (.omc/DESIGN.md, modal migration B) — chrome 을 ModalShell + Button
+  // 으로. tab strip + body + footer 는 children 안에 layout. RevokeModal +
+  // IsolationDowngradeModal 는 PluginsModal 의 sibling 으로 (ModalShell 바깥)
+  // mount — 별도 overlay 가 nested 되어도 z-index 충돌 없도록.
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('plugins.modal.aria_label')}
-      data-testid="plugins-modal"
-    >
-      <div className="w-[640px] max-w-[95vw] max-h-[80vh] flex flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl">
-        <header className="flex items-center justify-between border-b border-border-primary px-5 py-3">
-          <h2 className="text-base font-semibold">{t('plugins.modal.title')}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded p-1 text-sm hover:bg-bg-tertiary"
-            aria-label={t('common.close')}
-            data-testid="plugins-modal-close"
-          >
-            <X aria-hidden="true" className="h-3.5 w-3.5" />
-          </button>
-        </header>
+    <>
+      <ModalShell
+        open={open}
+        size="lg"
+        title={t('plugins.modal.title')}
+        titleId="plugins-modal-title"
+        onClose={onClose}
+        data-testid="plugins-modal"
+        footer={
+          activeTab === 'local' ? (
+            <div className="flex w-full items-center justify-between">
+              <span className="text-caption text-text-tertiary">
+                {t('plugins.modal.footer_hint')}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void fetchList(true)}
+                disabled={loading}
+                data-testid="plugins-modal-rescan"
+              >
+                {t('plugins.modal.rescan')}
+              </Button>
+            </div>
+          ) : undefined
+        }
+      >
         {/* v2.4.0 — tab strip: Local plugins ↔ MCP Marketplace */}
         <div
           role="tablist"
           aria-label="Plugin sections"
-          className="flex border-b border-border-primary px-5"
+          className="-mx-lg mb-base flex border-b border-hairline px-lg"
           data-testid="plugins-modal-tabs"
         >
           <button
@@ -148,8 +158,8 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
             onClick={() => setActiveTab('local')}
             className={
               activeTab === 'local'
-                ? 'border-b-2 border-blue-400 px-3 py-2 text-xs font-semibold text-blue-300'
-                : 'border-b-2 border-transparent px-3 py-2 text-xs text-text-tertiary hover:text-text-secondary'
+                ? 'border-b-2 border-accent px-sm py-xs text-caption font-semibold text-accent'
+                : 'border-b-2 border-transparent px-sm py-xs text-caption text-text-tertiary hover:text-text-secondary'
             }
             data-testid="plugins-tab-local"
           >
@@ -162,8 +172,8 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
             onClick={() => setActiveTab('marketplace')}
             className={
               activeTab === 'marketplace'
-                ? 'border-b-2 border-blue-400 px-3 py-2 text-xs font-semibold text-blue-300'
-                : 'border-b-2 border-transparent px-3 py-2 text-xs text-text-tertiary hover:text-text-secondary'
+                ? 'border-b-2 border-accent px-sm py-xs text-caption font-semibold text-accent'
+                : 'border-b-2 border-transparent px-sm py-xs text-caption text-text-tertiary hover:text-text-secondary'
             }
             data-testid="plugins-tab-marketplace"
           >
@@ -171,10 +181,7 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
           </button>
         </div>
         {activeTab === 'marketplace' && (
-          <div
-            className="flex-1 overflow-y-auto px-5 py-4 text-sm space-y-4"
-            data-testid="plugins-modal-marketplace-pane"
-          >
+          <div className="space-y-base text-body-sm" data-testid="plugins-modal-marketplace-pane">
             <PluginSecuritySettings />
             <InstalledPluginList
               key={marketplaceVersion}
@@ -184,9 +191,9 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
           </div>
         )}
         {activeTab === 'local' && (
-          <div className="flex-1 overflow-y-auto px-5 py-4 text-sm">
+          <div className="text-body-sm">
             {error !== null && (
-              <p className="mb-3 rounded border border-red-600/40 bg-red-900/15 px-3 py-2 text-xs text-red-300">
+              <p className="mb-sm rounded-md border border-semantic-danger/40 bg-semantic-danger/10 px-sm py-xs text-caption text-semantic-danger">
                 {error}
               </p>
             )}
@@ -200,43 +207,45 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
             )}
             {data !== null && (
               <>
-                <p className="mb-3 text-xs text-text-tertiary">
+                <p className="mb-sm text-caption text-text-tertiary">
                   {t('plugins.modal.root_dir_label')}{' '}
-                  <code className="rounded bg-bg-tertiary px-1.5 py-0.5">{data.rootDir}</code>
+                  <code className="rounded-sm bg-surface-strong px-xxs py-[1px]">
+                    {data.rootDir}
+                  </code>
                 </p>
                 {data.loaded.length === 0 && data.issues.length === 0 && (
                   <p
-                    className="rounded border border-border-primary bg-bg-secondary px-3 py-2 text-xs text-text-tertiary"
+                    className="rounded-md border border-hairline bg-canvas-soft px-sm py-xs text-caption text-text-tertiary"
                     data-testid="plugins-modal-empty"
                   >
                     {t('plugins.modal.empty_no_plugins')}
                   </p>
                 )}
                 {data.loaded.length > 0 && (
-                  <section className="mb-4">
-                    <h3 className="mb-2 text-xs font-semibold text-text-secondary">
+                  <section className="mb-base">
+                    <h3 className="mb-xs text-caption font-semibold text-text-secondary">
                       {t('plugins.modal.loaded_section', { count: data.loaded.length })}
                     </h3>
-                    <ul className="space-y-2">
+                    <ul className="space-y-xs">
                       {data.loaded.map((p) => (
                         <li
                           key={p.dir}
-                          className="rounded border border-border-primary bg-bg-secondary px-3 py-2"
+                          className="rounded-md border border-hairline bg-canvas-soft px-sm py-xs"
                           data-testid="plugins-modal-loaded-item"
                         >
-                          <div className="flex items-baseline justify-between gap-2">
-                            <div className="flex items-baseline gap-2">
-                              <span className="font-mono text-sm font-semibold">
+                          <div className="flex items-baseline justify-between gap-xs">
+                            <div className="flex items-baseline gap-xs">
+                              <span className="font-mono text-body-sm font-semibold">
                                 {p.manifest.name}
                               </span>
-                              <span className="font-mono text-[11px] text-text-tertiary">
+                              <span className="font-mono text-caption text-text-tertiary">
                                 v{p.manifest.version}
                               </span>
                               <span
                                 className={
                                   p.trusted
-                                    ? 'rounded bg-emerald-900/30 px-1.5 py-0.5 text-[11px] text-emerald-400'
-                                    : 'rounded bg-yellow-900/30 px-1.5 py-0.5 text-[11px] text-yellow-400'
+                                    ? 'rounded-pill bg-semantic-success/15 px-xs py-[1px] text-caption text-semantic-success'
+                                    : 'rounded-pill bg-semantic-warning/15 px-xs py-[1px] text-caption text-semantic-warning'
                                 }
                                 data-testid="plugin-trust-badge"
                                 data-trusted={p.trusted ? 'true' : 'false'}
@@ -246,27 +255,27 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
                                   : t('plugins.modal.trust_badge_untrusted')}
                               </span>
                             </div>
-                            <button
-                              type="button"
+                            <Button
+                              variant="secondary"
+                              size="sm"
                               onClick={() => void handleToggleTrust(p.manifest.name, !p.trusted)}
-                              className="rounded border border-border-primary bg-bg-tertiary px-2 py-0.5 text-[11px] hover:bg-border-primary"
                               data-testid="plugin-trust-toggle"
                               data-plugin-name={p.manifest.name}
                             >
                               {p.trusted
                                 ? t('plugins.modal.untrust_button')
                                 : t('plugins.modal.trust_button')}
-                            </button>
+                            </Button>
                           </div>
                           {p.manifest.description !== undefined && (
-                            <p className="mt-1 text-xs text-text-tertiary">
+                            <p className="mt-xxs text-caption text-text-tertiary">
                               {p.manifest.description}
                             </p>
                           )}
                           {p.manifest.hooks !== undefined &&
                             (p.manifest.hooks.pre_turn !== undefined ||
                               p.manifest.hooks.post_turn !== undefined) && (
-                              <p className="mt-1 text-[11px] text-text-tertiary">
+                              <p className="mt-xxs text-caption text-text-tertiary">
                                 {t('plugins.modal.hooks_label')}{' '}
                                 {[
                                   p.manifest.hooks.pre_turn !== undefined ? 'pre_turn' : null,
@@ -278,9 +287,9 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
                             )}
                           {p.manifest.capabilities !== undefined &&
                             p.manifest.capabilities.length > 0 && (
-                              <p className="mt-1 text-[11px] text-yellow-400/80">
+                              <p className="mt-xxs text-caption text-semantic-warning">
                                 {t('plugins.modal.capabilities_label')}{' '}
-                                <code className="rounded bg-bg-tertiary px-1 py-0.5">
+                                <code className="rounded-sm bg-surface-strong px-xxs py-[1px]">
                                   {p.manifest.capabilities.join(', ')}
                                 </code>
                               </p>
@@ -292,14 +301,14 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
                 )}
                 {data.issues.length > 0 && (
                   <section>
-                    <h3 className="mb-2 text-xs font-semibold text-yellow-400">
+                    <h3 className="mb-xs text-caption font-semibold text-semantic-warning">
                       {t('plugins.modal.issues_section', { count: data.issues.length })}
                     </h3>
-                    <ul className="space-y-2">
+                    <ul className="space-y-xs">
                       {data.issues.map((iss, i) => (
                         <li
                           key={`${iss.path}-${i}`}
-                          className="rounded border border-yellow-600/40 bg-yellow-900/10 px-3 py-2 text-xs"
+                          className="rounded-md border border-semantic-warning/40 bg-semantic-warning/10 px-sm py-xs text-caption"
                           data-testid="plugins-modal-issue-item"
                         >
                           <div className="font-mono">{iss.path}</div>
@@ -313,21 +322,7 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
             )}
           </div>
         )}
-        {activeTab === 'local' && (
-          <footer className="flex items-center justify-between border-t border-border-primary px-5 py-3 text-xs">
-            <span className="text-text-tertiary">{t('plugins.modal.footer_hint')}</span>
-            <button
-              type="button"
-              onClick={() => void fetchList(true)}
-              className="rounded border border-border-primary bg-bg-secondary px-3 py-1 hover:bg-bg-tertiary"
-              disabled={loading}
-              data-testid="plugins-modal-rescan"
-            >
-              {t('plugins.modal.rescan')}
-            </button>
-          </footer>
-        )}
-      </div>
+      </ModalShell>
       {/* v2.4.0 — RevokeModal mounted at root of PluginsModal so it overlays
           when a row's "Revoke" button fires. onConfirm wires through
           mcp.requestRevoke IPC; on success increments marketplaceVersion to
@@ -379,6 +374,6 @@ export function PluginsModal({ open, onClose }: PluginsModalProps): React.JSX.El
           }
         }}
       />
-    </div>
+    </>
   );
 }

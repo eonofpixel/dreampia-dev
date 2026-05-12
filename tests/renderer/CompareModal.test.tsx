@@ -225,7 +225,8 @@ describe('CompareModal', () => {
         onAccept={() => {}}
       />
     );
-    await user.click(screen.getByTestId('compare-close'));
+    // v2.10.0 (.omc/DESIGN.md modal B) — ModalShell 의 default close button.
+    await user.click(screen.getByTestId('modal-shell-close'));
     expect(onClose).toHaveBeenCalled();
   });
 

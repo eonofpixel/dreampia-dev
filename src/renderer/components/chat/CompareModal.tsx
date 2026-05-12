@@ -14,9 +14,10 @@
  *   렌더링은 dangerouslySetInnerHTML 절대 사용 X — 모든 텍스트는 React text node.
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useT } from '../../i18n';
+import { Button } from '../ui/Button';
+import { ModalShell } from '../ui/ModalShell';
 import type {
   CompareRun,
   CompareSide,
@@ -75,20 +76,23 @@ function buildSimpleDiff(left: string, right: string): UnifiedDiffLine[] {
   return out;
 }
 
+// v2.10.0 (.omc/DESIGN.md modal migration B) — provider-style raw color 는
+// streaming/done 등 status semantic distinction 이라 유지. bg-bg-tertiary
+// alias 그대로 (token 시스템 자동 매핑).
 function statusBadgeClass(status: CompareSideStatus): string {
   switch (status) {
     case 'pending':
-      return 'bg-bg-tertiary text-text-tertiary';
+      return 'bg-surface-strong text-text-tertiary';
     case 'streaming':
       return 'bg-blue-500/20 text-blue-300';
     case 'done':
-      return 'bg-green-500/20 text-green-300';
+      return 'bg-semantic-success/20 text-semantic-success';
     case 'error':
-      return 'bg-red-500/20 text-red-300';
+      return 'bg-semantic-danger/20 text-semantic-danger';
     case 'skipped':
-      return 'bg-yellow-500/20 text-yellow-300';
+      return 'bg-semantic-warning/20 text-semantic-warning';
     default:
-      return 'bg-bg-tertiary text-text-tertiary';
+      return 'bg-surface-strong text-text-tertiary';
   }
 }
 
@@ -125,108 +129,78 @@ export function CompareModal({
     if (!open) setShowDiff(false);
   }, [open]);
 
-  // Esc → close (또는 isRunning 시 cancel + close 후 호출자가 다음 동작 결정)
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        if (isRunning) {
-          onCancel();
-        }
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [open, isRunning, onCancel, onClose]);
-
   const diffLines = useMemo<UnifiedDiffLine[]>(() => {
     if (!showDiff) return [];
     if (run === null) return [];
     return buildSimpleDiff(run.claude.text, run.codex.text);
   }, [showDiff, run]);
 
-  if (!open) return null;
+  // v2.10.0 (modal migration B) — Escape/overlay close 시 isRunning 이면 cancel
+  // 도 같이 호출. ModalShell 이 keydown 만 처리하므로 wrapper.
+  const handleClose = useCallback((): void => {
+    if (isRunning) onCancel();
+    onClose();
+  }, [isRunning, onCancel, onClose]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('compare.title')}
+    <ModalShell
+      open={open}
+      size="xl"
+      title={
+        <span className="flex flex-col">
+          <span>{t('compare.title')}</span>
+          <span
+            className="mt-xxs truncate text-caption font-normal text-text-tertiary"
+            title={run?.prompt ?? ''}
+            data-testid="compare-prompt"
+          >
+            {run !== null && run.prompt.length > 0 ? run.prompt : t('compare.prompt.empty')}
+          </span>
+        </span>
+      }
+      titleId="compare-modal-title"
+      onClose={handleClose}
       data-testid="compare-modal"
     >
-      <div className="flex max-h-[92vh] w-[1100px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-border-primary p-4">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-semibold">{t('compare.title')}</h2>
-            <p
-              className="mt-1 truncate text-xs text-text-tertiary"
-              title={run?.prompt ?? ''}
-              data-testid="compare-prompt"
-            >
-              {run !== null && run.prompt.length > 0 ? run.prompt : t('compare.prompt.empty')}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowDiff((v) => !v)}
-              className="rounded-md border border-border-primary px-2 py-1 text-xs text-text-secondary hover:bg-bg-tertiary"
-              data-testid="compare-toggle-diff"
-              aria-pressed={showDiff}
-            >
-              {showDiff ? t('compare.diff.hide') : t('compare.diff.show')}
-            </button>
-            {isRunning && (
-              <button
-                type="button"
-                onClick={onCancel}
-                className="rounded-md border border-red-500/40 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10"
-                data-testid="compare-cancel"
-              >
-                {t('compare.cancel')}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md p-2 hover:bg-bg-tertiary"
-              aria-label={t('compare.close')}
-              data-testid="compare-close"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-          {showDiff ? (
-            <DiffView lines={diffLines} />
-          ) : (
-            <div className="grid flex-1 grid-cols-2 gap-0 overflow-hidden">
-              <SidePanel
-                side="claude"
-                result={run?.claude ?? null}
-                onAccept={onAccept}
-                isRunning={isRunning}
-              />
-              <SidePanel
-                side="codex"
-                result={run?.codex ?? null}
-                onAccept={onAccept}
-                isRunning={isRunning}
-              />
-            </div>
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {/* 우상단 toolbar (diff toggle + cancel) — header 옆이 아닌 body 상단 row */}
+        <div className="mb-xs flex items-center justify-end gap-xs">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setShowDiff((v) => !v)}
+            data-testid="compare-toggle-diff"
+            aria-pressed={showDiff}
+          >
+            {showDiff ? t('compare.diff.hide') : t('compare.diff.show')}
+          </Button>
+          {isRunning && (
+            <Button variant="danger" size="sm" onClick={onCancel} data-testid="compare-cancel">
+              {t('compare.cancel')}
+            </Button>
           )}
         </div>
+
+        {showDiff ? (
+          <DiffView lines={diffLines} />
+        ) : (
+          <div className="grid flex-1 grid-cols-2 gap-0 overflow-hidden rounded-md border border-hairline">
+            <SidePanel
+              side="claude"
+              result={run?.claude ?? null}
+              onAccept={onAccept}
+              isRunning={isRunning}
+            />
+            <SidePanel
+              side="codex"
+              result={run?.codex ?? null}
+              onAccept={onAccept}
+              isRunning={isRunning}
+            />
+          </div>
+        )}
       </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -247,33 +221,33 @@ function SidePanel({ side, result, isRunning, onAccept }: SidePanelProps): React
 
   return (
     <div
-      className={`flex h-full flex-col overflow-hidden ${side === 'claude' ? 'border-r border-border-primary' : ''}`}
+      className={`flex h-full flex-col overflow-hidden ${side === 'claude' ? 'border-r border-hairline' : ''}`}
       data-testid={`compare-side-${side}`}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-border-primary bg-bg-secondary px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="text-sm font-semibold">
+      <div className="flex items-center justify-between gap-xs border-b border-hairline bg-canvas-soft px-sm py-xs">
+        <div className="flex min-w-0 items-center gap-xs">
+          <span className="text-body-sm font-semibold text-text-primary">
             {side === 'claude' ? t('compare.side.claude') : t('compare.side.codex')}
           </span>
           {model !== null && (
-            <span className="truncate text-xs text-text-tertiary" title={model}>
+            <span className="truncate text-caption text-text-tertiary" title={model}>
               {model}
             </span>
           )}
         </div>
         <span
-          className={`rounded px-2 py-0.5 text-xs ${statusBadgeClass(status)}`}
+          className={`rounded-pill px-xs py-[2px] text-caption ${statusBadgeClass(status)}`}
           data-testid={`compare-status-${side}`}
         >
           {t(statusLabelKey(status))}
         </span>
       </div>
       <div
-        className="flex-1 overflow-y-auto whitespace-pre-wrap p-3 font-mono text-xs text-text-primary"
+        className="flex-1 overflow-y-auto whitespace-pre-wrap p-sm font-mono text-code text-text-primary"
         data-testid={`compare-text-${side}`}
       >
         {error !== null && (
-          <div className="mb-2 rounded border border-red-500/40 bg-red-500/10 p-2 text-red-300">
+          <div className="mb-xs rounded-md border border-semantic-danger/40 bg-semantic-danger/10 p-xs text-semantic-danger">
             {error}
           </div>
         )}
@@ -286,23 +260,23 @@ function SidePanel({ side, result, isRunning, onAccept }: SidePanelProps): React
         {text.length > 0 && (
           <>
             {text}
-            {status === 'streaming' && <span className="ml-1 animate-pulse">▍</span>}
+            {status === 'streaming' && <span className="ml-xxs animate-pulse">▍</span>}
           </>
         )}
       </div>
-      <div className="border-t border-border-primary bg-bg-secondary px-3 py-2">
-        <button
-          type="button"
+      <div className="border-t border-hairline bg-canvas-soft px-sm py-xs">
+        <Button
+          variant="primary"
+          size="sm"
           onClick={() => {
             if (!acceptable) return;
             onAccept(side, text, model);
           }}
           disabled={!acceptable}
-          className="rounded bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           data-testid={`compare-accept-${side}`}
         >
           {t('compare.accept')}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -312,24 +286,25 @@ function DiffView({ lines }: { lines: UnifiedDiffLine[] }): React.JSX.Element {
   const t = useT();
   if (lines.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center p-6 text-sm text-text-tertiary">
+      <div className="flex flex-1 items-center justify-center p-lg text-body-sm text-text-tertiary">
         {t('compare.diff.empty')}
       </div>
     );
   }
   return (
     <div
-      className="flex-1 overflow-y-auto bg-bg-primary p-3 font-mono text-xs"
+      className="flex-1 overflow-y-auto rounded-md border border-hairline bg-canvas-soft p-sm font-mono text-code"
       data-testid="compare-diff-view"
     >
       {lines.map((line, idx) => {
+        // claude/codex side distinction 은 provider-specific 색 유지.
         let bg = '';
         let prefix = '  ';
         if (line.kind === 'claude') {
-          bg = 'bg-blue-500/10 text-blue-200';
+          bg = 'bg-blue-500/10 text-blue-300';
           prefix = '< ';
         } else if (line.kind === 'codex') {
-          bg = 'bg-green-500/10 text-green-200';
+          bg = 'bg-purple-500/10 text-purple-300';
           prefix = '> ';
         } else if (line.kind === 'common') {
           prefix = '  ';
@@ -337,7 +312,7 @@ function DiffView({ lines }: { lines: UnifiedDiffLine[] }): React.JSX.Element {
         return (
           <div
             key={idx}
-            className={`whitespace-pre-wrap px-2 ${bg}`}
+            className={`whitespace-pre-wrap px-xs ${bg}`}
             data-testid={`compare-diff-line-${line.kind}`}
           >
             <span className="select-none text-text-tertiary">{prefix}</span>
