@@ -2604,6 +2604,50 @@ function registerBrowserHandlers(browser: BrowserManager): void {
       }
     }
   );
+
+  // v2.10.0 β-4 (F-021 inline panel + voice memo) — Persist a WebM/Opus
+  // annotation audio clip captured by the renderer's MediaRecorder. Renderer
+  // ships base64; main writes to userData/annotations/<sid>/audio/<uuid>.webm
+  // and returns the file URI. Result.value = null on save failure (renderer
+  // proceeds without comment_audio_uri).
+  //
+  // Defensive validation here re-checks the same 5MB cap the renderer enforces
+  // because a buggy/compromised renderer must not blow up disk.
+  ipcMain.handle(
+    'annotation/save-audio',
+    async (
+      _evt,
+      args: unknown
+    ): Promise<Result<{ uri: string; size_bytes: number } | null>> => {
+      try {
+        if (args === null || typeof args !== 'object') {
+          throw new Error('args must be an object');
+        }
+        const a = args as Record<string, unknown>;
+        const session_id = a['session_id'];
+        const webm_base64 = a['webm_base64'];
+        const duration_ms = a['duration_ms'];
+        if (typeof session_id !== 'string' || session_id.length === 0) {
+          throw new Error('session_id required');
+        }
+        if (typeof webm_base64 !== 'string' || webm_base64.length === 0) {
+          throw new Error('webm_base64 required');
+        }
+        if (typeof duration_ms !== 'number' || duration_ms < 0) {
+          throw new Error('duration_ms must be a non-negative number');
+        }
+        const { saveAnnotationAudio } = await import('./AnnotationAudioStore');
+        const result = await saveAnnotationAudio({
+          session_id: session_id as SessionId,
+          webm_base64,
+          duration_ms,
+        });
+        return ok(result);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
 }
 
 function toolResultToRef(result: ToolResult): ToolResultRef {

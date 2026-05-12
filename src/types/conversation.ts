@@ -148,6 +148,19 @@ const AnnotationBlockSchema = z.object({
    * userData/screenshots/<id>.png 로 저장 후 파일 URI.
    */
   screenshot_uri: z.string().optional(),
+  /**
+   * v2.10.0 β-4 (F-021 inline panel) — WebM/Opus 음성 메모 file URI.
+   * userData/annotations/<sessionId>/audio/<uuid>.webm. 사용자가 inline
+   * panel 의 마이크 버튼으로 녹음했을 때만 set. annotation block 의
+   * `comment` 와 동등한 user input — AI 가 양쪽 모두를 첨부 컨텍스트로 인식.
+   */
+  comment_audio_uri: z.string().optional(),
+  /**
+   * v2.10.0 β-4 — 녹음 길이 (ms). chip footer 에 "0:NN" 형태로 표시용.
+   * 음성 파일 size 자체는 file system 에서 stat 가능하므로 schema 에는
+   * 포함하지 않는다.
+   */
+  comment_audio_duration_ms: z.number().int().nonnegative().optional(),
   /** 캡처 시각 (ISO 8601). */
   captured_at: z.string(),
 });

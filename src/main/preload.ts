@@ -1357,6 +1357,29 @@ const api = {
   },
 
   /**
+   * v2.10.0 β-4 (F-021 inline panel + voice memo) — User-input artifacts
+   * captured by the renderer outside the webview. Keep separate from the
+   * `browser` namespace because the data is collected in the main renderer
+   * (annotation comment textarea, microphone) — not from any tab.
+   *
+   * saveAudio:
+   *   - Renderer encodes a WebM/Opus blob (≤5MB, ≤60s) as base64.
+   *   - Main writes it to userData/annotations/<sid>/audio/<uuid>.webm.
+   *   - Value=null when fs write fails — renderer falls back to attaching the
+   *     AnnotationBlock without comment_audio_uri (toast notifies the user).
+   */
+  annotation: {
+    saveAudio: (args: {
+      session_id: SessionId;
+      webm_base64: string;
+      duration_ms: number;
+    }): Promise<Result<{ uri: string; size_bytes: number } | null>> =>
+      ipcRenderer.invoke('annotation/save-audio', args) as Promise<
+        Result<{ uri: string; size_bytes: number } | null>
+      >,
+  },
+
+  /**
    * AI streaming via real CLI subprocesses (P1-4).
    *
    * Spec: docs/session/cross-ai-sync.md

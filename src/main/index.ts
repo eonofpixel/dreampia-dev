@@ -228,6 +228,26 @@ function createMainWindow(): BrowserWindow {
     return { action: 'deny' };
   });
 
+  // v2.10.0 β-4 (F-021 inline panel + voice memo) — Allow microphone access
+  // for the main renderer (annotation audio comment). Electron emits
+  // 'media' for getUserMedia({audio:true}) requests. We deny every other
+  // permission by default so the main BrowserWindow's attack surface stays
+  // minimal. The webview partition created by BrowserManager keeps its own
+  // deny-everything handler (see `denyBrowserSessionPermissions`) — this
+  // only grants the main renderer session.
+  try {
+    const sess = win.webContents.session;
+    sess.setPermissionRequestHandler((_wc, permission, callback) => {
+      if (permission === 'media') {
+        callback(true);
+        return;
+      }
+      callback(false);
+    });
+  } catch (err) {
+    console.warn('[main] setPermissionRequestHandler failed:', err);
+  }
+
   // Crash recovery (TODO: integrate with sentry)
   win.webContents.on('render-process-gone', (_event, details) => {
     console.error('Renderer process gone:', details);

@@ -355,3 +355,120 @@ describe('v2.10.0 β-3 — Annotation hover meta card', () => {
     expect(getByTestId('annotation-hover-outline')).toBeDefined();
   });
 });
+
+// ────────────────────────────────────────────────────────────
+// v2.10.0 β-4 (F-021 inline panel + voice memo) — InlinePanel
+// ────────────────────────────────────────────────────────────
+describe('v2.10.0 β-4 — Annotation inline panel', () => {
+  const draftBox = {
+    x: 30,
+    y: 40,
+    w: 120,
+    h: 60,
+    captured_at: '2026-05-12T00:00:00.000Z',
+  };
+
+  it('pendingBox + onPanelSave wire → panel renders + textarea exists', () => {
+    const { getByTestId } = render(
+      <AnnotationOverlay
+        active={true}
+        pendingBox={draftBox}
+        onPanelSave={() => {}}
+        onPanelCancel={() => {}}
+      />
+    );
+    expect(getByTestId('annotation-inline-panel')).toBeDefined();
+    expect(getByTestId('annotation-inline-panel-textarea')).toBeDefined();
+    expect(getByTestId('annotation-inline-panel-save')).toBeDefined();
+    expect(getByTestId('annotation-inline-panel-cancel')).toBeDefined();
+  });
+
+  it('pendingBox=null → panel 미렌더', () => {
+    const { queryByTestId } = render(
+      <AnnotationOverlay active={true} pendingBox={null} onPanelSave={() => {}} />
+    );
+    expect(queryByTestId('annotation-inline-panel')).toBeNull();
+  });
+
+  it('save click → onPanelSave 호출 with comment + bbox', () => {
+    const onSave = vi.fn();
+    const { getByTestId } = render(
+      <AnnotationOverlay
+        active={true}
+        pendingBox={draftBox}
+        onPanelSave={onSave}
+        onPanelCancel={() => {}}
+      />
+    );
+    const ta = getByTestId('annotation-inline-panel-textarea') as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: '여기 잘못됨' } });
+    fireEvent.click(getByTestId('annotation-inline-panel-save'));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const final = onSave.mock.calls[0]![0] as {
+      comment: string;
+      x: number;
+      y: number;
+      captured_at: string;
+    };
+    expect(final.comment).toBe('여기 잘못됨');
+    expect(final.x).toBe(30);
+    expect(final.y).toBe(40);
+    expect(final.captured_at).toBe(draftBox.captured_at);
+  });
+
+  it('cancel click → onPanelCancel 호출, onPanelSave 미호출', () => {
+    const onSave = vi.fn();
+    const onCancel = vi.fn();
+    const { getByTestId } = render(
+      <AnnotationOverlay
+        active={true}
+        pendingBox={draftBox}
+        onPanelSave={onSave}
+        onPanelCancel={onCancel}
+      />
+    );
+    fireEvent.click(getByTestId('annotation-inline-panel-cancel'));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('Esc on textarea → onPanelCancel', () => {
+    const onCancel = vi.fn();
+    const { getByTestId } = render(
+      <AnnotationOverlay
+        active={true}
+        pendingBox={draftBox}
+        onPanelSave={() => {}}
+        onPanelCancel={onCancel}
+      />
+    );
+    fireEvent.keyDown(getByTestId('annotation-inline-panel-textarea'), { key: 'Escape' });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('saveAudio 미지정 — mic 버튼 disabled', () => {
+    const { getByTestId } = render(
+      <AnnotationOverlay
+        active={true}
+        pendingBox={draftBox}
+        onPanelSave={() => {}}
+        onPanelCancel={() => {}}
+      />
+    );
+    const mic = getByTestId('annotation-inline-panel-mic') as HTMLButtonElement;
+    expect(mic.disabled).toBe(true);
+  });
+
+  it('active=false → panel 미렌더 (pendingBox 있어도)', () => {
+    const { queryByTestId } = render(
+      <AnnotationOverlay
+        active={false}
+        pendingBox={draftBox}
+        onPanelSave={() => {}}
+        onPanelCancel={() => {}}
+      />
+    );
+    expect(queryByTestId('annotation-inline-panel')).toBeNull();
+  });
+});

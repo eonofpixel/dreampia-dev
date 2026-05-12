@@ -192,6 +192,11 @@ function BrowserPreview({
   const [annotationActive, setAnnotationActive] = useState(false);
   const [pendingBoxes, setPendingBoxes] = useState<AnnotationBox[]>([]);
   const [capturing, setCapturing] = useState(false);
+  // v2.10.0 β-4 (F-021 inline panel) — current draft mark awaiting user
+  // comment + audio. Set by handleAnnotationMark (drag mouseup / pick event)
+  // and cleared on [저장] / [취소]. While set, AnnotationOverlay 의 InlinePanel
+  // 이 떠 있고 다른 새 mark 는 큐잉되지 않는다 (한 번에 하나).
+  const [pendingBox, setPendingBox] = useState<AnnotationBox | null>(null);
   // v2.10.0 β-2 — Annotation mode (pick = DOM element, region = drag box) +
   // pick hover bbox (webview-viewport-relative; anchor 가 webview 와 정렬되어
   // 있어 overlay 좌표로 그대로 사용). 부모가 inspector-event 받아 overlay 에 전달.
@@ -266,31 +271,51 @@ function BrowserPreview({
 
   const handleAnnotationMark = useCallback(
     (box: AnnotationBox): void => {
-      setPendingBoxes((prev) => [...prev, box]);
+      // v2.10.0 β-4 (F-021 inline panel) — draft 로 보유. InlinePanel 의
+      // [저장] 시점에 captureRegion + audio save + onAnnotation forward.
+      // pendingBox 가 이미 있으면 새 mark 는 무시 (사용자가 panel 정리 먼저).
+      setPendingBox((prev) => (prev === null ? box : prev));
+    },
+    []
+  );
+
+  // v2.10.0 β-4 — InlinePanel 의 [저장] 콜백. 여기서 screenshot capture +
+  // (이미 finalized 된 audio) + AnnotationBlock 조립 후 onAnnotation forward.
+  // audio 는 AnnotationOverlay 의 saveAudio prop 이 main IPC 로 이미 보냈고,
+  // 결과 uri 가 final 파라미터에 들어 있다.
+  const handlePanelSave = useCallback(
+    (
+      final: AnnotationBox & {
+        comment: string;
+        comment_audio_uri?: string;
+        comment_audio_duration_ms?: number;
+      }
+    ): void => {
+      setPendingBox(null);
       if (onAnnotation === undefined || activeTab === null) return;
-      // 즉시 부모에 forward — App.tsx 가 ChatInput 에 prepend.
-      // v2.10.0 β-2 — pick 모드에서 잡힌 box 는 selector + page_url 까지 포함.
-      // v2.10.0 β-3 — 동일 시점에 main 의 captureRegion 을 호출해 부분
-      // 스크린샷을 userData 에 저장 후 file URI 를 screenshot_uri 에 채운다.
-      // captureRegion 비동기 동안 사용자가 다른 pick 을 해도 promise 가
-      // 독립이라 race 가 발생하지 않는다 — captured_at 으로 식별 가능.
+      setPendingBoxes((prev) => [...prev, final]);
       const baseBlock: AnnotationBlock = {
         type: 'annotation_block',
-        url: box.page_url ?? activeTab.url,
-        bounding_box: { x: box.x, y: box.y, w: box.w, h: box.h },
-        comment: '',
-        captured_at: box.captured_at,
-        ...(box.selector !== undefined && { selector: box.selector }),
+        url: final.page_url ?? activeTab.url,
+        bounding_box: { x: final.x, y: final.y, w: final.w, h: final.h },
+        comment: final.comment,
+        captured_at: final.captured_at,
+        ...(final.selector !== undefined && { selector: final.selector }),
+        ...(final.comment_audio_uri !== undefined && {
+          comment_audio_uri: final.comment_audio_uri,
+        }),
+        ...(final.comment_audio_duration_ms !== undefined && {
+          comment_audio_duration_ms: final.comment_audio_duration_ms,
+        }),
       };
       const tabId = activeTab.tab_id;
       const api = typeof window !== 'undefined' ? window.dreampia?.browser : undefined;
       if (api?.captureRegion === undefined) {
-        // captureRegion IPC 미존재 (older preload) — screenshot 없이 그대로.
         onAnnotation(baseBlock);
         return;
       }
       void api
-        .captureRegion(tabId, { x: box.x, y: box.y, w: box.w, h: box.h })
+        .captureRegion(tabId, { x: final.x, y: final.y, w: final.w, h: final.h })
         .then((r) => {
           if (r.ok && r.value !== null && r.value.uri.length > 0) {
             onAnnotation({ ...baseBlock, screenshot_uri: r.value.uri });
@@ -302,7 +327,64 @@ function BrowserPreview({
           onAnnotation(baseBlock);
         });
     },
-    [onAnnotation, activeTab]
+    [activeTab, onAnnotation]
+  );
+
+  // v2.10.0 β-4 — InlinePanel 의 [취소] / Esc 콜백. draft 만 폐기.
+  const handlePanelCancel = useCallback((): void => {
+    setPendingBox(null);
+  }, []);
+
+  // v2.10.0 β-4 — Inline panel 의 audio blob 을 main 에 저장. AnnotationOverlay
+  // 가 [저장] 직전에 호출. 결과 file URI 를 AnnotationBlock 에 첨부.
+  const handleSaveAudio = useCallback(
+    async (
+      blob: Blob,
+      durationMs: number
+    ): Promise<{ uri: string; duration_ms: number } | null> => {
+      if (sessionId === null) return null;
+      const api =
+        typeof window !== 'undefined'
+          ? (
+              window.dreampia as unknown as {
+                annotation?: {
+                  saveAudio?: (args: {
+                    session_id: string;
+                    webm_base64: string;
+                    duration_ms: number;
+                  }) => Promise<{
+                    ok: boolean;
+                    value?: { uri: string; size_bytes: number } | null;
+                  }>;
+                };
+              }
+            )?.annotation
+          : undefined;
+      if (api?.saveAudio === undefined) return null;
+      try {
+        const arrayBuf = await blob.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuf);
+        let bin = '';
+        // Chunked encode to avoid the spread-operator stack limit on large blobs.
+        const CHUNK = 0x8000;
+        for (let i = 0; i < bytes.length; i += CHUNK) {
+          bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+        }
+        const webm_base64 = btoa(bin);
+        const r = await api.saveAudio({
+          session_id: String(sessionId),
+          webm_base64,
+          duration_ms: Math.max(0, Math.round(durationMs)),
+        });
+        if (r.ok && r.value !== null && r.value !== undefined) {
+          return { uri: r.value.uri, duration_ms: Math.max(0, Math.round(durationMs)) };
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    },
+    [sessionId]
   );
 
   // v2.10.0 β-2 hardening (architect strengthening 7) — Annotation 모드 active
@@ -531,6 +613,10 @@ function BrowserPreview({
             onModeChange={setAnnotationMode}
             hoverRect={hoverRect}
             hoverMeta={hoverMeta}
+            pendingBox={pendingBox}
+            onPanelSave={handlePanelSave}
+            onPanelCancel={handlePanelCancel}
+            saveAudio={handleSaveAudio}
           />
         )}
       </div>

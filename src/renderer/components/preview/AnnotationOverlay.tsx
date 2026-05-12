@@ -15,9 +15,10 @@
  *   - onMark callback — region 모드는 좌표, pick 모드는 selector + page_url 까지 포함.
  */
 
-import { MousePointer2, Ruler, X } from 'lucide-react';
-import { useCallback, useRef, useState } from 'react';
+import { Mic, MicOff, MousePointer2, Ruler, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../../i18n';
+import { useRecorder } from '../../hooks/useRecorder';
 
 export interface AnnotationBox {
   /** Overlay-relative pixel coordinates. */
@@ -31,6 +32,21 @@ export interface AnnotationBox {
   selector?: string;
   /** v2.10.0 β-2 — pick 모드의 page url (location.href). */
   page_url?: string;
+  /**
+   * v2.10.0 β-4 (F-021 inline panel) — 사용자가 inline panel 의 textarea 에
+   * 입력한 메모. 패널의 [저장] 클릭 시점에만 값이 채워진다 (취소 → onMark
+   * 호출 자체가 없음). 빈 string 가능 — 음성만 첨부한 경우.
+   */
+  comment?: string;
+  /**
+   * v2.10.0 β-4 — `annotation/save-audio` IPC 결과의 file URI. 사용자가
+   * 음성 녹음 + [저장] 한 경우에만 set. 음성 미녹음 시 undefined.
+   */
+  comment_audio_uri?: string;
+  /**
+   * v2.10.0 β-4 — 녹음 길이 (ms). file URI 와 함께 chip footer 등 표시용.
+   */
+  comment_audio_duration_ms?: number;
 }
 
 /** v2.10.0 β-2 — Annotation 의 두 모드. */
@@ -78,6 +94,40 @@ export interface AnnotationOverlayProps {
    * 카드가 hoverRect 옆에 absolute 로 렌더. region 모드 / 비활성 시 미렌더.
    */
   hoverMeta?: AnnotationHoverMeta | null;
+  /**
+   * v2.10.0 β-4 (F-021 inline panel) — 부모가 음성 녹음 blob 을 main 의
+   * `annotation/save-audio` IPC 로 보낼 때 사용. blob + duration_ms 를
+   * 받아 file URI 를 반환 (실패 시 null). InlinePanel 의 [저장] 시점에
+   * blob 이 있을 때만 호출. 미지정 시 음성 녹음 UI 자체가 disabled.
+   */
+  saveAudio?: (
+    blob: Blob,
+    durationMs: number
+  ) => Promise<{ uri: string; duration_ms: number } | null>;
+  /**
+   * v2.10.0 β-4 — 음성 저장 실패 시 부모가 toast 띄울 때 사용. i18n key 를
+   * 받아 부모가 t() + addToast 호출. 미지정 시 silent fail (console.warn 만).
+   */
+  onMicError?: (i18nKey: string) => void;
+  /**
+   * v2.10.0 β-4 (F-021 inline panel) — 부모가 보유한 draft mark.
+   * onMark 직후 부모가 본 prop 으로 다시 흘려보내면 inline panel 이 mark
+   * 옆에 mount 된다 (textarea autofocus). null 이면 panel 미렌더.
+   *
+   * Controlled 패턴: panel 의 [저장] / [취소] / Esc 시 부모가 onPanelSave /
+   * onPanelCancel 콜백 후 본 prop 을 null 로 reset.
+   */
+  pendingBox?: AnnotationBox | null;
+  /** v2.10.0 β-4 — [저장] 클릭 시 호출. comment + audio uri/duration 포함. */
+  onPanelSave?: (
+    final: AnnotationBox & {
+      comment: string;
+      comment_audio_uri?: string;
+      comment_audio_duration_ms?: number;
+    }
+  ) => void;
+  /** v2.10.0 β-4 — [취소] / Esc 시 호출. 부모가 pendingBox 를 null 로 reset. */
+  onPanelCancel?: () => void;
 }
 
 interface DragState {
@@ -113,6 +163,11 @@ export function AnnotationOverlay({
   onModeChange,
   hoverRect = null,
   hoverMeta = null,
+  saveAudio,
+  onMicError,
+  pendingBox = null,
+  onPanelSave,
+  onPanelCancel,
 }: AnnotationOverlayProps): React.JSX.Element {
   const t = useT();
   const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -190,6 +245,8 @@ export function AnnotationOverlay({
       const w = Math.abs(end.x - drag.startX);
       const h = Math.abs(end.y - drag.startY);
       // 너무 작은 box (실수 클릭) 은 무시.
+      // v2.10.0 β-4 — onMark 는 "draft 캡처됨" 신호. 부모가 pendingBox state 에
+      // 보관 후 InlinePanel 의 [저장] 시점에 최종 forward (race fix).
       if (w >= 4 && h >= 4 && onMark !== undefined) {
         onMark({ x, y, w, h, captured_at: new Date().toISOString() });
       }
@@ -435,6 +492,293 @@ export function AnnotationOverlay({
           )}
         </div>
       )}
+
+      {/* v2.10.0 β-4 (F-021 inline panel) — draft mark 옆에 떠 사용자가
+          comment + 음성을 첨부할 수 있는 floating panel. pendingBox 가 set
+          이고 onPanelSave 가 wire 된 경우에만 mount. */}
+      {active && pendingBox !== null && onPanelSave !== undefined && (
+        <InlinePanel
+          box={pendingBox}
+          overlayWidth={overlayW}
+          overlayHeight={overlayH}
+          saveAudio={saveAudio}
+          onMicError={onMicError}
+          onSave={onPanelSave}
+          onCancel={onPanelCancel ?? ((): void => {})}
+        />
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────
+// v2.10.0 β-4 (F-021 inline panel + voice memo) — InlinePanel
+// ────────────────────────────────────────────────────────────
+
+/** Anchor a panel ~220x180 next to the mark; flip when it overflows. */
+const PANEL_W = 240;
+const PANEL_H_EST = 200;
+const PANEL_GAP = 8;
+
+interface InlinePanelProps {
+  box: AnnotationBox;
+  overlayWidth: number;
+  overlayHeight: number;
+  saveAudio?: (
+    blob: Blob,
+    durationMs: number
+  ) => Promise<{ uri: string; duration_ms: number } | null>;
+  onMicError?: (i18nKey: string) => void;
+  onSave: (
+    final: AnnotationBox & {
+      comment: string;
+      comment_audio_uri?: string;
+      comment_audio_duration_ms?: number;
+    }
+  ) => void;
+  onCancel: () => void;
+}
+
+/** "m:ss" formatter — fixed-width seconds. */
+function formatClock(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+function InlinePanel({
+  box,
+  overlayWidth,
+  overlayHeight,
+  saveAudio,
+  onMicError,
+  onSave,
+  onCancel,
+}: InlinePanelProps): React.JSX.Element {
+  const t = useT();
+  const [comment, setComment] = useState('');
+  const [saving, setSaving] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // Cache the last audio URL we created so we can revoke it on unmount/replace.
+  const audioObjectUrlRef = useRef<string | null>(null);
+
+  const MAX_MS = 60_000;
+  const MAX_BYTES = 5 * 1024 * 1024;
+  const recorder = useRecorder({ maxDurationMs: MAX_MS, maxSizeBytes: MAX_BYTES });
+
+  // Autofocus the textarea on mount — directly into typing flow.
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
+
+  // Build an <audio src> object URL when a blob lands; revoke on replace.
+  const audioUrl = useMemo<string | null>(() => {
+    if (recorder.blob === null) return null;
+    if (audioObjectUrlRef.current !== null) {
+      try {
+        URL.revokeObjectURL(audioObjectUrlRef.current);
+      } catch {
+        // best effort
+      }
+    }
+    const url = URL.createObjectURL(recorder.blob);
+    audioObjectUrlRef.current = url;
+    return url;
+  }, [recorder.blob]);
+
+  useEffect(() => {
+    return (): void => {
+      if (audioObjectUrlRef.current !== null) {
+        try {
+          URL.revokeObjectURL(audioObjectUrlRef.current);
+        } catch {
+          // best effort
+        }
+        audioObjectUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  // Surface mic errors via onMicError (toast). We treat 'size_limit_reached'
+  // and 'permission_denied' as the two user-visible reasons; anything else
+  // gets the permission_denied bucket.
+  useEffect(() => {
+    if (recorder.state !== 'error' && recorder.state !== 'stopped') return;
+    if (recorder.errorMessage === null) return;
+    if (onMicError === undefined) return;
+    onMicError(recorder.errorMessage);
+  }, [recorder.state, recorder.errorMessage, onMicError]);
+
+  const handleSave = useCallback(async (): Promise<void> => {
+    if (saving) return;
+    setSaving(true);
+    let audioUri: string | undefined;
+    let audioMs: number | undefined;
+    try {
+      if (recorder.blob !== null && saveAudio !== undefined) {
+        const r = await saveAudio(recorder.blob, recorder.elapsedMs);
+        if (r !== null) {
+          audioUri = r.uri;
+          audioMs = r.duration_ms;
+        } else if (onMicError !== undefined) {
+          onMicError('preview.annotation.mic.save_failed');
+        }
+      }
+    } finally {
+      setSaving(false);
+    }
+    onSave({
+      ...box,
+      comment,
+      ...(audioUri !== undefined && { comment_audio_uri: audioUri }),
+      ...(audioMs !== undefined && { comment_audio_duration_ms: audioMs }),
+    });
+  }, [box, comment, onSave, recorder.blob, recorder.elapsedMs, saveAudio, saving, onMicError]);
+
+  const handleCancel = useCallback((): void => {
+    // Stop any in-flight recording so the mic releases. Parent's
+    // pendingBox reset unmounts us; the hook cleanup also fires.
+    if (recorder.state === 'recording') recorder.stop();
+    onCancel();
+  }, [onCancel, recorder]);
+
+  // Esc closes (= cancel).
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        handleCancel();
+      }
+    },
+    [handleCancel]
+  );
+
+  // Anchor: right edge of the box + gap. Flip to left side when it overflows
+  // the overlay's right edge. Drop below or above the box vertically if it
+  // would clip — small content-driven heuristic, no measurement pass.
+  const overlayW = Number.isFinite(overlayWidth) ? overlayWidth : Number.POSITIVE_INFINITY;
+  const overlayH = Number.isFinite(overlayHeight) ? overlayHeight : Number.POSITIVE_INFINITY;
+  const rightAnchor = box.x + box.w + PANEL_GAP;
+  const leftAnchor = box.x - PANEL_W - PANEL_GAP;
+  const placeLeft = rightAnchor + PANEL_W > overlayW && leftAnchor >= 0;
+  const left = placeLeft ? leftAnchor : rightAnchor;
+  let top = box.y;
+  if (top + PANEL_H_EST > overlayH) {
+    top = Math.max(0, overlayH - PANEL_H_EST);
+  }
+
+  const recording = recorder.state === 'recording';
+  const micDisabled = saveAudio === undefined;
+  const elapsedLabel = formatClock(recorder.elapsedMs);
+  const maxLabel = formatClock(MAX_MS);
+
+  return (
+    // role=dialog (WAI-ARIA) is the correct semantic but eslint-jsx-a11y's
+    // `no-noninteractive-element-interactions` rule excludes it from its
+    // built-in interactive list. The onMouseDown only stopPropagation's so
+    // overlay drag handlers don't fire under the textarea — keyboard nav
+    // still flows through child controls (textarea / buttons).
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+    <div
+      role="dialog"
+      aria-label={t('preview.annotation.panel.aria')}
+      aria-modal={false}
+      data-testid="annotation-inline-panel"
+      className="pointer-events-auto absolute z-20 flex flex-col gap-xs rounded-md border border-hairline bg-surface-card px-sm py-xs shadow-card"
+      style={{ left: `${left}px`, top: `${top}px`, width: `${PANEL_W}px` }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <textarea
+        ref={textareaRef}
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder={t('preview.annotation.panel.placeholder')}
+        data-testid="annotation-inline-panel-textarea"
+        rows={2}
+        className="resize-none rounded-sm border border-hairline bg-surface-strong px-xs py-xxs text-caption text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none"
+        style={{ maxHeight: '6em' }}
+      />
+
+      <div className="flex items-center justify-between gap-xs">
+        <button
+          type="button"
+          onClick={() => {
+            if (recording) {
+              recorder.stop();
+              return;
+            }
+            void recorder.start();
+          }}
+          disabled={micDisabled}
+          aria-label={
+            recording
+              ? t('preview.annotation.mic.stop_aria')
+              : t('preview.annotation.mic.start_aria')
+          }
+          aria-pressed={recording}
+          data-testid="annotation-inline-panel-mic"
+          data-recording={recording}
+          className={
+            recording
+              ? 'rounded-sm bg-red-600/20 p-xxs text-red-500 hover:bg-red-600/30'
+              : 'rounded-sm p-xxs text-text-tertiary hover:bg-surface-strong hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed'
+          }
+        >
+          {recording ? (
+            <MicOff aria-hidden="true" className="h-4 w-4" />
+          ) : (
+            <Mic aria-hidden="true" className="h-4 w-4" />
+          )}
+        </button>
+
+        <span
+          className="font-mono text-caption text-text-tertiary"
+          data-testid="annotation-inline-panel-duration"
+          aria-live={recording ? 'polite' : 'off'}
+        >
+          {t('preview.annotation.mic.duration_format', {
+            current: elapsedLabel,
+            max: maxLabel,
+          })}
+        </span>
+      </div>
+
+      {audioUrl !== null && recorder.state === 'stopped' && (
+        // User-recorded voice memo — no caption track exists. aria-label
+        // provides the SR description for the playback control.
+        // eslint-disable-next-line jsx-a11y/media-has-caption
+        <audio
+          src={audioUrl}
+          controls
+          data-testid="annotation-inline-panel-audio"
+          aria-label={t('preview.annotation.audio_playback_aria')}
+          className="w-full"
+        />
+      )}
+
+      <div className="flex items-center justify-end gap-xs">
+        <button
+          type="button"
+          onClick={handleCancel}
+          data-testid="annotation-inline-panel-cancel"
+          className="rounded-sm px-xs py-xxs text-caption text-text-tertiary hover:bg-surface-strong hover:text-text-primary"
+        >
+          {t('preview.annotation.panel.cancel')}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            void handleSave();
+          }}
+          disabled={saving}
+          data-testid="annotation-inline-panel-save"
+          className="rounded-sm bg-accent px-xs py-xxs text-caption text-white hover:bg-accent-hover disabled:opacity-50"
+        >
+          {t('preview.annotation.panel.save')}
+        </button>
+      </div>
     </div>
   );
 }

@@ -265,6 +265,15 @@ const mockStore = {
     tabId: string;
     bbox: { x: number; y: number; w: number; h: number };
   }>,
+  // v2.10.0 β-4 — annotation/save-audio mock state. 'success' returns a
+  // fixed file URI; 'null' simulates fs write failure; 'fail' simulates IPC
+  // ok=false. Calls are accumulated on annotationAudioSaves for assertion.
+  annotationAudioBehavior: 'success' as 'success' | 'null' | 'fail',
+  annotationAudioSaves: [] as Array<{
+    session_id: string;
+    webm_base64: string;
+    duration_ms: number;
+  }>,
 
   // ── ai/* (P1-4) ───────────────────────────────────────
   // Tests can inject events via __emitAiStreamEvent / __emitAiStreamEnd.
@@ -534,6 +543,8 @@ beforeEach(() => {
   mockStore.browserInspectorListeners.clear();
   mockStore.browserCaptureRegionBehavior = 'success';
   mockStore.browserCaptureRegions = [];
+  mockStore.annotationAudioBehavior = 'success';
+  mockStore.annotationAudioSaves = [];
   mockStore.aiDetection = {
     claude: { path: '/usr/local/bin/claude', version: '1.2.3' },
     codex: null,
@@ -1391,6 +1402,34 @@ if (typeof window !== 'undefined') {
                 png_base64: Buffer.from('mock-png', 'utf-8').toString('base64'),
                 width: bbox.w,
                 height: bbox.h,
+              },
+            };
+          }
+        ),
+      },
+
+      // v2.10.0 β-4 (F-021 inline panel + voice memo) — annotation/save-audio
+      // mock. Records every call in __mockStore.annotationAudioSaves for
+      // assertion. behavior controls the response shape (success / null / fail).
+      annotation: {
+        saveAudio: vi.fn(
+          async (args: {
+            session_id: string;
+            webm_base64: string;
+            duration_ms: number;
+          }): Promise<Result<{ uri: string; size_bytes: number } | null>> => {
+            mockStore.annotationAudioSaves.push(args);
+            if (mockStore.annotationAudioBehavior === 'fail') {
+              return { ok: false, error: 'mock saveAudio failure' };
+            }
+            if (mockStore.annotationAudioBehavior === 'null') {
+              return { ok: true, value: null };
+            }
+            return {
+              ok: true,
+              value: {
+                uri: `file:///mock-userdata/annotations/${args.session_id}/audio/mock.webm`,
+                size_bytes: Math.floor(args.webm_base64.length * 0.75),
               },
             };
           }

@@ -128,4 +128,54 @@ describe('v1.6.0 follow-up — AnnotationBlock', () => {
       expect(r.data.selector).toBeUndefined();
     }
   });
+
+  // ──────────────────────────────────────────────────────────
+  // v2.10.0 β-4 (F-021 inline panel + voice memo)
+  // ──────────────────────────────────────────────────────────
+  it('comment_audio_uri + comment_audio_duration_ms optional — 채워진 경우 parse 통과', () => {
+    const block = {
+      type: 'annotation_block',
+      url: 'https://example.com',
+      bounding_box: { x: 10, y: 20, w: 100, h: 50 },
+      comment: '여기 음성으로 설명',
+      comment_audio_uri: 'file:///tmp/audio.webm',
+      comment_audio_duration_ms: 4321,
+      captured_at: '2026-05-12T00:00:00.000Z',
+    };
+    const r = ContentBlockSchema.safeParse(block);
+    expect(r.success).toBe(true);
+    if (r.success && r.data.type === 'annotation_block') {
+      expect(r.data.comment_audio_uri).toBe('file:///tmp/audio.webm');
+      expect(r.data.comment_audio_duration_ms).toBe(4321);
+    }
+  });
+
+  it('comment_audio_uri 생략 — backward compat (β-2/β-3 block)', () => {
+    const block = {
+      type: 'annotation_block',
+      url: 'https://example.com',
+      bounding_box: { x: 10, y: 20, w: 100, h: 50 },
+      comment: '음성 없음',
+      captured_at: '2026-05-12T00:00:00.000Z',
+    };
+    const r = ContentBlockSchema.safeParse(block);
+    expect(r.success).toBe(true);
+    if (r.success && r.data.type === 'annotation_block') {
+      expect(r.data.comment_audio_uri).toBeUndefined();
+      expect(r.data.comment_audio_duration_ms).toBeUndefined();
+    }
+  });
+
+  it('comment_audio_duration_ms 음수 → fail', () => {
+    const block = {
+      type: 'annotation_block',
+      url: 'x',
+      bounding_box: { x: 0, y: 0, w: 1, h: 1 },
+      comment: '',
+      comment_audio_duration_ms: -100,
+      captured_at: '2026-05-12T00:00:00.000Z',
+    };
+    const r = ContentBlockSchema.safeParse(block);
+    expect(r.success).toBe(false);
+  });
 });

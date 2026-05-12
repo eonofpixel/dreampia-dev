@@ -387,7 +387,7 @@ describe('PreviewPanel', () => {
     });
   });
 
-  it('v2.10.0 β-2: inspector pick event → onAnnotation block w/ selector', async () => {
+  it('v2.10.0 β-2: inspector pick event → onAnnotation block w/ selector (after panel save)', async () => {
     __mockStore.browserTabs.set('seed-1', {
       tab_id: 'seed-1',
       session_id: SID,
@@ -431,6 +431,14 @@ describe('PreviewPanel', () => {
       });
     });
 
+    // v2.10.0 β-4 — pick → InlinePanel mount (no forward yet). User clicks
+    // Save → onAnnotation finally fires with comment + screenshot wired.
+    await waitFor(() => {
+      expect(screen.getByTestId('annotation-inline-panel')).toBeInTheDocument();
+    });
+    expect(onAnnotation).not.toHaveBeenCalled();
+    await user.click(screen.getByTestId('annotation-inline-panel-save'));
+
     await waitFor(() => {
       expect(onAnnotation).toHaveBeenCalledTimes(1);
     });
@@ -439,11 +447,13 @@ describe('PreviewPanel', () => {
       url: string;
       bounding_box: { x: number; y: number; w: number; h: number };
       selector?: string;
+      comment: string;
     };
     expect(block.type).toBe('annotation_block');
     expect(block.selector).toBe('button#submit');
     expect(block.url).toBe('https://example.com/page');
     expect(block.bounding_box).toEqual({ x: 12, y: 34, w: 100, h: 30 });
+    expect(block.comment).toBe('');
   });
 
   // ────────────────────────────────────────────────────────────
@@ -565,7 +575,7 @@ describe('PreviewPanel', () => {
   // ────────────────────────────────────────────────────────────
   // v2.10.0 β-3 — captureRegion + screenshot_uri wiring
   // ────────────────────────────────────────────────────────────
-  it('v2.10.0 β-3: pick event triggers captureRegion + screenshot_uri in AnnotationBlock', async () => {
+  it('v2.10.0 β-3: pick event + panel save triggers captureRegion + screenshot_uri', async () => {
     __mockStore.browserTabs.set('seed-1', {
       tab_id: 'seed-1',
       session_id: SID,
@@ -607,10 +617,17 @@ describe('PreviewPanel', () => {
       });
     });
 
+    // v2.10.0 β-4 — InlinePanel mount → user clicks Save → captureRegion fires.
+    await waitFor(() => {
+      expect(screen.getByTestId('annotation-inline-panel')).toBeInTheDocument();
+    });
+    expect(__mockStore.browserCaptureRegions).toHaveLength(0);
+    await user.click(screen.getByTestId('annotation-inline-panel-save'));
+
     await waitFor(() => {
       expect(onAnnotation).toHaveBeenCalledTimes(1);
     });
-    // captureRegion 호출 검증.
+    // captureRegion 호출 검증 (panel save 이후에만).
     expect(__mockStore.browserCaptureRegions).toHaveLength(1);
     expect(__mockStore.browserCaptureRegions[0]).toEqual({
       tabId: 'seed-1',
@@ -667,6 +684,13 @@ describe('PreviewPanel', () => {
       });
     });
 
+    // v2.10.0 β-4 — Save triggers the failing captureRegion; block forwards
+    // sans screenshot_uri.
+    await waitFor(() => {
+      expect(screen.getByTestId('annotation-inline-panel')).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId('annotation-inline-panel-save'));
+
     await waitFor(() => {
       expect(onAnnotation).toHaveBeenCalledTimes(1);
     });
@@ -716,6 +740,115 @@ describe('PreviewPanel', () => {
     });
     expect(screen.getByTestId('annotation-hover-meta-title').textContent).toBe('<h3.title>');
     expect(screen.getByTestId('annotation-hover-meta-dimensions').textContent).toContain('100x40');
+  });
+
+  // ────────────────────────────────────────────────────────────
+  // v2.10.0 β-4 — inline panel cancel + comment + audio flow
+  // ────────────────────────────────────────────────────────────
+  it('v2.10.0 β-4: panel cancel → mark discarded, onAnnotation 미호출', async () => {
+    __mockStore.browserTabs.set('seed-1', {
+      tab_id: 'seed-1',
+      session_id: SID,
+      url: 'https://example.com',
+      title: 'Example',
+      favicon_url: null,
+      status: 'ready',
+      can_go_back: false,
+      can_go_forward: false,
+    });
+    const onAnnotation = vi.fn();
+    const user = userEvent.setup();
+    render(<PreviewPanel sessionId={SID} browser={null} onAnnotation={onAnnotation} />);
+    await waitFor(() => screen.getByText('Example'));
+    await user.click(screen.getByText('Example'));
+    await user.click(screen.getByTestId('preview-annotation-start'));
+    await waitFor(() => {
+      expect(__mockStore.browserInspectorEnabled.has('seed-1')).toBe(true);
+    });
+
+    act(() => {
+      __emitInspectorEvent({
+        tab_id: 'seed-1',
+        session_id: SID,
+        event: {
+          type: 'pick',
+          selector: 'a',
+          x: 1,
+          y: 2,
+          w: 50,
+          h: 30,
+          tag: 'a',
+          dimensions: '50x30',
+          page_url: 'https://example.com',
+          ts: 1,
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('annotation-inline-panel')).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId('annotation-inline-panel-cancel'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('annotation-inline-panel')).not.toBeInTheDocument();
+    });
+    // captureRegion 도 호출되지 않아야 한다 (cancel 은 mark 폐기).
+    expect(__mockStore.browserCaptureRegions).toHaveLength(0);
+    expect(onAnnotation).not.toHaveBeenCalled();
+  });
+
+  it('v2.10.0 β-4: panel save with comment → AnnotationBlock 의 comment 채움', async () => {
+    __mockStore.browserTabs.set('seed-1', {
+      tab_id: 'seed-1',
+      session_id: SID,
+      url: 'https://example.com',
+      title: 'Example',
+      favicon_url: null,
+      status: 'ready',
+      can_go_back: false,
+      can_go_forward: false,
+    });
+    const onAnnotation = vi.fn();
+    const user = userEvent.setup();
+    render(<PreviewPanel sessionId={SID} browser={null} onAnnotation={onAnnotation} />);
+    await waitFor(() => screen.getByText('Example'));
+    await user.click(screen.getByText('Example'));
+    await user.click(screen.getByTestId('preview-annotation-start'));
+    await waitFor(() => {
+      expect(__mockStore.browserInspectorEnabled.has('seed-1')).toBe(true);
+    });
+
+    act(() => {
+      __emitInspectorEvent({
+        tab_id: 'seed-1',
+        session_id: SID,
+        event: {
+          type: 'pick',
+          selector: 'div',
+          x: 5,
+          y: 6,
+          w: 100,
+          h: 40,
+          tag: 'div',
+          dimensions: '100x40',
+          page_url: 'https://example.com',
+          ts: 1,
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('annotation-inline-panel')).toBeInTheDocument();
+    });
+    const ta = screen.getByTestId('annotation-inline-panel-textarea') as HTMLTextAreaElement;
+    await user.click(ta);
+    await user.type(ta, '이 버튼 잘못됨');
+    await user.click(screen.getByTestId('annotation-inline-panel-save'));
+
+    await waitFor(() => expect(onAnnotation).toHaveBeenCalledTimes(1));
+    const block = onAnnotation.mock.calls[0]![0] as { comment: string };
+    expect(block.comment).toBe('이 버튼 잘못됨');
   });
 
   it('v2.10.0 β-2: pick event for OTHER tab id is ignored', async () => {
