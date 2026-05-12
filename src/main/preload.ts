@@ -71,6 +71,36 @@ interface BrowserBoundsShape {
   height: number;
 }
 
+// v2.10.0 β-2 (F-021 + F-033) — Inspector event shape mirrored from
+// `@/main/BrowserManager.ts`. Inlined so preload stays free of Electron-only
+// imports. Keep in sync with `InspectorEvent` in BrowserManager.ts.
+type InspectorEventShape =
+  | {
+      type: 'hover';
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      tag: string;
+    }
+  | {
+      type: 'pick';
+      selector: string;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      tag: string;
+      page_url: string;
+      ts: number;
+    };
+
+interface BrowserInspectorPayloadShape {
+  tab_id: string;
+  session_id: SessionId;
+  event: InspectorEventShape;
+}
+
 // AI shapes (P1-4). Inlined here so preload doesn't import @/providers
 // (which transitively pulls in Node-only modules — child_process, fs).
 // Keep these in sync with @/providers/cli/detect.ts and @/providers/types.ts.
@@ -1269,6 +1299,32 @@ const api = {
       };
       ipcRenderer.on('browser/tab-updated', handler);
       return () => ipcRenderer.removeListener('browser/tab-updated', handler);
+    },
+
+    /**
+     * v2.10.0 β-2 (F-021 + F-033) — Element pick mode. Renderer toggles
+     * inspector ON via enableInspector — main injects a script into the
+     * tab's webContents and starts polling. Hover / click inside the
+     * webview push events through `onInspectorEvent`. disableInspector
+     * stops the polling + hides the in-page outline.
+     */
+    enableInspector: (tabId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('browser/enable-inspector', tabId) as Promise<Result<void>>,
+
+    disableInspector: (tabId: string): Promise<Result<void>> =>
+      ipcRenderer.invoke('browser/disable-inspector', tabId) as Promise<Result<void>>,
+
+    onInspectorEvent: (
+      listener: (payload: BrowserInspectorPayloadShape) => void
+    ): (() => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: BrowserInspectorPayloadShape
+      ): void => {
+        listener(payload);
+      };
+      ipcRenderer.on('browser/inspector-event', handler);
+      return () => ipcRenderer.removeListener('browser/inspector-event', handler);
     },
   },
 

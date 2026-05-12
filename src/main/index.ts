@@ -739,6 +739,15 @@ app.whenReady().then(async () => {
       if (!win || win.isDestroyed()) return;
       win.webContents.send('browser/tab-updated', state);
     },
+    // v2.10.0 β-2 (F-021 + F-033) — Inspector hover/pick events from the
+    // in-page script. Forward to renderer over a dedicated channel so the
+    // AnnotationOverlay can render a dashed outline + create annotation
+    // blocks on pick. Renderer filters by tab_id to ignore stale events.
+    onInspectorEvent: (tab_id, session_id, event) => {
+      const win = mainWindow;
+      if (!win || win.isDestroyed()) return;
+      win.webContents.send('browser/inspector-event', { tab_id, session_id, event });
+    },
   });
 
   // v0.2.0 — MCP Bridge MVP (Issue #5).

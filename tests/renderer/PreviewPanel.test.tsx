@@ -21,7 +21,7 @@ import userEvent from '@testing-library/user-event';
 
 import { PreviewPanel } from '../../src/renderer/components/preview/PreviewPanel';
 import type { SessionId } from '../../src/types';
-import { __mockStore, __emitBrowserUpdate } from '../setup';
+import { __mockStore, __emitBrowserUpdate, __emitInspectorEvent } from '../setup';
 
 const SID = '019d-aaaa' as SessionId;
 
@@ -328,5 +328,282 @@ describe('PreviewPanel', () => {
       );
       expect(tabs.length).toBeGreaterThanOrEqual(2);
     });
+  });
+
+  // ────────────────────────────────────────────────────────────
+  // v2.10.0 β-2 (F-021 + F-033) — Annotation pick mode wiring
+  // ────────────────────────────────────────────────────────────
+  it('v2.10.0 β-2: annotation activate (pick default) → enableInspector', async () => {
+    __mockStore.browserTabs.set('seed-1', {
+      tab_id: 'seed-1',
+      session_id: SID,
+      url: 'https://example.com',
+      title: 'Example',
+      favicon_url: null,
+      status: 'ready',
+      can_go_back: false,
+      can_go_forward: false,
+    });
+    const user = userEvent.setup();
+    render(
+      <PreviewPanel sessionId={SID} browser={null} onAnnotation={() => {}} />
+    );
+    await waitFor(() => screen.getByText('Example'));
+    await user.click(screen.getByText('Example'));
+
+    // Toggle annotation on.
+    await user.click(screen.getByTestId('preview-annotation-start'));
+
+    await waitFor(() => {
+      expect(__mockStore.browserInspectorEnabled.has('seed-1')).toBe(true);
+    });
+  });
+
+  it('v2.10.0 β-2: annotation deactivate → disableInspector', async () => {
+    __mockStore.browserTabs.set('seed-1', {
+      tab_id: 'seed-1',
+      session_id: SID,
+      url: 'https://example.com',
+      title: 'Example',
+      favicon_url: null,
+      status: 'ready',
+      can_go_back: false,
+      can_go_forward: false,
+    });
+    const user = userEvent.setup();
+    render(
+      <PreviewPanel sessionId={SID} browser={null} onAnnotation={() => {}} />
+    );
+    await waitFor(() => screen.getByText('Example'));
+    await user.click(screen.getByText('Example'));
+
+    await user.click(screen.getByTestId('preview-annotation-start'));
+    await waitFor(() => {
+      expect(__mockStore.browserInspectorEnabled.has('seed-1')).toBe(true);
+    });
+    await user.click(screen.getByTestId('preview-annotation-start'));
+    await waitFor(() => {
+      expect(__mockStore.browserInspectorEnabled.has('seed-1')).toBe(false);
+    });
+  });
+
+  it('v2.10.0 β-2: inspector pick event → onAnnotation block w/ selector', async () => {
+    __mockStore.browserTabs.set('seed-1', {
+      tab_id: 'seed-1',
+      session_id: SID,
+      url: 'https://example.com',
+      title: 'Example',
+      favicon_url: null,
+      status: 'ready',
+      can_go_back: false,
+      can_go_forward: false,
+    });
+    const onAnnotation = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <PreviewPanel sessionId={SID} browser={null} onAnnotation={onAnnotation} />
+    );
+    await waitFor(() => screen.getByText('Example'));
+    await user.click(screen.getByText('Example'));
+    await user.click(screen.getByTestId('preview-annotation-start'));
+
+    // Wait for inspector subscription to settle.
+    await waitFor(() => {
+      expect(__mockStore.browserInspectorEnabled.has('seed-1')).toBe(true);
+    });
+
+    act(() => {
+      __emitInspectorEvent({
+        tab_id: 'seed-1',
+        session_id: SID,
+        event: {
+          type: 'pick',
+          selector: 'button#submit',
+          x: 12,
+          y: 34,
+          w: 100,
+          h: 30,
+          tag: 'button',
+          page_url: 'https://example.com/page',
+          ts: 1715600000000,
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(onAnnotation).toHaveBeenCalledTimes(1);
+    });
+    const block = onAnnotation.mock.calls[0]![0] as {
+      type: string;
+      url: string;
+      bounding_box: { x: number; y: number; w: number; h: number };
+      selector?: string;
+    };
+    expect(block.type).toBe('annotation_block');
+    expect(block.selector).toBe('button#submit');
+    expect(block.url).toBe('https://example.com/page');
+    expect(block.bounding_box).toEqual({ x: 12, y: 34, w: 100, h: 30 });
+  });
+
+  // ────────────────────────────────────────────────────────────
+  // v2.10.0 β-2 hardening (architect strengthening 7) — keyboard P / R
+  // ────────────────────────────────────────────────────────────
+  it('v2.10.0 β-2 hardening: P key (annotation active) switches to pick mode', async () => {
+    __mockStore.browserTabs.set('seed-1', {
+      tab_id: 'seed-1',
+      session_id: SID,
+      url: 'https://example.com',
+      title: 'Example',
+      favicon_url: null,
+      status: 'ready',
+      can_go_back: false,
+      can_go_forward: false,
+    });
+    const user = userEvent.setup();
+    render(<PreviewPanel sessionId={SID} browser={null} onAnnotation={() => {}} />);
+    await waitFor(() => screen.getByText('Example'));
+    await user.click(screen.getByText('Example'));
+
+    // Annotation 활성 + segmented control 의 region 으로 전환.
+    await user.click(screen.getByTestId('preview-annotation-start'));
+    await waitFor(() => {
+      expect(screen.getByTestId('annotation-mode-segment')).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId('annotation-mode-region'));
+    await waitFor(() => {
+      expect(screen.getByTestId('annotation-mode-region').getAttribute('aria-checked')).toBe(
+        'true'
+      );
+    });
+
+    // P 키 → pick 으로 복귀.
+    await user.keyboard('p');
+    await waitFor(() => {
+      expect(screen.getByTestId('annotation-mode-pick').getAttribute('aria-checked')).toBe('true');
+    });
+  });
+
+  it('v2.10.0 β-2 hardening: R key (annotation active) switches to region mode', async () => {
+    __mockStore.browserTabs.set('seed-1', {
+      tab_id: 'seed-1',
+      session_id: SID,
+      url: 'https://example.com',
+      title: 'Example',
+      favicon_url: null,
+      status: 'ready',
+      can_go_back: false,
+      can_go_forward: false,
+    });
+    const user = userEvent.setup();
+    render(<PreviewPanel sessionId={SID} browser={null} onAnnotation={() => {}} />);
+    await waitFor(() => screen.getByText('Example'));
+    await user.click(screen.getByText('Example'));
+    await user.click(screen.getByTestId('preview-annotation-start'));
+
+    await user.keyboard('r');
+    await waitFor(() => {
+      expect(screen.getByTestId('annotation-mode-region').getAttribute('aria-checked')).toBe(
+        'true'
+      );
+    });
+  });
+
+  it('v2.10.0 β-2 hardening: P / R keys ignored when annotation is inactive', async () => {
+    __mockStore.browserTabs.set('seed-1', {
+      tab_id: 'seed-1',
+      session_id: SID,
+      url: 'https://example.com',
+      title: 'Example',
+      favicon_url: null,
+      status: 'ready',
+      can_go_back: false,
+      can_go_forward: false,
+    });
+    const user = userEvent.setup();
+    render(<PreviewPanel sessionId={SID} browser={null} onAnnotation={() => {}} />);
+    await waitFor(() => screen.getByText('Example'));
+    await user.click(screen.getByText('Example'));
+
+    // annotation 비활성 → keypress 가 mode 토글 안 함 (segmented control 자체가
+    // 안 보임).
+    await user.keyboard('p');
+    expect(screen.queryByTestId('annotation-mode-segment')).not.toBeInTheDocument();
+    await user.keyboard('r');
+    expect(screen.queryByTestId('annotation-mode-segment')).not.toBeInTheDocument();
+  });
+
+  it('v2.10.0 β-2 hardening: P / R keys ignored while typing in the URL bar (input focus)', async () => {
+    __mockStore.browserTabs.set('seed-1', {
+      tab_id: 'seed-1',
+      session_id: SID,
+      url: 'https://example.com',
+      title: 'Example',
+      favicon_url: null,
+      status: 'ready',
+      can_go_back: false,
+      can_go_forward: false,
+    });
+    const user = userEvent.setup();
+    render(<PreviewPanel sessionId={SID} browser={null} onAnnotation={() => {}} />);
+    await waitFor(() => screen.getByText('Example'));
+    await user.click(screen.getByText('Example'));
+    await user.click(screen.getByTestId('preview-annotation-start'));
+    await waitFor(() => {
+      expect(screen.getByTestId('annotation-mode-pick').getAttribute('aria-checked')).toBe('true');
+    });
+
+    // URL bar 에 focus → 'r' 입력해도 mode 가 region 으로 가지 않아야 함.
+    const urlInput = screen.getByLabelText('URL') as HTMLInputElement;
+    await user.click(urlInput);
+    await user.type(urlInput, 'r');
+
+    expect(screen.getByTestId('annotation-mode-pick').getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByTestId('annotation-mode-region').getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('v2.10.0 β-2: pick event for OTHER tab id is ignored', async () => {
+    __mockStore.browserTabs.set('seed-1', {
+      tab_id: 'seed-1',
+      session_id: SID,
+      url: 'https://example.com',
+      title: 'Example',
+      favicon_url: null,
+      status: 'ready',
+      can_go_back: false,
+      can_go_forward: false,
+    });
+    const onAnnotation = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <PreviewPanel sessionId={SID} browser={null} onAnnotation={onAnnotation} />
+    );
+    await waitFor(() => screen.getByText('Example'));
+    await user.click(screen.getByText('Example'));
+    await user.click(screen.getByTestId('preview-annotation-start'));
+    await waitFor(() => {
+      expect(__mockStore.browserInspectorEnabled.has('seed-1')).toBe(true);
+    });
+
+    act(() => {
+      __emitInspectorEvent({
+        tab_id: 'OTHER-TAB',
+        session_id: SID,
+        event: {
+          type: 'pick',
+          selector: 'a',
+          x: 0,
+          y: 0,
+          w: 10,
+          h: 10,
+          tag: 'a',
+          page_url: 'https://other',
+          ts: 0,
+        },
+      });
+    });
+
+    // Tick a bit — make sure no annotation comes through.
+    await new Promise((r) => setTimeout(r, 10));
+    expect(onAnnotation).not.toHaveBeenCalled();
   });
 });

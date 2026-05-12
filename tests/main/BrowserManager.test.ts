@@ -9,7 +9,7 @@
  * `did-finish-load`, `page-title-updated`, etc.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // ────────────────────────────────────────────────────────────
 // Mock electron — must come before importing BrowserManager
@@ -567,5 +567,365 @@ describe('BrowserManager', () => {
     const r = await mgr.dumpTabDom('dom4');
     expect(r).toBeNull();
     warnSpy.mockRestore();
+  });
+
+  // ── v2.10.0 β-2 — Inspector / element pick ─────────────────
+
+  describe('inspector (F-021 + F-033)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('enableInspector injects the script + flips active flag', async () => {
+      mgr.openTab({ session_id: SID_A, tab_id: 'i1', url: 'https://e' });
+      const view = fakeViewsCreated[0];
+      expect(view).toBeDefined();
+      if (!view) return;
+      view.webContents.executeJavaScript.mockResolvedValue(undefined);
+
+      await mgr.enableInspector('i1');
+
+      // Two executeJavaScript calls: install script + enable flag.
+      const calls = view.webContents.executeJavaScript.mock.calls;
+      expect(calls.length).toBeGreaterThanOrEqual(2);
+      expect(calls[0]?.[0]).toContain('__dreampia_inspector_installed');
+      expect(calls[1]?.[0]).toContain('__dreampia_inspector_enable');
+    });
+
+    it('enableInspector → drain forwards hover + pick events to onInspectorEvent', async () => {
+      const events: Array<{ tabId: string; sessionId: string; ev: unknown }> = [];
+      const sink = vi.fn((tabId: string, sessionId: string, ev: unknown) => {
+        events.push({ tabId, sessionId, ev });
+      });
+      // 새 manager — onInspectorEvent 옵션 wire.
+      const win2 = makeFakeWindow();
+      const mgr2 = new BrowserManager({
+        getMainWindow: () => win2 as unknown as Electron.BrowserWindow,
+        onInspectorEvent: sink,
+      });
+      mgr2.openTab({ session_id: SID_A, tab_id: 'i2', url: 'https://e' });
+      const view = fakeViewsCreated[fakeViewsCreated.length - 1];
+      expect(view).toBeDefined();
+      if (!view) return;
+
+      // executeJavaScript: install (1st) + enable (2nd) returns undefined;
+      // drain (3rd+) returns serialized `{ hover, picks }` JSON (architect P0-1).
+      view.webContents.executeJavaScript
+        .mockResolvedValueOnce(undefined) // install
+        .mockResolvedValueOnce(undefined) // enable
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            hover: { type: 'hover', x: 10, y: 20, w: 100, h: 40, tag: 'div' },
+            picks: [
+              {
+                type: 'pick',
+                selector: 'div#a',
+                x: 5,
+                y: 6,
+                w: 7,
+                h: 8,
+                tag: 'div',
+                page_url: 'https://e/page',
+                ts: 1234567890,
+              },
+            ],
+          })
+        )
+        .mockResolvedValue(JSON.stringify({ hover: null, picks: [] }));
+
+      await mgr2.enableInspector('i2');
+      // Advance one tick — fires the 50ms drain interval.
+      await vi.advanceTimersByTimeAsync(60);
+      // Allow the .then() chain to settle.
+      await vi.runOnlyPendingTimersAsync();
+
+      // sink got both events with correct tab/session ids.
+      expect(sink).toHaveBeenCalled();
+      const types = events.map((e) => (e.ev as { type: string }).type);
+      expect(types).toContain('hover');
+      expect(types).toContain('pick');
+      const pick = events.find((e) => (e.ev as { type: string }).type === 'pick');
+      expect(pick?.tabId).toBe('i2');
+      expect(pick?.sessionId).toBe(SID_A);
+      expect((pick?.ev as { selector: string }).selector).toBe('div#a');
+
+      // Stop the loop to avoid leaks across test boundaries.
+      await mgr2.disableInspector('i2');
+    });
+
+    // ── v2.10.0 β-2 hardening (architect findings) ──────────────
+
+    it('architect P0-1: pick event survives a hover storm (separate queues)', async () => {
+      const events: Array<unknown> = [];
+      const sink = vi.fn((_tabId: string, _sessionId: string, ev: unknown) => {
+        events.push(ev);
+      });
+      const win2 = makeFakeWindow();
+      const mgr2 = new BrowserManager({
+        getMainWindow: () => win2 as unknown as Electron.BrowserWindow,
+        onInspectorEvent: sink,
+      });
+      mgr2.openTab({ session_id: SID_A, tab_id: 'p01', url: 'https://e' });
+      const view = fakeViewsCreated[fakeViewsCreated.length - 1];
+      expect(view).toBeDefined();
+      if (!view) return;
+
+      // First drain returns latest hover + the pick (which would have been
+      // evicted by 100 hover storms under the old single-queue/cap-32 design).
+      view.webContents.executeJavaScript
+        .mockResolvedValueOnce(undefined) // install
+        .mockResolvedValueOnce(undefined) // enable
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            // hover queue is latest-only — the storm survives only as the
+            // single most-recent hover.
+            hover: { type: 'hover', x: 999, y: 999, w: 1, h: 1, tag: 'p' },
+            // pick must NOT be evicted by the hover storm.
+            picks: [
+              {
+                type: 'pick',
+                selector: 'button#submit',
+                x: 1,
+                y: 2,
+                w: 3,
+                h: 4,
+                tag: 'button',
+                page_url: 'https://e/p',
+                ts: 99,
+              },
+            ],
+          })
+        )
+        .mockResolvedValue(JSON.stringify({ hover: null, picks: [] }));
+
+      await mgr2.enableInspector('p01');
+      await vi.advanceTimersByTimeAsync(60);
+      await vi.runOnlyPendingTimersAsync();
+
+      const types = events.map((e) => (e as { type: string }).type);
+      expect(types).toContain('pick');
+      const pick = events.find((e) => (e as { type: string }).type === 'pick') as {
+        selector: string;
+      };
+      expect(pick.selector).toBe('button#submit');
+
+      await mgr2.disableInspector('p01');
+    });
+
+    it('architect P0-2: drain reentrancy guard — stalled executeJavaScript does not pile Promises', async () => {
+      // Match the pattern of the surrounding tests: fake timers from
+      // beforeEach, install + enable as mockResolvedValueOnce chain. The
+      // drain mock returns a hanging Promise via a dedicated factory.
+      const win2 = makeFakeWindow();
+      const mgr2 = new BrowserManager({
+        getMainWindow: () => win2 as unknown as Electron.BrowserWindow,
+        onInspectorEvent: () => {},
+      });
+      mgr2.openTab({ session_id: SID_A, tab_id: 'p02', url: 'https://e' });
+      const view = fakeViewsCreated[fakeViewsCreated.length - 1];
+      expect(view).toBeDefined();
+      if (!view) return;
+
+      // install + enable resolve; every subsequent drain call returns a
+      // hanging Promise so the reentrancy flag stays true forever.
+      let drainCallCount = 0;
+      const hang = (): Promise<string> => {
+        drainCallCount += 1;
+        return new Promise<string>(() => {});
+      };
+      view.webContents.executeJavaScript
+        .mockResolvedValueOnce(undefined) // install
+        .mockResolvedValueOnce(undefined) // enable
+        .mockImplementation((code: string) => {
+          if (typeof code === 'string' && code.includes('__dreampia_inspector_drain')) {
+            return hang();
+          }
+          // disable / re-inject paths after enable also resolve immediately.
+          return Promise.resolve(undefined);
+        });
+
+      await mgr2.enableInspector('p02');
+      // 5 ticks × 50ms = 250ms. Without the reentrancy guard, drainCallCount
+      // would climb to 5. With the guard, only the first tick dispatches a
+      // drain; the remaining 4 see inspectorDrainInFlight=true and skip.
+      await vi.advanceTimersByTimeAsync(60);
+      await vi.advanceTimersByTimeAsync(50);
+      await vi.advanceTimersByTimeAsync(50);
+      await vi.advanceTimersByTimeAsync(50);
+      await vi.advanceTimersByTimeAsync(50);
+
+      expect(drainCallCount).toBe(1);
+
+      // Cleanup: stopInspectorPolling clears the interval; disable's
+      // executeJavaScript resolves immediately. The hanging drain Promise
+      // stays pending forever but vitest ignores unsettled Promises after
+      // the test function returns.
+      await mgr2.disableInspector('p02');
+    });
+
+    it('architect P1-3: did-finish-load re-injects script after navigation', async () => {
+      const win2 = makeFakeWindow();
+      const mgr2 = new BrowserManager({
+        getMainWindow: () => win2 as unknown as Electron.BrowserWindow,
+        onInspectorEvent: () => {},
+      });
+      mgr2.openTab({ session_id: SID_A, tab_id: 'p13', url: 'https://e' });
+      const view = fakeViewsCreated[fakeViewsCreated.length - 1];
+      expect(view).toBeDefined();
+      if (!view) return;
+      view.webContents.executeJavaScript.mockResolvedValue(
+        JSON.stringify({ hover: null, picks: [] })
+      );
+
+      await mgr2.enableInspector('p13');
+      // Baseline: install + enable already happened. Track new injects.
+      view.webContents.executeJavaScript.mockClear();
+
+      // Simulate navigation — webContents fires did-finish-load.
+      fireListener(view, 'did-finish-load');
+      // Allow the .then chain inside the listener to settle.
+      await vi.runOnlyPendingTimersAsync();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const injectedCodes = view.webContents.executeJavaScript.mock.calls.map(
+        (c) => c[0] as string
+      );
+      expect(injectedCodes.some((c) => c.includes('__dreampia_inspector_installed'))).toBe(true);
+      expect(injectedCodes.some((c) => c.includes('__dreampia_inspector_enable'))).toBe(true);
+
+      await mgr2.disableInspector('p13');
+    });
+
+    it('architect P1-3: disableInspector detaches the did-finish-load re-injector', async () => {
+      const win2 = makeFakeWindow();
+      const mgr2 = new BrowserManager({
+        getMainWindow: () => win2 as unknown as Electron.BrowserWindow,
+        onInspectorEvent: () => {},
+      });
+      mgr2.openTab({ session_id: SID_A, tab_id: 'p13d', url: 'https://e' });
+      const view = fakeViewsCreated[fakeViewsCreated.length - 1];
+      expect(view).toBeDefined();
+      if (!view) return;
+      view.webContents.executeJavaScript.mockResolvedValue(
+        JSON.stringify({ hover: null, picks: [] })
+      );
+
+      await mgr2.enableInspector('p13d');
+      await mgr2.disableInspector('p13d');
+
+      view.webContents.executeJavaScript.mockClear();
+      // After disable, did-finish-load must NOT trigger a re-inject.
+      fireListener(view, 'did-finish-load');
+      await vi.runOnlyPendingTimersAsync();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(view.webContents.executeJavaScript).not.toHaveBeenCalled();
+    });
+
+    it('architect P1-4: closeTab calls the in-page uninstall hook', async () => {
+      const win2 = makeFakeWindow();
+      const mgr2 = new BrowserManager({
+        getMainWindow: () => win2 as unknown as Electron.BrowserWindow,
+        onInspectorEvent: () => {},
+      });
+      mgr2.openTab({ session_id: SID_A, tab_id: 'p14', url: 'https://e' });
+      const view = fakeViewsCreated[fakeViewsCreated.length - 1];
+      expect(view).toBeDefined();
+      if (!view) return;
+      view.webContents.executeJavaScript.mockResolvedValue(
+        JSON.stringify({ hover: null, picks: [] })
+      );
+
+      await mgr2.enableInspector('p14');
+      view.webContents.executeJavaScript.mockClear();
+      mgr2.closeTab('p14');
+
+      const codes = view.webContents.executeJavaScript.mock.calls.map((c) => c[0] as string);
+      expect(codes.some((c) => c.includes('__dreampia_inspector_uninstall'))).toBe(true);
+    });
+
+    it('disableInspector clears the polling interval + calls in-page disable', async () => {
+      mgr.openTab({ session_id: SID_A, tab_id: 'i3', url: 'https://e' });
+      const view = fakeViewsCreated[fakeViewsCreated.length - 1];
+      expect(view).toBeDefined();
+      if (!view) return;
+      view.webContents.executeJavaScript.mockResolvedValue('[]');
+
+      await mgr.enableInspector('i3');
+      const callsAfterEnable = view.webContents.executeJavaScript.mock.calls.length;
+
+      await mgr.disableInspector('i3');
+
+      // disable triggers one more executeJavaScript (the disable flip).
+      expect(view.webContents.executeJavaScript.mock.calls.length).toBeGreaterThanOrEqual(
+        callsAfterEnable + 1
+      );
+      const last = view.webContents.executeJavaScript.mock.calls.at(-1);
+      expect(last?.[0]).toContain('__dreampia_inspector_disable');
+
+      // After disable, advancing the clock does NOT fire any further drain.
+      view.webContents.executeJavaScript.mockClear();
+      await vi.advanceTimersByTimeAsync(200);
+      expect(view.webContents.executeJavaScript).not.toHaveBeenCalled();
+    });
+
+    it('closeTab stops inspector polling for that tab', async () => {
+      mgr.openTab({ session_id: SID_A, tab_id: 'i4', url: 'https://e' });
+      const view = fakeViewsCreated[fakeViewsCreated.length - 1];
+      expect(view).toBeDefined();
+      if (!view) return;
+      view.webContents.executeJavaScript.mockResolvedValue('[]');
+
+      await mgr.enableInspector('i4');
+      mgr.closeTab('i4');
+
+      view.webContents.executeJavaScript.mockClear();
+      await vi.advanceTimersByTimeAsync(200);
+      expect(view.webContents.executeJavaScript).not.toHaveBeenCalled();
+    });
+
+    it('shutdown clears inspector intervals', async () => {
+      mgr.openTab({ session_id: SID_A, tab_id: 'i5', url: 'https://e' });
+      const view = fakeViewsCreated[fakeViewsCreated.length - 1];
+      expect(view).toBeDefined();
+      if (!view) return;
+      view.webContents.executeJavaScript.mockResolvedValue('[]');
+
+      await mgr.enableInspector('i5');
+      mgr.shutdown();
+
+      view.webContents.executeJavaScript.mockClear();
+      await vi.advanceTimersByTimeAsync(200);
+      expect(view.webContents.executeJavaScript).not.toHaveBeenCalled();
+    });
+
+    it('enableInspector — unknown tab → no-op (no executeJavaScript)', async () => {
+      await mgr.enableInspector('does-not-exist');
+      // No view was created → nothing executed.
+      for (const v of fakeViewsCreated) {
+        expect(v.webContents.executeJavaScript).not.toHaveBeenCalled();
+      }
+    });
+
+    it('enableInspector — script inject throw → silent warn, no polling', async () => {
+      mgr.openTab({ session_id: SID_A, tab_id: 'i6', url: 'https://e' });
+      const view = fakeViewsCreated[fakeViewsCreated.length - 1];
+      expect(view).toBeDefined();
+      if (!view) return;
+      view.webContents.executeJavaScript.mockRejectedValueOnce(new Error('inject failed'));
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await mgr.enableInspector('i6');
+      view.webContents.executeJavaScript.mockClear();
+      await vi.advanceTimersByTimeAsync(200);
+      expect(view.webContents.executeJavaScript).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
   });
 });

@@ -134,6 +134,16 @@ const AnnotationBlockSchema = z.object({
   /** 사용자 메모. 빈 string 허용 (UI 가 placeholder 분기). */
   comment: z.string(),
   /**
+   * v2.10.0 β-2 (F-021 + F-033) — pick 모드 캡처 시 CSS selector. region 모드는
+   * undefined. AI 가 "이 element" 가 어떤 DOM 위치인지 알 수 있게 함.
+   *
+   * 주의: 본 selector 는 annotation hint 일 뿐 uniqueness 보장 X — sibling
+   * count / 동적 class 명 변경으로 stale 될 수 있다. renderer / AI 는 이 값을
+   * "사람이 가리킨 element" 단서로만 사용하고 re-pick 용 stable locator 로
+   * 취급해서는 안 된다 (architect 권고 5).
+   */
+  selector: z.string().optional(),
+  /**
    * Optional — 해당 영역 screenshot URI. v1.6.1 의 capture-tab 결과를
    * userData/screenshots/<id>.png 로 저장 후 파일 URI.
    */

@@ -41,7 +41,7 @@ describe('v1.2.4 — AnnotationOverlay', () => {
   });
 });
 
-describe('v1.6.0 — AnnotationOverlay drag-to-mark', () => {
+describe('v1.6.0 — AnnotationOverlay drag-to-mark (region mode)', () => {
   /**
    * jsdom 의 getBoundingClientRect 는 본 컴포넌트의 absolute inset-0 div 에
    * 대해 0,0,0,0 을 반환할 수 있어 mock 한다. PointerEvent client coords 는
@@ -53,10 +53,12 @@ describe('v1.6.0 — AnnotationOverlay drag-to-mark', () => {
     return fn;
   }
 
-  it('드래그 → onMark 호출 with bbox', () => {
+  // v2.10.0 β-2 — 기존 drag-to-mark 테스트는 region 모드 회귀 검증.
+  // mode='region' 명시 (기본 'pick' 에선 drag 무시되도록 변경됨).
+  it('드래그 → onMark 호출 with bbox (region mode)', () => {
     const onMark = vi.fn();
     const { getByTestId } = render(
-      <AnnotationOverlay active={true} onMark={onMark} />
+      <AnnotationOverlay active={true} mode="region" onMark={onMark} />
     );
     const overlay = getByTestId('annotation-overlay');
     withPointer((el) => {
@@ -82,7 +84,7 @@ describe('v1.6.0 — AnnotationOverlay drag-to-mark', () => {
   it('역방향 드래그 (오른쪽 → 왼쪽) → bbox 의 x,y 가 작은 좌표', () => {
     const onMark = vi.fn();
     const { getByTestId } = render(
-      <AnnotationOverlay active={true} onMark={onMark} />
+      <AnnotationOverlay active={true} mode="region" onMark={onMark} />
     );
     const overlay = getByTestId('annotation-overlay');
     fireEvent.mouseDown(overlay, { button: 0, clientX: 100, clientY: 80 });
@@ -98,7 +100,7 @@ describe('v1.6.0 — AnnotationOverlay drag-to-mark', () => {
   it('너무 작은 드래그 (4px 미만) → onMark 호출 X (실수 클릭 방지)', () => {
     const onMark = vi.fn();
     const { getByTestId } = render(
-      <AnnotationOverlay active={true} onMark={onMark} />
+      <AnnotationOverlay active={true} mode="region" onMark={onMark} />
     );
     const overlay = getByTestId('annotation-overlay');
     fireEvent.mouseDown(overlay, { button: 0, clientX: 50, clientY: 50 });
@@ -109,7 +111,7 @@ describe('v1.6.0 — AnnotationOverlay drag-to-mark', () => {
   it('active=false 일 때 드래그 무시', () => {
     const onMark = vi.fn();
     const { getByTestId } = render(
-      <AnnotationOverlay active={false} onMark={onMark} />
+      <AnnotationOverlay active={false} mode="region" onMark={onMark} />
     );
     const overlay = getByTestId('annotation-overlay');
     fireEvent.mouseDown(overlay, { button: 0, clientX: 10, clientY: 10 });
@@ -133,7 +135,7 @@ describe('v1.6.0 — AnnotationOverlay drag-to-mark', () => {
     const onMark = vi.fn();
     const onToggle = vi.fn();
     const { getByTestId } = render(
-      <AnnotationOverlay active={true} onMark={onMark} onToggle={onToggle} />
+      <AnnotationOverlay active={true} mode="region" onMark={onMark} onToggle={onToggle} />
     );
     const toolbar = getByTestId('annotation-overlay-toolbar');
     fireEvent.mouseDown(toolbar, { button: 0, clientX: 100, clientY: 5 });
@@ -142,5 +144,94 @@ describe('v1.6.0 — AnnotationOverlay drag-to-mark', () => {
     const overlay = getByTestId('annotation-overlay');
     fireEvent.mouseUp(overlay, { clientX: 200, clientY: 100 });
     expect(onMark).not.toHaveBeenCalled();
+  });
+});
+
+// ────────────────────────────────────────────────────────────
+// v2.10.0 β-2 (F-021 + F-033) — Annotation pick / segmented control
+// ────────────────────────────────────────────────────────────
+describe('v2.10.0 β-2 — Annotation pick mode + segmented control', () => {
+  it("default mode='pick' — data-annotation-pick-mode 'pick'", () => {
+    const { getByTestId } = render(<AnnotationOverlay active={true} />);
+    const overlay = getByTestId('annotation-overlay');
+    expect(overlay.getAttribute('data-annotation-pick-mode')).toBe('pick');
+  });
+
+  it("mode='pick' — drag 무시 (onMark 호출 X)", () => {
+    const onMark = vi.fn();
+    const { getByTestId } = render(
+      <AnnotationOverlay active={true} mode="pick" onMark={onMark} />
+    );
+    const overlay = getByTestId('annotation-overlay');
+    fireEvent.mouseDown(overlay, { button: 0, clientX: 10, clientY: 10 });
+    fireEvent.mouseMove(overlay, { clientX: 80, clientY: 60 });
+    fireEvent.mouseUp(overlay, { clientX: 80, clientY: 60 });
+    expect(onMark).not.toHaveBeenCalled();
+  });
+
+  it('segmented control — onModeChange 호출 + radiogroup a11y', () => {
+    const onModeChange = vi.fn();
+    const { getByTestId, getByRole } = render(
+      <AnnotationOverlay active={true} mode="pick" onModeChange={onModeChange} />
+    );
+    const group = getByRole('radiogroup');
+    expect(group).toBeDefined();
+
+    const pickRadio = getByTestId('annotation-mode-pick');
+    const regionRadio = getByTestId('annotation-mode-region');
+    expect(pickRadio.getAttribute('role')).toBe('radio');
+    expect(regionRadio.getAttribute('role')).toBe('radio');
+    expect(pickRadio.getAttribute('aria-checked')).toBe('true');
+    expect(regionRadio.getAttribute('aria-checked')).toBe('false');
+
+    fireEvent.click(regionRadio);
+    expect(onModeChange).toHaveBeenCalledWith('region');
+  });
+
+  it('segmented control — region 활성 시 aria-checked 가 그쪽으로', () => {
+    const { getByTestId } = render(
+      <AnnotationOverlay active={true} mode="region" onModeChange={() => {}} />
+    );
+    expect(getByTestId('annotation-mode-pick').getAttribute('aria-checked')).toBe('false');
+    expect(getByTestId('annotation-mode-region').getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('hoverRect prop 주어지면 dashed outline 렌더', () => {
+    const { getByTestId } = render(
+      <AnnotationOverlay
+        active={true}
+        mode="pick"
+        hoverRect={{ x: 5, y: 10, w: 100, h: 40 }}
+      />
+    );
+    const outline = getByTestId('annotation-hover-outline');
+    expect(outline).toBeDefined();
+    expect(outline.style.left).toBe('5px');
+    expect(outline.style.top).toBe('10px');
+    expect(outline.style.width).toBe('100px');
+    expect(outline.style.height).toBe('40px');
+  });
+
+  it('hoverRect null — outline 미렌더', () => {
+    const { queryByTestId } = render(
+      <AnnotationOverlay active={true} mode="pick" hoverRect={null} />
+    );
+    expect(queryByTestId('annotation-hover-outline')).toBeNull();
+  });
+
+  it("mode='region' 일 때 hoverRect 가 있어도 outline 렌더 X", () => {
+    const { queryByTestId } = render(
+      <AnnotationOverlay
+        active={true}
+        mode="region"
+        hoverRect={{ x: 5, y: 10, w: 100, h: 40 }}
+      />
+    );
+    expect(queryByTestId('annotation-hover-outline')).toBeNull();
+  });
+
+  it('onModeChange 미지정 — segmented control 숨김', () => {
+    const { queryByTestId } = render(<AnnotationOverlay active={true} mode="pick" />);
+    expect(queryByTestId('annotation-mode-segment')).toBeNull();
   });
 });

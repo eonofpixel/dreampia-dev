@@ -64,6 +64,8 @@ interface StubManager {
   getTab: ReturnType<typeof vi.fn>;
   listTabs: ReturnType<typeof vi.fn>;
   shutdown: ReturnType<typeof vi.fn>;
+  enableInspector: ReturnType<typeof vi.fn>;
+  disableInspector: ReturnType<typeof vi.fn>;
 }
 
 const SID = '019d-aaaa' as SessionId;
@@ -91,6 +93,8 @@ function makeStub(): StubManager {
     getTab: vi.fn(() => sample),
     listTabs: vi.fn(() => [sample]),
     shutdown: vi.fn(),
+    enableInspector: vi.fn(async () => undefined),
+    disableInspector: vi.fn(async () => undefined),
   };
 }
 
@@ -130,7 +134,7 @@ describe('IPC browser handlers', () => {
 
   // ── registration ────────────────────────────────────────────
 
-  it('registers all 9 browser channels', () => {
+  it('registers all browser channels', () => {
     expect(handlers.has('browser/open-tab')).toBe(true);
     expect(handlers.has('browser/close-tab')).toBe(true);
     expect(handlers.has('browser/switch-tab')).toBe(true);
@@ -140,6 +144,9 @@ describe('IPC browser handlers', () => {
     expect(handlers.has('browser/reload')).toBe(true);
     expect(handlers.has('browser/set-bounds')).toBe(true);
     expect(handlers.has('browser/list-tabs')).toBe(true);
+    // v2.10.0 β-2 — inspector / element pick channels.
+    expect(handlers.has('browser/enable-inspector')).toBe(true);
+    expect(handlers.has('browser/disable-inspector')).toBe(true);
   });
 
   it('does NOT register browser/* when manager is omitted', () => {
@@ -281,5 +288,41 @@ describe('IPC browser handlers', () => {
     if (!result.ok) return;
     expect(result.value).toHaveLength(1);
     expect(mgr.listTabs).toHaveBeenCalledWith(SID);
+  });
+
+  // ── v2.10.0 β-2 — browser/enable-inspector + disable-inspector ────────
+
+  describe('browser/enable-inspector', () => {
+    it('forwards tabId to enableInspector', async () => {
+      const result = await call<Result<void>>('browser/enable-inspector', 't1');
+      expect(result.ok).toBe(true);
+      expect(mgr.enableInspector).toHaveBeenCalledWith('t1');
+    });
+
+    it('rejects empty tabId', async () => {
+      const result = await call<Result<void>>('browser/enable-inspector', '');
+      expect(result.ok).toBe(false);
+      expect(mgr.enableInspector).not.toHaveBeenCalled();
+    });
+
+    it('rejects non-string tabId', async () => {
+      const result = await call<Result<void>>('browser/enable-inspector', 42);
+      expect(result.ok).toBe(false);
+      expect(mgr.enableInspector).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('browser/disable-inspector', () => {
+    it('forwards tabId to disableInspector', async () => {
+      const result = await call<Result<void>>('browser/disable-inspector', 't1');
+      expect(result.ok).toBe(true);
+      expect(mgr.disableInspector).toHaveBeenCalledWith('t1');
+    });
+
+    it('rejects empty tabId', async () => {
+      const result = await call<Result<void>>('browser/disable-inspector', '');
+      expect(result.ok).toBe(false);
+      expect(mgr.disableInspector).not.toHaveBeenCalled();
+    });
   });
 });

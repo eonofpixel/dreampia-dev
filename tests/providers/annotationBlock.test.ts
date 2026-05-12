@@ -94,4 +94,38 @@ describe('v1.6.0 follow-up — AnnotationBlock', () => {
     expect(text).toContain('주석: 있음');
     expect(text).not.toContain('스크린샷:');
   });
+
+  // ──────────────────────────────────────────────────────────
+  // v2.10.0 β-2 (F-021 + F-033) — selector field
+  // ──────────────────────────────────────────────────────────
+  it('selector optional — pick 모드 캡처 시 parse 통과', () => {
+    const block = {
+      type: 'annotation_block',
+      url: 'https://example.com',
+      bounding_box: { x: 10, y: 20, w: 100, h: 50 },
+      comment: '',
+      selector: 'button.primary:nth-of-type(2)',
+      captured_at: '2026-05-06T00:00:00.000Z',
+    };
+    const r = ContentBlockSchema.safeParse(block);
+    expect(r.success).toBe(true);
+    if (r.success && r.data.type === 'annotation_block') {
+      expect(r.data.selector).toBe('button.primary:nth-of-type(2)');
+    }
+  });
+
+  it('selector 생략 — region 모드 호환', () => {
+    const block = {
+      type: 'annotation_block',
+      url: 'https://example.com',
+      bounding_box: { x: 10, y: 20, w: 100, h: 50 },
+      comment: '',
+      captured_at: '2026-05-06T00:00:00.000Z',
+    };
+    const r = ContentBlockSchema.safeParse(block);
+    expect(r.success).toBe(true);
+    if (r.success && r.data.type === 'annotation_block') {
+      expect(r.data.selector).toBeUndefined();
+    }
+  });
 });

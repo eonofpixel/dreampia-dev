@@ -41,10 +41,18 @@ import {
   X,
 } from 'lucide-react';
 import type { BrowserState, SessionId } from '@/types';
-import { useBrowser, type BrowserTabUI } from '../../hooks/useBrowser';
+import {
+  useBrowser,
+  type BrowserTabUI,
+  type BrowserInspectorPayload,
+} from '../../hooks/useBrowser';
 import { useT } from '../../i18n';
 import { CodePanel } from '../code/CodePanel';
-import { AnnotationOverlay, type AnnotationBox } from './AnnotationOverlay';
+import {
+  AnnotationOverlay,
+  type AnnotationBox,
+  type AnnotationMode,
+} from './AnnotationOverlay';
 import type { AnnotationBlock, DomDumpBlock } from '@/types/conversation';
 
 const DEMO_URL = 'https://example.com';
@@ -183,6 +191,13 @@ function BrowserPreview({
   const [annotationActive, setAnnotationActive] = useState(false);
   const [pendingBoxes, setPendingBoxes] = useState<AnnotationBox[]>([]);
   const [capturing, setCapturing] = useState(false);
+  // v2.10.0 β-2 — Annotation mode (pick = DOM element, region = drag box) +
+  // pick hover bbox (webview-viewport-relative; anchor 가 webview 와 정렬되어
+  // 있어 overlay 좌표로 그대로 사용). 부모가 inspector-event 받아 overlay 에 전달.
+  const [annotationMode, setAnnotationMode] = useState<AnnotationMode>('pick');
+  const [hoverRect, setHoverRect] = useState<{ x: number; y: number; w: number; h: number } | null>(
+    null
+  );
 
   const handleCapture = useCallback(async (): Promise<void> => {
     if (onScreenshot === undefined || activeTab === null || capturing) return;
@@ -247,17 +262,92 @@ function BrowserPreview({
       setPendingBoxes((prev) => [...prev, box]);
       if (onAnnotation === undefined || activeTab === null) return;
       // 즉시 부모에 forward — App.tsx 가 ChatInput 에 prepend.
+      // v2.10.0 β-2 — pick 모드에서 잡힌 box 는 selector + page_url 까지 포함.
       const block: AnnotationBlock = {
         type: 'annotation_block',
-        url: activeTab.url,
+        url: box.page_url ?? activeTab.url,
         bounding_box: { x: box.x, y: box.y, w: box.w, h: box.h },
         comment: '',
         captured_at: box.captured_at,
+        ...(box.selector !== undefined && { selector: box.selector }),
       };
       onAnnotation(block);
     },
     [onAnnotation, activeTab]
   );
+
+  // v2.10.0 β-2 hardening (architect strengthening 7) — Annotation 모드 active
+  // 시 P=pick, R=region 단축키. textarea/input/select/contenteditable focus
+  // 시 무시 — chat 입력 / URL bar 등에서 타자를 막지 않기 위함. ChatInput 의
+  // global Mod+P quick-open 과는 모디파이어 키 충돌 X (단순 'p' 만 처리).
+  useEffect(() => {
+    if (!annotationActive) return undefined;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target !== null) {
+        const tag = target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (target.isContentEditable === true) return;
+      }
+      const k = e.key.toLowerCase();
+      if (k === 'p') {
+        setAnnotationMode('pick');
+        e.preventDefault();
+      } else if (k === 'r') {
+        setAnnotationMode('region');
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return (): void => {
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [annotationActive]);
+
+  // v2.10.0 β-2 — Inspector lifecycle. annotationActive && pick 모드일 때만
+  // enable. 모드 전환 / 비활성 / activeTab 변경 시 cleanup. inspector hover/pick
+  // event 를 hoverRect / handleAnnotationMark 로 분배.
+  useEffect(() => {
+    if (!annotationActive) return undefined;
+    if (annotationMode !== 'pick') return undefined;
+    if (activeTab === null) return undefined;
+    const api = typeof window !== 'undefined' ? window.dreampia?.browser : undefined;
+    if (
+      api?.enableInspector === undefined ||
+      api.disableInspector === undefined ||
+      api.onInspectorEvent === undefined
+    ) {
+      return undefined;
+    }
+    const tabId = activeTab.tab_id;
+    void api.enableInspector(tabId);
+    const unsub = api.onInspectorEvent((payload: BrowserInspectorPayload) => {
+      if (payload.tab_id !== tabId) return;
+      const ev = payload.event;
+      if (ev.type === 'hover') {
+        setHoverRect({ x: ev.x, y: ev.y, w: ev.w, h: ev.h });
+      } else if (ev.type === 'pick') {
+        // Inspector coords are webview-viewport. anchor placeholder 가 webview
+        // 와 동일 origin 으로 정렬돼 있어 그대로 overlay 좌표로 사용 가능.
+        const box: AnnotationBox = {
+          x: Math.round(ev.x),
+          y: Math.round(ev.y),
+          w: Math.round(ev.w),
+          h: Math.round(ev.h),
+          captured_at: new Date(ev.ts).toISOString(),
+          selector: ev.selector,
+          page_url: ev.page_url,
+        };
+        handleAnnotationMark(box);
+      }
+    });
+    return (): void => {
+      unsub();
+      void api.disableInspector?.(tabId);
+      setHoverRect(null);
+    };
+  }, [annotationActive, annotationMode, activeTab, handleAnnotationMark]);
 
   return (
     <aside
@@ -395,6 +485,9 @@ function BrowserPreview({
             onToggle={handleAnnotationToggle}
             onMark={handleAnnotationMark}
             boxes={pendingBoxes}
+            mode={annotationMode}
+            onModeChange={setAnnotationMode}
+            hoverRect={hoverRect}
           />
         )}
       </div>

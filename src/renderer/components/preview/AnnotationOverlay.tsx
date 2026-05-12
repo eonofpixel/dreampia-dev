@@ -1,20 +1,21 @@
 /**
  * AnnotationOverlay — PreviewPanel 의 DOM Inspector / Annotation 모드.
  *
- * Spec: docs/v1.x-roadmap.md (P2 v1.2.4 stub → v1.6.0 element pick + bbox).
+ * Spec: docs/v1.x-roadmap.md (P2 v1.2.4 stub → v1.6.0 element pick + bbox),
+ *       docs/ux/patterns/F-021-annotation.md, F-033-dom-inspector.md.
  *
- * v1.2.4 → v1.6.0 진화:
+ * v1.2.4 → v1.6.0 → v2.10.0 β-2 진화:
  *   - active toggle 유지.
- *   - drag-to-mark — 사용자가 overlay 위 영역을 드래그해 bounding box 캡처.
- *   - 캡처된 boxes 시각화 + 마지막 box 의 [전송] 버튼.
- *   - onMark(box) callback — 부모가 chat 으로 전송 / annotation block 생성.
- *
- * 한계 (v1.6.0 partial scope):
- *   - 실제 element pick (DOM `:hover` 인식) 은 webview 내부 script 주입이
- *     필요해 별도 슬롯. 본 commit 은 좌표 기반 bbox 만.
+ *   - **region mode** (기존 drag-to-mark) — 사용자가 overlay 위 영역을 드래그.
+ *   - **pick mode** (β-2 신규) — webview 안 DOM element 호버/클릭. 실제 hover/pick
+ *     은 main process 가 webview 에 inject 한 inspector script 가 처리하고,
+ *     본 overlay 는 부모가 forward 한 `hoverRect` 를 dashed outline 으로 그린다
+ *     (webview 안 overlay 와 별개로 placeholder 위 시각 cue).
+ *   - 두 모드는 segmented control (radiogroup) 로 토글. default='pick'.
+ *   - onMark callback — region 모드는 좌표, pick 모드는 selector + page_url 까지 포함.
  */
 
-import { Ruler, X } from 'lucide-react';
+import { MousePointer2, Ruler, X } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 import { useT } from '../../i18n';
 
@@ -26,7 +27,14 @@ export interface AnnotationBox {
   h: number;
   /** 캡처 시각 (ISO 8601). */
   captured_at: string;
+  /** v2.10.0 β-2 — pick 모드일 때만 set. region 모드는 undefined. */
+  selector?: string;
+  /** v2.10.0 β-2 — pick 모드의 page url (location.href). */
+  page_url?: string;
 }
+
+/** v2.10.0 β-2 — Annotation 의 두 모드. */
+export type AnnotationMode = 'pick' | 'region';
 
 export interface AnnotationOverlayProps {
   active: boolean;
@@ -35,6 +43,20 @@ export interface AnnotationOverlayProps {
   onMark?: (box: AnnotationBox) => void;
   /** 부모가 외부에서 관리하는 box 목록 (이미 chat 으로 보낸 것 등). */
   boxes?: ReadonlyArray<AnnotationBox>;
+  /**
+   * v2.10.0 β-2 — 현재 모드. 부모가 제어 (uncontrolled 형태도 segmented
+   * control 토글로 호출만 발생 — 부모가 state 보관). default 'pick'.
+   */
+  mode?: AnnotationMode;
+  /** v2.10.0 β-2 — segmented control 클릭 시 호출. */
+  onModeChange?: (mode: AnnotationMode) => void;
+  /**
+   * v2.10.0 β-2 — pick 모드에서 webview hover bbox (overlay-relative). 부모가
+   * inspector-event 'hover' 받아 좌표 변환 후 set. 값이 있으면 dashed accent
+   * outline 렌더. webview 안 overlay 가 이미 그리지만 placeholder 위 fallback
+   * 시각 cue 로 사용자가 어디를 가리키는지 명확하게.
+   */
+  hoverRect?: { x: number; y: number; w: number; h: number } | null;
 }
 
 interface DragState {
@@ -49,6 +71,9 @@ export function AnnotationOverlay({
   onToggle,
   onMark,
   boxes = [],
+  mode = 'pick',
+  onModeChange,
+  hoverRect = null,
 }: AnnotationOverlayProps): React.JSX.Element {
   const t = useT();
   const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -68,14 +93,16 @@ export function AnnotationOverlay({
   );
 
   // Mouse-event 기반 — pointer events 는 jsdom 에서 지원 spotty.
+  // v2.10.0 β-2 — region 모드에서만 drag 처리. pick 모드는 webview 안 click 으로.
   const handleMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>): void => {
       if (!active) return;
+      if (mode !== 'region') return;
       if (e.button !== 0) return;
       const { x, y } = overlayCoords(e);
       setDrag({ startX: x, startY: y, curX: x, curY: y });
     },
-    [active, overlayCoords]
+    [active, mode, overlayCoords]
   );
 
   const handleMouseMove = useCallback(
@@ -125,6 +152,7 @@ export function AnnotationOverlay({
           : 'absolute inset-0 pointer-events-none'
       }
       data-annotation-mode={active ? 'on' : 'off'}
+      data-annotation-pick-mode={active ? mode : undefined}
       data-testid="annotation-overlay"
       aria-hidden={!active}
       onMouseDown={handleMouseDown}
@@ -156,7 +184,7 @@ export function AnnotationOverlay({
         </div>
       ))}
 
-      {/* drag 중인 활성 box (accent-hover = orange 더 밝은 톤). */}
+      {/* drag 중인 활성 box (accent-hover = orange 더 밝은 톤). region 모드 only. */}
       {dragRect !== null && dragRect.w >= 1 && dragRect.h >= 1 && (
         <div
           className="absolute border-2 border-accent-hover bg-accent-soft"
@@ -171,6 +199,22 @@ export function AnnotationOverlay({
         />
       )}
 
+      {/* v2.10.0 β-2 — pick 모드 hover outline (placeholder-relative). webview
+          안 overlay 가 메인 시각 표시이고 이건 placeholder 위 fallback cue. */}
+      {active && mode === 'pick' && hoverRect !== null && hoverRect.w >= 1 && hoverRect.h >= 1 && (
+        <div
+          className="absolute border-2 border-dashed border-accent bg-accent-soft/60"
+          style={{
+            left: `${hoverRect.x}px`,
+            top: `${hoverRect.y}px`,
+            width: `${hoverRect.w}px`,
+            height: `${hoverRect.h}px`,
+            pointerEvents: 'none',
+          }}
+          data-testid="annotation-hover-outline"
+        />
+      )}
+
       {active && (
         <div
           role="toolbar"
@@ -182,6 +226,47 @@ export function AnnotationOverlay({
         >
           <Ruler aria-hidden="true" className="h-3 w-3 text-accent" />
           <span>{t('preview.annotation.toolbar_label')}</span>
+
+          {/* v2.10.0 β-2 — segmented control. radiogroup pattern. */}
+          {onModeChange !== undefined && (
+            <div
+              role="radiogroup"
+              aria-label={t('preview.annotation.modes_aria')}
+              className="ml-xs flex items-center gap-px rounded-sm border border-hairline bg-bg-secondary p-px"
+              data-testid="annotation-mode-segment"
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={mode === 'pick'}
+                aria-label={t('preview.annotation.mode_pick_aria')}
+                // v2.10.0 β-2 hardening (architect strengthening 7) — title 에
+                // 키 단축키 (P) 노출. radio 그룹은 aria-checked 만 사용 — radio
+                // 와 aria-pressed 는 양립하지 않음 (a11y 패턴 충돌).
+                title={t('preview.annotation.shortcut_pick')}
+                onClick={() => onModeChange('pick')}
+                data-testid="annotation-mode-pick"
+                data-active={mode === 'pick'}
+                className="rounded-sm p-xxs text-text-tertiary hover:text-text-primary data-[active=true]:bg-accent data-[active=true]:text-white"
+              >
+                <MousePointer2 aria-hidden="true" className="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={mode === 'region'}
+                aria-label={t('preview.annotation.mode_region_aria')}
+                title={t('preview.annotation.shortcut_region')}
+                onClick={() => onModeChange('region')}
+                data-testid="annotation-mode-region"
+                data-active={mode === 'region'}
+                className="rounded-sm p-xxs text-text-tertiary hover:text-text-primary data-[active=true]:bg-accent data-[active=true]:text-white"
+              >
+                <Ruler aria-hidden="true" className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+
           {onToggle !== undefined && (
             <button
               type="button"

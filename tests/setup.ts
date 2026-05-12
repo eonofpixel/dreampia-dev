@@ -89,6 +89,27 @@ interface MockTurnSearchResult {
 
 type BrowserUpdateListener = (state: MockBrowserTabState) => void;
 
+// v2.10.0 β-2 — Inspector event shapes mirrored from preload.
+type MockInspectorEvent =
+  | { type: 'hover'; x: number; y: number; w: number; h: number; tag: string }
+  | {
+      type: 'pick';
+      selector: string;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      tag: string;
+      page_url: string;
+      ts: number;
+    };
+interface MockInspectorPayload {
+  tab_id: string;
+  session_id: string;
+  event: MockInspectorEvent;
+}
+type InspectorListener = (payload: MockInspectorPayload) => void;
+
 // ── ai/* (P1-4) — mock IPC for IpcStreamingProvider tests ──
 interface MockCliInfo {
   path: string;
@@ -221,6 +242,9 @@ const mockStore = {
   browserActive: new Map<string, string>(),
   browserBounds: new Map<string, MockBrowserBounds>(),
   browserListeners: new Set<BrowserUpdateListener>(),
+  // v2.10.0 β-2 — Inspector / element pick mock state.
+  browserInspectorEnabled: new Set<string>(),
+  browserInspectorListeners: new Set<InspectorListener>(),
 
   // ── ai/* (P1-4) ───────────────────────────────────────
   // Tests can inject events via __emitAiStreamEvent / __emitAiStreamEnd.
@@ -397,6 +421,19 @@ function emitBrowserUpdate(state: MockBrowserTabState): void {
   }
 }
 
+// v2.10.0 β-2 — Test helper: simulate a main-side inspector event reaching
+// the renderer. Tests call `__emitInspectorEvent({ tab_id, session_id, event })`
+// to drive `onInspectorEvent` subscribers without a real BrowserManager.
+function emitInspectorEvent(payload: MockInspectorPayload): void {
+  for (const fn of mockStore.browserInspectorListeners) {
+    try {
+      fn(payload);
+    } catch {
+      // ignore listener errors in tests
+    }
+  }
+}
+
 function emitAiStreamEvent(payload: MockStreamEventPayload): void {
   for (const fn of mockStore.aiEventListeners) {
     try {
@@ -442,6 +479,7 @@ function emitCompareEvent(event: MockCompareEvent): void {
  */
 export const __mockStore = mockStore;
 export const __emitBrowserUpdate = emitBrowserUpdate;
+export const __emitInspectorEvent = emitInspectorEvent;
 export const __emitAiStreamEvent = emitAiStreamEvent;
 export const __emitAiStreamEnd = emitAiStreamEnd;
 export const __emitCompareEvent = emitCompareEvent;
@@ -472,6 +510,8 @@ beforeEach(() => {
   mockStore.browserActive.clear();
   mockStore.browserBounds.clear();
   mockStore.browserListeners.clear();
+  mockStore.browserInspectorEnabled.clear();
+  mockStore.browserInspectorListeners.clear();
   mockStore.aiDetection = {
     claude: { path: '/usr/local/bin/claude', version: '1.2.3' },
     codex: null,
@@ -1280,6 +1320,24 @@ if (typeof window !== 'undefined') {
           mockStore.browserListeners.add(listener);
           return () => {
             mockStore.browserListeners.delete(listener);
+          };
+        }),
+
+        // v2.10.0 β-2 — Inspector / element pick mode.
+        enableInspector: vi.fn(async (tabId: string): Promise<Result<void>> => {
+          mockStore.browserInspectorEnabled.add(tabId);
+          return { ok: true, value: undefined };
+        }),
+
+        disableInspector: vi.fn(async (tabId: string): Promise<Result<void>> => {
+          mockStore.browserInspectorEnabled.delete(tabId);
+          return { ok: true, value: undefined };
+        }),
+
+        onInspectorEvent: vi.fn((listener: InspectorListener): (() => void) => {
+          mockStore.browserInspectorListeners.add(listener);
+          return () => {
+            mockStore.browserInspectorListeners.delete(listener);
           };
         }),
       },

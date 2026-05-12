@@ -95,6 +95,28 @@ export function normalizeBrowserUrl(input: string): string {
 // Inline IPC shapes (avoid importing from `@/main`)
 // ────────────────────────────────────────────────────────────
 
+// v2.10.0 β-2 (F-021 + F-033) — Inspector event shapes mirrored from
+// preload.ts. Renderer keeps a local copy to avoid cross-boundary imports.
+export type InspectorEvent =
+  | { type: 'hover'; x: number; y: number; w: number; h: number; tag: string }
+  | {
+      type: 'pick';
+      selector: string;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      tag: string;
+      page_url: string;
+      ts: number;
+    };
+
+export interface BrowserInspectorPayload {
+  tab_id: string;
+  session_id: SessionId;
+  event: InspectorEvent;
+}
+
 interface BrowserApi {
   openTab: (args: {
     session_id: SessionId;
@@ -110,6 +132,10 @@ interface BrowserApi {
   setBounds: (tabId: string, bounds: BrowserBoundsRect) => Promise<Result<void>>;
   listTabs: (sessionId: SessionId) => Promise<Result<BrowserTabUI[]>>;
   onTabUpdated: (listener: (state: BrowserTabUI) => void) => () => void;
+  // v2.10.0 β-2 — optional (preload may be older during gradual rollout).
+  enableInspector?: (tabId: string) => Promise<Result<void>>;
+  disableInspector?: (tabId: string) => Promise<Result<void>>;
+  onInspectorEvent?: (listener: (payload: BrowserInspectorPayload) => void) => () => void;
 }
 
 // ────────────────────────────────────────────────────────────

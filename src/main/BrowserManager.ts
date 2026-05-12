@@ -63,7 +63,41 @@ export interface BrowserManagerOptions {
   getMainWindow: () => BrowserWindow | null;
   /** Optional: emit per-tab state changes to the renderer. */
   onTabUpdate?: (state: BrowserTabState) => void;
+  /**
+   * v2.10.0 β-2 (F-021 + F-033) — Inspector event sink. Renderer 가
+   * enableInspector 후 webview 안 hover/click 이벤트를 받음. tab_id +
+   * session_id 와 함께 forward (renderer 가 자기 tab 인지 필터링).
+   */
+  onInspectorEvent?: (tabId: string, sessionId: SessionId, event: InspectorEvent) => void;
 }
+
+// v2.10.0 β-2 — Inspector event discriminated union. webview 안 inspector
+// script 가 push 한 큐를 main 이 drain → 본 형식으로 emit. F-033 spec.
+export type InspectorEvent =
+  | {
+      type: 'hover';
+      /** viewport-relative bounding rect (CSS px). */
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      /** Element tag name (lowercased). */
+      tag: string;
+    }
+  | {
+      type: 'pick';
+      /** Auto-generated CSS selector (id > tag.class > nth-of-type chain, max 6). */
+      selector: string;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      tag: string;
+      /** Picked element's owner document URL. */
+      page_url: string;
+      /** Picked epoch ms (webview clock). */
+      ts: number;
+    };
 
 // ────────────────────────────────────────────────────────────
 // Internal types
@@ -78,6 +112,19 @@ interface ManagedTab {
   attached: boolean;
   emitState: (patch?: Partial<BrowserTabState>) => void;
   detachListeners: () => void;
+  /**
+   * v2.10.0 β-2 hardening (P1-3 — nav re-arm) — Inspector active 중 페이지
+   * navigation (link click / F5) 시 새 document 가 `window.__dreampia_inspector_*`
+   * 를 잃는다. enableInspector 가 본 listener 를 `did-finish-load` 에 attach 해
+   * 재주입한다. disableInspector / closeTab / shutdown 이 detach.
+   */
+  inspectorNavListener?: () => void;
+  /**
+   * v2.10.0 β-2 hardening (P0-2 — drain reentrancy) — interval tick 이
+   * executeJavaScript Promise 미해소 상태로 또 fire 하면 큐가 piling.
+   * tick 시 in-flight 면 skip, resolve/reject 후 false 로 clear.
+   */
+  inspectorDrainInFlight?: boolean;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -131,6 +178,48 @@ function normalizeAllowedBrowserUrl(rawUrl: string): string | null {
   return null;
 }
 
+/**
+ * v2.10.0 β-2 — Validate raw drain payload from inspector script. The script
+ * runs untrusted page JS context (we control the source but a hostile page
+ * could overwrite the queue), so each event is shape-checked before forward.
+ *
+ * v2.10.0 β-2 hardening — drain JSON shape moved from a flat event array to
+ * `{ hover: Event|null, picks: Event[] }`. The single-event path still goes
+ * through this validator (called once per hover, once per pick element).
+ */
+function parseInspectorEvent(raw: unknown): InspectorEvent | null {
+  if (raw === null || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const t = o['type'];
+  const x = o['x'];
+  const y = o['y'];
+  const w = o['w'];
+  const h = o['h'];
+  const tag = o['tag'];
+  if (
+    typeof x !== 'number' ||
+    typeof y !== 'number' ||
+    typeof w !== 'number' ||
+    typeof h !== 'number' ||
+    typeof tag !== 'string'
+  ) {
+    return null;
+  }
+  if (t === 'hover') {
+    return { type: 'hover', x, y, w, h, tag };
+  }
+  if (t === 'pick') {
+    const selector = o['selector'];
+    const page_url = o['page_url'];
+    const ts = o['ts'];
+    if (typeof selector !== 'string' || typeof page_url !== 'string' || typeof ts !== 'number') {
+      return null;
+    }
+    return { type: 'pick', selector, x, y, w, h, tag, page_url, ts };
+  }
+  return null;
+}
+
 function denyBrowserSessionPermissions(sess: ElectronSession): void {
   const maybeSession = sess as ElectronSession & {
     setPermissionCheckHandler?: (handler: () => boolean) => void;
@@ -153,9 +242,158 @@ function denyBrowserSessionPermissions(sess: ElectronSession): void {
 // BrowserManager
 // ────────────────────────────────────────────────────────────
 
+// v2.10.0 β-2 (F-033) — Webview-side inspector script. main 이
+// `webContents.executeJavaScript(INSPECTOR_SCRIPT)` 으로 inject. dashed
+// overlay div 그리기 + hover/click 이벤트를 in-page 큐에 push. main 이 50ms
+// 마다 `__dreampia_inspector_drain()` 호출해 fetch.
+//
+// Why polling and not preload IPC: BrowserManager 의 WebContentsView 는
+// preload 없이 sandbox=true 로 생성 (그대로 둔다 — preload 추가는 permission
+// model 영향이 큼). executeJavaScript 가 가장 변경 폭 작은 방법. Codex
+// chrome-recorder 도 같은 패턴.
+//
+// v2.10.0 β-2 hardening (architect P0-1):
+//   - Queue split into hover (latest-only, ring-of-1 overwrite-on-push) and
+//     picks (FIFO, cap 16). Previous single-queue (cap 32, shift-on-overflow)
+//     could evict a `pick` under fast hover storms — sad path for the very
+//     event we care most about. 16 click overflow is essentially unreachable
+//     in normal use; pick eviction is acceptable.
+//   - drain returns `{ hover: latest|null, picks: [...] }` JSON.
+//
+// v2.10.0 β-2 hardening (architect P1-4):
+//   - `__dreampia_inspector_uninstall` added. Capture-phase listeners stay
+//     attached even when active=false (current code's active guard is the
+//     first statement, so user clicks pass through). disableInspector does
+//     NOT call uninstall — re-enable cost stays zero. closeTab/shutdown
+//     paths can call it explicitly; in practice the webContents is being
+//     torn down anyway so it's defensive-only, but the contract is now
+//     explicit if the inspector script ever sprouts non-no-op listeners.
+//
+// Cross-origin iframe targets are NOT covered — document-level capture-phase
+// listeners 가 닿지 않음. β-2 known limitation; β-3 (또는 docs PR) 에서 별도
+// 처리 (each-frame inject) 검토.
+const INSPECTOR_SCRIPT = `(function(){
+  if (window.__dreampia_inspector_installed) return;
+  window.__dreampia_inspector_installed = true;
+  // v2.10.0 β-2 hardening (P0-1) — split queues. hover = latest only.
+  window.__dreampia_inspector_hover_latest = null;
+  window.__dreampia_inspector_picks = [];
+  window.__dreampia_inspector_active = false;
+
+  var overlay = document.createElement('div');
+  overlay.setAttribute('data-dreampia-inspector', '');
+  overlay.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;border:2px dashed #f54e00;background:rgba(245,78,0,0.08);display:none;box-sizing:border-box;transition:all 0.05s linear;';
+  document.documentElement.appendChild(overlay);
+
+  // NOTE: generateSelector 결과는 annotation hint 용 — renderer 가 이걸로
+  // "re-pick 가능한 locator" 처럼 사용하면 안 된다. uniqueness 보장 X
+  // (sibling 카운트 변동 / 동적 클래스명 등으로 stale 가능). AI 가 사람에게
+  // "이 element" 를 가리키는 단서로만 활용.
+  function generateSelector(el){
+    if (!el || el === document.documentElement) return 'html';
+    if (el.id) return '#' + CSS.escape(el.id);
+    var parts = [];
+    var node = el;
+    while (node && node.nodeType === 1 && node !== document.documentElement){
+      var part = node.tagName.toLowerCase();
+      if (node.classList && node.classList.length){
+        var cls = Array.prototype.slice.call(node.classList).filter(function(c){return c && !/^[0-9]/.test(c);}).slice(0,3);
+        if (cls.length) part += '.' + cls.map(function(c){return CSS.escape(c);}).join('.');
+      }
+      var parent = node.parentElement;
+      if (parent){
+        var siblings = Array.prototype.slice.call(parent.children).filter(function(s){return s.tagName === node.tagName;});
+        if (siblings.length > 1){
+          part += ':nth-of-type(' + (siblings.indexOf(node)+1) + ')';
+        }
+      }
+      parts.unshift(part);
+      if (parts.length >= 6) break;
+      node = parent;
+    }
+    return parts.join(' > ');
+  }
+
+  function pushPick(e){
+    var picks = window.__dreampia_inspector_picks;
+    // cap 16 — overflow oldest drop. 16 누적 클릭은 실용상 도달 X.
+    if (picks.length >= 16) picks.shift();
+    picks.push(e);
+  }
+
+  function onMove(e){
+    if (!window.__dreampia_inspector_active) return;
+    var t = e.target;
+    if (!t || t === overlay) return;
+    var r = t.getBoundingClientRect();
+    overlay.style.display = 'block';
+    overlay.style.left = r.left + 'px';
+    overlay.style.top = r.top + 'px';
+    overlay.style.width = r.width + 'px';
+    overlay.style.height = r.height + 'px';
+    // Latest-only ring buffer of size 1 — overwrite on every push so a hover
+    // storm 이 pick 큐를 누르지 못한다 (architect P0-1).
+    window.__dreampia_inspector_hover_latest = {
+      type:'hover', x:r.left, y:r.top, w:r.width, h:r.height, tag:t.tagName.toLowerCase()
+    };
+  }
+
+  function onClick(e){
+    if (!window.__dreampia_inspector_active) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var t = e.target;
+    if (!t) return;
+    var r = t.getBoundingClientRect();
+    pushPick({
+      type:'pick',
+      selector: generateSelector(t),
+      x:r.left, y:r.top, w:r.width, h:r.height,
+      tag:t.tagName.toLowerCase(),
+      page_url: location.href,
+      ts: Date.now()
+    });
+  }
+
+  document.addEventListener('mousemove', onMove, true);
+  document.addEventListener('click', onClick, true);
+
+  window.__dreampia_inspector_enable = function(){ window.__dreampia_inspector_active = true; };
+  window.__dreampia_inspector_disable = function(){
+    window.__dreampia_inspector_active = false;
+    overlay.style.display = 'none';
+    // hover latest 비움 — 재활성화 시 stale outline 방지.
+    window.__dreampia_inspector_hover_latest = null;
+  };
+  // v2.10.0 β-2 hardening (P1-4) — explicit uninstall. disableInspector 가
+  // 호출하지 않음 (re-enable 비용 회피). closeTab / shutdown 시 호출 — 사실상
+  // webContents 가 폐기되므로 noop 이지만 contract 명시화.
+  window.__dreampia_inspector_uninstall = function(){
+    try { document.removeEventListener('mousemove', onMove, true); } catch (e) {}
+    try { document.removeEventListener('click', onClick, true); } catch (e) {}
+    try { if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay); } catch (e) {}
+    window.__dreampia_inspector_active = false;
+    window.__dreampia_inspector_installed = false;
+    window.__dreampia_inspector_hover_latest = null;
+    window.__dreampia_inspector_picks = [];
+  };
+  window.__dreampia_inspector_drain = function(){
+    var hover = window.__dreampia_inspector_hover_latest;
+    window.__dreampia_inspector_hover_latest = null;
+    var picks = window.__dreampia_inspector_picks;
+    window.__dreampia_inspector_picks = [];
+    return JSON.stringify({ hover: hover, picks: picks });
+  };
+})();`;
+
+/** Drain poll interval — 50ms keeps hover latency under one paint frame at 60Hz. */
+const INSPECTOR_POLL_MS = 50;
+
 export class BrowserManager {
   private readonly tabs = new Map<string, ManagedTab>();
   private readonly activeTabBySession = new Map<SessionId, string>();
+  /** v2.10.0 β-2 — tab_id → drain interval. inspector active 일 때만 set. */
+  private readonly inspectorIntervals = new Map<string, NodeJS.Timeout>();
 
   constructor(private readonly opts: BrowserManagerOptions) {}
 
@@ -280,6 +518,14 @@ export class BrowserManager {
   closeTab(tab_id: string): void {
     const tab = this.tabs.get(tab_id);
     if (!tab) return;
+
+    // v2.10.0 β-2 — inspector polling 도 stop. wc 가 사라지기 전에 정리.
+    this.stopInspectorPolling(tab_id);
+    // v2.10.0 β-2 hardening (P1-3) — did-finish-load re-arm listener detach.
+    this.detachInspectorNavListener(tab);
+    // v2.10.0 β-2 hardening (P1-4) — explicit in-page uninstall. webContents
+    // 가 곧 close 되므로 사실상 noop 이지만 contract 명시화.
+    this.tryUninstallInspector(tab);
 
     this.detachFromWindow(tab);
     tab.detachListeners();
@@ -494,6 +740,237 @@ export class BrowserManager {
     }
   }
 
+  // ── v2.10.0 β-2 (F-021 + F-033) — Inspector / element pick ──
+
+  /**
+   * Inject (idempotent) the inspector script into a tab's webContents and
+   * start polling the in-page event queue. Hovering or clicking inside the
+   * webview after this call forwards {hover,pick} events to
+   * `opts.onInspectorEvent`.
+   *
+   * Iron rule (BrowserManager): executeJavaScript failures must not throw
+   * across IPC — log + best-effort. The caller's renderer simply sees no
+   * inspector events.
+   */
+  async enableInspector(tab_id: string): Promise<void> {
+    const tab = this.tabs.get(tab_id);
+    if (!tab) return;
+    const wc = tab.view.webContents as {
+      isDestroyed(): boolean;
+      executeJavaScript?: (code: string, userGesture?: boolean) => Promise<unknown>;
+      on?: (event: string, listener: (...args: unknown[]) => void) => unknown;
+      off?: (event: string, listener: (...args: unknown[]) => void) => unknown;
+    };
+    if (wc.isDestroyed()) return;
+    if (typeof wc.executeJavaScript !== 'function') return;
+
+    try {
+      // 두 번째 호출은 idempotent — script 안 `__dreampia_inspector_installed`
+      // 플래그가 막아준다. enable flip 만 매번 수행.
+      await wc.executeJavaScript(INSPECTOR_SCRIPT);
+      await wc.executeJavaScript(
+        'window.__dreampia_inspector_enable && window.__dreampia_inspector_enable();'
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[BrowserManager] enableInspector(${tab_id}) inject failed: ${msg}`);
+      return;
+    }
+
+    // v2.10.0 β-2 hardening (architect P1-3) — re-arm on navigation.
+    // User-driven nav (link click / F5 / programmatic loadURL) destroys the
+    // old document → `window.__dreampia_inspector_*` evaporates. Re-attach
+    // via `did-finish-load` so inspector keeps working across pages.
+    if (tab.inspectorNavListener === undefined && typeof wc.on === 'function') {
+      const navListener = (): void => {
+        const live = this.tabs.get(tab_id);
+        if (!live) return;
+        const liveWc = live.view.webContents as {
+          isDestroyed(): boolean;
+          executeJavaScript?: (code: string) => Promise<unknown>;
+        };
+        if (liveWc.isDestroyed()) return;
+        if (typeof liveWc.executeJavaScript !== 'function') return;
+        // Polling 은 이미 돌고 있다 — 다음 tick 이 새 document 의 큐를 본다.
+        // 우리는 script + active flag 만 새 document 에 다시 inject.
+        liveWc
+          .executeJavaScript(INSPECTOR_SCRIPT)
+          .then(() =>
+            liveWc.executeJavaScript!(
+              'window.__dreampia_inspector_enable && window.__dreampia_inspector_enable();'
+            )
+          )
+          .catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(
+              `[BrowserManager] inspector re-inject after navigation(${tab_id}) failed: ${msg}`
+            );
+          });
+      };
+      tab.inspectorNavListener = navListener;
+      try {
+        wc.on('did-finish-load', navListener);
+      } catch {
+        // wc may have been destroyed in race — accept silently.
+        tab.inspectorNavListener = undefined;
+      }
+    }
+
+    // 기존 polling 있으면 그대로 사용 — 두 번 시작하지 않음.
+    if (this.inspectorIntervals.has(tab_id)) return;
+
+    // v2.10.0 β-2 hardening (architect P0-2) — drain reentrancy guard.
+    // Reset the per-tab flag; a stale `true` from a previous enable can never
+    // happen in practice (disable clears it), but be defensive.
+    tab.inspectorDrainInFlight = false;
+
+    const interval = setInterval((): void => {
+      // tab 이 사라졌거나 wc 가 파괴됐으면 polling 종료.
+      const live = this.tabs.get(tab_id);
+      const liveWc = live?.view.webContents as
+        | { isDestroyed(): boolean; executeJavaScript?: (code: string) => Promise<unknown> }
+        | undefined;
+      if (
+        !live ||
+        !liveWc ||
+        liveWc.isDestroyed() ||
+        typeof liveWc.executeJavaScript !== 'function'
+      ) {
+        this.stopInspectorPolling(tab_id);
+        return;
+      }
+      // architect P0-2: skip when a previous drain has not resolved. Page
+      // stall 시 setInterval 이 Promise 를 piling 하지 않도록.
+      if (live.inspectorDrainInFlight === true) return;
+      live.inspectorDrainInFlight = true;
+      liveWc
+        .executeJavaScript(
+          'window.__dreampia_inspector_drain ? window.__dreampia_inspector_drain() : null'
+        )
+        .then((raw) => {
+          try {
+            if (typeof raw !== 'string' || raw.length === 0) return;
+            let parsedJson: unknown;
+            try {
+              parsedJson = JSON.parse(raw);
+            } catch {
+              return;
+            }
+            // v2.10.0 β-2 hardening (architect P0-1) — drain JSON shape
+            // changed from flat array → `{ hover, picks }`. Forward hover
+            // (if any) first then each pick in FIFO order.
+            if (parsedJson === null || typeof parsedJson !== 'object') return;
+            const obj = parsedJson as { hover?: unknown; picks?: unknown };
+            const hoverParsed = parseInspectorEvent(obj.hover);
+            if (hoverParsed !== null) {
+              try {
+                this.opts.onInspectorEvent?.(tab_id, live.session_id, hoverParsed);
+              } catch {
+                // Listener errors must never bubble into the timer loop.
+              }
+            }
+            if (Array.isArray(obj.picks)) {
+              for (const raw_pick of obj.picks) {
+                const parsed = parseInspectorEvent(raw_pick);
+                if (parsed === null) continue;
+                try {
+                  this.opts.onInspectorEvent?.(tab_id, live.session_id, parsed);
+                } catch {
+                  // Listener errors must never bubble into the timer loop.
+                }
+              }
+            }
+          } finally {
+            // P0-2: clear flag on the live tab (may differ from `tab` if a
+            // racing close/reopen replaced it — `live` is the freshest ref).
+            const stillLive = this.tabs.get(tab_id);
+            if (stillLive !== undefined) stillLive.inspectorDrainInFlight = false;
+          }
+        })
+        .catch(() => {
+          // executeJavaScript 가 transient 실패 — 다음 tick 에 재시도.
+          const stillLive = this.tabs.get(tab_id);
+          if (stillLive !== undefined) stillLive.inspectorDrainInFlight = false;
+        });
+    }, INSPECTOR_POLL_MS);
+    this.inspectorIntervals.set(tab_id, interval);
+  }
+
+  /** Stop polling + flip the in-page `active` flag off + hide overlay. */
+  async disableInspector(tab_id: string): Promise<void> {
+    this.stopInspectorPolling(tab_id);
+    const tab = this.tabs.get(tab_id);
+    if (!tab) return;
+    // v2.10.0 β-2 hardening (P1-3) — disable detaches the nav listener so
+    // inspector stays off after subsequent navigations.
+    this.detachInspectorNavListener(tab);
+    // P0-2: clear any stale drain-in-flight flag — the next enable starts fresh.
+    tab.inspectorDrainInFlight = false;
+    const wc = tab.view.webContents as {
+      isDestroyed(): boolean;
+      executeJavaScript?: (code: string) => Promise<unknown>;
+    };
+    if (wc.isDestroyed()) return;
+    if (typeof wc.executeJavaScript !== 'function') return;
+    try {
+      await wc.executeJavaScript(
+        'window.__dreampia_inspector_disable && window.__dreampia_inspector_disable();'
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[BrowserManager] disableInspector(${tab_id}) failed: ${msg}`);
+    }
+  }
+
+  private stopInspectorPolling(tab_id: string): void {
+    const existing = this.inspectorIntervals.get(tab_id);
+    if (existing !== undefined) {
+      clearInterval(existing);
+      this.inspectorIntervals.delete(tab_id);
+    }
+  }
+
+  /**
+   * v2.10.0 β-2 hardening (architect P1-3) — remove the `did-finish-load`
+   * re-injector. Called on disableInspector / closeTab / shutdown.
+   */
+  private detachInspectorNavListener(tab: ManagedTab): void {
+    const listener = tab.inspectorNavListener;
+    if (listener === undefined) return;
+    const wc = tab.view.webContents as {
+      isDestroyed(): boolean;
+      off?: (event: string, listener: (...args: unknown[]) => void) => unknown;
+    };
+    try {
+      if (!wc.isDestroyed() && typeof wc.off === 'function') {
+        wc.off('did-finish-load', listener);
+      }
+    } catch {
+      // already destroyed — harmless
+    }
+    tab.inspectorNavListener = undefined;
+  }
+
+  /**
+   * v2.10.0 β-2 hardening (architect P1-4) — fire the in-page uninstall hook.
+   * Used by closeTab + shutdown only. Best-effort: webContents may already be
+   * destroyed, in which case there's nothing to do.
+   */
+  private tryUninstallInspector(tab: ManagedTab): void {
+    const wc = tab.view.webContents as {
+      isDestroyed(): boolean;
+      executeJavaScript?: (code: string) => Promise<unknown>;
+    };
+    if (wc.isDestroyed()) return;
+    if (typeof wc.executeJavaScript !== 'function') return;
+    // Fire-and-forget — closeTab path can't await without slowing tab close.
+    wc.executeJavaScript(
+      'window.__dreampia_inspector_uninstall && window.__dreampia_inspector_uninstall();'
+    ).catch(() => {
+      // best-effort
+    });
+  }
+
   // ── geometry ──────────────────────────────────────────────
 
   /** Renderer reports where the placeholder div lives so the WebContentsView
@@ -522,7 +999,15 @@ export class BrowserManager {
 
   /** Cleanup all tabs (app shutdown). */
   shutdown(): void {
+    // v2.10.0 β-2 — inspector polling 모두 stop. tabs.clear 전에 처리.
+    for (const interval of this.inspectorIntervals.values()) {
+      clearInterval(interval);
+    }
+    this.inspectorIntervals.clear();
     for (const tab of this.tabs.values()) {
+      // v2.10.0 β-2 hardening (P1-3 / P1-4) — clean inspector wiring per tab.
+      this.detachInspectorNavListener(tab);
+      this.tryUninstallInspector(tab);
       this.detachFromWindow(tab);
       tab.detachListeners();
       if (!tab.view.webContents.isDestroyed()) {

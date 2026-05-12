@@ -2525,6 +2525,40 @@ function registerBrowserHandlers(browser: BrowserManager): void {
       return fail(err);
     }
   });
+
+  // v2.10.0 β-2 (F-021 + F-033) — Inspector / element pick mode. Renderer
+  // 가 toggle ON 시 enable, OFF 시 disable. inspector hover/pick 이벤트는
+  // BrowserManager 의 onInspectorEvent 에서 `browser/inspector-event` 로
+  // 별도 push (registerIpcHandlers caller 가 wire).
+  ipcMain.handle(
+    'browser/enable-inspector',
+    async (_evt, tabId: unknown): Promise<Result<void>> => {
+      try {
+        if (typeof tabId !== 'string' || tabId.length === 0) {
+          throw new Error('tab id required');
+        }
+        await browser.enableInspector(tabId);
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'browser/disable-inspector',
+    async (_evt, tabId: unknown): Promise<Result<void>> => {
+      try {
+        if (typeof tabId !== 'string' || tabId.length === 0) {
+          throw new Error('tab id required');
+        }
+        await browser.disableInspector(tabId);
+        return ok(undefined);
+      } catch (err) {
+        return fail(err);
+      }
+    }
+  );
 }
 
 function toolResultToRef(result: ToolResult): ToolResultRef {
