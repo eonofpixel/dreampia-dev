@@ -73,13 +73,13 @@ export function SearchSection({
           placeholder={t('sidebar.search.placeholder')}
           aria-label={t('sidebar.search.aria_label')}
           data-testid="sidebar-search-input"
-          className="w-full rounded-md border border-transparent bg-bg-tertiary py-1.5 pl-8 pr-3 text-xs text-text-primary placeholder:text-text-tertiary focus:border-border-primary focus:outline-none"
+          className="w-full rounded-md border border-transparent bg-surface-strong py-1.5 pl-8 pr-3 text-xs text-text-primary placeholder:text-text-tertiary focus-visible:border-accent focus:outline-none"
         />
       </label>
 
       {showResults && (
         <div
-          className="max-h-64 overflow-y-auto rounded-md border border-border-primary bg-bg-primary"
+          className="max-h-64 overflow-y-auto rounded-md border border-hairline bg-surface-card"
           role="region"
           aria-label={t('sidebar.search.result_region')}
           data-testid="sidebar-search-results"
@@ -93,7 +93,7 @@ export function SearchSection({
             </p>
           ) : error !== null ? (
             <p
-              className="px-3 py-2 text-xs text-red-400"
+              className="px-3 py-2 text-xs text-semantic-danger"
               role="alert"
               data-testid="sidebar-search-error"
             >
@@ -104,7 +104,7 @@ export function SearchSection({
               {t('sidebar.search.no_results')}
             </p>
           ) : (
-            <ul className="divide-y divide-border-primary" role="listbox">
+            <ul className="divide-y divide-hairline" role="listbox">
               {results.map((r) => (
                 <li key={r.turn_id} role="option" aria-selected="false">
                   <button
@@ -112,10 +112,10 @@ export function SearchSection({
                     onClick={() => {
                       onResultClick(r.session_id, r.turn_id);
                     }}
-                    className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-xs hover:bg-bg-tertiary"
+                    className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-xs hover:bg-surface-strong"
                     data-testid="sidebar-search-result"
                   >
-                    <span className="flex w-full items-center justify-between gap-2 text-[10px] uppercase tracking-wide text-text-tertiary">
+                    <span className="flex w-full items-center justify-between gap-2 text-caption-uppercase text-text-tertiary">
                       <span className="truncate">
                         {sessionTitleById?.get(r.session_id) ??
                           t('sidebar.search.fallback_session_title')}
@@ -168,7 +168,7 @@ function SnippetText({ snippet }: { snippet: string }): React.JSX.Element {
         p.highlight ? (
           <mark
             key={i}
-            className="bg-yellow-500/30 text-text-primary"
+            className="bg-semantic-warning/25 text-text-primary"
             data-testid="sidebar-search-mark"
           >
             {p.text}

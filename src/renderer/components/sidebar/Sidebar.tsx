@@ -157,14 +157,14 @@ export function Sidebar({
 
   return (
     <aside
-      className="flex h-full w-[286px] flex-col border-r border-border-primary bg-bg-secondary text-sm"
+      className="flex h-full w-[286px] flex-col border-r border-hairline bg-canvas-soft text-sm"
       aria-label={t('sidebar.aria_label')}
     >
       {/* Top action: 새 채팅 */}
-      <div className="border-b border-border-primary p-2">
+      <div className="border-b border-hairline p-2">
         <button
           onClick={onNewChat}
-          className="flex w-full items-center gap-2 rounded-md px-3 py-2 font-medium hover:bg-bg-tertiary"
+          className="flex w-full items-center gap-2 rounded-md px-3 py-2 font-medium hover:bg-surface-strong"
           aria-label={t('sidebar.new_chat')}
           data-testid="sidebar-new-chat"
         >
@@ -175,7 +175,7 @@ export function Sidebar({
 
       {/* v0.7.0 (F-026) — 검색 입력 + 결과 — 이전엔 placeholder nav item 이었던
           자리를 활성화. 결과 영역은 query 가 비어있으면 hidden. */}
-      <div className="border-b border-border-primary p-2">
+      <div className="border-b border-hairline p-2">
         <SearchSection
           query={searchQuery}
           onQueryChange={handleSearchQueryChange}
@@ -190,7 +190,7 @@ export function Sidebar({
       {/* Nav — v1.0.3: 미구현 placeholder 명시화. v1.0.13 (FAKE-2): [비교]
           만 활성화 — 백엔드가 v0.12.0 부터 있음. 사용자가 사이드바에서 진입
           가능. */}
-      <nav className="border-b border-border-primary p-2 text-text-secondary">
+      <nav className="border-b border-hairline p-2 text-text-secondary">
         {onOpenCompare !== undefined && (
           <SidebarNavItem
             icon={<GitCompareArrows className="h-4 w-4" />}
@@ -226,7 +226,7 @@ export function Sidebar({
       {/* Projects — v1.0.5: 클릭 시 workspace 폴더 변경 picker 열림.
           이전엔 onClick 없어서 v1.0.3 자동 disabled 룰에 걸렸음 (사용자 보고).
           onPickWorkspace 미지정 시에는 disabled 처리 (안전 가드). */}
-      <section className="border-b border-border-primary p-2">
+      <section className="border-b border-hairline p-2">
         <SectionHeader>{t('sidebar.section.projects')}</SectionHeader>
         <SidebarNavItem
           icon={<Folder className="h-4 w-4" />}
@@ -359,10 +359,13 @@ function McpStatusIndicator({ onOpen }: { onOpen: () => void }): React.JSX.Eleme
   const t = useT();
   const { servers, loading } = useMcp();
 
-  let dotColor = 'bg-gray-500';
+  // Dots use semantic tokens (.omc/DESIGN.md Stage 4a) — inactive/loading
+  // map to the muted tertiary text color so the indicator reads as quiet on
+  // the warm canvas.
+  let dotColor = 'bg-text-tertiary';
   let label = t('sidebar.mcp.zero_servers');
   if (loading) {
-    dotColor = 'bg-gray-400';
+    dotColor = 'bg-text-tertiary';
     label = t('sidebar.mcp.loading');
   } else if (servers.length > 0) {
     let readyCount = 0;
@@ -374,16 +377,16 @@ function McpStatusIndicator({ onOpen }: { onOpen: () => void }): React.JSX.Eleme
       else if (s.status === 'connecting') connectingCount += 1;
     }
     if (errorCount > 0) {
-      dotColor = 'bg-red-500';
+      dotColor = 'bg-semantic-danger';
       label = t('sidebar.mcp.error_count', { n: servers.length, e: errorCount });
     } else if (connectingCount > 0) {
-      dotColor = 'bg-yellow-500';
+      dotColor = 'bg-semantic-warning';
       label = t('sidebar.mcp.connecting_count', { n: servers.length, c: connectingCount });
     } else if (readyCount === servers.length) {
-      dotColor = 'bg-green-500';
+      dotColor = 'bg-semantic-success';
       label = t('sidebar.mcp.ready_count', { n: servers.length });
     } else {
-      dotColor = 'bg-gray-500';
+      dotColor = 'bg-text-tertiary';
       label = t('sidebar.mcp.servers_count', { n: servers.length });
     }
   }
@@ -402,7 +405,7 @@ function McpStatusIndicator({ onOpen }: { onOpen: () => void }): React.JSX.Eleme
       onClick={onOpen}
       title={tooltip}
       data-testid="sidebar-mcp-status"
-      className="group flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm hover:bg-bg-tertiary"
+      className="group flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm hover:bg-surface-strong"
       aria-label={tooltip}
     >
       <span className="flex-shrink-0">
@@ -458,18 +461,18 @@ function SidebarNavItem({
       title={comingSoon === true ? comingSoonHint : undefined}
       aria-disabled={isDisabled}
       className={`group flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left ${
-        isDisabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-bg-tertiary'
+        isDisabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-surface-strong'
       }`}
     >
       <span className="flex-shrink-0">{icon}</span>
       <span className="flex-1 truncate">{label}</span>
       {comingSoon === true ? (
-        <span className="rounded-sm bg-bg-tertiary px-1 py-0.5 text-[9px] uppercase tracking-wide text-text-tertiary">
+        <span className="rounded-sm border border-hairline bg-surface-strong px-1 py-0.5 text-caption-uppercase text-text-tertiary">
           {t('sidebar.coming_soon_badge')}
         </span>
       ) : (
         shortcut && (
-          <kbd className="text-[10px] text-text-tertiary opacity-0 group-hover:opacity-100">
+          <kbd className="text-caption-uppercase text-text-tertiary opacity-0 group-hover:opacity-100">
             {shortcut}
           </kbd>
         )
@@ -493,13 +496,13 @@ function ChatItem({
     <button
       onClick={onClick}
       data-active={active}
-      className="group flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left hover:bg-bg-tertiary data-[active=true]:bg-bg-tertiary data-[active=true]:font-medium"
+      className="group flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left hover:bg-surface-strong data-[active=true]:bg-surface-strong data-[active=true]:font-medium"
       aria-current={active ? 'true' : undefined}
     >
       {session.pinned && <Pin className="h-3 w-3 flex-shrink-0 text-text-tertiary" />}
       <span className="flex-1 truncate">{session.title}</span>
       {shortcut && (
-        <kbd className="text-[10px] text-text-tertiary opacity-0 group-hover:opacity-100">
+        <kbd className="text-caption-uppercase text-text-tertiary opacity-0 group-hover:opacity-100">
           {shortcut}
         </kbd>
       )}
