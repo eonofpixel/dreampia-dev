@@ -327,7 +327,7 @@ export function FileTree({
           </p>
         ) : error !== null ? (
           <p
-            className="px-3 py-4 text-xs text-danger"
+            className="px-3 py-4 text-xs text-semantic-danger"
             role="alert"
             data-testid="code-file-tree-error"
           >

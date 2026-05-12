@@ -364,7 +364,7 @@ function IpcUnavailableBanner(): React.JSX.Element {
     <div
       role="alert"
       data-testid="ipc-unavailable-banner"
-      className="border-b border-danger/30 bg-danger/10 px-4 py-2 text-xs text-danger"
+      className="border-b border-semantic-danger/30 bg-semantic-danger/10 px-4 py-2 text-xs text-semantic-danger"
     >
       <strong>{t('chat.ipc.banner_strong')}</strong> {t('chat.ipc.banner_detail')}{' '}
       <code>window.dreampia</code> {t('chat.ipc.banner_check')}

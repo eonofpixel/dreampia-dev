@@ -638,7 +638,7 @@ export function CodePanel({
             </p>
           ) : error !== null ? (
             <p
-              className="flex flex-1 items-center justify-center px-6 text-center text-xs text-danger"
+              className="flex flex-1 items-center justify-center px-6 text-center text-xs text-semantic-danger"
               role="alert"
               data-testid="code-editor-error"
             >

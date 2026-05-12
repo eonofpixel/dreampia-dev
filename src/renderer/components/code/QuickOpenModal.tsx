@@ -227,7 +227,7 @@ export function QuickOpenModal({
             </p>
           ) : error !== null ? (
             <p
-              className="px-3 py-6 text-center text-xs text-danger"
+              className="px-3 py-6 text-center text-xs text-semantic-danger"
               role="alert"
               data-testid="quick-open-error"
             >
