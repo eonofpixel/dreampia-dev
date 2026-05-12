@@ -115,7 +115,7 @@ export function UsageChart({
         role="img"
         aria-label="사용량 차트 (데이터 없음)"
         data-testid="usage-chart-empty"
-        className="flex h-32 items-center justify-center rounded-md border border-dashed border-border-primary text-xs text-text-tertiary"
+        className="flex h-32 items-center justify-center rounded-md border border-dashed border-hairline text-xs text-text-tertiary"
       >
         차트로 표시할 데이터가 없어요.
       </div>

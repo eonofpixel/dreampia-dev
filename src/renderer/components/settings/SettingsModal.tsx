@@ -160,7 +160,7 @@ export function SettingsModal({
       <div className="-mx-lg -my-base flex min-h-[520px] overflow-hidden">
         <nav
           aria-label={t('settings.aria.categories')}
-          className="w-[180px] flex-shrink-0 border-r border-border-primary bg-bg-secondary p-2"
+          className="w-[180px] flex-shrink-0 border-r border-hairline bg-canvas-soft p-2"
         >
           <ul className="space-y-1">
             {TAB_ORDER.map((tab) => {
@@ -173,7 +173,7 @@ export function SettingsModal({
                     }}
                     data-active={active}
                     data-testid={`settings-tab-${tab.id}`}
-                    className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm hover:bg-bg-tertiary data-[active=true]:bg-bg-tertiary data-[active=true]:font-medium"
+                    className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm hover:bg-surface-strong data-[active=true]:bg-surface-strong data-[active=true]:font-medium"
                     aria-current={active ? 'true' : undefined}
                   >
                     <span className="flex-shrink-0">{tab.icon}</span>
@@ -316,8 +316,8 @@ function ProviderPanel(): React.JSX.Element {
                 <label
                   className={`flex cursor-pointer items-start gap-2 rounded-md border p-3 ${
                     active
-                      ? 'border-accent bg-bg-tertiary'
-                      : 'border-border-primary hover:bg-bg-tertiary'
+                      ? 'border-accent bg-surface-strong'
+                      : 'border-hairline hover:bg-surface-strong'
                   }`}
                   data-testid={`settings-provider-${opt.value}`}
                 >
@@ -441,7 +441,7 @@ function DirectApiPanel(): React.JSX.Element {
     const isSaving = saving === provider;
     return (
       <div
-        className="rounded-md border border-border-primary p-3"
+        className="rounded-md border border-hairline p-3"
         data-testid={`settings-direct-api-${provider}`}
       >
         <div className="mb-2 flex items-center justify-between">
@@ -470,7 +470,7 @@ function DirectApiPanel(): React.JSX.Element {
             onChange={(e) => {
               setInputValue(e.target.value);
             }}
-            className="flex-1 rounded-md border border-border-primary bg-bg-secondary px-2 py-1 font-mono text-xs text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none"
+            className="flex-1 rounded-md border border-hairline bg-canvas-soft px-2 py-1 font-mono text-xs text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none"
             data-testid={`settings-direct-api-${provider}-field`}
             disabled={isSaving}
             autoComplete="off"
@@ -482,7 +482,7 @@ function DirectApiPanel(): React.JSX.Element {
               void handleSave(provider, trimmed);
             }}
             disabled={isSaving || trimmed.length === 0}
-            className="rounded-md border border-border-primary bg-bg-tertiary px-3 py-1 text-xs hover:bg-bg-primary disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-hairline bg-surface-strong px-3 py-1 text-xs hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
             data-testid={`settings-direct-api-${provider}-save`}
           >
             {t('settings.direct_api.save')}
@@ -494,7 +494,7 @@ function DirectApiPanel(): React.JSX.Element {
                 void handleSave(provider, '');
               }}
               disabled={isSaving}
-              className="rounded-md border border-red-600/40 bg-red-900/20 px-3 py-1 text-xs text-red-300 hover:bg-red-900/30 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md border border-semantic-danger/40 bg-semantic-danger/10 px-3 py-1 text-xs text-semantic-danger hover:bg-semantic-danger/20 disabled:cursor-not-allowed disabled:opacity-50"
               data-testid={`settings-direct-api-${provider}-clear`}
             >
               {t('settings.direct_api.clear')}
@@ -541,7 +541,7 @@ function DirectApiPanel(): React.JSX.Element {
           )}
           {error !== null && (
             <p
-              className="break-words font-mono text-[11px] text-red-400"
+              className="break-words font-mono text-[11px] text-semantic-danger"
               data-testid="settings-direct-api-error"
             >
               {error}
@@ -675,7 +675,7 @@ function PermissionGrantsBlock(): React.JSX.Element {
 
   return (
     <section
-      className="mb-4 rounded-md border border-border-primary bg-bg-secondary p-3"
+      className="mb-4 rounded-md border border-hairline bg-canvas-soft p-3"
       data-testid="settings-permission-grants"
     >
       <header className="mb-2 flex items-start justify-between gap-3">
@@ -691,7 +691,7 @@ function PermissionGrantsBlock(): React.JSX.Element {
             void reload();
           }}
           disabled={loading}
-          className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-xs hover:bg-bg-primary disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md border border-hairline bg-surface-strong px-2 py-1 text-xs hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="settings-permission-grants-refresh"
         >
           {t('settings.permission.grants.refresh')}
@@ -700,7 +700,7 @@ function PermissionGrantsBlock(): React.JSX.Element {
 
       {error !== null && (
         <p
-          className="mb-2 break-words font-mono text-[11px] text-red-400"
+          className="mb-2 break-words font-mono text-[11px] text-semantic-danger"
           data-testid="settings-permission-grants-error"
         >
           {error}
@@ -720,26 +720,26 @@ function PermissionGrantsBlock(): React.JSX.Element {
         >
           <thead className="text-text-tertiary">
             <tr>
-              <th className="border-b border-border-primary py-1 pr-3 font-medium">
+              <th className="border-b border-hairline py-1 pr-3 font-medium">
                 {t('settings.permission.grants.col.capability')}
               </th>
-              <th className="border-b border-border-primary py-1 pr-3 font-medium">
+              <th className="border-b border-hairline py-1 pr-3 font-medium">
                 {t('settings.permission.grants.col.target')}
               </th>
-              <th className="border-b border-border-primary py-1 pr-3 font-medium">
+              <th className="border-b border-hairline py-1 pr-3 font-medium">
                 {t('settings.permission.grants.col.scope')}
               </th>
-              <th className="border-b border-border-primary py-1 pr-3 font-medium">
+              <th className="border-b border-hairline py-1 pr-3 font-medium">
                 {t('settings.permission.grants.col.granted_at')}
               </th>
-              <th className="border-b border-border-primary py-1 font-medium" />
+              <th className="border-b border-hairline py-1 font-medium" />
             </tr>
           </thead>
           <tbody>
             {grants.map((g) => (
               <tr
                 key={g.id || `${g.capability}-${g.granted_at}`}
-                className="border-b border-border-primary/30 last:border-b-0"
+                className="border-b border-hairline/30 last:border-b-0"
                 data-testid={`settings-permission-grant-row-${g.id}`}
               >
                 <td className="py-1 pr-3 font-mono text-text-primary">{g.capability}</td>
@@ -757,7 +757,7 @@ function PermissionGrantsBlock(): React.JSX.Element {
                       void handleRevoke(g.id);
                     }}
                     disabled={g.id === ''}
-                    className="rounded-md border border-red-600/40 bg-red-900/20 px-2 py-0.5 text-[10px] text-red-300 hover:bg-red-900/30 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-md border border-semantic-danger/40 bg-semantic-danger/10 px-2 py-0.5 text-[10px] text-semantic-danger hover:bg-semantic-danger/20 disabled:cursor-not-allowed disabled:opacity-50"
                     data-testid={`settings-permission-grant-revoke-${g.id}`}
                   >
                     {t('settings.permission.grants.revoke')}
@@ -881,8 +881,8 @@ function PermissionPanel(): React.JSX.Element {
                   <label
                     className={`flex cursor-pointer items-start gap-2 rounded-md border p-3 ${
                       active
-                        ? 'border-accent bg-bg-tertiary'
-                        : 'border-border-primary hover:bg-bg-tertiary'
+                        ? 'border-accent bg-surface-strong'
+                        : 'border-hairline hover:bg-surface-strong'
                     }`}
                     data-testid={`settings-permission-${opt}`}
                   >
@@ -916,7 +916,7 @@ function PermissionPanel(): React.JSX.Element {
 
           <section
             aria-label={t('settings.permission.included_aria')}
-            className="rounded-md border border-border-primary bg-bg-secondary p-3"
+            className="rounded-md border border-hairline bg-canvas-soft p-3"
             data-testid="settings-permission-capabilities"
           >
             <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
@@ -935,7 +935,7 @@ function PermissionPanel(): React.JSX.Element {
                 {currentCapabilities.map((cap) => (
                   <li
                     key={cap}
-                    className="rounded bg-bg-tertiary px-2 py-1 font-mono text-text-secondary"
+                    className="rounded bg-surface-strong px-2 py-1 font-mono text-text-secondary"
                   >
                     {cap}
                   </li>
@@ -1066,8 +1066,8 @@ function ThemePanel(): React.JSX.Element {
                 <label
                   className={`flex cursor-pointer items-start gap-2 rounded-md border p-3 ${
                     active
-                      ? 'border-accent bg-bg-tertiary'
-                      : 'border-border-primary hover:bg-bg-tertiary'
+                      ? 'border-accent bg-surface-strong'
+                      : 'border-hairline hover:bg-surface-strong'
                   }`}
                   data-testid={`settings-theme-${opt.value}`}
                 >
@@ -1123,7 +1123,7 @@ function OnboardingPanel({ onReopenOnboarding }: OnboardingPanelProps): React.JS
         type="button"
         onClick={onReopenOnboarding}
         disabled={onReopenOnboarding === undefined}
-        className="rounded-md border border-border-primary bg-bg-secondary px-4 py-2 text-sm hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-md border border-hairline bg-canvas-soft px-4 py-2 text-sm hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-50"
         data-testid="settings-reopen-onboarding"
       >
         {t('settings.onboarding.reopen')}

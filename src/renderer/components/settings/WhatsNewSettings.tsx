@@ -93,7 +93,7 @@ export function WhatsNewSettings(): React.JSX.Element {
         {RELEASES.map((release) => (
           <li
             key={release.version}
-            className="rounded-md border border-border-primary bg-bg-secondary p-4"
+            className="rounded-md border border-hairline bg-canvas-soft p-4"
             data-testid={`whats-new-release-${release.version}`}
           >
             <div className="mb-1 flex items-baseline gap-2">

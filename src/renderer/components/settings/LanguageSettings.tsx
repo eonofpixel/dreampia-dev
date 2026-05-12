@@ -111,8 +111,8 @@ export function LanguageSettings(): React.JSX.Element {
                 <label
                   className={`flex cursor-pointer items-start gap-2 rounded-md border p-3 ${
                     active
-                      ? 'border-accent bg-bg-tertiary'
-                      : 'border-border-primary hover:bg-bg-tertiary'
+                      ? 'border-accent bg-surface-strong'
+                      : 'border-hairline hover:bg-surface-strong'
                   }`}
                   data-testid={`settings-language-${opt.value}`}
                 >

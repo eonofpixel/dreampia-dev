@@ -206,7 +206,7 @@ interface AboutSectionProps {
 
 function AboutSection({ title, children }: AboutSectionProps): React.JSX.Element {
   return (
-    <section className="rounded-md border border-border-primary bg-bg-secondary p-3">
+    <section className="rounded-md border border-hairline bg-canvas-soft p-3">
       <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
         {title}
       </h4>

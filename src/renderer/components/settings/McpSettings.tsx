@@ -38,11 +38,11 @@ export interface McpSettingsProps {
 }
 
 const STATUS_COLORS: Record<McpServerStatusUI, string> = {
-  disconnected: 'bg-gray-500',
-  connecting: 'bg-yellow-500',
-  ready: 'bg-green-500',
-  error: 'bg-red-500',
-  disabled: 'bg-gray-400',
+  disconnected: 'bg-text-tertiary',
+  connecting: 'bg-semantic-warning',
+  ready: 'bg-semantic-success',
+  error: 'bg-semantic-danger',
+  disabled: 'bg-text-tertiary',
 };
 
 /** v1.7.18 — locale reactive label. caller 가 useT() 결과를 전달. */
@@ -72,16 +72,16 @@ export function McpSettings({ open, onClose }: McpSettingsProps): React.JSX.Elem
       aria-modal="true"
       aria-label={t('mcp.modal_aria')}
     >
-      <div className="flex max-h-[90vh] w-[800px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl">
+      <div className="flex max-h-[90vh] w-[800px] max-w-[95vw] flex-col rounded-lg border border-hairline bg-canvas shadow-xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border-primary p-4">
+        <div className="flex items-center justify-between border-b border-hairline p-4">
           <div>
             <h2 className="text-lg font-semibold">{t('mcp.title')}</h2>
             <p className="text-xs text-text-secondary">{t('mcp.subtitle')}</p>
           </div>
           <button
             onClick={onClose}
-            className="rounded-md p-2 hover:bg-bg-tertiary"
+            className="rounded-md p-2 hover:bg-surface-strong"
             aria-label={t('mcp.close')}
           >
             <X className="h-4 w-4" />
@@ -167,7 +167,7 @@ export function McpSettingsPanel(): React.JSX.Element {
       {/* Body */}
       <div className="flex-1 overflow-y-auto p-4">
         {error !== null && (
-          <div className="mb-3 flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">
+          <div className="mb-3 flex items-start gap-2 rounded-md border border-semantic-danger/40 bg-semantic-danger/10 p-3 text-sm text-semantic-danger">
             <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
             <span>{error}</span>
           </div>
@@ -208,12 +208,12 @@ export function McpSettingsPanel(): React.JSX.Element {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between border-t border-border-primary p-3">
+      <div className="flex items-center justify-between border-t border-hairline p-3">
         <button
           onClick={() => {
             void refresh();
           }}
-          className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-bg-tertiary"
+          className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-surface-strong"
         >
           <RefreshCw className="h-3.5 w-3.5" />
           {t('mcp.refresh')}
@@ -222,7 +222,7 @@ export function McpSettingsPanel(): React.JSX.Element {
           onClick={() => {
             openAddForm(null);
           }}
-          className="flex items-center gap-2 rounded-md bg-bg-tertiary px-3 py-1.5 text-sm font-medium hover:bg-bg-quaternary"
+          className="flex items-center gap-2 rounded-md bg-surface-strong px-3 py-1.5 text-sm font-medium hover:bg-surface-card"
           data-testid="mcp-add-button"
         >
           <Plus className="h-3.5 w-3.5" />
@@ -340,13 +340,13 @@ function DiscoveredRow({ source, config, onAdd }: DiscoveredRowProps): React.JSX
   const t = useT();
   return (
     <li
-      className="flex items-start justify-between gap-3 rounded-md border border-border-primary bg-bg-elevated p-2.5"
+      className="flex items-start justify-between gap-3 rounded-md border border-hairline bg-surface-card p-2.5"
       data-testid={`discovered-${config.id}`}
     >
       <div className="min-w-0 flex-1">
         <p className="text-sm">
           <span className="font-medium">{config.name}</span>
-          <span className="ml-2 rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px] text-text-tertiary">
+          <span className="ml-2 rounded bg-surface-strong px-1.5 py-0.5 text-[10px] text-text-tertiary">
             {source} CLI
           </span>
         </p>
@@ -359,7 +359,7 @@ function DiscoveredRow({ source, config, onAdd }: DiscoveredRowProps): React.JSX
       <button
         type="button"
         onClick={onAdd}
-        className="flex flex-shrink-0 items-center gap-1 rounded-md border border-border-primary bg-bg-secondary px-2.5 py-1 text-xs hover:bg-bg-tertiary"
+        className="flex flex-shrink-0 items-center gap-1 rounded-md border border-hairline bg-canvas-soft px-2.5 py-1 text-xs hover:bg-surface-strong"
         data-testid={`discovered-add-${config.id}`}
       >
         <Plus className="h-3 w-3" />
@@ -378,7 +378,7 @@ function SuggestedRow({ suggested, onAdd }: SuggestedRowProps): React.JSX.Elemen
   const t = useT();
   return (
     <li
-      className="flex items-start justify-between gap-3 rounded-md border border-border-primary bg-bg-elevated p-2.5"
+      className="flex items-start justify-between gap-3 rounded-md border border-hairline bg-surface-card p-2.5"
       data-testid={`suggested-${suggested.id}`}
     >
       <div className="min-w-0 flex-1">
@@ -389,7 +389,7 @@ function SuggestedRow({ suggested, onAdd }: SuggestedRowProps): React.JSX.Elemen
       <button
         type="button"
         onClick={onAdd}
-        className="flex flex-shrink-0 items-center gap-1 rounded-md border border-border-primary bg-bg-secondary px-2.5 py-1 text-xs hover:bg-bg-tertiary"
+        className="flex flex-shrink-0 items-center gap-1 rounded-md border border-hairline bg-canvas-soft px-2.5 py-1 text-xs hover:bg-surface-strong"
         data-testid={`suggested-add-${suggested.id}`}
       >
         <Plus className="h-3 w-3" />
@@ -419,7 +419,7 @@ function McpServerRow({
   const t = useT();
   const sLabel = statusLabel(t, server.status);
   return (
-    <li className="rounded-md border border-border-primary p-3">
+    <li className="rounded-md border border-hairline p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -441,7 +441,7 @@ function McpServerRow({
             {server.pid !== undefined ? ` · PID ${server.pid}` : ''}
           </div>
           {server.last_error !== undefined && (
-            <p className="mt-1 text-xs text-red-400">
+            <p className="mt-1 text-xs text-semantic-danger">
               {t('mcp.row_error', { e: server.last_error })}
             </p>
           )}
@@ -449,7 +449,7 @@ function McpServerRow({
         <div className="flex flex-shrink-0 gap-1">
           <button
             onClick={onViewLogs}
-            className="rounded-md p-1.5 hover:bg-bg-tertiary"
+            className="rounded-md p-1.5 hover:bg-surface-strong"
             aria-label={t('mcp.row.view_logs')}
             title={t('mcp.row.view_logs')}
           >
@@ -457,7 +457,7 @@ function McpServerRow({
           </button>
           <button
             onClick={onRestart}
-            className="rounded-md p-1.5 hover:bg-bg-tertiary"
+            className="rounded-md p-1.5 hover:bg-surface-strong"
             aria-label={t('mcp.row.restart')}
             title={t('mcp.row.restart')}
           >
@@ -465,7 +465,7 @@ function McpServerRow({
           </button>
           <button
             onClick={onRemove}
-            className="rounded-md p-1.5 text-red-400 hover:bg-red-500/10"
+            className="rounded-md p-1.5 text-semantic-danger hover:bg-semantic-danger/10"
             aria-label={t('mcp.row.remove')}
             title={t('mcp.row.remove')}
           >
@@ -578,14 +578,14 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
         onSubmit={(e) => {
           void handleSubmit(e);
         }}
-        className="flex max-h-[90vh] w-[600px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl"
+        className="flex max-h-[90vh] w-[600px] max-w-[95vw] flex-col rounded-lg border border-hairline bg-canvas shadow-xl"
       >
-        <div className="flex items-center justify-between border-b border-border-primary p-4">
+        <div className="flex items-center justify-between border-b border-hairline p-4">
           <h3 className="text-base font-semibold">{t('mcp.add_form_title')}</h3>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-2 hover:bg-bg-tertiary"
+            className="rounded-md p-2 hover:bg-surface-strong"
             aria-label={t('mcp.close')}
           >
             <X className="h-4 w-4" />
@@ -594,7 +594,7 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
 
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
           {formError !== null && (
-            <div className="rounded-md border border-red-500/40 bg-red-500/10 p-2 text-xs text-red-300">
+            <div className="rounded-md border border-semantic-danger/40 bg-semantic-danger/10 p-2 text-xs text-semantic-danger">
               {formError}
             </div>
           )}
@@ -605,7 +605,7 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
               onChange={(e) => {
                 setId(e.target.value);
               }}
-              className="w-full rounded-md border border-border-primary bg-bg-secondary px-2 py-1 text-sm font-mono"
+              className="w-full rounded-md border border-hairline bg-canvas-soft px-2 py-1 text-sm font-mono"
               required
             />
           </Field>
@@ -616,7 +616,7 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
               onChange={(e) => {
                 setName(e.target.value);
               }}
-              className="w-full rounded-md border border-border-primary bg-bg-secondary px-2 py-1 text-sm"
+              className="w-full rounded-md border border-hairline bg-canvas-soft px-2 py-1 text-sm"
               required
             />
           </Field>
@@ -627,7 +627,7 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
               onChange={(e) => {
                 setCommand(e.target.value);
               }}
-              className="w-full rounded-md border border-border-primary bg-bg-secondary px-2 py-1 text-sm font-mono"
+              className="w-full rounded-md border border-hairline bg-canvas-soft px-2 py-1 text-sm font-mono"
               required
             />
           </Field>
@@ -638,7 +638,7 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
               onChange={(e) => {
                 setArgsText(e.target.value);
               }}
-              className="h-20 w-full resize-y rounded-md border border-border-primary bg-bg-secondary px-2 py-1 text-sm font-mono"
+              className="h-20 w-full resize-y rounded-md border border-hairline bg-canvas-soft px-2 py-1 text-sm font-mono"
             />
           </Field>
 
@@ -648,7 +648,7 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
               onChange={(e) => {
                 setEnvText(e.target.value);
               }}
-              className="h-20 w-full resize-y rounded-md border border-border-primary bg-bg-secondary px-2 py-1 text-sm font-mono"
+              className="h-20 w-full resize-y rounded-md border border-hairline bg-canvas-soft px-2 py-1 text-sm font-mono"
             />
           </Field>
 
@@ -658,7 +658,7 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
               onChange={(e) => {
                 setCwd(e.target.value);
               }}
-              className="w-full rounded-md border border-border-primary bg-bg-secondary px-2 py-1 text-sm font-mono"
+              className="w-full rounded-md border border-hairline bg-canvas-soft px-2 py-1 text-sm font-mono"
             />
           </Field>
 
@@ -674,11 +674,11 @@ function McpAddForm({ onClose, onSubmit, initial }: McpAddFormProps): React.JSX.
           </label>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-border-primary p-3">
+        <div className="flex justify-end gap-2 border-t border-hairline p-3">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md px-3 py-1.5 text-sm hover:bg-bg-tertiary"
+            className="rounded-md px-3 py-1.5 text-sm hover:bg-surface-strong"
           >
             {t('mcp.cancel')}
           </button>
@@ -714,18 +714,18 @@ function McpLogsModal({ id, lines, onClose }: McpLogsModalProps): React.JSX.Elem
       aria-modal="true"
       aria-label={t('mcp.logs.aria', { id })}
     >
-      <div className="flex max-h-[80vh] w-[700px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl">
-        <div className="flex items-center justify-between border-b border-border-primary p-3">
+      <div className="flex max-h-[80vh] w-[700px] max-w-[95vw] flex-col rounded-lg border border-hairline bg-canvas shadow-xl">
+        <div className="flex items-center justify-between border-b border-hairline p-3">
           <h3 className="text-base font-semibold">{t('mcp.logs.title', { id })}</h3>
           <button
             onClick={onClose}
-            className="rounded-md p-2 hover:bg-bg-tertiary"
+            className="rounded-md p-2 hover:bg-surface-strong"
             aria-label={t('mcp.close')}
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto bg-bg-secondary p-3">
+        <div className="flex-1 overflow-y-auto bg-canvas-soft p-3">
           {lines.length === 0 ? (
             <p className="text-sm text-text-secondary">{t('mcp.logs.empty')}</p>
           ) : (

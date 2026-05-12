@@ -78,7 +78,7 @@ export function DiagnoseSettings(): React.JSX.Element {
             void runDiagnose();
           }}
           disabled={loading}
-          className="rounded-md border border-border-primary bg-bg-secondary px-3 py-1.5 text-xs hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md border border-hairline bg-canvas-soft px-3 py-1.5 text-xs hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="settings-diagnose-refresh"
         >
           {t('settings.diagnose.refresh')}
@@ -161,7 +161,7 @@ function TelemetrySection({ t }: SubProps): React.JSX.Element {
 
   return (
     <section
-      className="mt-6 rounded-md border border-border-primary p-4"
+      className="mt-6 rounded-md border border-hairline p-4"
       data-testid="settings-telemetry-section"
     >
       <h4 className="mb-1 text-sm font-semibold">{t('settings.diagnose.telemetry.title')}</h4>
@@ -182,7 +182,7 @@ function TelemetrySection({ t }: SubProps): React.JSX.Element {
       </label>
       {error !== null && (
         <p
-          className="mt-3 break-words rounded border border-red-600/40 bg-red-900/20 p-2 font-mono text-[11px] text-red-300"
+          className="mt-3 break-words rounded border border-semantic-danger/40 bg-semantic-danger/10 p-2 font-mono text-[11px] text-semantic-danger"
           data-testid="settings-telemetry-error"
         >
           {error}
@@ -232,7 +232,7 @@ function WorkspaceBackfillSection({ t }: SubProps): React.JSX.Element {
 
   return (
     <section
-      className="mt-6 rounded-md border border-border-primary p-4"
+      className="mt-6 rounded-md border border-hairline p-4"
       data-testid="settings-workspace-backfill"
     >
       <h4 className="mb-1 text-sm font-semibold">
@@ -247,7 +247,7 @@ function WorkspaceBackfillSection({ t }: SubProps): React.JSX.Element {
           void handleRun();
         }}
         disabled={running}
-        className="rounded-md border border-border-primary bg-bg-secondary px-3 py-1.5 text-xs hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-md border border-hairline bg-canvas-soft px-3 py-1.5 text-xs hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-50"
         data-testid="settings-workspace-backfill-run"
       >
         {running
@@ -278,7 +278,7 @@ function WorkspaceBackfillSection({ t }: SubProps): React.JSX.Element {
       )}
       {err !== null && (
         <p
-          className="mt-3 break-words rounded border border-red-600/40 bg-red-900/20 p-2 font-mono text-[11px] text-red-300"
+          className="mt-3 break-words rounded border border-semantic-danger/40 bg-semantic-danger/10 p-2 font-mono text-[11px] text-semantic-danger"
           data-testid="settings-workspace-backfill-error"
         >
           {err}
@@ -346,7 +346,7 @@ function AuditLogSection({ t }: SubProps): React.JSX.Element {
 
   return (
     <section
-      className="mt-6 rounded-md border border-border-primary bg-bg-secondary p-3"
+      className="mt-6 rounded-md border border-hairline bg-canvas-soft p-3"
       data-testid="settings-diagnose-audit"
     >
       <header className="mb-2 flex items-start justify-between gap-3">
@@ -360,7 +360,7 @@ function AuditLogSection({ t }: SubProps): React.JSX.Element {
             void reload();
           }}
           disabled={auditLoading}
-          className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-xs hover:bg-bg-primary disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md border border-hairline bg-surface-strong px-2 py-1 text-xs hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="settings-diagnose-audit-refresh"
         >
           {t('settings.diagnose.audit.refresh')}
@@ -371,11 +371,11 @@ function AuditLogSection({ t }: SubProps): React.JSX.Element {
         <p className="text-xs text-text-secondary">{t('settings.diagnose.loading')}</p>
       ) : auditError !== null ? (
         <div
-          className="rounded border border-red-400/40 bg-red-500/10 p-2"
+          className="rounded border border-semantic-danger/40 bg-semantic-danger/10 p-2"
           role="alert"
           data-testid="settings-diagnose-audit-error"
         >
-          <p className="text-xs font-semibold text-red-400">
+          <p className="text-xs font-semibold text-semantic-danger">
             {t('settings.diagnose.audit.error.title')}
           </p>
           <p className="break-words font-mono text-[11px] text-text-secondary">{auditError}</p>
@@ -406,19 +406,19 @@ function AuditTable({
       >
         <thead className="text-text-tertiary">
           <tr>
-            <th className="border-b border-border-primary py-1 pr-3 font-medium">
+            <th className="border-b border-hairline py-1 pr-3 font-medium">
               {t('settings.diagnose.audit.column.time')}
             </th>
-            <th className="border-b border-border-primary py-1 pr-3 font-medium">
+            <th className="border-b border-hairline py-1 pr-3 font-medium">
               {t('settings.diagnose.audit.column.event')}
             </th>
-            <th className="border-b border-border-primary py-1 pr-3 font-medium">
+            <th className="border-b border-hairline py-1 pr-3 font-medium">
               {t('settings.diagnose.audit.column.capability')}
             </th>
-            <th className="border-b border-border-primary py-1 pr-3 font-medium">
+            <th className="border-b border-hairline py-1 pr-3 font-medium">
               {t('settings.diagnose.audit.column.outcome')}
             </th>
-            <th className="border-b border-border-primary py-1 font-medium">
+            <th className="border-b border-hairline py-1 font-medium">
               {t('settings.diagnose.audit.column.target')}
             </th>
           </tr>
@@ -427,7 +427,7 @@ function AuditTable({
           {entries.map((e) => (
             <tr
               key={e.id}
-              className="border-b border-border-primary/30 last:border-b-0 hover:bg-bg-tertiary/40"
+              className="border-b border-hairline/30 last:border-b-0 hover:bg-surface-strong/40"
               data-testid={`settings-diagnose-audit-row-${e.id}`}
             >
               <td className="py-1 pr-3 font-mono text-text-secondary">
@@ -472,7 +472,7 @@ function formatAuditTime(iso: string): string {
 
 function auditOutcomeClass(e: AuditEntry): string {
   if (e.event.startsWith('permission.denied') || e.event === 'tool_use.failed') {
-    return 'text-red-400';
+    return 'text-semantic-danger';
   }
   if (e.event === 'tool_use.cancelled' || e.event === 'tool_use.timeout') {
     return 'text-yellow-400';
@@ -494,11 +494,11 @@ interface SubProps {
 function DiagnoseErrorBlock({ t, error }: SubProps & { error: string }): React.JSX.Element {
   return (
     <div
-      className="rounded-md border border-red-400/40 bg-red-500/10 p-4"
+      className="rounded-md border border-semantic-danger/40 bg-semantic-danger/10 p-4"
       role="alert"
       data-testid="settings-diagnose-error"
     >
-      <h4 className="mb-2 text-sm font-semibold text-red-400">
+      <h4 className="mb-2 text-sm font-semibold text-semantic-danger">
         {t('settings.diagnose.error.title')}
       </h4>
       <p className="break-words font-mono text-xs text-text-secondary">{error}</p>
@@ -585,12 +585,12 @@ function DiagnoseDataBlock({ t, data }: SubProps & { data: DiagnoseShape }): Rea
         ]}
       />
       {dbHint !== undefined && (
-        <p className="text-xs text-red-400" data-testid="settings-diagnose-db-load-failed">
+        <p className="text-xs text-semantic-danger" data-testid="settings-diagnose-db-load-failed">
           {dbHint}
         </p>
       )}
       {data.db_error !== undefined && (
-        <p className="font-mono text-xs text-red-400" data-testid="settings-diagnose-db-error">
+        <p className="font-mono text-xs text-semantic-danger" data-testid="settings-diagnose-db-error">
           {data.db_error}
         </p>
       )}
@@ -622,7 +622,7 @@ function DiagnoseSection({
   rows: ReadonlyArray<RowSpec>;
 }): React.JSX.Element {
   return (
-    <section className="rounded-md border border-border-primary bg-bg-secondary p-3">
+    <section className="rounded-md border border-hairline bg-canvas-soft p-3">
       <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
         {title}
       </h4>
@@ -632,7 +632,7 @@ function DiagnoseSection({
             r.ok === true
               ? 'text-emerald-400'
               : r.ok === false
-                ? 'text-red-400'
+                ? 'text-semantic-danger'
                 : 'text-text-secondary';
           return (
             <div key={r.key} className="flex items-center justify-between gap-3">
@@ -653,7 +653,7 @@ function DiagnoseSection({
 
 function DiagnoseHints({ t }: SubProps): React.JSX.Element {
   return (
-    <div className="mt-3 rounded-md border border-border-primary bg-bg-tertiary p-3">
+    <div className="mt-3 rounded-md border border-hairline bg-surface-strong p-3">
       <h4 className="mb-1 text-xs font-semibold">{t('settings.diagnose.hint.heading')}</h4>
       <ul className="ml-4 list-disc space-y-1 text-xs text-text-secondary">
         <li>{t('settings.diagnose.hint.line1')}</li>

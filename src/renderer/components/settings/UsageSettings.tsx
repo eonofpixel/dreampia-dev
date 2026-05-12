@@ -102,9 +102,9 @@ export function UsageSettings({ open, onClose }: UsageSettingsProps): React.JSX.
       aria-modal="true"
       aria-label={t('usage.modal_aria')}
     >
-      <div className="flex max-h-[90vh] w-[860px] max-w-[95vw] flex-col rounded-lg border border-border-primary bg-bg-primary shadow-xl">
+      <div className="flex max-h-[90vh] w-[860px] max-w-[95vw] flex-col rounded-lg border border-hairline bg-canvas shadow-xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border-primary p-4">
+        <div className="flex items-center justify-between border-b border-hairline p-4">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-text-secondary" />
             <div>
@@ -114,7 +114,7 @@ export function UsageSettings({ open, onClose }: UsageSettingsProps): React.JSX.
           </div>
           <button
             onClick={onClose}
-            className="rounded-md p-2 hover:bg-bg-tertiary"
+            className="rounded-md p-2 hover:bg-surface-strong"
             aria-label={t('usage.close')}
           >
             <X className="h-4 w-4" />
@@ -181,7 +181,7 @@ export function UsageSettingsPanel(): React.JSX.Element {
       <div
         role="radiogroup"
         aria-label={t('usage.cost_limit')}
-        className="flex items-center gap-1 border-b border-border-primary p-2"
+        className="flex items-center gap-1 border-b border-hairline p-2"
       >
         {PRESETS.map((p) => (
           <button
@@ -192,7 +192,7 @@ export function UsageSettingsPanel(): React.JSX.Element {
             onClick={() => {
               setPreset(p);
             }}
-            className="rounded-md px-3 py-1.5 text-sm hover:bg-bg-tertiary data-[active=true]:bg-bg-tertiary data-[active=true]:font-medium"
+            className="rounded-md px-3 py-1.5 text-sm hover:bg-surface-strong data-[active=true]:bg-surface-strong data-[active=true]:font-medium"
           >
             {t(PRESET_LABEL_KEYS[p])}
           </button>
@@ -204,7 +204,7 @@ export function UsageSettingsPanel(): React.JSX.Element {
             onClick={() => {
               void handleExportCsv();
             }}
-            className="flex items-center gap-1.5 rounded-md border border-border-primary bg-bg-elevated px-2.5 py-1 text-xs hover:bg-bg-tertiary"
+            className="flex items-center gap-1.5 rounded-md border border-hairline bg-surface-card px-2.5 py-1 text-xs hover:bg-surface-strong"
             data-testid="usage-export-csv"
             aria-label={t('usage.export_csv')}
           >
@@ -217,7 +217,7 @@ export function UsageSettingsPanel(): React.JSX.Element {
       {/* Body */}
       <div className="flex-1 overflow-y-auto p-4">
         {error !== null && (
-          <div className="mb-3 flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">
+          <div className="mb-3 flex items-start gap-2 rounded-md border border-semantic-danger/40 bg-semantic-danger/10 p-3 text-sm text-semantic-danger">
             <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
             <span>{error}</span>
           </div>
@@ -235,7 +235,7 @@ export function UsageSettingsPanel(): React.JSX.Element {
             {/* Total card */}
             <section
               aria-label={t('usage.range_total_aria')}
-              className="mb-4 grid grid-cols-2 gap-2 rounded-md border border-border-primary bg-bg-secondary p-3 text-sm"
+              className="mb-4 grid grid-cols-2 gap-2 rounded-md border border-hairline bg-canvas-soft p-3 text-sm"
             >
               <div>
                 <div className="text-xs text-text-tertiary">{t(PRESET_LABEL_KEYS[preset])}</div>
@@ -253,7 +253,7 @@ export function UsageSettingsPanel(): React.JSX.Element {
             {daily.length > 0 && (
               <section className="mb-4">
                 <SectionHeader>{t('usage.daily_chart_title')}</SectionHeader>
-                <div className="rounded-md border border-border-primary bg-bg-secondary p-3 text-text-secondary">
+                <div className="rounded-md border border-hairline bg-canvas-soft p-3 text-text-secondary">
                   <UsageChart data={daily} metric="tokens" maxDays={30} />
                 </div>
               </section>
@@ -266,13 +266,13 @@ export function UsageSettingsPanel(): React.JSX.Element {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between border-t border-border-primary p-3">
+      <div className="flex items-center justify-between border-t border-hairline p-3">
         <span className="text-xs text-text-tertiary">
           {t('usage.last_refresh', { when: formatRefreshTime(t, lastRefreshedAt) })}
         </span>
         <button
           onClick={handleRefresh}
-          className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-bg-tertiary"
+          className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-surface-strong"
         >
           <RefreshCw className="h-3.5 w-3.5" />
           {t('usage.refresh')}
@@ -354,7 +354,7 @@ function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JS
       return {
         kind: 'over' as const,
         label: t('usage.cost_limit.exceeded'),
-        color: 'text-red-400',
+        color: 'text-semantic-danger',
       };
     }
     const ratio = currentMonthCost / limitUsd;
@@ -363,7 +363,7 @@ function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JS
       return {
         kind: 'over' as const,
         label: `${t('usage.cost_limit.exceeded')} (${pct})`,
-        color: 'text-red-400',
+        color: 'text-semantic-danger',
       };
     }
     if (ratio >= threshold) {
@@ -382,7 +382,7 @@ function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JS
 
   return (
     <section
-      className="mb-4 rounded-md border border-border-primary bg-bg-secondary p-3"
+      className="mb-4 rounded-md border border-hairline bg-canvas-soft p-3"
       data-testid="cost-limit-section"
     >
       <header className="mb-2 flex items-center gap-2">
@@ -415,14 +415,14 @@ function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JS
                   setDraftLimit(e.target.value);
                 }}
                 placeholder={t('usage.cost_limit.input_placeholder')}
-                className="flex-1 rounded-md border border-border-primary bg-bg-elevated px-2 py-1 text-sm font-mono"
+                className="flex-1 rounded-md border border-hairline bg-surface-card px-2 py-1 text-sm font-mono"
                 data-testid="cost-limit-input"
               />
             </label>
             <button
               type="button"
               onClick={handleSaveLimit}
-              className="rounded-md border border-border-primary bg-bg-elevated px-2 py-1 hover:bg-bg-tertiary"
+              className="rounded-md border border-hairline bg-surface-card px-2 py-1 hover:bg-surface-strong"
               data-testid="cost-limit-save"
             >
               {t('usage.cost_limit.save')}
@@ -446,7 +446,7 @@ function CostLimitSection({ currentMonthCost }: CostLimitSectionProps): React.JS
                   data-active={threshold === opt.value}
                   data-testid={`cost-limit-threshold-${opt.value}`}
                   onClick={() => handleThresholdChange(opt.value)}
-                  className="rounded-md px-2.5 py-0.5 hover:bg-bg-tertiary data-[active=true]:bg-bg-tertiary data-[active=true]:font-medium"
+                  className="rounded-md px-2.5 py-0.5 hover:bg-surface-strong data-[active=true]:bg-surface-strong data-[active=true]:font-medium"
                 >
                   {opt.label}
                 </button>
@@ -475,7 +475,7 @@ function SummarySection({ rows }: SummarySectionProps): React.JSX.Element {
     return (
       <section className="mb-4">
         <SectionHeader>{t('usage.summary.title')}</SectionHeader>
-        <p className="rounded-md border border-border-primary bg-bg-secondary p-3 text-xs text-text-tertiary">
+        <p className="rounded-md border border-hairline bg-canvas-soft p-3 text-xs text-text-tertiary">
           {t('usage.summary.empty')}
         </p>
       </section>
@@ -485,9 +485,9 @@ function SummarySection({ rows }: SummarySectionProps): React.JSX.Element {
   return (
     <section className="mb-4">
       <SectionHeader>{t('usage.summary.title')}</SectionHeader>
-      <div className="overflow-hidden rounded-md border border-border-primary">
+      <div className="overflow-hidden rounded-md border border-hairline">
         <table className="w-full text-sm">
-          <thead className="bg-bg-secondary text-left text-xs text-text-tertiary">
+          <thead className="bg-canvas-soft text-left text-xs text-text-tertiary">
             <tr>
               <th className="p-2 font-medium">{t('usage.summary.col.provider')}</th>
               <th className="p-2 font-medium">{t('usage.summary.col.model')}</th>
@@ -502,7 +502,7 @@ function SummarySection({ rows }: SummarySectionProps): React.JSX.Element {
               const cacheTotal =
                 row.total_cache_creation + row.total_cache_read + row.total_reasoning;
               return (
-                <tr key={`${row.provider}/${row.model}`} className="border-t border-border-primary">
+                <tr key={`${row.provider}/${row.model}`} className="border-t border-hairline">
                   <td className="p-2">
                     <span
                       className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs ${PROVIDER_BADGE_COLORS[row.provider]}`}
@@ -541,7 +541,7 @@ function DailySection({ rows }: DailySectionProps): React.JSX.Element {
     return (
       <section>
         <SectionHeader>{t('usage.daily.title')}</SectionHeader>
-        <p className="rounded-md border border-border-primary bg-bg-secondary p-3 text-xs text-text-tertiary">
+        <p className="rounded-md border border-hairline bg-canvas-soft p-3 text-xs text-text-tertiary">
           {t('usage.daily.empty')}
         </p>
       </section>
@@ -551,9 +551,9 @@ function DailySection({ rows }: DailySectionProps): React.JSX.Element {
   return (
     <section>
       <SectionHeader>{t('usage.daily.title')}</SectionHeader>
-      <div className="overflow-hidden rounded-md border border-border-primary">
+      <div className="overflow-hidden rounded-md border border-hairline">
         <table className="w-full text-sm">
-          <thead className="bg-bg-secondary text-left text-xs text-text-tertiary">
+          <thead className="bg-canvas-soft text-left text-xs text-text-tertiary">
             <tr>
               <th className="p-2 font-medium">{t('usage.daily.col.date')}</th>
               <th className="p-2 font-medium">{t('usage.daily.col.provider')}</th>
@@ -565,7 +565,7 @@ function DailySection({ rows }: DailySectionProps): React.JSX.Element {
             {rows.map((row, idx) => (
               <tr
                 key={`${row.date}/${row.provider}/${idx}`}
-                className="border-t border-border-primary"
+                className="border-t border-hairline"
               >
                 <td className="p-2 font-mono text-xs">{row.date}</td>
                 <td className="p-2">
@@ -617,7 +617,7 @@ function PricingFreshnessBanner(): React.JSX.Element | null {
   const stale = ageDays >= 90;
   const tone = stale
     ? 'border-yellow-700/40 bg-yellow-900/20 text-yellow-300'
-    : 'border-border-primary bg-bg-secondary text-text-secondary';
+    : 'border-hairline bg-canvas-soft text-text-secondary';
 
   return (
     <div

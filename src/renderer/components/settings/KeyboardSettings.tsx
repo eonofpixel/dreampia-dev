@@ -159,7 +159,7 @@ export function KeyboardSettings(): React.JSX.Element {
           </h3>
           <p className="text-xs text-text-secondary">
             행을 [편집] 으로 누른 뒤 원하는 키 조합을 입력하면 즉시 적용됩니다.{' '}
-            <code className="rounded bg-bg-tertiary px-1 font-mono">Mod</code> ={' '}
+            <code className="rounded bg-surface-strong px-1 font-mono">Mod</code> ={' '}
             {onMac ? '⌘ Cmd (macOS)' : 'Ctrl (Windows / Linux)'}.
           </p>
         </div>
@@ -167,7 +167,7 @@ export function KeyboardSettings(): React.JSX.Element {
           <button
             type="button"
             onClick={handleResetAll}
-            className="flex shrink-0 items-center gap-1 rounded-md border border-border-primary bg-bg-secondary px-3 py-1.5 text-xs hover:bg-bg-tertiary"
+            className="flex shrink-0 items-center gap-1 rounded-md border border-hairline bg-canvas-soft px-3 py-1.5 text-xs hover:bg-surface-strong"
             data-testid="settings-keyboard-reset-all"
             aria-label="모든 단축키 기본값으로"
           >
@@ -184,7 +184,7 @@ export function KeyboardSettings(): React.JSX.Element {
           {error !== null && (
             <div
               role="alert"
-              className="mb-3 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300"
+              className="mb-3 rounded-md border border-semantic-danger/40 bg-semantic-danger/10 p-3 text-xs text-semantic-danger"
               data-testid="settings-keyboard-error"
             >
               {error}
@@ -200,7 +200,7 @@ export function KeyboardSettings(): React.JSX.Element {
                   {CATEGORY_LABELS_KO[category]}
                 </h4>
                 <ul
-                  className="rounded-md border border-border-primary bg-bg-secondary"
+                  className="rounded-md border border-hairline bg-canvas-soft"
                   data-testid={`settings-keyboard-group-${category}`}
                 >
                   {defs.map((def, idx) => {
@@ -212,7 +212,7 @@ export function KeyboardSettings(): React.JSX.Element {
                       <li
                         key={def.action}
                         className={`flex items-center justify-between gap-3 px-3 py-2 ${
-                          idx > 0 ? 'border-t border-border-primary' : ''
+                          idx > 0 ? 'border-t border-hairline' : ''
                         }`}
                         data-testid={`settings-keyboard-row-${def.action}`}
                       >
@@ -223,7 +223,7 @@ export function KeyboardSettings(): React.JSX.Element {
                         <div className="flex shrink-0 items-center gap-2">
                           {isEditing ? (
                             <span
-                              className="rounded-md border border-accent bg-bg-tertiary px-2 py-1 font-mono text-xs text-accent"
+                              className="rounded-md border border-accent bg-surface-strong px-2 py-1 font-mono text-xs text-accent"
                               data-testid={`settings-keyboard-capture-${def.action}`}
                               role="status"
                               aria-live="polite"
@@ -232,7 +232,7 @@ export function KeyboardSettings(): React.JSX.Element {
                             </span>
                           ) : (
                             <kbd
-                              className="rounded-md bg-bg-tertiary px-2 py-1 font-mono text-xs text-text-secondary"
+                              className="rounded-md bg-surface-strong px-2 py-1 font-mono text-xs text-text-secondary"
                               data-testid={`settings-keyboard-combo-${def.action}`}
                             >
                               {formatShortcut(combo)}
@@ -244,7 +244,7 @@ export function KeyboardSettings(): React.JSX.Element {
                               onClick={() => {
                                 setEditing(null);
                               }}
-                              className="rounded-md p-1 text-text-tertiary hover:bg-bg-tertiary"
+                              className="rounded-md p-1 text-text-tertiary hover:bg-surface-strong"
                               aria-label="편집 취소"
                               data-testid={`settings-keyboard-cancel-${def.action}`}
                             >
@@ -258,7 +258,7 @@ export function KeyboardSettings(): React.JSX.Element {
                                   setError(null);
                                   setEditing(def.action);
                                 }}
-                                className="rounded-md p-1 text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary"
+                                className="rounded-md p-1 text-text-tertiary hover:bg-surface-strong hover:text-text-primary"
                                 aria-label={`${def.label} 단축키 편집`}
                                 data-testid={`settings-keyboard-edit-${def.action}`}
                               >
@@ -270,7 +270,7 @@ export function KeyboardSettings(): React.JSX.Element {
                                   onClick={() => {
                                     handleResetOne(def.action);
                                   }}
-                                  className="rounded-md p-1 text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary"
+                                  className="rounded-md p-1 text-text-tertiary hover:bg-surface-strong hover:text-text-primary"
                                   aria-label={`${def.label} 기본값 복원`}
                                   data-testid={`settings-keyboard-reset-${def.action}`}
                                 >
