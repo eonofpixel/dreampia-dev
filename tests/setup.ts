@@ -12,6 +12,7 @@ import { afterEach, beforeEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import type { Session, Turn } from '../src/types';
 import type { Result, SessionMetaPatch } from '../src/main/types';
+import type { CommandRunResult, RepoContextSummary } from '../src/types/workspace';
 // v0.11.0 (B2) — 매 테스트마다 i18n locale 을 default ('ko') 로 reset.
 // 한 테스트가 'en' 으로 전환해도 다음 테스트의 한국어 assertion 이 깨지지 않도록.
 import { setLocale } from '../src/renderer/i18n';
@@ -137,12 +138,7 @@ type AiStreamEndListener = (payload: MockStreamEndPayload) => void;
 
 // ── compare/* (v0.12.0 I) — mock IPC for useCompare / CompareModal tests ──
 type MockCompareSide = 'claude' | 'codex';
-type MockCompareSideStatus =
-  | 'pending'
-  | 'streaming'
-  | 'done'
-  | 'error'
-  | 'skipped';
+type MockCompareSideStatus = 'pending' | 'streaming' | 'done' | 'error' | 'skipped';
 type MockCompareRunStatus = 'running' | 'completed' | 'failed';
 interface MockCompareSideResult {
   status: MockCompareSideStatus;
@@ -295,6 +291,9 @@ const mockStore = {
   // popover 가 실제 파일 검색 흐름을 검증할 수 있다.
   workspaceFiles: [] as MockFileEntry[],
   workspaceFileContents: new Map<string, MockFileContent>(),
+  repoContext: null as RepoContextSummary | null,
+  repoContextError: null as string | null,
+  commandResults: new Map<string, CommandRunResult>(),
   // v2.7.0 (Phase 3) — workspace.writeFile mock 분기.
   writeFileBehavior: undefined as 'success' | 'mtime_mismatch' | 'fail' | undefined,
   lastWrittenFile: null as { rel_path: string; content: string } | null,
@@ -531,6 +530,57 @@ function toMeta(s: Session): MockSessionMeta {
   return meta;
 }
 
+function buildMockRepoContext(workspaceRoot: string): RepoContextSummary {
+  const files = [...mockStore.workspaceFiles];
+  const keyFiles =
+    files.length > 0
+      ? files.slice(0, 6)
+      : [{ path: 'README.md', size_bytes: 1, mtime: '2026-01-01T00:00:00.000Z' }];
+  const testFiles = files.filter(
+    (file) =>
+      /(^|\/)(test|tests|e2e)\//i.test(file.path) || /\.(test|spec)\.[cm]?[jt]sx?$/i.test(file.path)
+  );
+  return {
+    root: workspaceRoot,
+    generated_at: '2026-01-01T00:00:00.000Z',
+    status: 'ready',
+    file_count: files.length,
+    indexed_count: files.length,
+    truncated: false,
+    ignored_patterns: ['node_modules/**', '.git/**', 'dist/**'],
+    languages: [{ language: 'TypeScript', files: 1, bytes: 120 }],
+    key_files: keyFiles.map((file) => ({
+      path: file.path,
+      reason: file.path === 'README.md' ? 'project overview' : 'mock context',
+    })),
+    test_files: testFiles.slice(0, 6).map((file) => ({
+      path: file.path,
+      reason: 'test candidate',
+    })),
+    scripts: [
+      { name: 'typecheck', command: 'npm run typecheck' },
+      { name: 'lint', command: 'npm run lint' },
+      { name: 'test', command: 'npm test' },
+    ],
+    safe_commands: [
+      { name: 'typecheck', command: 'npm run typecheck' },
+      { name: 'lint', command: 'npm run lint' },
+      { name: 'test', command: 'npm test' },
+    ],
+    source_roots: ['src', 'tests'],
+    git: {
+      is_repo: true,
+      branch: 'main',
+      dirty_count: 0,
+      staged_count: 0,
+      unstaged_count: 0,
+      untracked_count: 0,
+      files: [],
+    },
+    warnings: [],
+  };
+}
+
 beforeEach(() => {
   mockStore.sessions.clear();
   mockStore.locks.clear();
@@ -577,6 +627,9 @@ beforeEach(() => {
   mockStore.workspacePickNext = undefined;
   mockStore.workspaceFiles = [];
   mockStore.workspaceFileContents.clear();
+  mockStore.repoContext = null;
+  mockStore.repoContextError = null;
+  mockStore.commandResults.clear();
   mockStore.writeFileBehavior = undefined;
   mockStore.lastWrittenFile = null;
   mockStore.workspaceFileStats.clear();
@@ -622,6 +675,8 @@ beforeEach(() => {
       // v0.6.0 (F-019) — file IPC mock clear (정의돼 있을 때만).
       (ws.listFiles as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
       (ws.readFile as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
+      (ws.inspect as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
+      (ws.runSafeCommand as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
     }
     const sess = window.dreampia.session;
     if (sess !== undefined) {
@@ -632,20 +687,12 @@ beforeEach(() => {
       (sess.updateMeta as unknown as { mockClear?: () => void }).mockClear?.();
       (sess.delete as unknown as { mockClear?: () => void }).mockClear?.();
       // v0.5.0 (F-018) — 새 mutation IPC mock clear (정의돼 있을 때만).
-      (
-        sess.clearTurns as unknown as { mockClear?: () => void } | undefined
-      )?.mockClear?.();
-      (
-        sess.updateConversation as unknown as { mockClear?: () => void } | undefined
-      )?.mockClear?.();
+      (sess.clearTurns as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
+      (sess.updateConversation as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
       // v0.7.0 (F-026) — 검색 IPC mock clear.
-      (
-        sess.search as unknown as { mockClear?: () => void } | undefined
-      )?.mockClear?.();
+      (sess.search as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
       // v0.8.0 — H Permission Dropdown mock clear.
-      (
-        sess.updatePermission as unknown as { mockClear?: () => void } | undefined
-      )?.mockClear?.();
+      (sess.updatePermission as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
     }
     const appApi = window.dreampia.app;
     if (appApi !== undefined) {
@@ -667,12 +714,8 @@ beforeEach(() => {
         appApi.setDefaultPermissionLevel as unknown as { mockClear?: () => void } | undefined
       )?.mockClear?.();
       // v0.8.0 — theme + capability IPC mock clear (정의돼 있을 때만).
-      (
-        appApi.getTheme as unknown as { mockClear?: () => void } | undefined
-      )?.mockClear?.();
-      (
-        appApi.setTheme as unknown as { mockClear?: () => void } | undefined
-      )?.mockClear?.();
+      (appApi.getTheme as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
+      (appApi.setTheme as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
       (
         appApi.getPermissionCapabilities as unknown as { mockClear?: () => void } | undefined
       )?.mockClear?.();
@@ -684,16 +727,10 @@ beforeEach(() => {
         appApi.setKeyboardShortcuts as unknown as { mockClear?: () => void } | undefined
       )?.mockClear?.();
       // v0.11.0 (B2) — language mock clear.
-      (
-        appApi.getLanguage as unknown as { mockClear?: () => void } | undefined
-      )?.mockClear?.();
-      (
-        appApi.setLanguage as unknown as { mockClear?: () => void } | undefined
-      )?.mockClear?.();
+      (appApi.getLanguage as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
+      (appApi.setLanguage as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
       // v0.14.0 (A ABI Hardening) — diagnose mock clear.
-      (
-        appApi.diagnose as unknown as { mockClear?: () => void } | undefined
-      )?.mockClear?.();
+      (appApi.diagnose as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
     }
     const ai = window.dreampia.ai;
     if (ai !== undefined) {
@@ -709,9 +746,7 @@ beforeEach(() => {
       (mcp['restart'] as unknown as { mockClear?: () => void }).mockClear?.();
       (mcp['getLogs'] as unknown as { mockClear?: () => void }).mockClear?.();
       // v0.9.0 — discover mock 도 reset.
-      (
-        mcp['discover'] as unknown as { mockClear?: () => void } | undefined
-      )?.mockClear?.();
+      (mcp['discover'] as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
     }
     const usageNs = (window.dreampia as unknown as { usage?: Record<string, unknown> }).usage;
     if (usageNs !== undefined) {
@@ -719,15 +754,9 @@ beforeEach(() => {
       (usageNs['daily'] as unknown as { mockClear?: () => void }).mockClear?.();
       (usageNs['bySession'] as unknown as { mockClear?: () => void }).mockClear?.();
       // v0.9.0 — exportCsv / getLimits / setLimits 는 새 IPC.
-      (
-        usageNs['exportCsv'] as unknown as { mockClear?: () => void } | undefined
-      )?.mockClear?.();
-      (
-        usageNs['getLimits'] as unknown as { mockClear?: () => void } | undefined
-      )?.mockClear?.();
-      (
-        usageNs['setLimits'] as unknown as { mockClear?: () => void } | undefined
-      )?.mockClear?.();
+      (usageNs['exportCsv'] as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
+      (usageNs['getLimits'] as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
+      (usageNs['setLimits'] as unknown as { mockClear?: () => void } | undefined)?.mockClear?.();
     }
   }
 });
@@ -762,20 +791,16 @@ if (typeof window !== 'undefined') {
           })
         ),
 
-        completeOnboarding: vi.fn(
-          async (): Promise<Result<void>> => {
-            mockStore.onboardingCompleted = true;
-            return { ok: true, value: undefined };
-          }
-        ),
+        completeOnboarding: vi.fn(async (): Promise<Result<void>> => {
+          mockStore.onboardingCompleted = true;
+          return { ok: true, value: undefined };
+        }),
 
         // v0.3.0 — Sidebar 의 [온보딩 다시 보기] 버튼 + 새 settings 항목들.
-        resetOnboarding: vi.fn(
-          async (): Promise<Result<void>> => {
-            mockStore.onboardingCompleted = false;
-            return { ok: true, value: undefined };
-          }
-        ),
+        resetOnboarding: vi.fn(async (): Promise<Result<void>> => {
+          mockStore.onboardingCompleted = false;
+          return { ok: true, value: undefined };
+        }),
 
         getDefaultProvider: vi.fn(
           async (): Promise<Result<'auto' | 'claude' | 'codex' | 'mock'>> => ({
@@ -785,9 +810,7 @@ if (typeof window !== 'undefined') {
         ),
 
         setDefaultProvider: vi.fn(
-          async (
-            provider: 'auto' | 'claude' | 'codex' | 'mock'
-          ): Promise<Result<void>> => {
+          async (provider: 'auto' | 'claude' | 'codex' | 'mock'): Promise<Result<void>> => {
             mockStore.defaultProvider = provider;
             return { ok: true, value: undefined };
           }
@@ -819,18 +842,14 @@ if (typeof window !== 'undefined') {
           })
         ),
 
-        setTheme: vi.fn(
-          async (theme: 'light' | 'dark' | 'system'): Promise<Result<void>> => {
-            mockStore.theme = theme;
-            return { ok: true, value: undefined };
-          }
-        ),
+        setTheme: vi.fn(async (theme: 'light' | 'dark' | 'system'): Promise<Result<void>> => {
+          mockStore.theme = theme;
+          return { ok: true, value: undefined };
+        }),
 
         getPermissionCapabilities: vi.fn(
           async (): Promise<
-            Result<
-              Record<'read_only' | 'workspace_write' | 'full_access' | 'custom', string[]>
-            >
+            Result<Record<'read_only' | 'workspace_write' | 'full_access' | 'custom', string[]>>
           > => ({
             ok: true,
             value: {
@@ -866,45 +885,47 @@ if (typeof window !== 'undefined') {
           })
         ),
 
-        setLanguage: vi.fn(
-          async (language: 'ko' | 'en'): Promise<Result<void>> => {
-            mockStore.language = language;
-            return { ok: true, value: undefined };
-          }
-        ),
+        setLanguage: vi.fn(async (language: 'ko' | 'en'): Promise<Result<void>> => {
+          mockStore.language = language;
+          return { ok: true, value: undefined };
+        }),
 
         // v0.14.0 (A ABI Hardening) — Settings → 진단 탭이 호출.
-        diagnose: vi.fn(async (): Promise<
-          Result<{
-            platform: NodeJS.Platform;
-            arch: string;
-            node_version: string;
-            electron_version: string;
-            app_version: string;
-            db_loaded: boolean;
-            db_ok?: boolean;
-            schema_version?: number | null;
-            table_count?: number | null;
-            integrity_ok?: boolean | null;
-            wal_mode?: boolean | null;
-            integrity_message?: string;
-            db_error?: string;
-          }>
-        > => {
-          if (mockStore.diagnoseError !== null) {
-            return { ok: false, error: mockStore.diagnoseError };
+        diagnose: vi.fn(
+          async (): Promise<
+            Result<{
+              platform: NodeJS.Platform;
+              arch: string;
+              node_version: string;
+              electron_version: string;
+              app_version: string;
+              db_loaded: boolean;
+              db_ok?: boolean;
+              schema_version?: number | null;
+              table_count?: number | null;
+              integrity_ok?: boolean | null;
+              wal_mode?: boolean | null;
+              integrity_message?: string;
+              db_error?: string;
+            }>
+          > => {
+            if (mockStore.diagnoseError !== null) {
+              return { ok: false, error: mockStore.diagnoseError };
+            }
+            return { ok: true, value: { ...mockStore.diagnose } };
           }
-          return { ok: true, value: { ...mockStore.diagnose } };
-        }),
+        ),
       },
 
       // Phase 2: workspace picker — main 의 dialog.showOpenDialog 를 mock.
       // Tests 가 __mockStore.workspacePickNext 로 다음 pick 결과를 inject.
       workspace: {
-        get: vi.fn(async (): Promise<Result<MockWorkspaceInfo | null>> => ({
-          ok: true,
-          value: mockStore.workspace,
-        })),
+        get: vi.fn(
+          async (): Promise<Result<MockWorkspaceInfo | null>> => ({
+            ok: true,
+            value: mockStore.workspace,
+          })
+        ),
 
         pickFolder: vi.fn(async (): Promise<Result<MockWorkspaceInfo | null>> => {
           const next =
@@ -933,6 +954,48 @@ if (typeof window !== 'undefined') {
           })
         ),
 
+        inspect: vi.fn(
+          async (args: {
+            workspace_root: string;
+            ignore_patterns?: string[];
+            max_files?: number;
+          }): Promise<Result<RepoContextSummary>> => {
+            if (mockStore.repoContextError !== null) {
+              return { ok: false, error: mockStore.repoContextError };
+            }
+            return {
+              ok: true,
+              value: mockStore.repoContext ?? buildMockRepoContext(args.workspace_root),
+            };
+          }
+        ),
+
+        runSafeCommand: vi.fn(
+          async (args: {
+            workspace_root: string;
+            command: 'npm run typecheck' | 'npm run lint' | 'npm test';
+          }): Promise<Result<CommandRunResult>> => {
+            const stored = mockStore.commandResults.get(args.command);
+            if (stored !== undefined) {
+              return { ok: true, value: stored };
+            }
+            return {
+              ok: true,
+              value: {
+                command: args.command,
+                cwd: args.workspace_root,
+                status: 'completed',
+                exit_code: 0,
+                stdout_tail: 'mock ok',
+                stderr_tail: '',
+                summary: `${args.command} completed successfully.`,
+                started_at: '2026-01-01T00:00:00.000Z',
+                ended_at: '2026-01-01T00:00:01.000Z',
+              },
+            };
+          }
+        ),
+
         readFile: vi.fn(
           async (args: {
             workspace_root: string;
@@ -954,9 +1017,7 @@ if (typeof window !== 'undefined') {
           async (args: {
             workspace_root: string;
             rel_path: string;
-          }): Promise<
-            Result<{ exists: boolean; mtime?: string; size_bytes?: number }>
-          > => {
+          }): Promise<Result<{ exists: boolean; mtime?: string; size_bytes?: number }>> => {
             const stat = mockStore.workspaceFileStats.get(args.rel_path);
             if (stat === undefined) {
               return { ok: true, value: { exists: false } };
@@ -1128,10 +1189,7 @@ if (typeof window !== 'undefined') {
         // v0.7.0 (F-026) — Sidebar 검색. searchResults 가 미리 채워져 있으면
         // 그 값을 반환, 아니면 빈 배열. searchError 가 set 돼 있으면 실패.
         search: vi.fn(
-          async (args: {
-            q: string;
-            limit?: number;
-          }): Promise<Result<MockTurnSearchResult[]>> => {
+          async (args: { q: string; limit?: number }): Promise<Result<MockTurnSearchResult[]>> => {
             if (mockStore.searchError !== null) {
               return { ok: false, error: mockStore.searchError };
             }
@@ -1577,15 +1635,13 @@ if (typeof window !== 'undefined') {
       // 빈 배열 반환. usageError 가 set 돼 있으면 모든 query 가 실패.
       usage: {
         summary: vi.fn(
-          async (
-            _args?: {
-              from?: string;
-              to?: string;
-              provider?: MockUsageProvider;
-              model?: string;
-              session_id?: string;
-            }
-          ): Promise<Result<MockUsageSummary[]>> => {
+          async (_args?: {
+            from?: string;
+            to?: string;
+            provider?: MockUsageProvider;
+            model?: string;
+            session_id?: string;
+          }): Promise<Result<MockUsageSummary[]>> => {
             if (mockStore.usageError !== null) {
               return { ok: false, error: mockStore.usageError };
             }
@@ -1605,29 +1661,25 @@ if (typeof window !== 'undefined') {
           }
         ),
 
-        bySession: vi.fn(
-          async (sessionId: string): Promise<Result<MockUsageEvent[]>> => {
-            if (mockStore.usageError !== null) {
-              return { ok: false, error: mockStore.usageError };
-            }
-            return {
-              ok: true,
-              value: [...(mockStore.usageBySession.get(sessionId) ?? [])],
-            };
+        bySession: vi.fn(async (sessionId: string): Promise<Result<MockUsageEvent[]>> => {
+          if (mockStore.usageError !== null) {
+            return { ok: false, error: mockStore.usageError };
           }
-        ),
+          return {
+            ok: true,
+            value: [...(mockStore.usageBySession.get(sessionId) ?? [])],
+          };
+        }),
 
         // v0.9.0 — CSV export. mockStore.usageExportCsv 가 비어있으면 header 만 반환.
         exportCsv: vi.fn(
-          async (
-            _args?: {
-              from?: string;
-              to?: string;
-              provider?: MockUsageProvider;
-              model?: string;
-              session_id?: string;
-            }
-          ): Promise<Result<string>> => {
+          async (_args?: {
+            from?: string;
+            to?: string;
+            provider?: MockUsageProvider;
+            model?: string;
+            session_id?: string;
+          }): Promise<Result<string>> => {
             if (mockStore.usageError !== null) {
               return { ok: false, error: mockStore.usageError };
             }
@@ -1640,9 +1692,10 @@ if (typeof window !== 'undefined') {
         ),
 
         getLimits: vi.fn(
-          async (): Promise<
-            Result<{ cost_limit_usd?: number; alert_threshold: number }>
-          > => ({ ok: true, value: { ...mockStore.usageLimits } })
+          async (): Promise<Result<{ cost_limit_usd?: number; alert_threshold: number }>> => ({
+            ok: true,
+            value: { ...mockStore.usageLimits },
+          })
         ),
 
         setLimits: vi.fn(
@@ -1726,10 +1779,7 @@ if (typeof window !== 'undefined') {
         ),
 
         list: vi.fn(
-          async (
-            sessionId: string,
-            limit?: number
-          ): Promise<Result<MockCompareRun[]>> => {
+          async (sessionId: string, limit?: number): Promise<Result<MockCompareRun[]>> => {
             const all = Array.from(mockStore.compareRuns.values()).filter(
               (r) => r.session_id === sessionId
             );
@@ -1739,12 +1789,10 @@ if (typeof window !== 'undefined') {
           }
         ),
 
-        cancel: vi.fn(
-          async (runId: string): Promise<Result<void>> => {
-            mockStore.compareCancelled.add(runId);
-            return { ok: true, value: undefined };
-          }
-        ),
+        cancel: vi.fn(async (runId: string): Promise<Result<void>> => {
+          mockStore.compareCancelled.add(runId);
+          return { ok: true, value: undefined };
+        }),
 
         onStreamEvent: vi.fn((listener: CompareEventListener): (() => void) => {
           mockStore.compareEventListeners.add(listener);

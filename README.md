@@ -9,7 +9,7 @@
 
 ---
 
-## v2.10.0 - Current Status (2026-05-13)
+## v2.10.0 - Current Status (2026-05-14)
 
 **Dreampia-Dev는 한국어 우선 로컬 AI 코딩 워크벤치입니다.** Claude Code와
 OpenAI Codex 스타일의 채팅, 프로젝트 선택, Code 모드, diff/apply, 권한 표시,
@@ -51,9 +51,14 @@ npm run test:e2e
 - 지원: 프로젝트 폴더 선택, 새 채팅, 빠른 시작 프롬프트, Claude/Codex/Mock
   provider 상태, Code 패널, 파일 적용 후보, 설정, MCP, Compare, Plugin,
   Automation 진입점.
+- 지원: local repo coding loop v1. 작업 패널에서 repo context, 근거 파일,
+  테스트 후보, safe test commands, git status, Lore Commit Protocol 커밋 후보
+  안내를 확인할 수 있습니다.
 - 제한: live AI 작업은 provider CLI와 preload/IPC 연결 상태에 의존합니다.
   브라우저-only renderer에서는 IPC 미연결 상태가 표시되고 입력/빠른 시작이
   비활성화됩니다.
+- 제한: safe command runner는 `npm run typecheck`, `npm run lint`, `npm test`
+  만 허용합니다. 삭제, 임의 shell, git push는 자동 실행하지 않습니다.
 - 제한: 코드 서명은 배포 환경에 따라 다르며 자세한 내용은
   [docs/code-signing.md](./docs/code-signing.md)를 확인하세요.
 - 공개/기여자 기준 문서:

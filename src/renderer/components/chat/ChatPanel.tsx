@@ -35,7 +35,9 @@ import { Virtuoso } from 'react-virtuoso';
  */
 export const TURN_VIRTUALIZATION_THRESHOLD = 100;
 import { ChatInput } from './ChatInput';
+import { CodingTaskPanel } from './CodingTaskPanel';
 import type { ContentBlock, PermissionLevel, Session, Turn, ToolResultRef } from '@/types';
+import type { CommandRunResult, RepoContextSummary, RepoScriptSummary } from '@/types/workspace';
 import { EFFORT_LABELS_KO } from '@/types';
 import { FileReferenceChip } from './FileReferenceChip';
 import { MessageText } from './MessageText';
@@ -206,6 +208,13 @@ export interface ChatPanelProps {
   onOpenProviderSettings?: () => void;
   /** Direct API 설정 CTA — Settings Direct API 탭으로 이동. */
   onOpenDirectApiSettings?: () => void;
+  /** local repo coding loop v1 — read-only repo context summary. */
+  repoContext?: RepoContextSummary | null;
+  repoContextLoading?: boolean;
+  repoContextError?: string | null;
+  commandResults?: Record<string, CommandRunResult>;
+  onRefreshRepoContext?: () => void;
+  onRunSafeCommand?: (command: RepoScriptSummary['command']) => void;
 }
 
 interface MessagesAreaProps {
@@ -285,6 +294,12 @@ export function ChatPanel({
   onApplyToFile,
   onOpenProviderSettings,
   onOpenDirectApiSettings,
+  repoContext = null,
+  repoContextLoading = false,
+  repoContextError = null,
+  commandResults = {},
+  onRefreshRepoContext,
+  onRunSafeCommand,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     // α-2 (.omc/DESIGN.md, Codex parity) — hero + ChatInput 도 같이 mount.
@@ -298,6 +313,20 @@ export function ChatPanel({
           cliStatus={cliStatus}
           {...(onOpenProviderSettings !== undefined && { onOpenProviderSettings })}
           {...(onOpenDirectApiSettings !== undefined && { onOpenDirectApiSettings })}
+        />
+        <CodingTaskPanel
+          workspaceName={workspaceName}
+          turns={[]}
+          isStreaming={isStreaming}
+          repoContext={repoContext}
+          repoContextLoading={repoContextLoading}
+          repoContextError={repoContextError}
+          commandResults={commandResults}
+          providerRecoverable={shouldShowProviderRecovery(cliStatus)}
+          {...(onRefreshRepoContext !== undefined && { onRefreshRepoContext })}
+          {...(onRunSafeCommand !== undefined && { onRunSafeCommand })}
+          {...(onPickWorkspace !== undefined && { onPickWorkspace })}
+          {...(onOpenProviderSettings !== undefined && { onOpenProviderSettings })}
         />
         <ChatLandingHero
           workspaceName={workspaceName}
@@ -347,6 +376,20 @@ export function ChatPanel({
         cliStatus={cliStatus}
         {...(onOpenProviderSettings !== undefined && { onOpenProviderSettings })}
         {...(onOpenDirectApiSettings !== undefined && { onOpenDirectApiSettings })}
+      />
+      <CodingTaskPanel
+        workspaceName={workspaceName}
+        turns={session.conversation.turns}
+        isStreaming={isStreaming}
+        repoContext={repoContext}
+        repoContextLoading={repoContextLoading}
+        repoContextError={repoContextError}
+        commandResults={commandResults}
+        providerRecoverable={shouldShowProviderRecovery(cliStatus)}
+        {...(onRefreshRepoContext !== undefined && { onRefreshRepoContext })}
+        {...(onRunSafeCommand !== undefined && { onRunSafeCommand })}
+        {...(onPickWorkspace !== undefined && { onPickWorkspace })}
+        {...(onOpenProviderSettings !== undefined && { onOpenProviderSettings })}
       />
       <MessagesArea
         turns={session.conversation.turns}

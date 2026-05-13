@@ -21,13 +21,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-  existsSync,
-} from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -67,7 +61,12 @@ vi.mock('electron', () => {
 import { registerIpcHandlers } from '../../src/main/ipc';
 import { __resetSettingsCache } from '../../src/main/settings';
 import type { Result } from '../../src/main/types';
-import type { FileContent, FileEntry } from '../../src/types/workspace';
+import type {
+  CommandRunResult,
+  FileContent,
+  FileEntry,
+  RepoContextSummary,
+} from '../../src/types/workspace';
 
 const evt = {} as unknown;
 
@@ -111,16 +110,13 @@ beforeEach(() => {
   mkdirSync(join(workspaceRoot, 'src', 'main'), { recursive: true });
   writeFileSync(
     join(workspaceRoot, 'src', 'main', 'index.ts'),
-    "export const a = 1;\nexport const b = 2;\n"
+    'export const a = 1;\nexport const b = 2;\n'
   );
-  writeFileSync(
-    join(workspaceRoot, 'src', 'main', 'preload.ts'),
-    "export const p = 'preload';\n"
-  );
+  writeFileSync(join(workspaceRoot, 'src', 'main', 'preload.ts'), "export const p = 'preload';\n");
   mkdirSync(join(workspaceRoot, 'node_modules', 'foo'), { recursive: true });
   writeFileSync(
     join(workspaceRoot, 'node_modules', 'foo', 'index.js'),
-    "module.exports = { a: 1 };\n"
+    'module.exports = { a: 1 };\n'
   );
   mkdirSync(join(workspaceRoot, 'bin'), { recursive: true });
   // binary file w/ NUL byte → looksBinary 가 reject
@@ -348,5 +344,80 @@ describe('IPC workspace/read-file (v0.6.0)', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.line_count).toBe(3);
+  });
+});
+
+describe('IPC workspace/inspect + run-safe-command (local repo coding loop v1)', () => {
+  it('summarizes repo context, package scripts, and safe commands', async () => {
+    mkdirSync(join(workspaceRoot, 'tests'), { recursive: true });
+    writeFileSync(join(workspaceRoot, 'tests', 'app.test.ts'), 'expect(true).toBe(true);\n');
+    writeFileSync(
+      join(workspaceRoot, 'package.json'),
+      JSON.stringify(
+        {
+          scripts: {
+            typecheck: 'tsc --noEmit',
+            lint: 'eslint .',
+            test: 'vitest run',
+            build: 'vite build',
+          },
+        },
+        null,
+        2
+      )
+    );
+
+    const result = await call<Result<RepoContextSummary>>('workspace/inspect', {
+      workspace_root: workspaceRoot,
+      max_files: 100,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.key_files.some((file) => file.path === 'README.md')).toBe(true);
+    expect(result.value.test_files.some((file) => file.path === 'tests/app.test.ts')).toBe(true);
+    expect(result.value.safe_commands.map((script) => script.command)).toEqual([
+      'npm run typecheck',
+      'npm run lint',
+      'npm test',
+    ]);
+    expect(result.value.scripts.some((script) => script.name === 'build')).toBe(true);
+  });
+
+  it('rejects commands outside the safe allowlist', async () => {
+    const result = await call<Result<CommandRunResult>>('workspace/run-safe-command', {
+      workspace_root: workspaceRoot,
+      command: 'git push',
+    });
+
+    expect(result.ok).toBe(false);
+  });
+
+  it('returns a structured result for an allowlisted npm test command', async () => {
+    writeFileSync(
+      join(workspaceRoot, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          test: 'node -e "console.log(\'safe test ok\')"',
+        },
+      })
+    );
+
+    const result = await call<Result<CommandRunResult>>('workspace/run-safe-command', {
+      workspace_root: workspaceRoot,
+      command: 'npm test',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.command).toBe('npm test');
+    expect(result.value.cwd).toBe(workspaceRoot);
+    expect(result.value.started_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(result.value.ended_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(result.value.summary.length).toBeGreaterThan(0);
+    if (result.value.status === 'completed') {
+      expect(result.value.exit_code).toBe(0);
+      expect(result.value.stdout_tail).toContain('safe test ok');
+    }
   });
 });

@@ -62,6 +62,7 @@ import { useStreamingTurn } from './hooks/useStreamingTurn';
 import { useSessionStore } from './hooks/useSessionStore';
 import { useWorkspace } from './hooks/useWorkspace';
 import { useOnboarding } from './hooks/useOnboarding';
+import { useRepoContext } from './hooks/useRepoContext';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useKeyboardOverrides } from './hooks/useKeyboardOverrides';
 import type { ShortcutAction } from './keyboard/shortcuts';
@@ -1041,6 +1042,7 @@ export function App(): React.JSX.Element {
   // 옛 폴더 mention 후보를 보여줘 사용자 혼란 발생하지 않도록.
   const mentionWorkspaceRoot = defaultWorkspace?.root ?? activeSession?.workspace.root;
   const mentionIgnorePatterns = activeSession?.workspace.ignore_patterns;
+  const repoContext = useRepoContext(mentionWorkspaceRoot, mentionIgnorePatterns);
   const mentionResolverContext = useMemo<ResolverContext | undefined>(() => {
     if (mentionWorkspaceRoot === undefined) return undefined;
     return {
@@ -1622,6 +1624,16 @@ export function App(): React.JSX.Element {
             onOpenDirectApiSettings={() => {
               setSettingsInitialTab('direct_api');
               setSettingsModalOpen(true);
+            }}
+            repoContext={repoContext.summary}
+            repoContextLoading={repoContext.loading}
+            repoContextError={repoContext.error}
+            commandResults={repoContext.commandResults}
+            onRefreshRepoContext={() => {
+              void repoContext.refresh();
+            }}
+            onRunSafeCommand={(command) => {
+              void repoContext.runCommand(command);
             }}
             {...(currentCodeFile !== null && {
               // v2.8.x (Builder UX, C 후속) — 현재 Code 모드 에 파일이 열려

@@ -19,6 +19,12 @@ npm run test:e2e
 
 Open Dreampia-Dev and select the repository folder you want to work on. The chat header should show the workspace name. If no folder is selected, quickstart actions stay disabled so you do not start a repo task without context.
 
+The local coding task panel should become the first checkpoint:
+
+- **Repo context** shows indexed files, major languages, evidence files, and test candidates.
+- **Task status** stays recoverable when the workspace or provider is missing.
+- **Test / Git handoff** shows detected safe commands and current git status. If the folder is not a git repository, the app must say so instead of implying a real commit handoff.
+
 ## 3. Start A Small Request
 
 Use a narrow first prompt:
@@ -52,7 +58,17 @@ Cancel leaves the disk untouched. Apply writes only the selected file and uses t
 
 ## 5. Validate
 
-Run the recommended checks:
+Use the task panel's safe command buttons when they are available. The app only exposes the following allowlisted commands:
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+```
+
+Each command result should show the command, workspace, status, exit code or timeout, output tail, and a short next-action summary. If npm or a script is unavailable, the failure must remain visible as a recoverable result.
+
+You can run the same checks from a terminal when validating a release or debugging the app:
 
 ```bash
 npm run typecheck
@@ -77,5 +93,6 @@ Remove-Item Env:DREAMPIA_REAL_CLI_SMOKE
 ## Current Limits
 
 - A real provider or configured Direct API is required for true repo reasoning beyond the deterministic Mock provider. The real CLI smoke above is opt-in because it can use authenticated provider quota.
-- Dangerous actions such as deletion and git mutation must stop at an approval point.
+- Dangerous actions such as deletion, arbitrary shell commands, git mutation, and push must stop at an approval point. The local task panel never auto-runs those actions.
+- Repo context v1 is metadata-based. It is gitignore-aware and shows key files/package scripts/test candidates, but semantic symbol ranking and hunk-level task patch history remain roadmap items.
 - `npm run build` is release pipeline scope and is not required for this golden path.

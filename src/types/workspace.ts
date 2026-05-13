@@ -168,3 +168,75 @@ export interface FileStatResult {
   mtime?: string;
   size_bytes?: number;
 }
+
+// ────────────────────────────────────────────────────────────
+// Repo context / local coding loop summaries (v2.10.x)
+// ────────────────────────────────────────────────────────────
+
+export interface RepoLanguageSummary {
+  language: string;
+  files: number;
+  bytes: number;
+}
+
+export interface RepoContextFile {
+  path: string;
+  reason: string;
+}
+
+export interface RepoScriptSummary {
+  name: string;
+  command: string;
+}
+
+export interface RepoGitFileChange {
+  path: string;
+  status: string;
+  staged: boolean;
+  worktree: boolean;
+}
+
+export interface RepoGitSummary {
+  is_repo: boolean;
+  branch: string | null;
+  dirty_count: number;
+  staged_count: number;
+  unstaged_count: number;
+  untracked_count: number;
+  files: RepoGitFileChange[];
+  last_commit?: {
+    sha: string;
+    subject: string;
+  };
+  error?: string;
+}
+
+export interface RepoContextSummary {
+  root: string;
+  generated_at: string;
+  status: 'ready' | 'partial' | 'failed';
+  file_count: number;
+  indexed_count: number;
+  truncated: boolean;
+  ignored_patterns: string[];
+  languages: RepoLanguageSummary[];
+  key_files: RepoContextFile[];
+  test_files: RepoContextFile[];
+  source_roots: string[];
+  scripts: RepoScriptSummary[];
+  safe_commands: RepoScriptSummary[];
+  git: RepoGitSummary;
+  warnings: string[];
+}
+
+export interface CommandRunResult {
+  command: string;
+  cwd: string;
+  status: 'completed' | 'failed' | 'timed_out';
+  exit_code: number | null;
+  stdout_tail: string;
+  stderr_tail: string;
+  started_at: string;
+  ended_at: string;
+  summary: string;
+}

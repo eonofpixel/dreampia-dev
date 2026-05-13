@@ -6,6 +6,7 @@
  * -> explicit apply -> file changed on disk.
  */
 
+import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -20,10 +21,33 @@ test.describe('golden path coding loop', () => {
   }) => {
     const readmePath = join(workspaceDir, 'README.md');
     writeFileSync(readmePath, '# Old README\n\nNeeds setup notes.\n', 'utf-8');
+    writeFileSync(
+      join(workspaceDir, 'package.json'),
+      JSON.stringify(
+        {
+          scripts: {
+            typecheck: 'tsc --noEmit',
+            lint: 'eslint .',
+            test: 'vitest run',
+          },
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    );
+    execFileSync('git', ['init'], { cwd: workspaceDir, stdio: 'ignore' });
 
     await window.setViewportSize({ width: 1440, height: 920 });
     await window.getByRole('button', { name: '새 채팅', exact: false }).first().click();
     await expect(window.getByTestId('chat-input')).toBeVisible({ timeout: 10_000 });
+    await expect(window.getByTestId('coding-task-panel')).toBeVisible();
+    await window.getByTestId('repo-context-refresh').click();
+    await expect(window.getByTestId('repo-context-preview')).toContainText('README.md', {
+      timeout: 10_000,
+    });
+    await expect(window.getByTestId('safe-command-list')).toBeVisible();
+    await expect(window.getByTestId('git-handoff-summary')).toContainText('변경');
 
     await window.getByTestId('provider-dropdown-select').selectOption('mock');
     await window.getByTestId('sidebar-open-code').click();
@@ -44,6 +68,8 @@ test.describe('golden path coding loop', () => {
     await expect(window.getByTestId('coding-workflow-section-tests')).toContainText(
       'npm run typecheck'
     );
+    await expect(window.getByTestId('coding-task-state-review_ready')).toBeVisible();
+    await expect(window.getByTestId('commit-candidate')).toContainText('Lore Commit Protocol');
 
     await assistantTurn
       .getByRole('button', { name: '이 코드 블록을 현재 열려 있는 파일에 적용' })

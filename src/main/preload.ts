@@ -560,6 +560,67 @@ interface FileStatResultShape {
   mtime?: string;
   size_bytes?: number;
 }
+interface RepoLanguageSummaryShape {
+  language: string;
+  files: number;
+  bytes: number;
+}
+interface RepoContextFileShape {
+  path: string;
+  reason: string;
+}
+interface RepoScriptSummaryShape {
+  name: string;
+  command: string;
+}
+interface RepoGitFileChangeShape {
+  path: string;
+  status: string;
+  staged: boolean;
+  worktree: boolean;
+}
+interface RepoGitSummaryShape {
+  is_repo: boolean;
+  branch: string | null;
+  dirty_count: number;
+  staged_count: number;
+  unstaged_count: number;
+  untracked_count: number;
+  files: RepoGitFileChangeShape[];
+  last_commit?: {
+    sha: string;
+    subject: string;
+  };
+  error?: string;
+}
+interface RepoContextSummaryShape {
+  root: string;
+  generated_at: string;
+  status: 'ready' | 'partial' | 'failed';
+  file_count: number;
+  indexed_count: number;
+  truncated: boolean;
+  ignored_patterns: string[];
+  languages: RepoLanguageSummaryShape[];
+  key_files: RepoContextFileShape[];
+  test_files: RepoContextFileShape[];
+  source_roots: string[];
+  scripts: RepoScriptSummaryShape[];
+  safe_commands: RepoScriptSummaryShape[];
+  git: RepoGitSummaryShape;
+  warnings: string[];
+}
+interface CommandRunResultShape {
+  command: string;
+  cwd: string;
+  status: 'completed' | 'failed' | 'timed_out';
+  exit_code: number | null;
+  stdout_tail: string;
+  stderr_tail: string;
+  started_at: string;
+  ended_at: string;
+  summary: string;
+}
 
 // Whitelist of IPC channels (security)
 const ALLOWED_INVOKE_CHANNELS = [
@@ -590,6 +651,8 @@ const ALLOWED_INVOKE_CHANNELS = [
   // v0.6.0 (F-019) — @ mention 가 사용하는 file enumeration / read.
   'workspace/list-files',
   'workspace/read-file',
+  'workspace/inspect',
+  'workspace/run-safe-command',
   // v2.7.0 (Phase 3) — Code mode 편집 모드 저장. workspace-scoped + atomic.
   'workspace/write-file',
   // v2.7.0 (Phase 3 sub-PR) — 외부 변경 감지 (renderer 폴링). lightweight stat.
@@ -980,6 +1043,25 @@ const api = {
      */
     listFiles: (args: ListFilesArgsShape): Promise<Result<FileEntryShape[]>> =>
       ipcRenderer.invoke('workspace/list-files', args) as Promise<Result<FileEntryShape[]>>,
+
+    /**
+     * v2.10.x — local repo coding loop context. Read-only RepoIndex-lite:
+     * files/languages/scripts/git/status/context candidates for task panels.
+     */
+    inspect: (args: ListFilesArgsShape): Promise<Result<RepoContextSummaryShape>> =>
+      ipcRenderer.invoke('workspace/inspect', args) as Promise<Result<RepoContextSummaryShape>>,
+
+    /**
+     * v2.10.x — explicit, allowlisted validation command runner. The renderer
+     * can request only npm typecheck/lint/test through the main-process guard.
+     */
+    runSafeCommand: (args: {
+      workspace_root: string;
+      command: 'npm run typecheck' | 'npm run lint' | 'npm test';
+    }): Promise<Result<CommandRunResultShape>> =>
+      ipcRenderer.invoke('workspace/run-safe-command', args) as Promise<
+        Result<CommandRunResultShape>
+      >,
 
     /**
      * v0.6.0 (F-019) — workspace 내 단일 파일 read. 다음 케이스는 거절:
