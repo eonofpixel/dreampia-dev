@@ -17,6 +17,13 @@ import userEvent from '@testing-library/user-event';
 import { UsageSettings } from '../../src/renderer/components/settings/UsageSettings';
 import { __mockStore } from '../setup';
 
+async function waitForUsagePanelSettled(): Promise<void> {
+  await screen.findByTestId('cost-limit-input');
+  await waitFor(() => {
+    expect(screen.getByText(/마지막 갱신/i)).toBeInTheDocument();
+  });
+}
+
 describe('UsageSettings', () => {
   it('renders nothing when open=false', () => {
     const { container } = render(<UsageSettings open={false} onClose={() => {}} />);
@@ -27,6 +34,7 @@ describe('UsageSettings', () => {
     render(<UsageSettings open={true} onClose={() => {}} />);
     expect(screen.getByRole('dialog', { name: /사용량 설정/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /사용량/i })).toBeInTheDocument();
+    await waitForUsagePanelSettled();
   });
 
   it('renders preset radio group with 3 options', async () => {
@@ -34,6 +42,7 @@ describe('UsageSettings', () => {
     expect(screen.getByRole('radio', { name: '오늘' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: '7일' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: '30일' })).toBeInTheDocument();
+    await waitForUsagePanelSettled();
   });
 
   it('shows empty state when no usage data', async () => {
@@ -41,6 +50,7 @@ describe('UsageSettings', () => {
     await waitFor(() => {
       expect(screen.getByText(/아직 사용 기록이 없어요/i)).toBeInTheDocument();
     });
+    await waitForUsagePanelSettled();
   });
 
   it('renders summary table when usage exists', async () => {
@@ -77,6 +87,7 @@ describe('UsageSettings', () => {
     expect(screen.getByText(/\$0\.0155/)).toBeInTheDocument();
     // 이벤트 합계
     expect(screen.getByText(/4건/)).toBeInTheDocument();
+    await waitForUsagePanelSettled();
   });
 
   it('renders daily trend table', async () => {
@@ -89,6 +100,7 @@ describe('UsageSettings', () => {
       expect(screen.getByText('2026-05-03')).toBeInTheDocument();
     });
     expect(screen.getByText('2026-05-02')).toBeInTheDocument();
+    await waitForUsagePanelSettled();
   });
 
   it('switches preset when tab clicked', async () => {
@@ -100,6 +112,7 @@ describe('UsageSettings', () => {
     await waitFor(() => {
       expect(todayTab).toHaveAttribute('aria-checked', 'true');
     });
+    await waitForUsagePanelSettled();
   });
 
   it('refresh button triggers re-fetch', async () => {
@@ -114,12 +127,14 @@ describe('UsageSettings', () => {
     await waitFor(() => {
       expect(summaryFn.mock?.calls.length ?? 0).toBeGreaterThan(initialCalls);
     });
+    await waitForUsagePanelSettled();
   });
 
   it('close button calls onClose', async () => {
     const onClose = vi.fn();
     const user = userEvent.setup();
     render(<UsageSettings open={true} onClose={onClose} />);
+    await waitForUsagePanelSettled();
     await user.click(screen.getByRole('button', { name: /닫기/i }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -130,6 +145,7 @@ describe('UsageSettings', () => {
     await waitFor(() => {
       expect(screen.getByText(/IPC bridge unavailable/i)).toBeInTheDocument();
     });
+    await waitForUsagePanelSettled();
   });
 
   it('formats $0 cost as "$0.00"', async () => {
@@ -153,5 +169,6 @@ describe('UsageSettings', () => {
     // 합계도 0 — 헤더 카드 + 행 양쪽에서 모두 $0.00.
     const zeroCells = screen.getAllByText(/\$0\.00/);
     expect(zeroCells.length).toBeGreaterThanOrEqual(2);
+    await waitForUsagePanelSettled();
   });
 });

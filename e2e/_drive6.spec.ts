@@ -100,6 +100,7 @@ test.describe('drive r6 — preview panel toggle (v1.0.8)', () => {
     await sidebarToggle.click();
     await expect(sidebarLayout).toHaveAttribute('data-sidebar-visible', 'true');
     await expect(window.getByLabel('사이드바')).toBeVisible();
+    await expect(window.getByTestId('sidebar-mobile-scrim')).toBeVisible();
     const sidebarTogglePlacement = await window.evaluate(() => {
       const sidebar = document.querySelector('.three-panel-sidebar')?.getBoundingClientRect();
       const newChat = document
@@ -121,7 +122,7 @@ test.describe('drive r6 — preview panel toggle (v1.0.8)', () => {
     expect(sidebarTogglePlacement.toggleRight).toBeLessThanOrEqual(
       sidebarTogglePlacement.sidebarRight + 1
     );
-    await sidebarToggle.click();
+    await window.getByTestId('sidebar-mobile-scrim').click({ position: { x: 320, y: 40 } });
     await expect(sidebarLayout).toHaveAttribute('data-sidebar-visible', 'false');
 
     const layout = window.locator('[data-preview-visible]');

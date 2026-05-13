@@ -14,7 +14,9 @@ import { WhatsNewSettings } from '../../src/renderer/components/settings/WhatsNe
 describe('WhatsNewSettings (v2.7.x sub-PR)', () => {
   it('renders the title and at least one release entry', () => {
     render(<WhatsNewSettings />);
-    expect(screen.getByText(/이번 업데이트의 주요 변화|Highlights of this update/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/이번 업데이트의 주요 변화|Highlights of this update/)
+    ).toBeInTheDocument();
     const list = screen.getByTestId('whats-new-release-list');
     expect(list.children.length).toBeGreaterThan(0);
   });
@@ -36,14 +38,14 @@ describe('WhatsNewSettings (v2.7.x sub-PR)', () => {
 });
 
 describe('SettingsModal — whats_new tab integration', () => {
-  it('shows the What\'s new tab in the sidebar', () => {
-    render(<SettingsModal open={true} onClose={() => {}} />);
+  it("shows the What's new tab in the sidebar", () => {
+    render(<SettingsModal open={true} onClose={() => {}} initialTab="whats_new" />);
     expect(screen.getByTestId('settings-tab-whats_new')).toBeInTheDocument();
   });
 
   it('clicking the tab activates the panel', async () => {
     const user = userEvent.setup();
-    render(<SettingsModal open={true} onClose={() => {}} />);
+    render(<SettingsModal open={true} onClose={() => {}} initialTab="onboarding" />);
     await user.click(screen.getByTestId('settings-tab-whats_new'));
     expect(screen.getByTestId('settings-panel-whats_new-content')).toBeInTheDocument();
   });

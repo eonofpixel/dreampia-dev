@@ -57,6 +57,9 @@ describe('AutomationModal audit viewer (v1.7.29)', () => {
     expect(screen.getByTestId('automation-audit-filter-rule')).toBeInTheDocument();
     expect(screen.getByTestId('automation-audit-filter-event')).toBeInTheDocument();
     expect(screen.getByTestId('automation-audit-refresh')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('automation-audit-empty')).toBeInTheDocument();
+    });
   });
 
   it('shows empty state when no api is wired', async () => {

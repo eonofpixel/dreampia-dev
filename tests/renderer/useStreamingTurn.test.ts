@@ -257,7 +257,7 @@ describe('useStreamingTurn', () => {
     expect(received.at(-1)?.status).toBe('cancelled');
   });
 
-  it('start() is no-op if already streaming', () => {
+  it('start() is no-op if already streaming', async () => {
     const provider = new MockProvider({ responseText: 'slow', delayMs: 50 });
     const { result } = renderHook(() =>
       useStreamingTurn({ provider, onTurnUpdate: vi.fn(), onComplete: vi.fn() })
@@ -272,5 +272,6 @@ describe('useStreamingTurn', () => {
     act(() => {
       result.current.cancel();
     });
+    await waitFor(() => expect(result.current.isStreaming).toBe(false));
   });
 });

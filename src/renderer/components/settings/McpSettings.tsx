@@ -183,9 +183,13 @@ export function McpSettingsPanel(): React.JSX.Element {
         )}
 
         {loading ? (
-          <p className="text-sm text-text-secondary">{t('mcp.loading')}</p>
+          <p className="text-sm text-text-secondary" data-testid="mcp-loading">
+            {t('mcp.loading')}
+          </p>
         ) : servers.length === 0 ? (
-          <div className="py-8 text-center text-sm text-text-secondary">{t('mcp.empty')}</div>
+          <div className="py-8 text-center text-sm text-text-secondary" data-testid="mcp-empty">
+            {t('mcp.empty')}
+          </div>
         ) : (
           <ul className="space-y-2" data-testid="mcp-server-list">
             {servers.map((server) => (

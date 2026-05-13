@@ -20,6 +20,10 @@ import userEvent from '@testing-library/user-event';
 import { SettingsModal } from '../../src/renderer/components/settings/SettingsModal';
 import { __mockStore } from '../setup';
 
+async function waitForMcpPanelSettled(): Promise<void> {
+  await screen.findByTestId('mcp-empty');
+}
+
 describe('SettingsModal (v0.8.0)', () => {
   it('renders nothing when open=false', () => {
     const { container } = render(<SettingsModal open={false} onClose={() => {}} />);
@@ -27,7 +31,7 @@ describe('SettingsModal (v0.8.0)', () => {
   });
 
   it('renders dialog with 7 tabs when open=true', async () => {
-    render(<SettingsModal open={true} onClose={() => {}} />);
+    render(<SettingsModal open={true} onClose={() => {}} initialTab="onboarding" />);
     expect(screen.getByRole('dialog', { name: /설정/i })).toBeInTheDocument();
     // 7 tabs in sidebar.
     expect(screen.getByTestId('settings-tab-mcp')).toBeInTheDocument();
@@ -44,6 +48,7 @@ describe('SettingsModal (v0.8.0)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('settings-panel-mcp')).toBeInTheDocument();
     });
+    await waitForMcpPanelSettled();
   });
 
   it('respects initialTab=usage', async () => {
@@ -55,14 +60,14 @@ describe('SettingsModal (v0.8.0)', () => {
 
   it('switches panels when sidebar tab is clicked', async () => {
     const user = userEvent.setup();
-    render(<SettingsModal open={true} onClose={() => {}} />);
-    await user.click(screen.getByTestId('settings-tab-provider'));
+    render(<SettingsModal open={true} onClose={() => {}} initialTab="onboarding" />);
+    await user.click(screen.getByTestId('settings-tab-whats_new'));
     await waitFor(() => {
-      expect(screen.getByTestId('settings-panel-provider')).toBeInTheDocument();
+      expect(screen.getByTestId('settings-panel-whats_new')).toBeInTheDocument();
     });
-    await user.click(screen.getByTestId('settings-tab-theme'));
+    await user.click(screen.getByTestId('settings-tab-onboarding'));
     await waitFor(() => {
-      expect(screen.getByTestId('settings-panel-theme')).toBeInTheDocument();
+      expect(screen.getByTestId('settings-panel-onboarding')).toBeInTheDocument();
     });
   });
 
@@ -133,13 +138,9 @@ describe('SettingsModal (v0.8.0)', () => {
     });
     // v0.10.0 — placeholder 가 KeyboardSettings 로 교체. 행이 표시되는지 검증.
     await waitFor(() => {
-      expect(
-        screen.getByTestId('settings-keyboard-row-search.focus')
-      ).toBeInTheDocument();
+      expect(screen.getByTestId('settings-keyboard-row-search.focus')).toBeInTheDocument();
     });
-    expect(
-      screen.getByTestId('settings-keyboard-row-modal.close')
-    ).toBeInTheDocument();
+    expect(screen.getByTestId('settings-keyboard-row-modal.close')).toBeInTheDocument();
   });
 
   it('Onboarding panel calls onReopenOnboarding when button clicked', async () => {
@@ -160,7 +161,7 @@ describe('SettingsModal (v0.8.0)', () => {
   it('calls onClose when close button clicked', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    render(<SettingsModal open={true} onClose={onClose} />);
+    render(<SettingsModal open={true} onClose={onClose} initialTab="onboarding" />);
     // v2.10.0 (.omc/DESIGN.md modal B) — ModalShell 기본 close button.
     await user.click(screen.getByTestId('modal-shell-close'));
     expect(onClose).toHaveBeenCalledTimes(1);

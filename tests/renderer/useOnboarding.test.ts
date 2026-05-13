@@ -11,12 +11,13 @@ import { useOnboarding } from '../../src/renderer/hooks/useOnboarding';
 import { __mockStore } from '../setup';
 
 describe('useOnboarding', () => {
-  it('initial state is loading (completed === null)', () => {
+  it('initial state is loading (completed === null)', async () => {
     __mockStore.onboardingCompleted = false;
     const { result } = renderHook(() => useOnboarding());
     // 첫 렌더는 loading 상태 (IPC 응답 도착 전)
     expect(result.current.completed).toBeNull();
     expect(result.current.loading).toBe(true);
+    await waitFor(() => expect(result.current.loading).toBe(false));
   });
 
   it('reflects completed=true when settings has it', async () => {

@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { CodePanel } from '../../src/renderer/components/code/CodePanel';
@@ -29,6 +29,10 @@ class ResizeObserverStub {
 }
 (globalThis as unknown as { ResizeObserver: typeof ResizeObserverStub }).ResizeObserver =
   ResizeObserverStub;
+
+async function waitForEmptyFileTree(): Promise<void> {
+  await screen.findByTestId('code-file-tree-no-results');
+}
 
 describe('CodePanel (Phase 2)', () => {
   beforeEach(() => {
@@ -275,37 +279,42 @@ describe('CodePanel (Phase 2)', () => {
   // v2.7.0 Phase 3 sub-PR — FileTree resize handle (localStorage width)
   // ────────────────────────────────────────────────────────────
 
-  it('Phase 3 resize: handle is rendered with default width', () => {
+  it('Phase 3 resize: handle is rendered with default width', async () => {
     render(<CodePanel workspaceRoot="/proj" />);
     const handle = screen.getByTestId('code-file-tree-resize-handle');
     expect(handle).toBeInTheDocument();
     const tree = screen.getByTestId('code-file-tree');
     expect(tree.getAttribute('data-tree-width')).toBe('260');
+    await waitForEmptyFileTree();
   });
 
-  it('Phase 3 resize: stored width loads from localStorage on mount', () => {
+  it('Phase 3 resize: stored width loads from localStorage on mount', async () => {
     localStorage.setItem('dreampia.codeMode.fileTreeWidth', '320');
     render(<CodePanel workspaceRoot="/proj" />);
     const tree = screen.getByTestId('code-file-tree');
     expect(tree.getAttribute('data-tree-width')).toBe('320');
+    await waitForEmptyFileTree();
   });
 
-  it('Phase 3 resize: stored width is clamped to safe range', () => {
+  it('Phase 3 resize: stored width is clamped to safe range', async () => {
     // Below min → clamped up.
     localStorage.setItem('dreampia.codeMode.fileTreeWidth', '50');
     const { unmount } = render(<CodePanel workspaceRoot="/proj" />);
     expect(screen.getByTestId('code-file-tree').getAttribute('data-tree-width')).toBe('180');
+    await waitForEmptyFileTree();
     unmount();
     // Above max → clamped down.
     localStorage.setItem('dreampia.codeMode.fileTreeWidth', '9999');
     render(<CodePanel workspaceRoot="/proj-other" />);
     expect(screen.getByTestId('code-file-tree').getAttribute('data-tree-width')).toBe('480');
+    await waitForEmptyFileTree();
   });
 
-  it('Phase 3 resize: invalid stored value falls back to default', () => {
+  it('Phase 3 resize: invalid stored value falls back to default', async () => {
     localStorage.setItem('dreampia.codeMode.fileTreeWidth', 'banana');
     render(<CodePanel workspaceRoot="/proj" />);
     expect(screen.getByTestId('code-file-tree').getAttribute('data-tree-width')).toBe('260');
+    await waitForEmptyFileTree();
   });
 
   // ────────────────────────────────────────────────────────────
@@ -351,10 +360,7 @@ describe('CodePanel (Phase 2)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('code-active-language').textContent).toContain('TypeScript');
       // The selected row reflects b.ts.
-      expect(screen.getByTestId('code-file-row-b.ts')).toHaveAttribute(
-        'data-selected',
-        'true'
-      );
+      expect(screen.getByTestId('code-file-row-b.ts')).toHaveAttribute('data-selected', 'true');
     });
   });
 
@@ -386,9 +392,7 @@ describe('CodePanel (Phase 2)', () => {
     try {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const initialMtime = '2026-05-10T00:00:00.000Z';
-      __mockStore.workspaceFiles = [
-        { path: 'a.ts', size_bytes: 12, mtime: initialMtime },
-      ];
+      __mockStore.workspaceFiles = [{ path: 'a.ts', size_bytes: 12, mtime: initialMtime }];
       __mockStore.workspaceFileContents.set('a.ts', {
         content: 'const x = 1;\n',
         truncated: false,
@@ -412,7 +416,9 @@ describe('CodePanel (Phase 2)', () => {
       });
 
       // Advance past the 5s polling interval.
-      await vi.advanceTimersByTimeAsync(5_500);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_500);
+      });
 
       await waitFor(() => {
         expect(screen.getByTestId('code-external-change-banner')).toBeInTheDocument();
@@ -429,9 +435,7 @@ describe('CodePanel (Phase 2)', () => {
     try {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const initialMtime = '2026-05-10T00:00:00.000Z';
-      __mockStore.workspaceFiles = [
-        { path: 'a.ts', size_bytes: 12, mtime: initialMtime },
-      ];
+      __mockStore.workspaceFiles = [{ path: 'a.ts', size_bytes: 12, mtime: initialMtime }];
       __mockStore.workspaceFileContents.set('a.ts', {
         content: 'const x = 1;\n',
         truncated: false,
@@ -450,7 +454,9 @@ describe('CodePanel (Phase 2)', () => {
         mtime: '2099-01-01T00:00:00.000Z',
         size_bytes: 12,
       });
-      await vi.advanceTimersByTimeAsync(5_500);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_500);
+      });
       await waitFor(() => screen.getByTestId('code-external-change-banner'));
 
       await user.click(screen.getByTestId('code-external-dismiss'));
@@ -527,10 +533,11 @@ describe('CodePanel (Phase 2)', () => {
   // v2.8.0 (Builder UX) — document.title sync (file name + dirty marker)
   // ────────────────────────────────────────────────────────────
 
-  it('Builder UX title: defaults to plain product name when no file selected', () => {
+  it('Builder UX title: defaults to plain product name when no file selected', async () => {
     document.title = 'Dreampia-Dev';
     render(<CodePanel workspaceRoot="/proj" />);
     expect(document.title).toBe('Dreampia-Dev');
+    await waitForEmptyFileTree();
   });
 
   it('Builder UX title: includes file basename after loading a file', async () => {
@@ -647,9 +654,7 @@ describe('CodePanel (Phase 2)', () => {
     try {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const initialMtime = '2026-05-10T00:00:00.000Z';
-      __mockStore.workspaceFiles = [
-        { path: 'a.ts', size_bytes: 12, mtime: initialMtime },
-      ];
+      __mockStore.workspaceFiles = [{ path: 'a.ts', size_bytes: 12, mtime: initialMtime }];
       __mockStore.workspaceFileContents.set('a.ts', {
         content: 'old\n',
         truncated: false,
@@ -674,21 +679,25 @@ describe('CodePanel (Phase 2)', () => {
         mtime: '2099-01-01T00:00:00.000Z',
         size_bytes: 12,
       });
-      await vi.advanceTimersByTimeAsync(5_500);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_500);
+      });
       await waitFor(() => screen.getByTestId('code-external-change-banner'));
 
       // appliedDiskUpdate dispatch — selectedPath 와 일치.
-      rerender(
-        <CodePanel
-          workspaceRoot="/proj"
-          appliedDiskUpdate={{
-            path: 'a.ts',
-            content: 'new\n',
-            mtime: '2099-01-01T00:00:00.000Z',
-          }}
-          onAppliedDiskUpdateConsumed={onConsumed}
-        />
-      );
+      await act(async () => {
+        rerender(
+          <CodePanel
+            workspaceRoot="/proj"
+            appliedDiskUpdate={{
+              path: 'a.ts',
+              content: 'new\n',
+              mtime: '2099-01-01T00:00:00.000Z',
+            }}
+            onAppliedDiskUpdateConsumed={onConsumed}
+          />
+        );
+      });
 
       // banner 가 즉시 사라지고 consume callback 호출됨.
       await waitFor(() => {

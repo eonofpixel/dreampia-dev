@@ -22,11 +22,22 @@ export default defineConfig({
     sourcemap: true,
     minify: 'esbuild',
     cssCodeSplit: true,
+    chunkSizeWarningLimit: 560,
 
     rollupOptions: {
       output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom'],
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (
+            id.includes('@codemirror') ||
+            id.includes(`${resolve('node_modules', 'codemirror')}`)
+          ) {
+            return 'codemirror';
+          }
+          if (id.includes('pdfjs-dist')) return 'pdfjs';
+          if (id.includes('lucide-react')) return 'icons';
+          if (id.includes('react') || id.includes('react-dom')) return 'react-vendor';
+          return 'vendor';
         },
       },
     },
@@ -51,6 +62,7 @@ export default defineConfig({
           build: {
             outDir: resolve(__dirname, 'dist/main'),
             sourcemap: true,
+            chunkSizeWarningLimit: 1300,
             rollupOptions: {
               external: ['electron', 'better-sqlite3'],
             },

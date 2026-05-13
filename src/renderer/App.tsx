@@ -1015,6 +1015,10 @@ export function App(): React.JSX.Element {
   // Surface IPC errors in the console; UI-level error states come later.
   useEffect(() => {
     if (storeError !== null) {
+      if (storeError === 'IPC not available') {
+        console.debug('[useSessionStore] IPC unavailable; using renderer fallback.');
+        return;
+      }
       console.error('[useSessionStore] error:', storeError);
     }
   }, [storeError]);
@@ -1415,6 +1419,8 @@ export function App(): React.JSX.Element {
       <ThreePanelLayout
         sidebarVisible={sidebarVisible}
         previewVisible={previewVisible}
+        onSidebarScrimClick={() => setSidebarVisible(false)}
+        sidebarScrimLabel={t('chat.header.sidebar_hide_aria')}
         sidebarToggle={
           <button
             type="button"

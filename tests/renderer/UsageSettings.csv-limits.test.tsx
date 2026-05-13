@@ -11,12 +11,17 @@ import userEvent from '@testing-library/user-event';
 import { UsageSettings } from '../../src/renderer/components/settings/UsageSettings';
 import { __mockStore } from '../setup';
 
+async function waitForUsagePanelSettled(): Promise<void> {
+  await screen.findByTestId('cost-limit-input');
+}
+
 describe('UsageSettings — CSV export (v0.9.0)', () => {
   it('renders [CSV 내보내기] 버튼 in panel', async () => {
     render(<UsageSettings open={true} onClose={() => {}} />);
     await waitFor(() => {
       expect(screen.getByTestId('usage-export-csv')).toBeInTheDocument();
     });
+    await waitForUsagePanelSettled();
   });
 
   it('clicking [CSV 내보내기] invokes usage.exportCsv IPC', async () => {
@@ -30,16 +35,20 @@ describe('UsageSettings — CSV export (v0.9.0)', () => {
     // jsdom 의 URL.createObjectURL / revokeObjectURL 이 없을 수 있어 stub.
     const origCreate = URL.createObjectURL;
     const origRevoke = URL.revokeObjectURL;
+    const origClick = HTMLAnchorElement.prototype.click;
     URL.createObjectURL = vi.fn(() => 'blob:mock');
     URL.revokeObjectURL = vi.fn();
+    HTMLAnchorElement.prototype.click = vi.fn();
     try {
       await userEvent.click(button);
       await waitFor(() => {
         expect(exportSpy).toHaveBeenCalled();
       });
+      await waitForUsagePanelSettled();
     } finally {
       URL.createObjectURL = origCreate;
       URL.revokeObjectURL = origRevoke;
+      HTMLAnchorElement.prototype.click = origClick;
     }
   });
 });
@@ -50,6 +59,7 @@ describe('UsageSettings — Cost Limit (v0.9.0)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('cost-limit-section')).toBeInTheDocument();
     });
+    await waitForUsagePanelSettled();
   });
 
   it("status shows '한도 미설정' when no limit configured", async () => {
@@ -58,6 +68,7 @@ describe('UsageSettings — Cost Limit (v0.9.0)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('cost-limit-status')).toHaveTextContent(/한도 미설정/);
     });
+    await waitForUsagePanelSettled();
   });
 
   it('status shows safe label when below threshold', async () => {
@@ -79,6 +90,7 @@ describe('UsageSettings — Cost Limit (v0.9.0)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('cost-limit-status')).toHaveTextContent(/안전/);
     });
+    await waitForUsagePanelSettled();
   });
 
   it('status shows warning when above threshold but below limit', async () => {
@@ -100,6 +112,7 @@ describe('UsageSettings — Cost Limit (v0.9.0)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('cost-limit-status')).toHaveTextContent(/경고/);
     });
+    await waitForUsagePanelSettled();
   });
 
   it('status shows over-limit when cost exceeds limit', async () => {
@@ -121,6 +134,7 @@ describe('UsageSettings — Cost Limit (v0.9.0)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('cost-limit-status')).toHaveTextContent(/한도 초과/);
     });
+    await waitForUsagePanelSettled();
   });
 
   it('saving a new limit invokes setLimits IPC with parsed number', async () => {

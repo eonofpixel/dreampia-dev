@@ -35,6 +35,8 @@ import { HostEventBus } from './plugins/eventBus';
 import { HostAbortRegistry } from './plugins/hostBridge/abortRegistry';
 import { makeOnQuarantineHook } from './plugins/onQuarantineHook';
 import type { GrantLedger } from './plugins/poolInterfaces';
+import { setIpcTriggerEmitter } from './automation/handlers/ipcTriggerHandler';
+import { vcrProductionGate } from '../providers/cli/vcrLoader';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -298,7 +300,6 @@ app.whenReady().then(async () => {
   try {
     const { bootstrapTelemetry } = await import('./telemetry/bootstrap');
     const { getTelemetry } = await import('./telemetry/Telemetry');
-    const { readSettings } = await import('./settings');
     const enabled = readSettings().telemetry_enabled === true;
     const result = await bootstrapTelemetry({
       telemetry: getTelemetry(),
@@ -319,7 +320,6 @@ app.whenReady().then(async () => {
   // packaged build 에서 DREAMPIA_VCR_MODE 가 set 됐으면 test fixture 누출
   // 가능성 — startup 즉시 차단. unpackaged (e2e/dev) 는 통과.
   {
-    const { vcrProductionGate } = await import('../providers/cli/vcrLoader');
     const gate = vcrProductionGate({
       isPackaged: app.isPackaged,
       vcrMode: process.env.DREAMPIA_VCR_MODE,
@@ -881,21 +881,18 @@ app.whenReady().then(async () => {
   // v1.7.25 — Automation 'ipc-trigger' handler 의 emitter 주입.
   // mainWindow.webContents.send 로 자동화 rule 이 renderer 에 IPC 발사.
   // window 가 destroyed 되면 silent drop (다음 fire 시 재시도).
-  void (async () => {
-    const { setIpcTriggerEmitter } = await import('./automation/handlers/ipcTriggerHandler');
-    setIpcTriggerEmitter((channel, payload) => {
-      const win = mainWindow;
-      if (win === null) return;
-      try {
-        if ('isDestroyed' in win && (win as { isDestroyed?: () => boolean }).isDestroyed?.()) {
-          return;
-        }
-        win.webContents.send(channel, payload);
-      } catch {
-        // ignore — window unmount race condition.
+  setIpcTriggerEmitter((channel, payload) => {
+    const win = mainWindow;
+    if (win === null) return;
+    try {
+      if ('isDestroyed' in win && (win as { isDestroyed?: () => boolean }).isDestroyed?.()) {
+        return;
       }
-    });
-  })();
+      win.webContents.send(channel, payload);
+    } catch {
+      // ignore — window unmount race condition.
+    }
+  });
 
   // v1.0.14 (META-4 hotfix — Codex blind spot): 저장된 workspace 가 userData
   // 와 충돌하면 사용자에게 dialog 로 알리고 picker 강제 (settings 리셋).

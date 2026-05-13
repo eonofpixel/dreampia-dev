@@ -14,6 +14,8 @@ export interface ThreePanelLayoutProps {
   preview: React.ReactNode;
   sidebarToggle?: React.ReactNode;
   previewToggle?: React.ReactNode;
+  onSidebarScrimClick?: () => void;
+  sidebarScrimLabel?: string;
   /**
    * v0.10.0 (F-025) — Mod+B 단축키로 사이드바 토글. false 면 sidebar 자리를
    * 0px 로 collapse, chat 이 그 자리를 차지. 기본값 true.
@@ -35,6 +37,8 @@ export function ThreePanelLayout({
   preview,
   sidebarToggle,
   previewToggle,
+  onSidebarScrimClick,
+  sidebarScrimLabel,
   sidebarVisible = true,
   previewVisible = true,
 }: ThreePanelLayoutProps): React.JSX.Element {
@@ -61,6 +65,15 @@ export function ThreePanelLayout({
         >
           {sidebarToggle}
         </div>
+      )}
+      {sidebarVisible && onSidebarScrimClick !== undefined && (
+        <button
+          type="button"
+          className="three-panel-sidebar-scrim"
+          aria-label={sidebarScrimLabel ?? 'Close sidebar'}
+          data-testid="sidebar-mobile-scrim"
+          onClick={onSidebarScrimClick}
+        />
       )}
       <div
         className="three-panel-sidebar min-w-0 overflow-hidden"

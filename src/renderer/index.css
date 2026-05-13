@@ -257,6 +257,10 @@ pre {
   left: 8px;
 }
 
+.three-panel-sidebar-scrim {
+  display: none;
+}
+
 @media (max-width: 1100px) {
   .three-panel-layout {
     grid-template-columns: var(--sidebar-panel-width) minmax(0, 1fr) 0px 44px;
@@ -287,6 +291,20 @@ pre {
     width: min(286px, calc(100vw - 44px));
     border-right: 1px solid var(--color-hairline);
     box-shadow: var(--elev-strong);
+  }
+
+  .three-panel-sidebar-scrim {
+    position: absolute;
+    top: 0;
+    right: 44px;
+    bottom: 0;
+    left: 0;
+    z-index: 25;
+    display: block;
+    border: 0;
+    background: rgba(23, 23, 20, 0.28);
+    cursor: pointer;
+    backdrop-filter: blur(2px);
   }
 
   .three-panel-sidebar-toggle[data-sidebar-open='true'] {

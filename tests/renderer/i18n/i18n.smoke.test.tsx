@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { Sidebar } from '../../../src/renderer/components/sidebar/Sidebar';
 import { ChatInput } from '../../../src/renderer/components/chat/ChatInput';
 import { setLocale } from '../../../src/renderer/i18n';
@@ -17,13 +17,7 @@ import { setLocale } from '../../../src/renderer/i18n';
 describe('i18n smoke (v0.11.0 B2)', () => {
   describe('Sidebar', () => {
     it('renders Korean labels when locale=ko (default)', () => {
-      render(
-        <Sidebar
-          sessions={[]}
-          onSelectSession={() => {}}
-          onNewChat={() => {}}
-        />
-      );
+      render(<Sidebar sessions={[]} onSelectSession={() => {}} onNewChat={() => {}} />);
       expect(screen.getByText('새 채팅')).toBeInTheDocument();
       expect(screen.getByLabelText('설정 (Ctrl+,)')).toBeInTheDocument();
       expect(screen.getByText('채팅')).toBeInTheDocument();
@@ -31,13 +25,7 @@ describe('i18n smoke (v0.11.0 B2)', () => {
 
     it('renders English labels when locale=en', () => {
       setLocale('en');
-      render(
-        <Sidebar
-          sessions={[]}
-          onSelectSession={() => {}}
-          onNewChat={() => {}}
-        />
-      );
+      render(<Sidebar sessions={[]} onSelectSession={() => {}} onNewChat={() => {}} />);
       expect(screen.getByText('New chat')).toBeInTheDocument();
       expect(screen.getByLabelText('Settings (Ctrl+,)')).toBeInTheDocument();
       expect(screen.getByText('Chats')).toBeInTheDocument();
@@ -45,13 +33,7 @@ describe('i18n smoke (v0.11.0 B2)', () => {
 
     it('search placeholder follows locale', () => {
       setLocale('en');
-      render(
-        <Sidebar
-          sessions={[]}
-          onSelectSession={() => {}}
-          onNewChat={() => {}}
-        />
-      );
+      render(<Sidebar sessions={[]} onSelectSession={() => {}} onNewChat={() => {}} />);
       expect(screen.getByPlaceholderText('Search messages…')).toBeInTheDocument();
     });
   });
@@ -79,8 +61,10 @@ describe('i18n smoke (v0.11.0 B2)', () => {
       // ko: "전송"
       expect(screen.getAllByText('전송').length).toBeGreaterThan(0);
 
-      setLocale('en');
-      rerender(<ChatInput onSubmit={() => {}} />);
+      act(() => {
+        setLocale('en');
+        rerender(<ChatInput onSubmit={() => {}} />);
+      });
       // en: "Send"
       expect(screen.getAllByText('Send').length).toBeGreaterThan(0);
     });

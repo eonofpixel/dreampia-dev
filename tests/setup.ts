@@ -1808,4 +1808,19 @@ if (typeof window !== 'undefined') {
 // Mock scrollIntoView for jsdom (not implemented in jsdom by default)
 if (typeof window !== 'undefined') {
   window.HTMLElement.prototype.scrollIntoView = function () {};
+  if (typeof window.Range !== 'undefined') {
+    window.Range.prototype.getBoundingClientRect = function (): DOMRect {
+      return new DOMRect(0, 0, 0, 0);
+    };
+    window.Range.prototype.getClientRects = function (): DOMRectList {
+      const rects: DOMRect[] = [];
+      return {
+        length: rects.length,
+        item: (index: number): DOMRect | null => rects[index] ?? null,
+        [Symbol.iterator]: function* (): IterableIterator<DOMRect> {
+          yield* rects;
+        },
+      } as DOMRectList;
+    };
+  }
 }

@@ -33,6 +33,20 @@ export type DefaultProviderChoice = 'auto' | 'claude' | 'codex' | 'mock';
 
 const PROVIDER_OPTIONS: ReadonlyArray<DefaultProviderChoice> = ['auto', 'claude', 'codex', 'mock'];
 
+type ProviderSettingsApi = NonNullable<Window['dreampia']>['app'];
+
+function getProviderSettingsApi(): ProviderSettingsApi | null {
+  const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
+  if (
+    appApi === undefined ||
+    typeof appApi.getDefaultProvider !== 'function' ||
+    typeof appApi.setDefaultProvider !== 'function'
+  ) {
+    return null;
+  }
+  return appApi;
+}
+
 export interface ProviderDropdownProps {
   /**
    * 외부에서 의도적으로 disable 가능 (e.g. 스트리밍 중). 미지정이면 자체 IPC
@@ -54,30 +68,27 @@ export function ProviderDropdown({
   controlled,
 }: ProviderDropdownProps): React.JSX.Element {
   const t = useT();
+  const initialIpcAvailable = controlled !== undefined || getProviderSettingsApi() !== null;
   const [value, setValue] = useState<DefaultProviderChoice>(controlled?.value ?? 'auto');
-  const [ipcAvailable, setIpcAvailable] = useState(false);
-  const [loaded, setLoaded] = useState(controlled !== undefined);
+  const [ipcAvailable, setIpcAvailable] = useState(initialIpcAvailable);
+  const [loaded, setLoaded] = useState(true);
 
   // controlled 모드일 땐 외부 값 → 내부 상태 동기화. self-managed 일 땐 mount 시
   // 한 번만 IPC 로 fetch.
   useEffect(() => {
     if (controlled !== undefined) {
-      setValue(controlled.value);
-      setLoaded(true);
-      setIpcAvailable(true);
+      setValue((prev) => (prev === controlled.value ? prev : controlled.value));
+      setLoaded((prev) => (prev ? prev : true));
+      setIpcAvailable((prev) => (prev ? prev : true));
       return;
     }
-    const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
-    if (
-      appApi === undefined ||
-      typeof appApi.getDefaultProvider !== 'function' ||
-      typeof appApi.setDefaultProvider !== 'function'
-    ) {
-      setIpcAvailable(false);
-      setLoaded(true);
+    const appApi = getProviderSettingsApi();
+    if (appApi === null) {
+      setIpcAvailable((prev) => (prev ? false : prev));
+      setLoaded((prev) => (prev ? prev : true));
       return;
     }
-    setIpcAvailable(true);
+    setIpcAvailable((prev) => (prev ? prev : true));
     let cancelled = false;
     void (async () => {
       try {
@@ -104,8 +115,8 @@ export function ProviderDropdown({
         controlled.onChange(next);
         return;
       }
-      const appApi = typeof window !== 'undefined' ? window.dreampia?.app : undefined;
-      if (appApi === undefined || typeof appApi.setDefaultProvider !== 'function') {
+      const appApi = getProviderSettingsApi();
+      if (appApi === null) {
         return;
       }
       void appApi.setDefaultProvider(next).catch(() => {

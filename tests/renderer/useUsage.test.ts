@@ -94,6 +94,9 @@ describe('useUsage', () => {
   it('initial preset defaults to 7d', async () => {
     const { result } = renderHook(() => useUsage());
     expect(result.current.preset).toBe('7d');
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
   });
 });
 

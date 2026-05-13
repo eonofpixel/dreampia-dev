@@ -4,8 +4,8 @@
  * Spec: docs/design/layout/3panel.md
  */
 
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ThreePanelLayout } from '../../src/renderer/components/layout/ThreePanelLayout';
 
 describe('ThreePanelLayout', () => {
@@ -62,5 +62,24 @@ describe('ThreePanelLayout', () => {
     expect(root.getAttribute('data-sidebar-visible')).toBe('false');
     expect(screen.getByTestId('sidebar-rail-toggle')).toBeInTheDocument();
     expect(screen.getByTestId('sidebar')).toBeInTheDocument();
+  });
+
+  it('renders a dismiss scrim for the open mobile sidebar state', () => {
+    const onDismiss = vi.fn();
+    render(
+      <ThreePanelLayout
+        sidebar={<div data-testid="sidebar">사이드바</div>}
+        chat={<div data-testid="chat">채팅</div>}
+        preview={<div data-testid="preview">미리보기</div>}
+        sidebarVisible={true}
+        onSidebarScrimClick={onDismiss}
+        sidebarScrimLabel="사이드바 닫기"
+      />
+    );
+
+    const scrim = screen.getByTestId('sidebar-mobile-scrim');
+    expect(scrim).toHaveAccessibleName('사이드바 닫기');
+    fireEvent.click(scrim);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });
