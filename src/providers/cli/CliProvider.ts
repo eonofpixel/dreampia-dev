@@ -16,7 +16,7 @@
  *   - stdin 은 즉시 end() — prompt 는 positional arg 로 전달 (stdin X)
  *
  * Verified CLI flags (2026-05-02):
- *   claude: --print --output-format stream-json --bare --verbose --model M "PROMPT"
+ *   claude: --print --output-format stream-json --verbose --no-session-persistence --model M "PROMPT"
  *   codex:  exec --json --skip-git-repo-check --ephemeral --model M "PROMPT"
  */
 
@@ -80,7 +80,7 @@ export interface CliProviderOptions {
    *   custom          → workspace-write (가장 안전한 default)
    *
    * Claude: '--add-dir <cwd>' (cwd 가 있으면) + tool-policy 매핑.
-   *   read_only → '--disallowed-tools "Bash Edit Write"'
+   *   read_only → '--disallowed-tools=Bash,Edit,Write'
    *   그 외     → 기본 (CLI 가 전체 tool 허용)
    *
    * Spec: docs/permission/provider-mapping.md
@@ -170,6 +170,8 @@ export class CliProvider implements StreamingProvider {
     // 명시적 union type — TS 가 closure 안 mutation 을 추적 못해 narrowing
     // 결과를 잃어버리는 경우가 있어, 여기서 type annotation 을 강제.
     const errorState: { message: string | null } = { message: null };
+    let fatalStderr = '';
+    let suspiciousStderr = '';
     let receivedComplete = false;
     let aborted = false;
     // v1.9.0 (A3) — auto timeout. aborted 와 분리된 flag — error event emit
@@ -259,9 +261,12 @@ export class CliProvider implements StreamingProvider {
     child.stderr?.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
       // 모든 stderr 을 에러로 볼 수는 없다 (CLI 들이 progress / debug 출력에
-      // stderr 을 쓰는 경우 있음). 강한 에러 키워드만 캡처.
-      if (/error|failed|denied|exception|panic/i.test(text)) {
-        errorState.message = (errorState.message ?? '') + text;
+      // stderr 을 쓰는 경우 있음). Codex CLI 는 exit 0 성공 중에도 plugin warm
+      // 경고에 "failed" 를 출력할 수 있어, stderr 는 실패 종료 시에만 승격한다.
+      if (CliProvider.isFatalStderr(text)) {
+        fatalStderr += text;
+      } else if (/error|failed|denied|exception|panic/i.test(text)) {
+        suspiciousStderr += text;
       }
     });
 
@@ -290,7 +295,9 @@ export class CliProvider implements StreamingProvider {
       }
       // v1.9.0 (A3): timedOut 도 SIGTERM 으로 종료시킨 거라 exit-code 메시지 합성 X.
       if (code !== 0 && code !== null && !aborted && !timedOut) {
-        errorState.message = `${errorState.message ?? ''} (exit code ${code})`.trim();
+        errorState.message = `${fatalStderr}${suspiciousStderr} (exit code ${code})`.trim();
+      } else if (fatalStderr.length > 0 && !aborted && !timedOut) {
+        errorState.message = fatalStderr.trim();
       }
       ended = true;
       wakeUp();
@@ -357,8 +364,8 @@ export class CliProvider implements StreamingProvider {
         '--print',
         '--output-format',
         'stream-json',
-        '--bare',
         '--verbose',
+        '--no-session-persistence',
         '--model',
         input.model,
       ];
@@ -370,7 +377,9 @@ export class CliProvider implements StreamingProvider {
       // custom) 은 Claude CLI 의 기본 정책 (전체 허용) 으로 둔다 — 세밀한 grant 제어는
       // hooks (PreToolUse) 단에서 한다. Spec: docs/permission/provider-mapping.md
       if (level === 'read_only') {
-        args.push('--disallowed-tools', 'Bash Edit Write');
+        // Claude CLI treats --disallowed-tools as variadic. The `--flag=value`
+        // form keeps the positional prompt from being consumed as another tool.
+        args.push('--disallowed-tools=Bash,Edit,Write');
       }
       if (this.opts.extraArgs !== undefined && this.opts.extraArgs.length > 0) {
         args.push(...this.opts.extraArgs);
@@ -448,6 +457,12 @@ export class CliProvider implements StreamingProvider {
       }
     }
     return parts.join('\n');
+  }
+
+  private static isFatalStderr(text: string): boolean {
+    return /(^|\n)\s*(error|fatal|panic)\b|authentication failed|unauthorized|permission denied/i.test(
+      text
+    );
   }
 
   /**

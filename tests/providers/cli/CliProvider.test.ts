@@ -169,6 +169,22 @@ describe('CliProvider', () => {
     expect((err as { error: string }).error).toMatch(/Error|exit code/);
   });
 
+  it('ignores suspicious stderr text when the CLI exits successfully', async () => {
+    nextChildHandler = (child) => {
+      child.stderr.emit('data', Buffer.from('WARN plugin warm failed but response continued\n'));
+      child.stdout.emit('data', Buffer.from('{"type":"text_delta","text":"ok"}\n'));
+      child.emit('close', 0);
+    };
+    const p = new CliProvider({
+      binaryPath: '/fake/codex',
+      provider: 'codex',
+      translate: passthroughTranslate,
+    });
+    const events = await consume(p, [userTurn('hi')]);
+    expect(events.some((e) => e.type === 'error')).toBe(false);
+    expect(events.some((e) => e.type === 'text_delta')).toBe(true);
+  });
+
   it('emits error event with exit code on non-zero exit', async () => {
     nextChildHandler = (child) => {
       child.emit('close', 2);
@@ -330,7 +346,8 @@ describe('CliProvider', () => {
     expect(args).toContain('--print');
     expect(args).toContain('--output-format');
     expect(args).toContain('stream-json');
-    expect(args).toContain('--bare');
+    expect(args).toContain('--no-session-persistence');
+    expect(args).not.toContain('--bare');
     expect(args).toContain('--verbose');
     expect(args).toContain('--model');
     expect(args[args.length - 1]).toBe('my question');
@@ -430,7 +447,22 @@ describe('CliProvider', () => {
       expect(args[idx + 1]).toBe('/workspace/project');
     });
 
-    it('claude with read_only adds --disallowed-tools "Bash Edit Write"', async () => {
+    it('claude includes no-session-persistence instead of bare mode', async () => {
+      nextChildHandler = (child) => {
+        child.emit('close', 0);
+      };
+      const p = new CliProvider({
+        binaryPath: '/fake/claude',
+        provider: 'claude',
+        translate: passthroughTranslate,
+      });
+      await consume(p, [userTurn('q')]);
+      const args = spawnCalls[0]?.args ?? [];
+      expect(args).toContain('--no-session-persistence');
+      expect(args).not.toContain('--bare');
+    });
+
+    it('claude with read_only adds --disallowed-tools without consuming the prompt', async () => {
       nextChildHandler = (child) => {
         child.emit('close', 0);
       };
@@ -442,9 +474,9 @@ describe('CliProvider', () => {
       });
       await consume(p, [userTurn('q')]);
       const args = spawnCalls[0]?.args ?? [];
-      const idx = args.indexOf('--disallowed-tools');
+      const idx = args.indexOf('--disallowed-tools=Bash,Edit,Write');
       expect(idx).toBeGreaterThanOrEqual(0);
-      expect(args[idx + 1]).toBe('Bash Edit Write');
+      expect(args[args.length - 1]).toBe('q');
     });
 
     it('claude with workspace_write does NOT add --disallowed-tools', async () => {

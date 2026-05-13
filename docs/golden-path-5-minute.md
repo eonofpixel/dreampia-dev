@@ -66,8 +66,16 @@ For release-grade confidence, also run the related e2e smoke:
 npm run test:e2e -- e2e/golden-path-coding-loop.spec.ts
 ```
 
+To verify real authenticated provider wiring on a developer machine:
+
+```powershell
+$env:DREAMPIA_REAL_CLI_SMOKE = '1'
+npm test -- tests/providers/cli/realCliSmoke.test.ts
+Remove-Item Env:DREAMPIA_REAL_CLI_SMOKE
+```
+
 ## Current Limits
 
-- A real provider or configured Direct API is required for true repo reasoning beyond the deterministic Mock provider.
+- A real provider or configured Direct API is required for true repo reasoning beyond the deterministic Mock provider. The real CLI smoke above is opt-in because it can use authenticated provider quota.
 - Dangerous actions such as deletion and git mutation must stop at an approval point.
 - `npm run build` is release pipeline scope and is not required for this golden path.
