@@ -24,6 +24,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 
 import { useT } from '../../i18n';
+import { readLocalStorage, writeLocalStorage } from '../../utils/safeStorage';
 
 interface FileEntry {
   path: string;
@@ -78,23 +79,15 @@ const TREE_WIDTH_MAX = 480;
 const TREE_WIDTH_STORAGE_KEY = 'dreampia.codeMode.fileTreeWidth';
 
 function loadStoredWidth(): number {
-  try {
-    const raw = localStorage.getItem(TREE_WIDTH_STORAGE_KEY);
-    if (raw === null) return TREE_WIDTH_DEFAULT;
-    const n = Number(raw);
-    if (!Number.isFinite(n)) return TREE_WIDTH_DEFAULT;
-    return Math.max(TREE_WIDTH_MIN, Math.min(TREE_WIDTH_MAX, n));
-  } catch {
-    return TREE_WIDTH_DEFAULT;
-  }
+  const raw = readLocalStorage(TREE_WIDTH_STORAGE_KEY);
+  if (raw === null) return TREE_WIDTH_DEFAULT;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return TREE_WIDTH_DEFAULT;
+  return Math.max(TREE_WIDTH_MIN, Math.min(TREE_WIDTH_MAX, n));
 }
 
 function saveStoredWidth(width: number): void {
-  try {
-    localStorage.setItem(TREE_WIDTH_STORAGE_KEY, String(Math.round(width)));
-  } catch {
-    // localStorage 가용 불가 — 무시
-  }
+  writeLocalStorage(TREE_WIDTH_STORAGE_KEY, String(Math.round(width)));
 }
 
 /**
@@ -117,13 +110,10 @@ function buildVisibleNodes(
       folderSet.add(parts.slice(0, i).join('/'));
     }
   }
-  const folders = [...folderSet].sort();
-  const fileEntries = [...entries].sort((a, b) => a.path.localeCompare(b.path));
-
   type Item = { kind: 'folder'; path: string } | { kind: 'file'; path: string; entry: FileEntry };
   const items: Item[] = [];
-  for (const p of folders) items.push({ kind: 'folder', path: p });
-  for (const e of fileEntries) items.push({ kind: 'file', path: e.path, entry: e });
+  for (const path of folderSet) items.push({ kind: 'folder', path });
+  for (const entry of entries) items.push({ kind: 'file', path: entry.path, entry });
   items.sort((a, b) => a.path.localeCompare(b.path));
 
   const ancestorVisible = (path: string): boolean => {

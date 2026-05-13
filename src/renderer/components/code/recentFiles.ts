@@ -10,8 +10,11 @@
  *
  * 모든 함수는 localStorage 접근 실패 (private mode / quota / SSR) 에 대해
  * 조용히 빈 배열 또는 no-op 으로 fallback. Storage 가 손상돼도 UX 가
- * 멈추지 않도록.
+ * 멈추지 않도록. 실제 storage 예외 처리는 renderer 공용 safeStorage 에
+ * 모아 호출부가 같은 try/catch 를 반복하지 않게 한다.
  */
+
+import { readLocalStorageJson, writeLocalStorage } from '../../utils/safeStorage';
 
 const STORAGE_PREFIX = 'dreampia.codeMode.recentFiles.';
 export const MAX_RECENTS = 5;
@@ -22,46 +25,32 @@ function key(workspaceRoot: string): string {
 
 export function loadRecentFiles(workspaceRoot: string): ReadonlyArray<string> {
   if (workspaceRoot.length === 0) return [];
-  try {
-    const raw = localStorage.getItem(key(workspaceRoot));
-    if (raw === null) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    // string only + dedup (corrupt storage 방어)
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const item of parsed) {
-      if (typeof item !== 'string' || item.length === 0) continue;
-      if (seen.has(item)) continue;
-      seen.add(item);
-      out.push(item);
-      if (out.length >= MAX_RECENTS) break;
-    }
-    return out;
-  } catch {
-    return [];
+  const parsed = readLocalStorageJson(key(workspaceRoot));
+  if (!Array.isArray(parsed)) return [];
+  // string only + dedup (corrupt storage 방어)
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of parsed) {
+    if (typeof item !== 'string' || item.length === 0) continue;
+    if (seen.has(item)) continue;
+    seen.add(item);
+    out.push(item);
+    if (out.length >= MAX_RECENTS) break;
   }
+  return out;
 }
 
 export function pushRecentFile(workspaceRoot: string, relPath: string): void {
   if (workspaceRoot.length === 0 || relPath.length === 0) return;
-  try {
-    const current = loadRecentFiles(workspaceRoot);
-    const next = [relPath, ...current.filter((p) => p !== relPath)].slice(0, MAX_RECENTS);
-    localStorage.setItem(key(workspaceRoot), JSON.stringify(next));
-  } catch {
-    // quota / SSR — UX-non-critical
-  }
+  const current = loadRecentFiles(workspaceRoot);
+  const next = [relPath, ...current.filter((p) => p !== relPath)].slice(0, MAX_RECENTS);
+  writeLocalStorage(key(workspaceRoot), JSON.stringify(next));
 }
 
 export function removeRecentFile(workspaceRoot: string, relPath: string): void {
   if (workspaceRoot.length === 0 || relPath.length === 0) return;
-  try {
-    const current = loadRecentFiles(workspaceRoot);
-    const next = current.filter((p) => p !== relPath);
-    if (next.length === current.length) return;
-    localStorage.setItem(key(workspaceRoot), JSON.stringify(next));
-  } catch {
-    // ignore
-  }
+  const current = loadRecentFiles(workspaceRoot);
+  const next = current.filter((p) => p !== relPath);
+  if (next.length === current.length) return;
+  writeLocalStorage(key(workspaceRoot), JSON.stringify(next));
 }

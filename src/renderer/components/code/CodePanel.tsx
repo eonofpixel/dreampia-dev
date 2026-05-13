@@ -21,6 +21,7 @@ import { Diff, FileCode2, Globe, ListTree, Pencil, RotateCcw, Save } from 'lucid
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useT } from '../../i18n';
+import { readLocalStorage, removeLocalStorage, writeLocalStorage } from '../../utils/safeStorage';
 
 import { CodeEditor } from './CodeEditor';
 import { DiffViewer } from './DiffViewer';
@@ -47,27 +48,15 @@ interface FileWriteResult {
 const LAST_FILE_STORAGE_PREFIX = 'dreampia.codeMode.lastFile.';
 
 function loadLastOpenedFile(workspaceRoot: string): string | null {
-  try {
-    return localStorage.getItem(LAST_FILE_STORAGE_PREFIX + workspaceRoot);
-  } catch {
-    return null;
-  }
+  return readLocalStorage(LAST_FILE_STORAGE_PREFIX + workspaceRoot);
 }
 
 function saveLastOpenedFile(workspaceRoot: string, relPath: string): void {
-  try {
-    localStorage.setItem(LAST_FILE_STORAGE_PREFIX + workspaceRoot, relPath);
-  } catch {
-    // localStorage 가 가득 차거나 접근 불가 — 무시 (UX-non-critical).
-  }
+  writeLocalStorage(LAST_FILE_STORAGE_PREFIX + workspaceRoot, relPath);
 }
 
 function clearLastOpenedFile(workspaceRoot: string): void {
-  try {
-    localStorage.removeItem(LAST_FILE_STORAGE_PREFIX + workspaceRoot);
-  } catch {
-    // ignore
-  }
+  removeLocalStorage(LAST_FILE_STORAGE_PREFIX + workspaceRoot);
 }
 
 // v2.8.0 (Builder UX) — outline 패널 표시 여부 (전역, per-workspace 아님).
@@ -75,19 +64,11 @@ function clearLastOpenedFile(workspaceRoot: string): void {
 const OUTLINE_VISIBLE_STORAGE_KEY = 'dreampia.codeMode.outlineVisible';
 
 function loadOutlineVisible(): boolean {
-  try {
-    return localStorage.getItem(OUTLINE_VISIBLE_STORAGE_KEY) === 'true';
-  } catch {
-    return false;
-  }
+  return readLocalStorage(OUTLINE_VISIBLE_STORAGE_KEY) === 'true';
 }
 
 function saveOutlineVisible(value: boolean): void {
-  try {
-    localStorage.setItem(OUTLINE_VISIBLE_STORAGE_KEY, value ? 'true' : 'false');
-  } catch {
-    // quota / SSR — UX-non-critical
-  }
+  writeLocalStorage(OUTLINE_VISIBLE_STORAGE_KEY, value ? 'true' : 'false');
 }
 
 export interface CodePanelProps {
