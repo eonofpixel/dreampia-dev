@@ -51,7 +51,6 @@ async function ensureAxeLoaded(page: Page): Promise<void> {
   );
   if (has) return;
   await page.evaluate((src) => {
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
     new Function(src)();
   }, AXE_SOURCE);
 }

@@ -168,7 +168,6 @@ describe('MessageText', () => {
       const send = screen.getByTestId('message-code-send-0');
       // DocumentPosition: apply 가 send 보다 먼저 → DOCUMENT_POSITION_FOLLOWING
       const pos = apply.compareDocumentPosition(send);
-      // eslint-disable-next-line no-bitwise
       expect(pos & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
   });

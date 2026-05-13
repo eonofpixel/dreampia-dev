@@ -160,7 +160,6 @@ export class PluginUtilityProcessRunner {
       options.auditSink ??
       ((e): void => {
         if (e.event !== 'plugin.hook_ok') {
-          // eslint-disable-next-line no-console
           console.error(
             `[PluginUtilityProcessRunner] ${e.event} ${e.plugin_name}/${e.hook}: ${e.error ?? ''}`
           );
