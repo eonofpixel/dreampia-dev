@@ -51,11 +51,13 @@ export function ThreePanelLayout({
       style={layoutStyle}
       data-sidebar-visible={sidebarVisible}
       data-preview-visible={previewVisible}
+      data-testid="three-panel-layout"
     >
       {sidebarToggle !== undefined && (
         <div
           className="three-panel-sidebar-toggle absolute top-sm z-40 flex items-center justify-center"
           data-sidebar-open={sidebarVisible}
+          data-testid="sidebar-toggle-anchor"
         >
           {sidebarToggle}
         </div>
@@ -64,14 +66,18 @@ export function ThreePanelLayout({
         className="three-panel-sidebar min-w-0 overflow-hidden"
         data-open={sidebarVisible}
         aria-hidden={!sidebarVisible}
+        data-testid="three-panel-sidebar"
       >
         {sidebar}
       </div>
-      <div className="three-panel-chat min-w-0 overflow-hidden">{chat}</div>
+      <div className="three-panel-chat min-w-0 overflow-hidden" data-testid="three-panel-chat">
+        {chat}
+      </div>
       <div
         className="three-panel-preview min-w-0 overflow-hidden"
         data-open={previewVisible}
         aria-hidden={!previewVisible}
+        data-testid="three-panel-preview"
       >
         {preview}
       </div>
@@ -79,6 +85,7 @@ export function ThreePanelLayout({
         className="three-panel-preview-rail flex min-w-0 items-start justify-center border-l border-hairline bg-canvas-soft px-1 py-sm"
         data-preview-open={previewVisible}
         aria-hidden={previewToggle === undefined}
+        data-testid="three-panel-preview-rail"
       >
         {previewToggle}
       </div>

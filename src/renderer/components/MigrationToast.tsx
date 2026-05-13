@@ -13,8 +13,7 @@
 
 import { AlertTriangle } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-
-const TOAST_TEXT = 'Plugins now run in isolated process. Some plugins may need updates.';
+import { useT } from '../i18n';
 
 export interface MigrationToastProps {
   /** True if v2.3.0 toast has been previously dismissed (read from settings). */
@@ -24,6 +23,7 @@ export interface MigrationToastProps {
 }
 
 export function MigrationToast(props: MigrationToastProps): React.JSX.Element | null {
+  const t = useT();
   const [visible, setVisible] = useState<boolean>(!props.dismissed);
   const [pending, setPending] = useState<boolean>(false);
 
@@ -47,26 +47,24 @@ export function MigrationToast(props: MigrationToastProps): React.JSX.Element | 
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none fixed bottom-4 left-1/2 z-40 w-[520px] max-w-[95vw] -translate-x-1/2 rounded-lg border border-yellow-700/50 bg-bg-secondary shadow-lg"
+      className="pointer-events-none fixed bottom-48 left-1/2 z-40 w-[520px] max-w-[95vw] -translate-x-1/2 rounded-lg border border-yellow-700/50 bg-bg-secondary shadow-lg"
       data-testid="migration-toast"
     >
       <div className="flex items-start gap-3 px-4 py-3">
         <AlertTriangle aria-hidden="true" className="h-5 w-5 shrink-0 text-yellow-400" />
         <div className="flex-1 min-w-0 space-y-1">
-          <p className="text-sm font-medium text-text-primary">{TOAST_TEXT}</p>
-          <p className="text-xs text-text-tertiary">
-            If a plugin no longer works after this update, switch it back to in-process mode in
-            settings (you&apos;ll be prompted to confirm).
-          </p>
+          <p className="text-sm font-medium text-text-primary">{t('migration_toast.title')}</p>
+          <p className="text-xs text-text-tertiary">{t('migration_toast.hint')}</p>
         </div>
         <button
           type="button"
           onClick={handleDismiss}
           disabled={pending}
+          aria-label={pending ? t('migration_toast.saving') : t('migration_toast.dismiss')}
           className="pointer-events-auto shrink-0 rounded border border-border-primary bg-bg-tertiary px-3 py-1 text-xs hover:bg-border-primary disabled:opacity-50"
           data-testid="migration-toast-dismiss"
         >
-          {pending ? 'Saving…' : 'Got it'}
+          {pending ? t('migration_toast.saving') : t('migration_toast.dismiss')}
         </button>
       </div>
     </div>

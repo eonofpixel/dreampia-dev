@@ -5,63 +5,59 @@
 
 [![CI](https://github.com/eonofpixel/dreampia-dev/actions/workflows/ci.yml/badge.svg)](https://github.com/eonofpixel/dreampia-dev/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Version](https://img.shields.io/badge/version-1.0.0-brightgreen.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.10.0-brightgreen.svg)](./CHANGELOG.md)
 
 ---
 
-## v1.0.0 — Production Release (2026-05-03)
+## v2.10.0 - Current Status (2026-05-13)
 
-**Dreampia-Dev v1.0.0 — feature complete, production-ready 한국어 우선 오픈소스
-AI 코딩 데스크톱.** v0.1.0 부터 v0.14.0 까지 14개 minor release 누적 위에 빌드
-된 안정 버전입니다. 일반 사용자 대상 배포 가능.
+**Dreampia-Dev는 한국어 우선 로컬 AI 코딩 워크벤치입니다.** Claude Code와
+OpenAI Codex 스타일의 채팅, 프로젝트 선택, Code 모드, diff/apply, 권한 표시,
+MCP/플러그인/자동화 진입점을 Electron 데스크톱 안에 묶습니다.
 
-> **단 unsigned build** — 코드 서명 인증서 매입 전까지 SmartScreen / Gatekeeper
-> 경고가 표시됩니다. 인증서 등록 후 (v1.0.1+) 자동으로 signed release 활성화.
-> 자세한 가이드: [docs/code-signing.md](./docs/code-signing.md)
+OpenHands, Aider, Continue, Roo Code와 같은 오픈소스 AI 코딩 도구와 비교할 때
+평가 기준은 단순 화면이 아니라 **새 사용자가 실제 저장소에서 작업 요청, 코드
+검토, 적용, 테스트 확인까지 이어갈 수 있는가**입니다.
 
-### 다운로드 (최신: v1.0.0)
+### 지금 바로 확인할 것
 
-[GitHub Releases](https://github.com/eonofpixel/dreampia-dev/releases/latest)
-
-| 플랫폼 | 파일 |
-|--------|------|
-| Windows | `Dreampia-Dev-Setup-1.0.0-x64.exe` |
-| macOS Intel | `Dreampia-Dev-1.0.0-x64.dmg` |
-| macOS Apple Silicon | `Dreampia-Dev-1.0.0-arm64.dmg` |
-| Linux AppImage | `Dreampia-Dev-1.0.0-x86_64.AppImage` |
-| Linux Debian | `Dreampia-Dev-1.0.0-amd64.deb` |
-
-v0.x 사용자는 자동 업데이트 (`electron-updater`). v1.0.0 → v1.0.1 (signed)
-전환 시 한 번만 manual install 필요할 수 있음.
-
-### v1.0.0 핵심 가치
-
-- 한국어 우선 + 영어 i18n (v0.11.0)
-- 슬래시 명령 7종 + 사용자 지정 단축키 (v0.5.0 + v0.10.0)
-- @ 멘션 typed file references — chip 표시 + FTS5 검색 인덱싱 (v0.6.0 + v0.13.0)
-- Cross-AI Compare — Claude vs Codex 동시 실행 + diff (v0.12.0)
-- FTS5 채팅 검색 (v0.7.0)
-- Usage 추적 + 비용 한도 + CSV 내보내기 (v0.4.0 + v0.9.0)
-- MCP Bridge + 자동 discovery (v0.2.0 + v0.9.0)
-- 4-tier sandbox 권한 모델 + 30+ capability (v0.1.0)
-- 자가 진단 도구 + ABI 영구 안정화 (v0.14.0)
-
-### Phase 진척
-
-```
-Phase 1 — Foundation (v0.1.0 ~ v0.1.2)             COMPLETE
-Phase 2 — MCP + Onboarding (v0.2.0 ~ v0.3.0)       COMPLETE
-Phase 3 — Features (v0.4.0 ~ v0.7.0)               COMPLETE
-Phase 4 — Polish (v0.8.0 ~ v0.14.0)                COMPLETE
-Phase 5 — Code Signing (v1.0.1+)                   AWAITING USER ACTION
+```bash
+npm install
+npm run dev
 ```
 
-> **v1.0.0 unsigned build 우회**:
-> - **macOS**: `시스템 환경설정 → 보안 및 개인정보 보호 → "확인 없이 열기"`
-> - **Windows**: `더 많이 → 실행` (SmartScreen 우회)
-> - **Linux**: AppImage / deb 모두 표준 코드 서명 없음 (정상)
->
-> 인증서 매입 후 secrets 등록은 [docs/code-signing.md](./docs/code-signing.md) 참조.
+검증 명령:
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run pretest:e2e
+npm run test:e2e
+```
+
+### 차별점
+
+- 한국어-first UX와 영어 i18n을 함께 유지합니다.
+- Claude/Codex CLI, Mock provider, MCP, Code 모드, Compare, Plugin, Automation
+  표면을 한 앱에서 다룹니다.
+- 권한/위험 작업, IPC 실패, 적용 후보, 테스트 결과를 사용자가 이해할 수 있는
+  흐름으로 노출하는 것을 목표로 합니다.
+- OpenHands처럼 완전한 클라우드/샌드박스 자율 에이전트를 대체하기보다는,
+  로컬 데스크톱에서 검토 가능한 코딩 루프를 강화합니다.
+
+### 현재 지원과 제한
+
+- 지원: 프로젝트 폴더 선택, 새 채팅, 빠른 시작 프롬프트, Claude/Codex/Mock
+  provider 상태, Code 패널, 파일 적용 후보, 설정, MCP, Compare, Plugin,
+  Automation 진입점.
+- 제한: live AI 작업은 provider CLI와 preload/IPC 연결 상태에 의존합니다.
+  브라우저-only renderer에서는 IPC 미연결 상태가 표시되고 입력/빠른 시작이
+  비활성화됩니다.
+- 제한: 코드 서명은 배포 환경에 따라 다르며 자세한 내용은
+  [docs/code-signing.md](./docs/code-signing.md)를 확인하세요.
+- 공개/기여자 기준 문서:
+  [docs/open-source-readiness.md](./docs/open-source-readiness.md)
 
 ---
 
@@ -152,7 +148,7 @@ npm      >= 10.0
 OS       Windows 10+ / macOS 12+ / Linux (Ubuntu 22+)
 ```
 
-### 진행 상황 (v1.0.0)
+### 진행 상황 (요약)
 
 ```
 ✅ Phase 1 — Foundation (v0.1.0 ~ v0.1.2)
@@ -185,14 +181,14 @@ OS       Windows 10+ / macOS 12+ / Linux (Ubuntu 22+)
    v0.13.0 Typed file references
    v0.14.0 ABI hardening + 자가 진단
 
-⏳ Phase 5 — Code Signing (v1.0.1+) — 사용자 액션 대기
+⏳ Phase 5 — Code Signing — 사용자 액션 대기
    ⏳ Win EV Code Signing Cert ($300-400/년) 매입 + secrets 등록
    ⏳ Apple Developer Program ($99/년) 가입 + secrets 등록
    ⏳ secrets 등록 후 다음 tag push 부터 자동 활성화
    세부: docs/code-signing.md
 ```
 
-### 검증 현황 (v1.0.0)
+### 검증 현황 (문서화된 기준)
 
 ```
 1421+ tests pass (vitest, mocked I/O)
@@ -204,11 +200,11 @@ production build 성공 (vite + electron-builder, 13 artifacts)
 Code-signing 인프라 검증 (secrets 등록 시 즉시 활성화)
 ```
 
-### v1.0.0 알려진 제한
+### 현재 알려진 제한
 
 ```
 1. Unsigned build — SmartScreen / Gatekeeper 경고 표시.
-   → v1.0.1 부터 cert 등록 후 해결 (사용자 액션 대기).
+   → cert 등록 후 해결 (사용자 액션 대기).
    세부: docs/code-signing.md
 
 2. Mock 응답 = "Mock response. You said: ..." (echo).
@@ -447,15 +443,15 @@ GitHub Releases 채널 폴링. 자세한 절차 (secrets, 아이콘, 버전 bump
 
 - **라이선스**: [Apache 2.0](./LICENSE) (확정)
 - **subprocess 호출만** → 두 회사 라이선스 위반 X
-- **코드 서명**: v1.0.0 unsigned (인프라 준비 완료). v1.0.1+ 부터 signed
+- **코드 서명**: 현재 unsigned 가능성 있음 (인프라 준비 완료). cert 등록 후 signed
   ([docs/code-signing.md](./docs/code-signing.md))
 - **사용자 자체 API 키 / CLI 인증 사용** — 토큰 저장 X
 
 ---
 
-## v1.0 발표 자료
+## 공개 / 발표 자료
 
-v1.0.0 release 후 OSS community 에 공유:
+공개 release 시 OSS community 에 공유:
 
 - [docs/announcement/hackernews.md](./docs/announcement/hackernews.md) — Show HN 포스트 초안
 - [docs/announcement/reddit.md](./docs/announcement/reddit.md) — r/programming + r/MachineLearning

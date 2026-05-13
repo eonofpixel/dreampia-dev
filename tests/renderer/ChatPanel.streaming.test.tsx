@@ -186,6 +186,39 @@ describe('null session + static', () => {
     expect(screen.getByTestId('chat-landing-hero')).toBeInTheDocument();
     expect(screen.getByText(/무엇을 만들어볼까요/)).toBeInTheDocument();
   });
+
+  it('landing quickstart actions submit repository-ready prompts', () => {
+    const onSubmit = vi.fn();
+    render(<ChatPanel session={null} onSubmit={onSubmit} workspaceName="dreampia-dev" />);
+    const actions = screen.getAllByTestId('chat-landing-quickstart-item');
+    expect(actions.length).toBe(4);
+    const first = actions[0];
+    if (first === undefined) throw new Error('expected first quickstart action');
+    fireEvent.click(first);
+    expect(onSubmit).toHaveBeenCalledWith(
+      '현재 저장소의 최근 변경사항을 리뷰하고 위험한 부분과 테스트 필요 지점을 정리해줘'
+    );
+  });
+
+  it('landing shows folder picker and disables quickstarts before workspace selection', () => {
+    const onPickWorkspace = vi.fn();
+    render(<ChatPanel session={null} onSubmit={() => {}} onPickWorkspace={onPickWorkspace} />);
+    fireEvent.click(screen.getByTestId('chat-landing-pick-workspace'));
+    expect(onPickWorkspace).toHaveBeenCalledTimes(1);
+    for (const action of screen.getAllByTestId('chat-landing-quickstart-item')) {
+      expect(action).toBeDisabled();
+    }
+  });
+
+  it('landing quickstart actions are disabled when IPC is unavailable', () => {
+    render(
+      <ChatPanel session={null} onSubmit={() => {}} workspaceName="dreampia-dev" ipcUnavailable />
+    );
+    for (const action of screen.getAllByTestId('chat-landing-quickstart-item')) {
+      expect(action).toBeDisabled();
+    }
+  });
+
   it('renders session title', () => {
     const s = makeSession([]);
     (s as { title: string }).title = '내 세션';
@@ -209,11 +242,7 @@ describe('null session + static', () => {
 describe('WelcomeMessage (v0.3.0)', () => {
   it('renders WelcomeMessage when session has zero turns', () => {
     render(
-      <ChatPanel
-        session={makeSession([])}
-        onSubmit={() => {}}
-        workspaceName="dreampia-dev"
-      />
+      <ChatPanel session={makeSession([])} onSubmit={() => {}} workspaceName="dreampia-dev" />
     );
     expect(screen.getByTestId('welcome-message')).toBeInTheDocument();
     expect(screen.getByText('안녕하세요')).toBeInTheDocument();
@@ -226,11 +255,7 @@ describe('WelcomeMessage (v0.3.0)', () => {
 
   it('renders 3 suggestion chips', () => {
     render(
-      <ChatPanel
-        session={makeSession([])}
-        onSubmit={() => {}}
-        workspaceName="dreampia-dev"
-      />
+      <ChatPanel session={makeSession([])} onSubmit={() => {}} workspaceName="dreampia-dev" />
     );
     const chips = screen.getAllByTestId('welcome-suggestion-chip');
     expect(chips.length).toBe(3);
@@ -239,11 +264,7 @@ describe('WelcomeMessage (v0.3.0)', () => {
   it('clicking a suggestion chip calls onSubmit with that prompt', () => {
     const onSubmit = vi.fn();
     render(
-      <ChatPanel
-        session={makeSession([])}
-        onSubmit={onSubmit}
-        workspaceName="dreampia-dev"
-      />
+      <ChatPanel session={makeSession([])} onSubmit={onSubmit} workspaceName="dreampia-dev" />
     );
     const chips = screen.getAllByTestId('welcome-suggestion-chip');
     const first = chips[0];
@@ -256,13 +277,7 @@ describe('WelcomeMessage (v0.3.0)', () => {
 
   it('clicking each chip submits with its own prompt text', () => {
     const onSubmit = vi.fn();
-    render(
-      <ChatPanel
-        session={makeSession([])}
-        onSubmit={onSubmit}
-        workspaceName="x"
-      />
-    );
+    render(<ChatPanel session={makeSession([])} onSubmit={onSubmit} workspaceName="x" />);
     const chips = screen.getAllByTestId('welcome-suggestion-chip');
     chips.forEach((chip) => fireEvent.click(chip));
     expect(onSubmit).toHaveBeenCalledTimes(3);
@@ -273,11 +288,7 @@ describe('WelcomeMessage (v0.3.0)', () => {
 
   it('shows workspaceName in greeting', () => {
     render(
-      <ChatPanel
-        session={makeSession([])}
-        onSubmit={() => {}}
-        workspaceName="my-cool-project"
-      />
+      <ChatPanel session={makeSession([])} onSubmit={() => {}} workspaceName="my-cool-project" />
     );
     expect(screen.getByText(/my-cool-project 작업 시작/)).toBeInTheDocument();
   });

@@ -97,20 +97,23 @@ Dreampia-Dev 는 **한국어 폴더 cwd 처리에 특화** 되어 있습니다 �
 
 ## Commit 메시지
 
-```
-feat: 새 기능
-fix: 버그 수정
-docs: 문서
-style: 포맷
-refactor: 리팩토링
-test: 테스트
-chore: 빌드 / CI
+이 저장소의 maintainer commit 은 Lore Commit Protocol 을 따릅니다. 첫 줄은
+무엇을 바꿨는지가 아니라 **왜 바꿨는지**를 짧게 씁니다.
 
-예:
-  feat(session): SS-1 TypeScript types 추가
-  fix(ime): 한글 모드에서 Ctrl+K 인식 안 되는 문제
-  docs(design): 컴포넌트 button 변형 추가
+```text
+<intent line: why the change was made>
+
+Constraint: <external constraint that shaped the decision>
+Rejected: <alternative considered> | <reason>
+Confidence: <low|medium|high>
+Scope-risk: <narrow|moderate|broad>
+Directive: <forward-looking warning>
+Tested: <what was verified>
+Not-tested: <known gaps>
 ```
+
+작은 외부 기여 PR 은 conventional commit 형식도 받을 수 있지만, merge/squash 시
+maintainer 가 위 형식으로 정리합니다.
 
 ## PR 체크리스트
 

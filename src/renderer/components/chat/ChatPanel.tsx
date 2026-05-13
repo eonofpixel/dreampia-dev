@@ -10,7 +10,17 @@
  *       docs/ia/onboarding.md (CLI 감지)
  */
 
-import { AlertTriangle, Eye, EyeOff, Folder, GitBranch, Hand, Lock, LockOpen } from 'lucide-react';
+import {
+  AlertTriangle,
+  CornerDownLeft,
+  Eye,
+  EyeOff,
+  Folder,
+  GitBranch,
+  Hand,
+  Lock,
+  LockOpen,
+} from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 
@@ -278,7 +288,12 @@ export function ChatPanel({
     return (
       <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
         {ipcUnavailable && <IpcUnavailableBanner />}
-        <ChatLandingHero workspaceName={workspaceName} />
+        <ChatLandingHero
+          workspaceName={workspaceName}
+          onSubmit={onSubmit}
+          onPickWorkspace={onPickWorkspace}
+          disabled={ipcUnavailable}
+        />
         <InputArea
           onSubmit={onSubmit}
           isStreaming={isStreaming}
@@ -1175,18 +1190,41 @@ function TurnDisplay({
  *
  * Refs: captures/explore_48_annotation_open + state_09_left_sidebar.
  */
-const QUICKSTART_KEYS: ReadonlyArray<string> = [
-  'chat.empty.quickstart.review_pr',
-  'chat.empty.quickstart.find_bug',
-  'chat.empty.quickstart.explain_arch',
-  'chat.empty.quickstart.write_test',
+const QUICKSTART_ACTIONS: ReadonlyArray<{ labelKey: string; promptKey: string }> = [
+  {
+    labelKey: 'chat.empty.quickstart.review_pr',
+    promptKey: 'chat.empty.quickstart.review_pr_prompt',
+  },
+  {
+    labelKey: 'chat.empty.quickstart.find_bug',
+    promptKey: 'chat.empty.quickstart.find_bug_prompt',
+  },
+  {
+    labelKey: 'chat.empty.quickstart.explain_arch',
+    promptKey: 'chat.empty.quickstart.explain_arch_prompt',
+  },
+  {
+    labelKey: 'chat.empty.quickstart.write_test',
+    promptKey: 'chat.empty.quickstart.write_test_prompt',
+  },
 ];
 
-function ChatLandingHero({ workspaceName }: { workspaceName?: string }): React.JSX.Element {
+function ChatLandingHero({
+  workspaceName,
+  onSubmit,
+  onPickWorkspace,
+  disabled = false,
+}: {
+  workspaceName?: string;
+  onSubmit: (text: string) => void;
+  onPickWorkspace?: () => void;
+  disabled?: boolean;
+}): React.JSX.Element {
   const t = useT();
+  const quickstartDisabled = disabled || workspaceName === undefined;
   return (
     <div
-      className="flex h-full flex-col items-center justify-center px-section py-xxl"
+      className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-section py-xl"
       data-testid="chat-landing-hero"
     >
       <div className="text-center">
@@ -1196,20 +1234,45 @@ function ChatLandingHero({ workspaceName }: { workspaceName?: string }): React.J
             ? t('chat.empty.hero_subtitle')
             : t('chat.empty.hero_subtitle_workspace', { name: workspaceName })}
         </p>
+        {workspaceName === undefined && onPickWorkspace !== undefined && (
+          <button
+            type="button"
+            onClick={onPickWorkspace}
+            className="mt-lg inline-flex items-center justify-center gap-xs rounded-md border border-hairline bg-surface-card px-md py-sm text-body-sm font-medium text-text-primary transition hover:border-hairline-strong hover:bg-surface-strong focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/35"
+            data-testid="chat-landing-pick-workspace"
+          >
+            <Folder aria-hidden="true" className="h-4 w-4" />
+            {t('chat.empty.pick_workspace')}
+          </button>
+        )}
       </div>
 
       <div className="mt-xxl w-full max-w-2xl">
-        <p className="mb-xs px-sm text-caption-uppercase uppercase text-text-tertiary">
-          {t('chat.empty.quickstart_label')}
-        </p>
+        <div className="mb-xs flex items-center justify-between gap-sm px-sm">
+          <p className="text-caption-uppercase uppercase text-text-tertiary">
+            {t('chat.empty.quickstart_label')}
+          </p>
+          {workspaceName === undefined && (
+            <p className="text-xs text-text-tertiary">{t('chat.empty.quickstart_disabled_hint')}</p>
+          )}
+        </div>
         <ul className="space-y-xs">
-          {QUICKSTART_KEYS.map((key) => (
-            <li
-              key={key}
-              className="rounded-lg border border-hairline bg-surface-card px-md py-sm text-body-md text-text-secondary"
-              data-testid="chat-landing-quickstart-item"
-            >
-              {t(key)}
+          {QUICKSTART_ACTIONS.map((action) => (
+            <li key={action.labelKey}>
+              <button
+                type="button"
+                onClick={() => onSubmit(t(action.promptKey))}
+                disabled={quickstartDisabled}
+                aria-label={t('chat.empty.quickstart_aria', { label: t(action.labelKey) })}
+                className="group flex w-full items-center justify-between rounded-lg border border-hairline bg-surface-card px-md py-sm text-left text-body-md text-text-primary transition hover:border-hairline-strong hover:bg-surface-strong focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/35 disabled:cursor-not-allowed disabled:text-text-secondary"
+                data-testid="chat-landing-quickstart-item"
+              >
+                <span>{t(action.labelKey)}</span>
+                <CornerDownLeft
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0 text-text-tertiary transition group-hover:text-text-secondary"
+                />
+              </button>
             </li>
           ))}
         </ul>
