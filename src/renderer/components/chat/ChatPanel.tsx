@@ -623,9 +623,11 @@ function ChatHeader({
     // narrow 한 header 에서 모든 자식이 단일 row 유지. 이전 v1.0.6 는 drift
     // badge 추가로 모든 요소 wrap 됐었음.
     // v2.10.0 (.omc/DESIGN.md) — h-12 → h-10 (modern productivity 표준).
-    <div className="flex h-10 items-center justify-between gap-xs border-b border-hairline px-base">
-      <h1 className="min-w-0 truncate text-title-sm text-text-primary">{session.title}</h1>
-      <div className="flex shrink-0 items-center gap-xs whitespace-nowrap text-body-sm text-text-tertiary">
+    <div className="flex h-10 items-center justify-between gap-xs border-b border-hairline pl-12 pr-sm sm:px-base">
+      <h1 className="hidden min-w-0 truncate text-title-sm text-text-primary sm:block">
+        {session.title}
+      </h1>
+      <div className="ml-auto flex min-w-0 items-center justify-end gap-xs whitespace-nowrap text-body-sm text-text-tertiary">
         {driftDetected && (
           // v1.1.21 (Workspace UX): drift menu — 짧은 ⚠ icon 을 click 시
           // popover (group focus-within) 로 detail + 액션 노출. v1.0.7 의
@@ -672,7 +674,7 @@ function ChatHeader({
           <button
             type="button"
             onClick={onPickWorkspace}
-            className="flex max-w-[160px] shrink-0 items-center gap-1.5 truncate rounded bg-surface-strong px-2 py-0.5 hover:bg-hairline-strong"
+            className="flex max-w-[118px] shrink-0 items-center gap-1.5 truncate rounded bg-surface-strong px-2 py-0.5 hover:bg-hairline-strong sm:max-w-[160px]"
             title={t('chat.header.workspace_tooltip', { name: workspaceName })}
             aria-label={t('chat.header.workspace_pick_aria')}
             data-testid="workspace-pick-button"
@@ -725,9 +727,13 @@ function ChatHeader({
          * CliStatusBadge (실제 감지 결과 표시) 는 그대로 유지 — dropdown 은
          * 사용자 선택, badge 는 실제 routing source 결과.
          */}
-        <ProviderDropdown />
-        <CliStatusBadge status={cliStatus} />
-        <span className="shrink-0">
+        <div className="hidden md:block">
+          <ProviderDropdown />
+        </div>
+        <div className="hidden md:block">
+          <CliStatusBadge status={cliStatus} />
+        </div>
+        <span className="hidden shrink-0 md:inline">
           {session.conversation.current_model}
           <span className="mx-1">·</span>
           {EFFORT_LABELS_KO[session.conversation.current_effort]}
@@ -740,7 +746,7 @@ function ChatHeader({
           <button
             type="button"
             onClick={onTogglePreview}
-            className="shrink-0 rounded px-1.5 py-0.5 text-[14px] leading-none hover:bg-surface-strong"
+            className="hidden shrink-0 rounded px-1.5 py-0.5 text-[14px] leading-none hover:bg-surface-strong md:inline-flex"
             title={
               previewVisible === true
                 ? t('chat.header.preview_hide_tooltip')
@@ -769,7 +775,7 @@ function ChatHeader({
           <button
             type="button"
             onClick={onForkSession}
-            className="shrink-0 rounded px-1.5 py-0.5 text-[14px] leading-none hover:bg-surface-strong"
+            className="hidden shrink-0 rounded px-1.5 py-0.5 text-[14px] leading-none hover:bg-surface-strong sm:inline-flex"
             title={t('chat.header.fork_tooltip')}
             aria-label={t('chat.header.fork_aria')}
             data-testid="chat-fork-button"
