@@ -25,6 +25,7 @@ test.describe('smoke', () => {
 
     const layout = window.locator('[data-preview-visible]');
     await expect(layout).toHaveAttribute('data-preview-visible', 'false');
+    await expect(window.getByTestId('sidebar-rail-toggle')).toBeVisible();
     await expect(window.getByTestId('preview-rail-toggle')).toBeVisible();
     await expect(window.getByRole('complementary', { name: '미리보기' })).toBeHidden();
 

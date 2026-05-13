@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { ThreePanelLayout } from './components/layout/ThreePanelLayout';
 import { Sidebar } from './components/sidebar/Sidebar';
 import type { SearchResultEntry } from './components/sidebar/SearchSection';
@@ -66,6 +66,8 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useKeyboardOverrides } from './hooks/useKeyboardOverrides';
 import type { ShortcutAction } from './keyboard/shortcuts';
 import { setLocale, isLocale, useT } from './i18n';
+
+const SIDEBAR_COMPACT_MEDIA_QUERY = '(max-width: 760px)';
 
 /**
  * Renderer-side mock fallback gate.
@@ -273,6 +275,25 @@ export function App(): React.JSX.Element {
   });
   // v0.10.0 (F-025) — 사이드바 토글. Mod+B 로 표시/숨김.
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+
+    const query = window.matchMedia(SIDEBAR_COMPACT_MEDIA_QUERY);
+    const syncSidebarForViewport = (): void => {
+      setSidebarVisible(!query.matches);
+    };
+
+    syncSidebarForViewport();
+    query.addEventListener('change', syncSidebarForViewport);
+    return () => {
+      query.removeEventListener('change', syncSidebarForViewport);
+    };
+  }, []);
+
+  const toggleSidebar = useCallback((): void => {
+    setSidebarVisible((v) => !v);
+  }, []);
+
   // v2.10.x — 미리보기 패널은 사용자가 필요할 때 여는 drawer 기본값.
   // 빈 작업 화면은 chat 중심으로 시작하고, rail / ChatHeader / Code 진입이
   // 같은 상태를 공유한다.
@@ -1291,7 +1312,7 @@ export function App(): React.JSX.Element {
         void handleNewChat();
       },
       'sidebar.toggle': (): void => {
-        setSidebarVisible((v) => !v);
+        toggleSidebar();
       },
       'preview.toggle': (): void => {
         setPreviewVisible((v) => !v);
@@ -1350,6 +1371,7 @@ export function App(): React.JSX.Element {
   }, [
     sidebarVisible,
     previewVisible,
+    toggleSidebar,
     handleNewChat,
     slashHelpOpen,
     settingsModalOpen,
@@ -1391,6 +1413,31 @@ export function App(): React.JSX.Element {
       <ThreePanelLayout
         sidebarVisible={sidebarVisible}
         previewVisible={previewVisible}
+        sidebarToggle={
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-hairline bg-surface-card text-text-secondary shadow-soft transition-colors hover:border-hairline-strong hover:bg-surface-strong hover:text-text-primary"
+            title={
+              sidebarVisible
+                ? t('chat.header.sidebar_hide_tooltip')
+                : t('chat.header.sidebar_show_tooltip')
+            }
+            aria-label={
+              sidebarVisible
+                ? t('chat.header.sidebar_hide_aria')
+                : t('chat.header.sidebar_show_aria')
+            }
+            aria-pressed={sidebarVisible}
+            data-testid="sidebar-rail-toggle"
+          >
+            {sidebarVisible ? (
+              <PanelLeftClose aria-hidden="true" className="h-4 w-4" />
+            ) : (
+              <PanelLeftOpen aria-hidden="true" className="h-4 w-4" />
+            )}
+          </button>
+        }
         previewToggle={
           <button
             type="button"

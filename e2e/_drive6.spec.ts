@@ -78,6 +78,7 @@ test.describe('drive r6 — preview panel toggle (v1.0.8)', () => {
 
     const layout = window.locator('[data-sidebar-visible]');
     await expect(layout).toHaveAttribute('data-sidebar-visible', 'true');
+    await expect(window.getByTestId('sidebar-rail-toggle')).toBeVisible();
 
     await window.evaluate(() => document.body.focus());
     await window.keyboard.press('ControlOrMeta+B');
@@ -91,6 +92,16 @@ test.describe('drive r6 — preview panel toggle (v1.0.8)', () => {
   }) => {
     await window.setViewportSize({ width: 720, height: 760 });
     await expect(window.getByTestId('chat-landing-hero')).toBeVisible({ timeout: 10_000 });
+
+    const sidebarLayout = window.locator('[data-sidebar-visible]');
+    await expect(sidebarLayout).toHaveAttribute('data-sidebar-visible', 'false');
+    const sidebarToggle = window.getByTestId('sidebar-rail-toggle');
+    await expect(sidebarToggle).toBeVisible();
+    await sidebarToggle.click();
+    await expect(sidebarLayout).toHaveAttribute('data-sidebar-visible', 'true');
+    await expect(window.getByLabel('사이드바')).toBeVisible();
+    await sidebarToggle.click();
+    await expect(sidebarLayout).toHaveAttribute('data-sidebar-visible', 'false');
 
     const layout = window.locator('[data-preview-visible]');
     await expect(layout).toHaveAttribute('data-preview-visible', 'false');

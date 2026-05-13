@@ -12,6 +12,7 @@ export interface ThreePanelLayoutProps {
   sidebar: React.ReactNode;
   chat: React.ReactNode;
   preview: React.ReactNode;
+  sidebarToggle?: React.ReactNode;
   previewToggle?: React.ReactNode;
   /**
    * v0.10.0 (F-025) — Mod+B 단축키로 사이드바 토글. false 면 sidebar 자리를
@@ -32,6 +33,7 @@ export function ThreePanelLayout({
   sidebar,
   chat,
   preview,
+  sidebarToggle,
   previewToggle,
   sidebarVisible = true,
   previewVisible = true,
@@ -50,6 +52,14 @@ export function ThreePanelLayout({
       data-sidebar-visible={sidebarVisible}
       data-preview-visible={previewVisible}
     >
+      {sidebarToggle !== undefined && (
+        <div
+          className="three-panel-sidebar-toggle absolute top-sm z-40 flex items-center justify-center"
+          data-sidebar-open={sidebarVisible}
+        >
+          {sidebarToggle}
+        </div>
+      )}
       <div
         className="three-panel-sidebar min-w-0 overflow-hidden"
         data-open={sidebarVisible}

@@ -46,4 +46,21 @@ describe('ThreePanelLayout', () => {
     expect(screen.getByTestId('preview-rail-toggle')).toBeInTheDocument();
     expect(screen.getByTestId('preview')).toBeInTheDocument();
   });
+
+  it('keeps the sidebar toggle available when sidebar is collapsed', () => {
+    const { container } = render(
+      <ThreePanelLayout
+        sidebar={<div data-testid="sidebar">사이드바</div>}
+        chat={<div data-testid="chat">채팅</div>}
+        preview={<div data-testid="preview">미리보기</div>}
+        sidebarVisible={false}
+        sidebarToggle={<button data-testid="sidebar-rail-toggle">열기</button>}
+      />
+    );
+
+    const root = container.firstChild as HTMLElement;
+    expect(root.getAttribute('data-sidebar-visible')).toBe('false');
+    expect(screen.getByTestId('sidebar-rail-toggle')).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar')).toBeInTheDocument();
+  });
 });

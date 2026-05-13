@@ -134,6 +134,40 @@ describe('App keyboard shortcuts (v0.10.0)', () => {
     });
   });
 
+  it('collapses sidebar on compact viewport and keeps the rail toggle usable', async () => {
+    stubPlatform('Win32');
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => {
+        return {
+          matches: query === '(max-width: 760px)',
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        } as unknown as MediaQueryList;
+      })
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-sidebar-visible]')?.getAttribute('data-sidebar-visible')
+      ).toBe('false');
+    });
+
+    fireEvent.click(screen.getByTestId('sidebar-rail-toggle'));
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-sidebar-visible]')?.getAttribute('data-sidebar-visible')
+      ).toBe('true');
+    });
+  });
+
   it('IME composition (isComposing=true) suppresses shortcut', async () => {
     stubPlatform('Win32');
     render(<App />);
