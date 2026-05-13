@@ -235,6 +235,43 @@ describe('null session + static', () => {
   });
 });
 
+describe('coding loop affordances', () => {
+  it('forwards onApplyToFile in the normal non-virtualized message path', () => {
+    const onApplyToFile = vi.fn();
+    const turn = makeCT('```ts\nconst answer = 42;\n```');
+
+    render(
+      <ChatPanel session={makeSession([turn])} onSubmit={() => {}} onApplyToFile={onApplyToFile} />
+    );
+
+    fireEvent.click(screen.getByTestId('message-code-apply-0'));
+    expect(onApplyToFile).toHaveBeenCalledWith('const answer = 42;', 'ts');
+  });
+
+  it('shows provider recovery when no CLI is detected and opens settings CTAs', () => {
+    const onOpenProviderSettings = vi.fn();
+    const onOpenDirectApiSettings = vi.fn();
+
+    render(
+      <ChatPanel
+        session={makeSession([])}
+        onSubmit={() => {}}
+        cliStatus={{ source: 'auto', claude: null, codex: null }}
+        onOpenProviderSettings={onOpenProviderSettings}
+        onOpenDirectApiSettings={onOpenDirectApiSettings}
+      />
+    );
+
+    expect(screen.getByTestId('provider-recovery-banner')).toHaveTextContent(
+      '실행 provider 확인 필요'
+    );
+    fireEvent.click(screen.getByTestId('provider-recovery-settings'));
+    fireEvent.click(screen.getByTestId('provider-recovery-direct-api'));
+    expect(onOpenProviderSettings).toHaveBeenCalledTimes(1);
+    expect(onOpenDirectApiSettings).toHaveBeenCalledTimes(1);
+  });
+});
+
 // ────────────────────────────────────────────────────────────
 // v0.3.0 — WelcomeMessage in empty MessagesArea
 // ────────────────────────────────────────────────────────────

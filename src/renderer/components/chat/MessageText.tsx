@@ -24,6 +24,7 @@ import { ArrowRightToLine, FileEdit } from 'lucide-react';
 import { Fragment, useMemo } from 'react';
 
 import { useT } from '../../i18n';
+import { CodingWorkflowCard } from './CodingWorkflowCard';
 
 interface CodeSegment {
   kind: 'code';
@@ -96,6 +97,8 @@ export interface MessageTextProps {
    * 내부에서 사용하지 않음.
    */
   inverse?: boolean;
+  /** Assistant 응답의 coding-loop 섹션을 구조화 카드로 요약 표시. */
+  showWorkflowCard?: boolean;
 }
 
 export function MessageText({
@@ -104,18 +107,27 @@ export function MessageText({
   onApplyToFile,
   // v2.10.0 (C-2) — unused, kept for prop compat. caller 가 inverse 전달해도 ignore.
   inverse: _inverse = false,
+  showWorkflowCard = false,
 }: MessageTextProps): React.JSX.Element {
   const t = useT();
   const segments = useMemo(() => parseMessageSegments(text), [text]);
+  const workflowCard = showWorkflowCard ? <CodingWorkflowCard text={text} /> : null;
 
   // fenced block 1개도 없으면 단순 <p> 로 — DOM 노이즈 최소화 + 기존
   // streaming-cursor-안의-<p> 마크업과 시각적으로 동일.
   if (segments.length === 1 && segments[0]?.kind === 'text') {
-    return <p>{segments[0].content}</p>;
+    if (workflowCard === null) return <p>{segments[0].content}</p>;
+    return (
+      <div className="space-y-1.5" data-testid="message-text">
+        {workflowCard}
+        <p>{segments[0].content}</p>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-1.5" data-testid="message-text">
+      {workflowCard}
       {segments.map((seg, idx) => {
         if (seg.kind === 'text') {
           // text segment 가 빈 줄 만으로 이뤄진 경우도 그대로 (line break 보존).

@@ -13,7 +13,11 @@ import type { StreamEvent } from '../../src/providers/types';
 // Helper: collect entire stream into array
 // ────────────────────────────────────────────────────────────
 
-async function collect(provider: MockProvider, turns: Turn[], model = 'claude-sonnet-4.6'): Promise<StreamEvent[]> {
+async function collect(
+  provider: MockProvider,
+  turns: Turn[],
+  model = 'claude-sonnet-4.6'
+): Promise<StreamEvent[]> {
   const events: StreamEvent[] = [];
   for await (const ev of provider.stream({ turns, model })) {
     events.push(ev);
@@ -114,6 +118,21 @@ describe('MockProvider — echo and defaults', () => {
     const events = await collect(provider, []);
     expect(events[0]?.type).toBe('message_start');
     expect(events[events.length - 1]?.type).toBe('message_complete');
+  });
+
+  it('returns a transparent structured coding-loop guide for README install requests', async () => {
+    const provider = new MockProvider();
+    const events = await collect(provider, [userTurn('README 설치 안내를 더 명확하게 바꿔줘')]);
+    const fullText = events
+      .filter((e): e is Extract<StreamEvent, { type: 'text_delta' }> => e.type === 'text_delta')
+      .map((e) => e.text)
+      .join('');
+
+    expect(fullText).toContain('## 작업 계획');
+    expect(fullText).toContain('## 변경 후보');
+    expect(fullText).toContain('## 테스트 명령');
+    expect(fullText).toContain('Mock/dry-run');
+    expect(fullText).toContain('```md');
   });
 
   it('finds the LAST user turn (not first)', async () => {

@@ -116,6 +116,17 @@ export function ApplyToFileModal({
     >
       <div className="space-y-sm text-body-sm">
         <p className="text-text-secondary">{t('code.apply.modal.body')}</p>
+        <div
+          className="rounded-md border border-yellow-600/30 bg-yellow-900/10 p-xs text-text-secondary"
+          data-testid="apply-to-file-safety"
+        >
+          <p className="font-medium text-text-primary">{t('code.apply.modal.safety_title')}</p>
+          <ul className="mt-xxs list-disc space-y-xxs pl-base">
+            <li>{t('code.apply.modal.safety_review')}</li>
+            <li>{t('code.apply.modal.safety_cancel')}</li>
+            <li>{t('code.apply.modal.safety_apply')}</li>
+          </ul>
+        </div>
         <div className="flex items-center gap-xs">
           <span className="text-text-tertiary">{t('code.apply.modal.target')}:</span>
           <span

@@ -202,6 +202,10 @@ export interface ChatPanelProps {
    * Refs: BUILDER_UX_ANALYSIS.md #C — Apply-to-file follow-up.
    */
   onApplyToFile?: (code: string, language?: string) => void;
+  /** Provider/CLI 미연결 안내 CTA — Settings Provider 탭으로 이동. */
+  onOpenProviderSettings?: () => void;
+  /** Direct API 설정 CTA — Settings Direct API 탭으로 이동. */
+  onOpenDirectApiSettings?: () => void;
 }
 
 interface MessagesAreaProps {
@@ -279,6 +283,8 @@ export function ChatPanel({
   persistedTurnIds,
   onSendToCode,
   onApplyToFile,
+  onOpenProviderSettings,
+  onOpenDirectApiSettings,
 }: ChatPanelProps): React.JSX.Element {
   if (!session) {
     // α-2 (.omc/DESIGN.md, Codex parity) — hero + ChatInput 도 같이 mount.
@@ -288,6 +294,11 @@ export function ChatPanel({
     return (
       <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
         {ipcUnavailable && <IpcUnavailableBanner />}
+        <ProviderRecoveryBanner
+          cliStatus={cliStatus}
+          {...(onOpenProviderSettings !== undefined && { onOpenProviderSettings })}
+          {...(onOpenDirectApiSettings !== undefined && { onOpenDirectApiSettings })}
+        />
         <ChatLandingHero
           workspaceName={workspaceName}
           onSubmit={onSubmit}
@@ -332,6 +343,11 @@ export function ChatPanel({
         onForkSession={onForkSession}
       />
       {ipcUnavailable && <IpcUnavailableBanner />}
+      <ProviderRecoveryBanner
+        cliStatus={cliStatus}
+        {...(onOpenProviderSettings !== undefined && { onOpenProviderSettings })}
+        {...(onOpenDirectApiSettings !== undefined && { onOpenDirectApiSettings })}
+      />
       <MessagesArea
         turns={session.conversation.turns}
         onPickPrompt={onSubmit}
@@ -383,6 +399,61 @@ function IpcUnavailableBanner(): React.JSX.Element {
     >
       <strong>{t('chat.ipc.banner_strong')}</strong> {t('chat.ipc.banner_detail')}{' '}
       <code>window.dreampia</code> {t('chat.ipc.banner_check')}
+    </div>
+  );
+}
+
+function shouldShowProviderRecovery(cliStatus: CliStatus): boolean {
+  if (cliStatus === null) return false;
+  if (cliStatus.source === 'mock') return true;
+  return cliStatus.claude === null && cliStatus.codex === null;
+}
+
+function ProviderRecoveryBanner({
+  cliStatus,
+  onOpenProviderSettings,
+  onOpenDirectApiSettings,
+}: {
+  cliStatus: CliStatus;
+  onOpenProviderSettings?: () => void;
+  onOpenDirectApiSettings?: () => void;
+}): React.JSX.Element | null {
+  const t = useT();
+  if (!shouldShowProviderRecovery(cliStatus)) return null;
+
+  return (
+    <div
+      role="status"
+      data-testid="provider-recovery-banner"
+      className="border-b border-yellow-600/30 bg-yellow-900/10 px-4 py-2 text-xs text-text-secondary"
+    >
+      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-xs">
+        <AlertTriangle aria-hidden="true" className="h-4 w-4 shrink-0 text-yellow-300" />
+        <div className="min-w-[220px] flex-1">
+          <strong className="text-text-primary">{t('chat.provider_recovery.title')}</strong>{' '}
+          {t('chat.provider_recovery.body')}
+        </div>
+        {onOpenProviderSettings !== undefined && (
+          <button
+            type="button"
+            onClick={onOpenProviderSettings}
+            className="rounded-md border border-hairline bg-surface-card px-xs py-xxs text-text-primary hover:bg-surface-strong"
+            data-testid="provider-recovery-settings"
+          >
+            {t('chat.provider_recovery.provider_cta')}
+          </button>
+        )}
+        {onOpenDirectApiSettings !== undefined && (
+          <button
+            type="button"
+            onClick={onOpenDirectApiSettings}
+            className="rounded-md border border-hairline bg-surface-card px-xs py-xxs text-text-primary hover:bg-surface-strong"
+            data-testid="provider-recovery-direct-api"
+          >
+            {t('chat.provider_recovery.direct_api_cta')}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -485,6 +556,7 @@ function MessagesArea({
               onPickSession={onPickSession}
               {...(onForkAtTurn !== undefined && { onForkAtTurn })}
               {...(onSendToCode !== undefined && { onSendToCode })}
+              {...(onApplyToFile !== undefined && { onApplyToFile })}
               isPersisted={persistedTurnIds?.has(turn.id) === true}
             />
           ))}
@@ -1111,6 +1183,7 @@ function TurnDisplay({
                 key={i}
                 text={block.text}
                 inverse={isUser}
+                showWorkflowCard={!isUser}
                 {...(onSendToCode !== undefined && { onSendToCode })}
                 {...(onApplyToFile !== undefined && { onApplyToFile })}
               />

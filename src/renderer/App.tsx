@@ -1615,6 +1615,14 @@ export function App(): React.JSX.Element {
               setPreviewMode('code');
               setPreviewVisible(true);
             }}
+            onOpenProviderSettings={() => {
+              setSettingsInitialTab('provider');
+              setSettingsModalOpen(true);
+            }}
+            onOpenDirectApiSettings={() => {
+              setSettingsInitialTab('direct_api');
+              setSettingsModalOpen(true);
+            }}
             {...(currentCodeFile !== null && {
               // v2.8.x (Builder UX, C 후속) — 현재 Code 모드 에 파일이 열려
               // 있을 때만 chat 코드 블록 옆 "파일에 적용" 버튼 노출. 클릭 시

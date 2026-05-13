@@ -51,6 +51,7 @@ describe('ApplyToFileModal', () => {
     // delta: 3 → 5
     expect(screen.getByTestId('apply-to-file-lines-delta').textContent).toContain('3');
     expect(screen.getByTestId('apply-to-file-lines-delta').textContent).toContain('5');
+    expect(screen.getByTestId('apply-to-file-safety')).toHaveTextContent('적용 전 안전 확인');
     expect(screen.getByTestId('apply-to-file-cancel')).toBeInTheDocument();
     expect(screen.getByTestId('apply-to-file-accept')).toBeInTheDocument();
   });

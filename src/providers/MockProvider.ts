@@ -81,7 +81,8 @@ export class MockProvider implements StreamingProvider {
       this.opts.responseText ??
       (triggeredToolCall
         ? `Mock tool call requested: ${triggeredToolCall.tool_id}`
-        : `Mock response. You said: "${userText.slice(0, 80)}"`);
+        : (this.buildGuidedResponse(userText) ??
+          `Mock response. You said: "${userText.slice(0, 80)}"`));
 
     yield { type: 'message_start', turn_id: turnId, model: input.model };
 
@@ -199,6 +200,106 @@ export class MockProvider implements StreamingProvider {
     } catch {
       return null;
     }
+  }
+
+  private buildGuidedResponse(userText: string): string | null {
+    const normalized = userText.toLowerCase();
+    const mentionsReadme = /readme|설치|install|quick start/.test(normalized);
+    const mentionsA11y = /접근성|accessibility|aria|a11y|컴포넌트/.test(normalized);
+    const mentionsTests = /테스트|test|typecheck|lint/.test(normalized);
+    const mentionsRisk = /삭제|delete|remove|rm |git |commit|위험|승인/.test(normalized);
+
+    if (mentionsRisk) {
+      return [
+        '## 작업 계획',
+        '- 요청한 작업이 파일 삭제, git 조작, 또는 위험 명령인지 먼저 분류합니다.',
+        '## 변경 후보',
+        '- 자동 변경 없음: 승인 전에는 디스크와 git 상태를 건드리지 않습니다.',
+        '## Diff / Review',
+        '- 실행 전 diff 또는 명령 preview를 먼저 보여줘야 합니다.',
+        '## 테스트 명령',
+        '- 필요 시 npm run typecheck, npm run lint, npm test를 권장합니다.',
+        '## 위험/권한',
+        '- 위험 작업은 자동 실행하지 않습니다. 사용자의 명시 승인 지점이 필요합니다.',
+        '## 다음 행동',
+        '- Provider/CLI 연결 후 승인 가능한 명령과 되돌리기 계획을 확인하세요.',
+      ].join('\n');
+    }
+
+    if (mentionsTests) {
+      return [
+        '## 작업 계획',
+        '- 관련 테스트 명령을 먼저 제안하고 실행 가능 상태를 확인합니다.',
+        '## 변경 후보',
+        '- 파일 변경 없음: 검증 요청은 결과 요약이 먼저입니다.',
+        '## Diff / Review',
+        '- 테스트 실패 후 코드 변경이 필요하면 별도 diff로 검토해야 합니다.',
+        '## 테스트 명령',
+        '- npm run typecheck',
+        '- npm run lint',
+        '- npm test',
+        '## 실행 결과',
+        '- Mock/dry-run 응답은 명령을 실제 실행하지 않습니다. CLI 또는 Direct API 연결 후 결과와 exit code를 표시합니다.',
+        '## 위험/권한',
+        '- 테스트 명령은 읽기 중심이지만 장시간 실행될 수 있어 실행 상태를 표시해야 합니다.',
+        '## 다음 행동',
+        '- 설정에서 provider를 연결한 뒤 같은 요청을 다시 보내거나 터미널에서 위 명령을 실행하세요.',
+      ].join('\n');
+    }
+
+    if (mentionsA11y) {
+      return [
+        '## 작업 계획',
+        '- 컴포넌트의 label, focus, keyboard, overflow 문제를 점검합니다.',
+        '## 변경 후보',
+        '- 대상 컴포넌트 파일: aria-label/title, focus ring, 버튼 상태 개선 후보',
+        '## Diff / Review',
+        '- 실제 수정 전 변경 범위와 접근성 의도를 diff로 검토합니다.',
+        '## 테스트 명령',
+        '- npm run typecheck',
+        '- npm run lint',
+        '- npm run test:e2e -- --grep axe',
+        '## 위험/권한',
+        '- 접근성 수정은 UI 동작을 바꿀 수 있으므로 키보드 smoke가 필요합니다.',
+        '## 다음 행동',
+        '- 문제 컴포넌트를 지정하거나 Code 모드에서 파일을 연 뒤 수정 후보를 적용하세요.',
+      ].join('\n');
+    }
+
+    if (mentionsReadme) {
+      return [
+        '## 작업 계획',
+        '- README 설치 안내를 새 사용자가 따라 할 수 있는 순서로 정리합니다.',
+        '## 변경 후보',
+        '- README.md: 설치, 개발 서버 실행, 검증 명령, provider 설정 안내',
+        '## Diff / Review',
+        '- 아래 Markdown 블록을 현재 열린 README.md에 적용하기 전 diff로 검토하세요.',
+        '## 테스트 명령',
+        '- npm run typecheck',
+        '- npm run lint',
+        '- npm test',
+        '## 위험/권한',
+        '- 문서 파일만 변경합니다. Mock/dry-run 안내는 적용 버튼 전에는 디스크에 쓰지 않습니다.',
+        '## 다음 행동',
+        '- Code 모드에서 README.md를 열고 코드 블록의 파일에 적용을 눌러 diff를 확인하세요.',
+        '```md',
+        '# Dreampia-Dev',
+        '',
+        '## Quick start',
+        '1. npm install',
+        '2. npm run dev',
+        '3. Open a workspace folder.',
+        '4. Ask for a small change, review the diff, then run tests.',
+        '',
+        '## Verify',
+        '- npm run typecheck',
+        '- npm run lint',
+        '- npm test',
+        '```',
+      ].join('\n');
+    }
+
+    return null;
   }
 
   private sleep(ms: number, signal?: AbortSignal): Promise<void> {
