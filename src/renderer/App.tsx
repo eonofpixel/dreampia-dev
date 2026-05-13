@@ -1417,7 +1417,7 @@ export function App(): React.JSX.Element {
           <button
             type="button"
             onClick={toggleSidebar}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-hairline bg-surface-card text-text-secondary shadow-soft transition-colors hover:border-hairline-strong hover:bg-surface-strong hover:text-text-primary"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-hairline bg-surface-card text-text-secondary shadow-soft transition-colors hover:border-hairline-strong hover:bg-surface-strong hover:text-text-primary focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/35"
             title={
               sidebarVisible
                 ? t('chat.header.sidebar_hide_tooltip')

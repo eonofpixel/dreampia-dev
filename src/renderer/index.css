@@ -250,8 +250,7 @@ pre {
 }
 
 .three-panel-sidebar-toggle {
-  left: calc(var(--sidebar-panel-width) - 16px);
-  transition: left var(--duration-base) var(--ease-out);
+  left: calc(var(--sidebar-panel-width) - 44px);
 }
 
 .three-panel-layout[data-sidebar-visible='false'] .three-panel-sidebar-toggle {
@@ -291,7 +290,7 @@ pre {
   }
 
   .three-panel-sidebar-toggle[data-sidebar-open='true'] {
-    left: min(270px, calc(100vw - 60px));
+    left: min(242px, calc(100vw - 88px));
   }
 
   .three-panel-preview[data-open='true'] {

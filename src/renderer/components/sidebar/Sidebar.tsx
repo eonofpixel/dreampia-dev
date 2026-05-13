@@ -161,7 +161,7 @@ export function Sidebar({
       aria-label={t('sidebar.aria_label')}
     >
       {/* Top action: 새 채팅 */}
-      <div className="border-b border-hairline p-2">
+      <div className="border-b border-hairline p-2 pr-12">
         <button
           onClick={onNewChat}
           className="flex w-full items-center gap-2 rounded-md px-3 py-2 font-medium hover:bg-surface-strong"

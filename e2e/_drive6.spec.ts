@@ -100,6 +100,27 @@ test.describe('drive r6 — preview panel toggle (v1.0.8)', () => {
     await sidebarToggle.click();
     await expect(sidebarLayout).toHaveAttribute('data-sidebar-visible', 'true');
     await expect(window.getByLabel('사이드바')).toBeVisible();
+    const sidebarTogglePlacement = await window.evaluate(() => {
+      const sidebar = document.querySelector('.three-panel-sidebar')?.getBoundingClientRect();
+      const newChat = document
+        .querySelector('[data-testid="sidebar-new-chat"]')
+        ?.getBoundingClientRect();
+      const toggle = document
+        .querySelector('[data-testid="sidebar-rail-toggle"]')
+        ?.getBoundingClientRect();
+      return {
+        sidebarRight: sidebar?.right ?? 0,
+        newChatRight: newChat?.right ?? 0,
+        toggleLeft: toggle?.left ?? 0,
+        toggleRight: toggle?.right ?? 0,
+      };
+    });
+    expect(sidebarTogglePlacement.toggleLeft).toBeGreaterThanOrEqual(
+      sidebarTogglePlacement.newChatRight + 2
+    );
+    expect(sidebarTogglePlacement.toggleRight).toBeLessThanOrEqual(
+      sidebarTogglePlacement.sidebarRight + 1
+    );
     await sidebarToggle.click();
     await expect(sidebarLayout).toHaveAttribute('data-sidebar-visible', 'false');
 
