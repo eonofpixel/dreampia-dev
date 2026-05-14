@@ -73,15 +73,34 @@ Effect:
 - Workspace inspect/run-safe-command channel names and preload API remain unchanged.
 - Path traversal and file read/write logic intentionally stayed in `ipc.ts`; that boundary still needs a separate contract-snapshot pass before further splitting.
 
+## IPC App Preference Extraction Pass
+
+The next pass added a contract snapshot before splitting additional `ipc.ts` code.
+
+| File | Change |
+| --- | --- |
+| `tests/main/ipc.contract.test.ts` | Added a default IPC channel surface snapshot so future handler extraction cannot silently drop or rename channels. |
+| `src/main/ipc/appPreferenceHandlers.ts` | Extracted provider, permission default, theme, language, plugin security, direct API key preview, and keyboard shortcut preference handlers. |
+| `src/main/ipc.ts` | Delegates app preference registration while keeping app lifecycle, workspace, backfill, diagnose, session, AI, tool, MCP, usage, compare, audit, permission, and automation boundaries in place. |
+
+Effect:
+
+- `src/main/ipc.ts` dropped from roughly 3,638 lines to roughly 3,351 lines in this pass.
+- App preference channel names remain unchanged and are covered by the new IPC contract snapshot.
+- Workspace, backfill, and DB-backed app handlers intentionally stayed in `ipc.ts`; moving them should be a separate pass because they depend on `SessionStore`, filesystem paths, and migration helpers.
+
 ## Verification Evidence
 
 | Check | Result |
 | --- | --- |
 | `npx prettier --write ...` on changed files | pass; all files unchanged |
 | `npm test -- safeStorage recentFiles CodePanel QuickOpenModal` | pass, exit 0; 4 files / 55 tests |
+| `npm test -- tests/main/ipc.contract.test.ts tests/main/ipc.workspace.test.ts tests/main/ipc.app-theme.test.ts tests/main/ipc.direct-api.test.ts tests/main/ipc.keyboard-shortcuts.test.ts tests/main/ipc.workspaceBackfill.test.ts tests/main/ipc.app-diagnose.test.ts` | pass, exit 0; 7 files / 79 tests |
+| `npx prettier --check docs/code-quality-cleanup-audit-2026-05-14.md src/main/ipc.ts src/main/ipc/appPreferenceHandlers.ts tests/main/ipc.contract.test.ts` | pass, exit 0 |
 | `npm run typecheck` | pass, exit 0 |
 | `npm run lint` | pass, exit 0 |
-| `npm test` | pass, exit 0; 230 files passed, 1 skipped; 2602 tests passed, 2 skipped |
+| `npm test` | pass, exit 0 |
+| `git diff --check` | pass, exit 0 |
 | `npm run test:e2e -- e2e/_drive6.spec.ts e2e/golden-path-coding-loop.spec.ts e2e/_drive18_axe.spec.ts` | pass, exit 0; 11 passed |
 
 Known non-blocking output:
