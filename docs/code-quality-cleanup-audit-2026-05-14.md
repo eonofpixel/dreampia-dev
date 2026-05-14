@@ -57,6 +57,22 @@ No P0/P1 spaghetti issue was found in the touched path after the cleanup pass. T
 - Split `ChatPanel.tsx` header/provider/status sections only after renderer snapshot tests cover each state.
 - Review migration fallbacks in `SessionStore.ts` in migration-number order; do not remove compatibility paths without fixture coverage.
 
+## IPC Workspace Extraction Pass
+
+Follow-up code-quality work started on the highest-risk main-process hotspot.
+
+| File | Change |
+| --- | --- |
+| `src/main/workspace/repoContext.ts` | Extracted repo context scanning, git summary parsing, package script detection, safe command allowlisting, and safe command execution from `ipc.ts`. |
+| `src/main/ipc.ts` | Kept IPC channel registration, workspace file read/write guards, and channel contracts while delegating repo context and safe command behavior. |
+| `tests/main/workspace.repoContext.test.ts` | Added direct regression coverage for file enumeration, ignore handling, script/safe-command summary, key files, and test-file detection. |
+
+Effect:
+
+- `src/main/ipc.ts` dropped from roughly 4,353 lines to 3,638 lines in this pass.
+- Workspace inspect/run-safe-command channel names and preload API remain unchanged.
+- Path traversal and file read/write logic intentionally stayed in `ipc.ts`; that boundary still needs a separate contract-snapshot pass before further splitting.
+
 ## Verification Evidence
 
 | Check | Result |
