@@ -41,9 +41,11 @@ test.describe('smoke', () => {
     await expect(window.getByLabel('메시지 검색')).toBeVisible();
 
     // 나머지 nav 버튼들은 그대로 — i18n key 적용 후에도 한국어 default 라벨 유지.
-    await expect(window.getByRole('button', { name: '플러그인', exact: false })).toBeVisible();
-    await expect(window.getByRole('button', { name: '자동화', exact: false })).toBeVisible();
-    await expect(window.getByRole('button', { name: '설정', exact: false })).toBeVisible();
+    // 설정 계열 CTA 가 채팅/작업 패널에도 존재하므로, 사이드바 smoke 는
+    // sidebar-owned test id 로 scope 를 고정한다.
+    await expect(window.getByTestId('sidebar-open-plugins')).toBeVisible();
+    await expect(window.getByTestId('sidebar-automation')).toBeVisible();
+    await expect(window.getByTestId('sidebar-open-settings')).toBeVisible();
 
     // SectionHeader: "프로젝트", "채팅"
     await expect(window.getByRole('heading', { name: '프로젝트' })).toBeVisible();
