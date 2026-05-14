@@ -36,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false # build other OSes even if one fails
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        os: [windows-2025-vs2026, macos-latest, ubuntu-latest]
 
     steps:
       - name: Checkout (push trigger)
@@ -103,7 +103,7 @@ jobs:
       #   생성한 뒤 actions/upload-artifact 로 다음 stage 에 전달.
 
       - name: Package (Windows, no publish)
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2025-vs2026'
         env:
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
@@ -158,7 +158,7 @@ jobs:
         with:
           path: release-artifacts/
           # 각 OS artifact 가 별도 dir 로 다운로드됨:
-          # release-artifacts/dreampia-dev-windows-latest/...
+          # release-artifacts/dreampia-dev-windows-2025-vs2026/...
           # release-artifacts/dreampia-dev-macos-latest/...
           # release-artifacts/dreampia-dev-ubuntu-latest/...
 

@@ -54,7 +54,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-2025-vs2026, macos-latest]
     steps:
       - uses: actions/checkout@v6
 
@@ -75,7 +75,7 @@ jobs:
     needs: [lint, typecheck, test]
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-2025-vs2026, macos-latest]
     steps:
       - uses: actions/checkout@v6
 
