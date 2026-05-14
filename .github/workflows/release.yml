@@ -12,7 +12,7 @@ on:
         type: string
 
 permissions:
-  contents: write   # for creating GitHub Releases
+  contents: write # for creating GitHub Releases
 
 concurrency:
   # workflow_dispatch 은 입력 tag 단위, push 는 ref 단위로 직렬화.
@@ -34,28 +34,28 @@ jobs:
     timeout-minutes: 60
 
     strategy:
-      fail-fast: false   # build other OSes even if one fails
+      fail-fast: false # build other OSes even if one fails
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
 
     steps:
       - name: Checkout (push trigger)
         if: github.event_name == 'push'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # Full history for changelog generation (future)
           fetch-depth: 0
 
       - name: Checkout (manual dispatch tag)
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # workflow_dispatch.inputs.tag 가 가리키는 ref 를 명시적으로 checkout.
           # 이전엔 input 이 선언만 있고 unused 라 항상 default branch 가 빌드됐다.
           ref: ${{ github.event.inputs.tag }}
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
@@ -151,7 +151,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
